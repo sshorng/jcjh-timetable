@@ -8749,6 +8749,11 @@ createApp({
       const t = lookupTeacher(email);
       return t ? (t.jobTitle || t.job || '') : '';
     };
+    const getTeacherIdentityTooltip = (email) => {
+      const jobTitle = String(getTeacherJobTitleByEmail(email) || '').trim();
+      const subject = String(getTeacherSubjectByEmail(email) || '').trim();
+      return `職務：${jobTitle || '未填寫'}\n科目：${subject || '未填寫'}`;
+    };
     const chineseClassNumber = (raw) => {
       const value = String(raw || '').trim();
       if (/^\d+$/.test(value)) return parseInt(value, 10);
@@ -11919,7 +11924,7 @@ createApp({
       exportActivityCoverWord,
       invigilationExportTitle, exportInvigilationWorkbook,
       devSwitchUser, restoreAdmin,
-       getTeacherNameByEmail, getTeacherSubjectByEmail, getTeacherTimetableHours, getRealTeacherName, startSecondSub,
+       getTeacherNameByEmail, getTeacherSubjectByEmail, getTeacherIdentityTooltip, getTeacherTimetableHours, getRealTeacherName, startSecondSub,
         getTeacherJobTitleByEmail, isHomeroomTeacher,
       getSubjectStyle, getClassBadgeStyle,
       changeHistoryPage, openHistoryEditModal, saveHistoryEdit, onHistoryEditDateChange, changePendingPage,
