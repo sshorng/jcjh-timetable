@@ -13,6 +13,7 @@
   var TEMPLATE_URL = 'templates/accounting-template.xlsx';
   var STORAGE_KEY = 'school-substitution-accounting-periods-v1';
   var FEE_DEFAULT = 455;
+  var MONEY_NUMBER_FORMAT = '#,##0';
   var DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
   var PERIOD_NAMES = {
     '0': '早自習',
@@ -65,7 +66,7 @@
       key: 'substituteAttribute',
       label: '課表代課（小鐘點）',
       suffix: '小鐘點',
-      titleSuffix: '課表代課（小鐘點）印領清冊',
+      titleSuffix: '代課鐘點費印領清冊',
       dataStart: 3,
       templateTotalRow: 14,
       columns: 15,
@@ -330,7 +331,7 @@
       suffix = plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊';
     }
     if (config.key === 'substituteAttribute') {
-      suffix = '課表代課（小鐘點：' + planLabel(expensePlan) + '）印領清冊';
+      suffix = planLabel(expensePlan) + '代課鐘點費印領清冊';
     }
     if (config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
@@ -1199,8 +1200,6 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
-        var dates = group.details.map(function (detail) { return shortDate(detail.date); })
-          .filter(function (date, index, all) { return date && all.indexOf(date) === index; });
         return {
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1208,8 +1207,7 @@
           hours: group.hours,
           rate: FEE_DEFAULT,
           amount: group.hours * FEE_DEFAULT,
-          note: '課表代課（小鐘點）' + displayCount(group.hours) + '節'
-            + (dates.length ? '；' + dates.join('、') : '')
+          note: '代課' + displayCount(group.hours) + '節'
         };
       });
       return { plan: source, rows: rows };
@@ -1418,6 +1416,14 @@
     });
   }
 
+  function applyMoneyNumberFormat(sheet, columns, start, end) {
+    for (var row = start; row <= end; row += 1) {
+      columns.forEach(function (column) {
+        sheet.getCell(row, column).numFmt = MONEY_NUMBER_FORMAT;
+      });
+    }
+  }
+
   function noteColumnFor(config) {
     if (!config) return 0;
     if (config.key === 'overtime') return 15;
@@ -1514,6 +1520,7 @@
       sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end);
       sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end);
     }
+    applyMoneyNumberFormat(sheet, [10, 11], config.dataStart, totalRow);
     mergeSummaryNoteRow(sheet, config, totalRow);
     return totalRow;
   }
@@ -1528,6 +1535,7 @@
     sheet.getCell(totalRow, 2).value = '合計';
     sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end);
     sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end);
+    applyMoneyNumberFormat(sheet, [5, 6], config.dataStart, totalRow);
     return totalRow;
   }
 
@@ -1542,6 +1550,7 @@
     sheet.getCell(totalRow, 1).value = '合計';
     sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end);
     sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end);
+    applyMoneyNumberFormat(sheet, [7, 8], config.dataStart, totalRow);
     return totalRow;
   }
 

@@ -1000,6 +1000,9 @@ body {
 }
 .match-drawer-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow-y: auto;
   max-height: none !important;
   padding: 16px 18px 24px !important;
@@ -1216,7 +1219,9 @@ body {
 }
 
 .match-list-container {
-  max-height: 480px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 

@@ -88,6 +88,7 @@ assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代�
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '預設');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
