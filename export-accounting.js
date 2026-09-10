@@ -36,7 +36,7 @@
       suffix: '超鐘點',
       titleSuffix: '超鐘點（計畫）印領清冊',
       dataStart: 3,
-      templateTotalRow: 28,
+      templateTotalRow: 15,
       columns: 15,
       kind: 'summary'
     },
