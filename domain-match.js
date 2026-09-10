@@ -324,7 +324,7 @@ window.DomainMatch = (function () {
 
   /**
    * 調課候選（同班、雙方空堂）
-   * 外出班／空堂事件釋出視同空堂，可對調
+   * 外出班／空堂事件釋出可作為老師的空堂，但被取消的課不可作為交換標的
    * 抽離僅可與抽離互調；一般課不可與抽離調課
    */
   function listExchangeCandidates(opts) {
@@ -397,13 +397,14 @@ window.DomainMatch = (function () {
       if (!schedDate) return;
 
       const ownerCell = getScheduleForDate(sched.teacherEmail, schedDate, sched.period, sched.dayOfWeek);
+      // 週課表仍保留事件當天的原課；已釋出的課並沒有實際課程可交換。
+      if (ownerCell && ownerCell.isClassAway) return;
       var actualEmail = sched.teacherEmail;
       var actualName = sched.teacherName;
       if (ownerCell && ownerCell.isSubstituted && ownerCell.subRecord) {
         actualEmail = ownerCell.subRecord.actualTeacherEmail;
         actualName = getTeacherNameByEmail(actualEmail);
       }
-      // 若原師這節是空堂事件／外出班，課仍屬該班時段，實際授課人仍可能被代；仍用 actualEmail
       if (actualEmail === leaveTeacher) return;
 
       const cellAtTarget = getScheduleForDate(leaveTeacher, schedDate, sched.period, sched.dayOfWeek);

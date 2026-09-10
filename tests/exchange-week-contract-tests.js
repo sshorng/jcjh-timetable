@@ -51,6 +51,41 @@ assert.equal(listCandidate(true, '2026-09-15')[0].subject, '單週課');
 assert.equal(listCandidate(false, '2026-09-22').length, 1);
 assert.equal(listCandidate(false, '2026-09-22')[0].subject, '雙週課');
 
+// 空堂事件取消的課不能拿來交換；其他班級釋出的空堂仍可用於互調。
+const holidaySchedule = {
+  teacherEmail: 'target@example.com', teacherName: '目標教師',
+  dayOfWeek: 1, period: 1, className: '901', subject: '公民'
+};
+function listHolidayCandidates(targetDate, cancelled, requesterReleased) {
+  return DomainMatch.listExchangeCandidates({
+    allSchedules: [holidaySchedule],
+    className: '901',
+    leaveEmail: 'leave@example.com',
+    leaveDate: '2026-10-02', leavePeriod: 7, leaveDay: 5,
+    leaveCell: { className: '901', subject: '生活科技' },
+    weekDates: DateUtils.getWeekDatesFrom(targetDate),
+    getTeacherNameByEmail: () => '目標教師',
+    getScheduleForDate(email, date, period) {
+      if (date === targetDate && Number(period) === 1) {
+        if (email === holidaySchedule.teacherEmail) {
+          return { ...holidaySchedule, isClassAway: cancelled };
+        }
+        if (requesterReleased) return { className: '902', isClassAway: true };
+      }
+      return null;
+    }
+  });
+}
+assert.equal(listHolidayCandidates('2026-09-28', true, false).length, 0,
+  '9/28 空堂事件取消的課不可出現在調課推薦');
+assert.equal(listHolidayCandidates('2026-09-28', false, false).length, 1,
+  '沒有空堂事件時，同一堂課仍可推薦');
+assert.equal(listHolidayCandidates('2026-10-05', false, false).length, 1,
+  '跨週的正常課程仍可推薦');
+const releasedCandidates = listHolidayCandidates('2026-09-28', false, true);
+assert.equal(releasedCandidates.length, 1, '其他班級外出釋出的空堂仍可互調');
+assert.equal(releasedCandidates[0].freeByAway, true);
+
 async function runDateAwareValidationTest() {
   const pendingRequestData = ref({
     mode: 'exchange',
