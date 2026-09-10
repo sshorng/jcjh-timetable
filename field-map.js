@@ -473,6 +473,7 @@ window.FieldMap = (function () {
       subject: subj,
       attr: attr,
       isOvertime: isOvertime,
+      isSubstitute: !isPatrol && attr === '代課',
       isPullOut: isPullOut,
       activeFrom: asDateStr(pick(s, ['啟用起日', '啟用開始日', 'activeFrom', 'activationStartDate', 'effectiveStartDate'])),
       activeTo: asDateStr(pick(s, ['啟用迄日', '啟用結束日', 'activeTo', 'activationEndDate', 'effectiveEndDate'])),

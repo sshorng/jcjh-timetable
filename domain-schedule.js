@@ -597,7 +597,7 @@ window.DomainSchedule = (function () {
 
      var candidates = getCandidates(index, teacherEmail, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);
     var base = candidates.find(function (s) {
-      if (!s.attr || s.attr === '一般' || s.attr === '課輔' || s.attr === '基本' || s.attr === '抽離' || s.attr === '巡堂') return true;
+      if (!s.attr || s.attr === '一般' || s.attr === '課輔' || s.attr === '基本' || s.attr === '抽離' || s.attr === '巡堂' || s.attr === '代課') return true;
       if (s.attr === '單週' && h.isSingleWeek(dateStr)) return true;
       if (s.attr === '雙週' && !h.isSingleWeek(dateStr)) return true;
       return false;

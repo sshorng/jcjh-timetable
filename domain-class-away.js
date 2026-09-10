@@ -251,7 +251,7 @@ window.DomainClassAway = (function () {
 
   /**
    * 教師基礎課表中，屬於「reduce 空堂班」的週鐘點節數
-    * （早自習0＋1–7＋午休45；基本／一般／抽離；超鐘點由特殊標記判定；不含巡堂／第8）
+    * （早自習0＋1–7＋午休45；基本／一般／代課／抽離；超鐘點由特殊標記判定；不含巡堂／第8）
    */
   function countReduceSlotsForTeacher(teacherEmail, allSchedules, awayClassSet, weekDates) {
     var em = String(teacherEmail || '').toLowerCase();
@@ -265,7 +265,7 @@ window.DomainClassAway = (function () {
         var p = parseInt(s.period, 10);
         if (!(p === 0 || p === 45 || (p >= 1 && p <= 7))) return;
         var attr = String(s.attr || '').trim();
-        if (attr && attr !== '基本' && attr !== '一般' && attr !== '超鐘點' && attr !== '抽離' && attr !== '實支') return;
+        if (attr && attr !== '基本' && attr !== '一般' && attr !== '超鐘點' && attr !== '抽離' && attr !== '實支' && attr !== '代課') return;
       }
       // 併班：任一班在 reduce 名單即計
       var classes = [];

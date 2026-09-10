@@ -40,6 +40,15 @@ const publicOvertime = build([{
 assert.equal(publicOvertime.sheets.overtime[0].deduction, 1);
 assert.equal(publicOvertime.sheets.overtime[0].actualHours, 0);
 
+const substituteAttribute = build([{
+  date: '2026-07-13', period: 1, className: '701', type: 'substitution',
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
+}], 0, [{
+  teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課'
+}]);
+assert.equal(substituteAttribute.sheets.overtime[0].deduction, 1, '代課屬性請假應進入鐘點扣減');
+assert.equal(substituteAttribute.sheets.overtime[0].actualHours, 0);
+
 const fallbackClassNote = build([], 2, schedules);
 assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '1*1(701、702、703班)', 'legacy/default overtime rows must include class names in notes');
 

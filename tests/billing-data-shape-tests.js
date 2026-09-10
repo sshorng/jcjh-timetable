@@ -6,6 +6,8 @@ const assert = require('node:assert/strict');
 global.window = global;
 require('../field-map.js');
 require('../domain-school-swap.js');
+require('../date-utils.js');
+require('../domain-class-away.js');
 require('../domain-billing.js');
 
 const schedule = window.FieldMap.mapSchedule({
@@ -19,6 +21,19 @@ const schedule = window.FieldMap.mapSchedule({
 });
 assert.equal(schedule.attr, '一般');
 assert.equal(schedule.isOvertime, true);
+
+const substituteSchedule = window.FieldMap.mapSchedule({
+  '教師姓名': 'SmallSub',
+  '星期': 1,
+  '節次': 1,
+  '班級': '701',
+  '科目': '國文',
+  '課堂屬性': '代課'
+});
+assert.equal(substituteSchedule.attr, '代課');
+assert.equal(substituteSchedule.isSubstitute, true);
+assert.equal(window.DomainBilling.isWeeklyHoursSlot(substituteSchedule), true);
+assert.equal(window.DomainBilling.isSubstituteScheduleSlot(substituteSchedule), true);
 
 const request = window.FieldMap.mapRequest({
   '狀態': '已核准',
@@ -51,6 +66,41 @@ const row = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(row.publicOvertimeUsed, 1);
 assert.equal(row.schoolPublicPayout, 0);
 assert.equal(row.actualOvertime, 0);
+
+const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],
+  allSchedules: [substituteSchedule],
+  substitutionRecords: [{
+    date: '2026-07-06',
+    period: 1,
+    className: '701',
+    type: 'substitution',
+    originalTeacherName: 'SmallSub',
+    actualTeacherName: 'Cover',
+    subFee: '活動公費'
+  }],
+  reportMonth: '2026-07',
+  reportWeeksCount: 1
+})[0];
+assert.equal(substituteLeaveRow.substituteDeduction, 1, '代課屬性請假應扣一節');
+assert.equal(substituteLeaveRow.substituteLeaveAdditionalDeduction, 1);
+assert.equal(substituteLeaveRow.actualOvertime, 0);
+
+const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],
+  allSchedules: [substituteSchedule],
+  classAwayEvents: [{
+    id: 'away-keep', name: '中秋節', startDate: '2026-07-06', endDate: '2026-07-06',
+    classes: ['701'], billingRule: 'keep', enabled: true
+  }],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportWeeksCount: 1
+})[0];
+assert.equal(substituteAwayRow.substituteKeepAwayDeduction, 1, '代課屬性空堂應扣一節');
+assert.equal(substituteAwayRow.substituteAdditionalDeduction, 1);
+assert.equal(substituteAwayRow.actualOvertime, 0);
+assert.equal(substituteAwayRow.expensePlanAllocations[0].actualHours, 0);
 
 const swappedSchedule = window.FieldMap.mapSchedule({
   '教師姓名': 'Billing',

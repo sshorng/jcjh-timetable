@@ -867,7 +867,7 @@ window.UiAdmin = (function () {
     function normalizeScheduleFormFlags() {
       var period = parseInt(scheduleForm.value.period, 10);
       var attr = String(scheduleForm.value.attr || '').trim();
-      if (period === 8 || attr === '巡堂') scheduleForm.value.overtime = false;
+      if (period === 8 || attr === '巡堂' || attr === '代課') scheduleForm.value.overtime = false;
     }
 
     function isOvertimePeriod(period) {
@@ -1063,7 +1063,8 @@ window.UiAdmin = (function () {
          }
          var overtime = !!scheduleForm.value.overtime
            && isOvertimePeriod(currentPeriod)
-           && attr !== '巡堂';
+           && attr !== '巡堂'
+           && attr !== '代課';
          var specialTags = specialTagList(scheduleForm.value.specialTags || '');
          if (attr === '抽離') addSpecialTag(specialTags, '抽離');
          else specialTags = removeSpecialTag(specialTags, '抽離');
