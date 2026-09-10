@@ -56,6 +56,18 @@ assert.equal(admin.overtimePlanRows.value.length, 1, '登入 Email 與課表姓�
 admin.overtimePlanRows.value[0].source = '校務自訂計畫';
 assert.ok(admin.getOvertimeExpenseSourceOptions().includes('校務自訂計畫'), '目前輸入的新計畫也應立即成為下拉建議');
 
+schedules.value = [{
+  teacherEmail: '教師',
+  teacherName: '教師',
+  dayOfWeek: 2,
+  period: 2,
+  className: '702',
+  attr: '代課',
+  specialTags: ''
+}];
+admin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師', name: '教師' });
+assert.equal(admin.overtimePlanRows.value.length, 1, '代課小鐘點課格也應可設定經費來源');
+
 admin.mappingFields.value = {
   teacherName: 'name',
   subject: 'subject',

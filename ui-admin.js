@@ -895,6 +895,7 @@ window.UiAdmin = (function () {
     }
 
     function isOvertimeScheduleEntry(schedule) {
+      if (isSubstituteScheduleEntry(schedule)) return false;
       if (schedule && schedule.isOvertime === true) return true;
       if (window.FieldMap && typeof window.FieldMap.isOvertimeSchedule === 'function') {
         return window.FieldMap.isOvertimeSchedule(schedule);
@@ -904,6 +905,12 @@ window.UiAdmin = (function () {
       return String(schedule && (schedule.specialTags || schedule['特殊標記']) || '')
         .split(/[,，、;；\/／|｜\s]+/)
          .some(function (value) { return String(value || '').trim() === '超鐘點'; });
+    }
+
+    function isSubstituteScheduleEntry(schedule) {
+      if (!schedule) return false;
+      if (schedule.isSubstitute === true) return true;
+      return String(schedule.attr || schedule['課堂屬性'] || '').trim() === '代課';
     }
 
     function getScheduleAttrLabel(schedule) {
@@ -958,7 +965,7 @@ window.UiAdmin = (function () {
         var scheduleKeys = teacherIdentityKeys(schedule);
         return teacherIdentityKeys(teacher).some(function (key) {
           return scheduleKeys.indexOf(key) >= 0;
-        }) && isOvertimeScheduleEntry(schedule);
+        }) && (isOvertimeScheduleEntry(schedule) || isSubstituteScheduleEntry(schedule));
       }).slice().sort(function (a, b) {
         return (parseInt(a.dayOfWeek, 10) || 0) - (parseInt(b.dayOfWeek, 10) || 0)
           || (parseInt(a.period, 10) || 0) - (parseInt(b.period, 10) || 0)

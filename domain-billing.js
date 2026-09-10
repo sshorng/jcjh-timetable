@@ -769,7 +769,8 @@ window.DomainBilling = (function () {
           date: dateStr,
           period: period,
           className: String(slot[0].className || slot[0]['班級'] || '').trim(),
-          subject: String(slot[0].subject || slot[0]['科目'] || '').trim()
+          subject: String(slot[0].subject || slot[0]['科目'] || '').trim(),
+          source: normalizeExpenseSource(sourceForOvertimeSchedule(opts.teacher, slot[0]) || DEFAULT_EXPENSE_SOURCE)
         });
       });
     });

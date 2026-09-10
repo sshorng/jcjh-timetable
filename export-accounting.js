@@ -61,6 +61,16 @@
       columns: 15,
       kind: 'public'
     },
+    substituteAttribute: {
+      key: 'substituteAttribute',
+      label: '課表代課（小鐘點）',
+      suffix: '小鐘點',
+      titleSuffix: '課表代課（小鐘點）印領清冊',
+      dataStart: 3,
+      templateTotalRow: 14,
+      columns: 15,
+      kind: 'public'
+    },
     selfSub: {
       index: 3,
       key: 'selfSub',
@@ -319,6 +329,9 @@
       var plan = normalizeExpensePlan(expensePlan);
       suffix = plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊';
     }
+    if (config.key === 'substituteAttribute') {
+      suffix = '課表代課（小鐘點：' + planLabel(expensePlan) + '）印領清冊';
+    }
     if (config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
     }
@@ -335,7 +348,7 @@
     var b = dateObj(period.end);
     var prefix = rocYear(parts.year) + '.' + (a ? (a.getMonth() + 1) : parts.month) + '.' + (a ? a.getDate() : 1)
       + '-' + (b ? (b.getMonth() + 1) : parts.month) + '.' + (b ? b.getDate() : 31);
-    var planSuffix = config.key === 'overtime' && normalizeExpensePlan(expensePlan)
+    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute') && normalizeExpensePlan(expensePlan)
       ? '-' + safeSheetPart(expensePlan)
       : '';
     var name = prefix + config.suffix + planSuffix;
@@ -1118,28 +1131,6 @@
       groups[email].hours += periodCount(r, false);
       groups[email].rate = feeRate(r, groups[email].rate);
     });
-    (opts.monthlyReportRows || []).forEach(function (sourceRow) {
-      var details = Array.isArray(sourceRow.substituteAttributeDetails)
-        ? sourceRow.substituteAttributeDetails.filter(function (detail) {
-          return dateInPeriod(detail.date, period);
-        })
-        : [];
-      if (!details.length) return;
-      var email = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
-      if (!email) return;
-      if (!groups[email]) {
-        groups[email] = {
-          email: email,
-          name: sourceRow.name || '',
-          records: [],
-          attributeDetails: [],
-          hours: 0,
-          rate: FEE_DEFAULT
-        };
-      }
-      groups[email].attributeDetails = (groups[email].attributeDetails || []).concat(details);
-      groups[email].hours += details.length;
-    });
     return Object.keys(groups).sort(function (leftEmail, rightEmail) {
       var result = compareTeacherOrder(teacherOrder, groups[leftEmail], groups[rightEmail]);
       return result || leftEmail.localeCompare(rightEmail);
@@ -1149,9 +1140,6 @@
       var t = teacherFromMap(teacherMap, email, group.name || firstRecord.actualTeacherName);
       var name = teacherName(t, group.name || firstRecord.actualTeacherName || email);
       var notes = groupedCoverNoteParts(group.records, opts);
-      if ((group.attributeDetails || []).length) {
-        notes.push('課表代課（小鐘點）' + displayCount(group.attributeDetails.length) + '節');
-      }
       return {
         serial: idx + 1,
         title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1161,6 +1149,70 @@
         amount: group.hours * group.rate,
         note: joinAccountingNotes(notes)
       };
+    });
+  }
+
+  function substituteAttributePlans(opts, period) {
+    var teacherMap = {};
+    var teacherOrder = teacherOrderMap(opts.teachers || []);
+    var groups = {};
+    (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
+    (opts.monthlyReportRows || []).forEach(function (sourceRow) {
+      var details = Array.isArray(sourceRow.substituteAttributeDetails)
+        ? sourceRow.substituteAttributeDetails.filter(function (detail) {
+          return dateInPeriod(detail.date, period);
+        })
+        : [];
+      if (!details.length) return;
+      var email = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
+      if (!email) return;
+      details.forEach(function (detail) {
+        var source = planLabel(detail.source);
+        var key = source + '|' + email;
+        if (!groups[key]) {
+          groups[key] = {
+            source: source,
+            email: email,
+            name: sourceRow.name || '',
+            details: [],
+            hours: 0
+          };
+        }
+        groups[key].details.push(detail);
+        groups[key].hours += 1;
+      });
+    });
+
+    var bySource = {};
+    Object.keys(groups).forEach(function (key) {
+      var group = groups[key];
+      if (!bySource[group.source]) bySource[group.source] = [];
+      bySource[group.source].push(group);
+    });
+    return Object.keys(bySource).sort(function (left, right) {
+      if (left === '預設') return -1;
+      if (right === '預設') return 1;
+      return left.localeCompare(right, 'zh-Hant', { numeric: true });
+    }).map(function (source) {
+      var rows = bySource[source].sort(function (left, right) {
+        return compareTeacherOrder(teacherOrder, left, right)
+          || left.email.localeCompare(right.email);
+      }).map(function (group, index) {
+        var t = teacherFromMap(teacherMap, group.email, group.name);
+        var dates = group.details.map(function (detail) { return shortDate(detail.date); })
+          .filter(function (date, index, all) { return date && all.indexOf(date) === index; });
+        return {
+          serial: index + 1,
+          title: teacherTitle(t) || '\u6559\u5e2b',
+          name: teacherName(t, group.name || group.email),
+          hours: group.hours,
+          rate: FEE_DEFAULT,
+          amount: group.hours * FEE_DEFAULT,
+          note: '課表代課（小鐘點）' + displayCount(group.hours) + '節'
+            + (dates.length ? '；' + dates.join('、') : '')
+        };
+      });
+      return { plan: source, rows: rows };
     });
   }
 
@@ -1238,6 +1290,7 @@
       periods: periods,
       sheets: {},
       overtimePlans: [],
+      substituteAttributePlans: [],
       summary: [],
       warnings: [],
       blocking: []
@@ -1297,6 +1350,11 @@
       if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, chargedMap);
       if (config.key === 'mentor') data.sheets[config.key] = mentorRows(opts, period);
       summaryFor(config.key, config.label, data.sheets[config.key]);
+    });
+    var substituteAttributePeriod = getPeriod(periods, 'publicSub', opts.reportMonth);
+    data.substituteAttributePlans = substituteAttributePlans(opts, substituteAttributePeriod);
+    data.substituteAttributePlans.forEach(function (group) {
+      summaryFor('substituteAttribute:' + group.plan, '課表代課（小鐘點）-' + group.plan, group.rows);
     });
 
     (opts.teachers || []).forEach(function (t) {
@@ -1364,7 +1422,7 @@
     if (!config) return 0;
     if (config.key === 'overtime') return 15;
     if (config.key === 'adjunct') return 14;
-    if (config.key === 'publicSub') return 9;
+    if (config.key === 'publicSub' || config.key === 'substituteAttribute') return 9;
     if (config.key === 'selfSub' || config.key === 'mentor') return 9;
     return 0;
   }
@@ -1542,8 +1600,11 @@
   function populateWorkbook(workbook, opts, data) {
     var usedNames = {};
     var overtimeConfig = SHEET_CONFIG.overtime;
+    var substituteAttributeConfig = SHEET_CONFIG.substituteAttribute;
     var overtimeTemplate = workbook.worksheets[overtimeConfig.index];
     if (!overtimeTemplate) throw new Error('範本缺少工作表：' + overtimeConfig.label);
+    var publicSubTemplate = workbook.worksheets[SHEET_CONFIG.publicSub.index];
+    if (!publicSubTemplate) throw new Error('範本缺少工作表：' + SHEET_CONFIG.publicSub.label);
     var planSheets = [];
     (data.overtimePlans || []).forEach(function (group, index) {
       planSheets.push({
@@ -1552,6 +1613,12 @@
           ? overtimeTemplate
           : cloneWorksheet(overtimeTemplate, workbook, '__overtime_plan_' + index, overtimeConfig.columns)
       });
+    });
+    var substituteAttributeSheets = (data.substituteAttributePlans || []).map(function (group, index) {
+      return {
+        group: group,
+        sheet: cloneWorksheet(publicSubTemplate, workbook, '__substitute_attribute_' + index, substituteAttributeConfig.columns)
+      };
     });
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
       var sheet = workbook.worksheets[config.index];
@@ -1590,14 +1657,33 @@
       sheet.name = name;
       writeSummarySheet(sheet, overtimeConfig, group.rows);
     });
+    substituteAttributeSheets.forEach(function (entry) {
+      var group = entry.group;
+      var sheet = entry.sheet;
+      var period = getPeriod(data.periods, 'publicSub', opts.reportMonth);
+      var titleCell = firstTitleCell(sheet, substituteAttributeConfig.columns);
+      titleCell.value = titleFor(substituteAttributeConfig, opts.reportMonth, period, group.plan);
+      var name = sheetName(substituteAttributeConfig, opts.reportMonth, period, group.plan);
+      var base = name;
+      var suffix = 2;
+      while (usedNames[name]) {
+        name = (base.slice(0, 28) + '_' + suffix).slice(0, 31);
+        suffix += 1;
+      }
+      usedNames[name] = true;
+      sheet.name = name;
+      writePublicSheet(sheet, substituteAttributeConfig, group.rows);
+    });
     if (!planSheets.length && typeof workbook.removeWorksheet === 'function') {
       workbook.removeWorksheet(overtimeTemplate.id);
     }
     var baseSheets = workbook.worksheets.filter(function (sheet) {
-      return planSheets.every(function (entry) { return entry.sheet !== sheet; });
+      return planSheets.every(function (entry) { return entry.sheet !== sheet; })
+        && substituteAttributeSheets.every(function (entry) { return entry.sheet !== sheet; });
     });
-    if (planSheets.length || baseSheets.length) {
+    if (planSheets.length || substituteAttributeSheets.length || baseSheets.length) {
       var orderedSheets = planSheets.map(function (entry) { return entry.sheet; })
+        .concat(substituteAttributeSheets.map(function (entry) { return entry.sheet; }))
         .concat(baseSheets);
       orderedSheets.forEach(function (sheet, index) {
         sheet.orderNo = index;

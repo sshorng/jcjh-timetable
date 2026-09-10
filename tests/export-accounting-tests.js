@@ -82,8 +82,32 @@ const substituteAttribute = build([{
   teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課'
 }]);
 assert.equal(substituteAttribute.sheets.overtime.length, 0, '代課屬性請假且無超鐘點時不列入超鐘點工作表');
-assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing').hours, 3, '代課屬性已授課應列入原教師公付代課');
+assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing'), undefined, '課表代課不應混入一般公付代課工作表');
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x').hours, 1, '實際代課教師仍應列入公付代課');
+assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代課應建立獨立工作表資料');
+assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '預設');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
+
+const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { publicSub: period },
+  teachers: [{
+    email: 'bill@x', name: 'Billing', baseHours: 16,
+    expensePlan: JSON.stringify([
+      { day: 1, period: 1, className: '701', source: '計畫A' },
+      { day: 1, period: 2, className: '702', source: '計畫B' }
+    ])
+  }],
+  allSchedules: [
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' },
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 2, className: '702', attr: '代課' }
+  ],
+  substitutionRecords: []
+});
+assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.plan), ['計畫A', '計畫B'], '課表代課不同來源應分表');
+assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [4, 4]);
 
 const fallbackClassNote = build([], 2, schedules);
 assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '1*1(701、702、703班)', 'legacy/default overtime rows must include class names in notes');
