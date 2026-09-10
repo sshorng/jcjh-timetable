@@ -32,7 +32,7 @@ const substituteSchedule = window.FieldMap.mapSchedule({
 });
 assert.equal(substituteSchedule.attr, '代課');
 assert.equal(substituteSchedule.isSubstitute, true);
-assert.equal(window.DomainBilling.isWeeklyHoursSlot(substituteSchedule), true);
+assert.equal(window.DomainBilling.isWeeklyHoursSlot(substituteSchedule), false);
 assert.equal(window.DomainBilling.isSubstituteScheduleSlot(substituteSchedule), true);
 
 const request = window.FieldMap.mapRequest({
@@ -84,6 +84,8 @@ const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
 })[0];
 assert.equal(substituteLeaveRow.substituteDeduction, 1, '代課屬性請假應扣一節');
 assert.equal(substituteLeaveRow.substituteLeaveAdditionalDeduction, 1);
+assert.equal(substituteLeaveRow.substitutePaidCount, 3, '代課屬性已授課應列入公付代課');
+assert.equal(substituteLeaveRow.pubSubCount, 3, '代課屬性已授課應列入公付代課');
 assert.equal(substituteLeaveRow.actualOvertime, 0);
 
 const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({
@@ -99,8 +101,10 @@ const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({
 })[0];
 assert.equal(substituteAwayRow.substituteKeepAwayDeduction, 1, '代課屬性空堂應扣一節');
 assert.equal(substituteAwayRow.substituteAdditionalDeduction, 1);
+assert.equal(substituteAwayRow.substitutePaidCount, 3, '代課屬性非空堂應列入公付代課');
+assert.equal(substituteAwayRow.pubSubCount, 3, '代課屬性非空堂應列入公付代課');
 assert.equal(substituteAwayRow.actualOvertime, 0);
-assert.equal(substituteAwayRow.expensePlanAllocations[0].actualHours, 0);
+assert.equal(substituteAwayRow.expensePlanAllocations.length, 0, '代課屬性不應產生超鐘點經費分配');
 
 const swappedSchedule = window.FieldMap.mapSchedule({
   '教師姓名': 'Billing',

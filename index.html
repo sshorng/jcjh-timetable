@@ -675,7 +675,7 @@
                                     </span>
                                   </div>
                                    <div class="cell-subject" :class="{ 'cell-subject-away': slot.isAwayLabel }">
-                                      {{ slot.cell.subject }}<span v-if="slot.cell.isOvertime || slot.cell.attr === '超鐘點'" title="超鐘點">（超）</span>
+                                      {{ slot.cell.subject }}<span v-if="slot.cell.isSubstitute || slot.cell.attr === '代課'" title="代課">（代）</span><span v-else-if="slot.cell.isOvertime || slot.cell.attr === '超鐘點'" title="超鐘點">（超）</span>
                                      <span v-if="slot.isAwayLabel" class="away-class-badge">{{ getClassAwayEventName(slot.cell.className, currentWeekDates[day-1]) || '空堂事件' }}</span>
                                    </div>
                                   <div v-if="slot.draft" class="cell-sub-text mutual-draft-label">
@@ -1835,11 +1835,11 @@
                       <th title="排課 − 基鐘（每週）">超時/週</th>
                       <th title="畢業等 reduce：只扣起日後週 × 1～7">空堂調降</th>
                        <th title="自己請假且自費代課；早自習、1～7、午休皆扣">自費扣</th>
-                       <th title="自己請假且公費代課；正式課程原堂為超鐘點或代課屬性才扣，含早自習、1～7、午休">公費扣</th>
+                        <th title="自己請假且公費代課；正式課程原堂為超鐘點才扣，代課屬性另列代課另扣，含早自習、1～7、午休">公費扣</th>
                        <th title="課程屬性為代課，且假別不是標準自費／公費，或不調降空堂事件未授課的另扣">代課另扣</th>
                       <th title="本月實得超時節數" class="billing-th-result">實得超時</th>
                       <th title="實得超時 × 455" class="billing-th-result">超鐘點費</th>
-                      <th title="代他人且經費為公費／活動公費">公代節</th>
+                       <th title="代他人且經費為公費／活動公費，或課堂屬性代課的實際授課節次">公代節</th>
                       <th title="公代節 × 455">公代費</th>
                       <th title="代他人且經費為自費">自代節</th>
                       <th title="自代節 × 455；懸停可看明細">自代費</th>
@@ -1975,7 +1975,7 @@
               <div style="margin-bottom:16px;font-size:0.88rem;color:var(--text-secondary);line-height:1.55;">
                 <p class="mb-8-block"><strong>策略 S1：</strong>匯入時<strong>只清除目前選取學期</strong>的課表（其他學期保留），再一次寫入。</p>
                  <p class="mb-8-block"><strong>格式：</strong>一列一節；以<strong>教師姓名</strong>對應已匯入的教師名單；同節多班可多列。</p>
-                 <p class="m-0">一般課必填：教師姓名、星期、節次、班級、科目。<strong>巡堂</strong>可省略班級／科目（科目或屬性寫「巡堂」即可）。節次可填<strong>早自習／0</strong>、1～8，或<strong>午休／45</strong>（12:35～13:15）。併班可填<strong>701、702</strong> 或 701/702。選填：課堂屬性、調課限制、特殊標記、啟用起日、啟用迄日。課堂屬性選<strong>代課</strong>代表小鐘點，請假或空堂未授課會扣除該節。啟用日期請填 YYYY-MM-DD；兩欄皆空白代表整個學期有效。姓名重複或名單沒有時，請先修正教師名單。</p>
+                  <p class="m-0">一般課必填：教師姓名、星期、節次、班級、科目。<strong>巡堂</strong>可省略班級／科目（科目或屬性寫「巡堂」即可）。節次可填<strong>早自習／0</strong>、1～8，或<strong>午休／45</strong>（12:35～13:15）。併班可填<strong>701、702</strong> 或 701/702。選填：課堂屬性、調課限制、特殊標記、啟用起日、啟用迄日。課堂屬性選<strong>代課</strong>代表小鐘點，實際授課列入公付代課；請假或空堂未授課會扣除該節。啟用日期請填 YYYY-MM-DD；兩欄皆空白代表整個學期有效。姓名重複或名單沒有時，請先修正教師名單。</p>
               </div>
 
               <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid var(--border-color);margin-bottom:16px;">

@@ -662,9 +662,9 @@
   }
 
   function isOvertimeSchedule(schedule) {
-    if (schedule && schedule.isOvertime === true) return true;
     var attr = String(schedule && (schedule.attr || schedule['\u8ab2\u5802\u5c6c\u6027']) || '').trim();
-    if (attr === '\u4ee3\u8ab2') return true;
+    if (attr === '\u4ee3\u8ab2' || (schedule && schedule.isSubstitute === true)) return false;
+    if (schedule && schedule.isOvertime === true) return true;
     if (attr.indexOf('\u8d85\u9418\u9ede') >= 0) return true;
     var tags = String(schedule && (schedule.specialTags || schedule['\u7279\u6b8a\u6a19\u8a18']) || '')
       .split(/[、,，;；/／|｜\s]+/).map(function (value) { return value.trim(); });
@@ -1096,10 +1096,37 @@
       groups[email].hours += periodCount(r, false);
       groups[email].rate = feeRate(r, groups[email].rate);
     });
+    (opts.monthlyReportRows || []).forEach(function (sourceRow) {
+      var details = Array.isArray(sourceRow.substituteAttributeDetails)
+        ? sourceRow.substituteAttributeDetails.filter(function (detail) {
+          return dateInPeriod(detail.date, period);
+        })
+        : [];
+      if (!details.length) return;
+      var email = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
+      if (!email) return;
+      if (!groups[email]) {
+        groups[email] = {
+          email: email,
+          name: sourceRow.name || '',
+          records: [],
+          attributeDetails: [],
+          hours: 0,
+          rate: FEE_DEFAULT
+        };
+      }
+      groups[email].attributeDetails = (groups[email].attributeDetails || []).concat(details);
+      groups[email].hours += details.length;
+    });
     return Object.keys(groups).sort().map(function (email, idx) {
       var group = groups[email];
-      var t = teacherFromMap(teacherMap, email, group.records[0].actualTeacherName);
-      var name = teacherName(t, group.records[0].actualTeacherName || email);
+      var firstRecord = group.records[0] || {};
+      var t = teacherFromMap(teacherMap, email, group.name || firstRecord.actualTeacherName);
+      var name = teacherName(t, group.name || firstRecord.actualTeacherName || email);
+      var notes = groupedCoverNoteParts(group.records, opts);
+      if ((group.attributeDetails || []).length) {
+        notes.push('課表代課（小鐘點）' + displayCount(group.attributeDetails.length) + '節');
+      }
       return {
         serial: idx + 1,
         title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1107,7 +1134,7 @@
         hours: group.hours,
         rate: group.rate,
         amount: group.hours * group.rate,
-        note: joinAccountingNotes(groupedCoverNoteParts(group.records, opts))
+        note: joinAccountingNotes(notes)
       };
     });
   }

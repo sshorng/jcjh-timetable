@@ -46,8 +46,10 @@ const substituteAttribute = build([{
 }], 0, [{
   teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課'
 }]);
-assert.equal(substituteAttribute.sheets.overtime[0].deduction, 1, '代課屬性請假應進入鐘點扣減');
+assert.equal(substituteAttribute.sheets.overtime[0].deduction, 0, '代課屬性請假不應進入超鐘點扣減');
 assert.equal(substituteAttribute.sheets.overtime[0].actualHours, 0);
+assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing').hours, 3, '代課屬性已授課應列入原教師公付代課');
+assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x').hours, 1, '實際代課教師仍應列入公付代課');
 
 const fallbackClassNote = build([], 2, schedules);
 assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '1*1(701、702、703班)', 'legacy/default overtime rows must include class names in notes');
