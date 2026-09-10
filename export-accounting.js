@@ -1465,9 +1465,16 @@
     });
   }
 
-  function sumFormula(column, start, end) {
+  function sumRows(rows, field) {
+    return (rows || []).reduce(function (sum, row) {
+      return sum + (Number(row && row[field]) || 0);
+    }, 0);
+  }
+
+  function sumFormula(column, start, end, result) {
     return {
-      formula: end >= start ? 'SUM(' + column + start + ':' + column + end + ')' : '0'
+      formula: end >= start ? 'SUM(' + column + start + ':' + column + end + ')' : '0',
+      result: Number(result) || 0
     };
   }
 
@@ -1507,18 +1514,18 @@
     var end = config.dataStart + rows.length - 1;
     if (config.key === 'overtime') {
       sheet.getCell(totalRow, 2).value = '合計';
-      sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end);
-      sheet.getCell(totalRow, 7).value = sumFormula('G', config.dataStart, end);
-      sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end);
-      sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end);
-      sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end);
+      sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'weeklyOvertime'));
+      sheet.getCell(totalRow, 7).value = sumFormula('G', config.dataStart, end, sumRows(rows, 'grossHours'));
+      sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end, sumRows(rows, 'deduction'));
+      sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end, sumRows(rows, 'actualHours'));
+      sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end, sumRows(rows, 'amount'));
     } else {
       sheet.getCell(totalRow, 3).value = '合計';
-      sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end);
-      sheet.getCell(totalRow, 7).value = sumFormula('G', config.dataStart, end);
-      sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end);
-      sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end);
-      sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end);
+      sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'weeklyOvertime'));
+      sheet.getCell(totalRow, 7).value = sumFormula('G', config.dataStart, end, sumRows(rows, 'grossHours'));
+      sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end, sumRows(rows, 'deduction'));
+      sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end, sumRows(rows, 'actualHours'));
+      sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end, sumRows(rows, 'amount'));
     }
     applyMoneyNumberFormat(sheet, [10, 11], config.dataStart, totalRow);
     mergeSummaryNoteRow(sheet, config, totalRow);
@@ -1533,8 +1540,8 @@
     applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     sheet.getCell(totalRow, 2).value = '合計';
-    sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end);
-    sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end);
+    sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'hours'));
+    sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end, sumRows(rows, 'amount'));
     applyMoneyNumberFormat(sheet, [5, 6], config.dataStart, totalRow);
     return totalRow;
   }
@@ -1548,8 +1555,8 @@
     applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     sheet.getCell(totalRow, 1).value = '合計';
-    sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end);
-    sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end);
+    sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end, sumRows(rows, 'count'));
+    sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end, sumRows(rows, 'amount'));
     applyMoneyNumberFormat(sheet, [7, 8], config.dataStart, totalRow);
     return totalRow;
   }
