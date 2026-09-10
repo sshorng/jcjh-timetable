@@ -29,16 +29,51 @@ function build(records, baseHours, scheduleRows, schoolSwaps, teacherOptions) {
 }
 
 const coEmployed = build([], 0, schedules, [], { jobTitle: '共聘教師' });
-assert.equal(coEmployed.sheets.adjunct.length, 1, '共聘教師仍應列入兼課教師鐘點工作表');
-assert.equal(coEmployed.sheets.adjunct[0].title, '共聘教師', '兼課工作表應保留共聘職務名稱');
-assert.equal(coEmployed.sheets.overtime.length, 0, '共聘教師不應再列入超鐘點工作表');
+assert.equal(coEmployed.sheets.adjunct.length, 0, '共聘教師不應列入兼課教師鐘點工作表');
+assert.equal(coEmployed.sheets.overtime.length, 1, '共聘教師應列入預設超鐘點工作表');
+assert.equal(coEmployed.sheets.overtime[0].title, '共聘教師', '預設超鐘點工作表應保留共聘職務名稱');
+assert.equal(coEmployed.overtimePlans[0].plan, '預設', '共聘教師應使用預設經費計畫');
+
+const noOvertime = build([], 3, schedules);
+assert.equal(noOvertime.sheets.overtime.length, 0, '沒有超鐘點的教師不應列入超鐘點工作表');
+assert.equal(noOvertime.overtimePlans.length, 0, '沒有超鐘點時不應建立超鐘點計畫工作表');
+
+const teacherOrderPeriod = { start: '2026-07-01', end: '2026-07-31' };
+const teacherOrder = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: {
+    overtime: teacherOrderPeriod,
+    adjunct: teacherOrderPeriod,
+    publicSub: teacherOrderPeriod,
+    selfSub: teacherOrderPeriod,
+    mentor: teacherOrderPeriod
+  },
+  teachers: [
+    { email: 'z@x', name: 'Zeta', baseHours: 16 },
+    { email: 'a@x', name: 'Alpha', baseHours: 16 }
+  ],
+  allSchedules: [],
+  substitutionRecords: [
+    { date: '2026-07-02', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'origin@x', actualTeacherEmail: 'z@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-01', period: 1, className: '702', type: 'substitution', originalTeacherEmail: 'origin@x', actualTeacherEmail: 'a@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-02', period: 2, className: '701', type: 'substitution', originalTeacherEmail: 'origin@x', actualTeacherEmail: 'z@x', subFee: '自費代課', status: 'approved' },
+    { date: '2026-07-01', period: 2, className: '702', type: 'substitution', originalTeacherEmail: 'origin@x', actualTeacherEmail: 'a@x', subFee: '自費代課', status: 'approved' }
+  ],
+  homeroomRecords: [
+    { date: '2026-07-02', actualTeacherEmail: 'z@x', actualTeacherName: 'Zeta', className: '701', status: 'approved' },
+    { date: '2026-07-01', actualTeacherEmail: 'a@x', actualTeacherName: 'Alpha', className: '702', status: 'approved' }
+  ]
+});
+assert.deepEqual(teacherOrder.sheets.publicSub.map(row => row.name), ['Zeta', 'Alpha'], '公付代課應依教師名單排序');
+assert.deepEqual(teacherOrder.sheets.selfSub.map(row => row.actualName), ['Zeta', 'Alpha'], '自付代課應依教師名單排序');
+assert.deepEqual(teacherOrder.sheets.mentor.map(row => row.actualName), ['Zeta', 'Alpha'], '代導明細應依教師名單排序');
 
 const publicOvertime = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
   originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
 }]);
-assert.equal(publicOvertime.sheets.overtime[0].deduction, 1);
-assert.equal(publicOvertime.sheets.overtime[0].actualHours, 0);
+assert.equal(publicOvertime.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
 
 const substituteAttribute = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
@@ -46,8 +81,7 @@ const substituteAttribute = build([{
 }], 0, [{
   teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課'
 }]);
-assert.equal(substituteAttribute.sheets.overtime[0].deduction, 0, '代課屬性請假不應進入超鐘點扣減');
-assert.equal(substituteAttribute.sheets.overtime[0].actualHours, 0);
+assert.equal(substituteAttribute.sheets.overtime.length, 0, '代課屬性請假且無超鐘點時不列入超鐘點工作表');
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing').hours, 3, '代課屬性已授課應列入原教師公付代課');
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x').hours, 1, '實際代課教師仍應列入公付代課');
 
@@ -79,7 +113,7 @@ const publicSpecial = build([
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
   }
 ], 1);
-assert.equal(publicSpecial.sheets.overtime[0].deduction, 2);
+assert.equal(publicSpecial.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
 
 const selfSpecial = build([
   {
@@ -131,6 +165,7 @@ const combinedReturn = build([{
    teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點'
 }]);
 assert.equal(combinedReturn.sheets.overtime[0].deduction, 1);
+assert.equal(combinedReturn.sheets.overtime[0].actualHours, -1, '超鐘不足仍保留提醒列');
 assert.equal(combinedReturn.sheets.publicSub.length, 0);
 
 const swappedPublic = build([{
@@ -142,8 +177,7 @@ const swappedPublic = build([{
   id: 'swap-billing', name: '補課', dateA: '2026-07-13', periodA: 1,
   dateB: '2026-07-14', periodB: 3, enabled: true
 }]);
-assert.equal(swappedPublic.sheets.overtime[0].deduction, 1, 'accounting export must resolve the original overtime slot after school swap');
-assert.equal(swappedPublic.sheets.overtime[0].actualHours, 0);
+assert.equal(swappedPublic.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
 
 const configuredPlan = JSON.stringify([
   { day: 1, period: 1, className: '701', source: '計畫A' },
@@ -178,13 +212,13 @@ const configuredA = configured.overtimePlans.find(group => group.plan === '計�
 const configuredB = configured.overtimePlans.find(group => group.plan === '計畫B');
 assert.ok(configuredA && configuredB, 'slot sources must create one overtime group per plan');
 assert.deepEqual(configuredA.rows[0], {
-  expensePlan: '計畫A', serial: 1, title: '教師', name: 'Billing', weeklyOvertime: 1,
-  schedule: '一1', weeks: 1, grossHours: 1, deduction: 1, actualHours: 0,
-  rate: 455, amount: 0, reduceNote: '', note: '1、1*1(701班)\n2、7/13公假扣1節'
+  expensePlan: '計畫A', serial: 1, title: '教師', name: 'Cover', weeklyOvertime: 1,
+  schedule: '一1(代)', weeks: '', grossHours: 1, deduction: 0, actualHours: 1,
+  rate: 455, amount: 455, reduceNote: '', note: '7/13代超鐘Billing1節（701）'
 });
 assert.equal(configuredB.rows[0].expensePlan, '計畫B');
 assert.equal(configuredB.rows[0].grossHours, 1);
-assert.equal(configuredB.rows[0].deduction, 1);
+assert.equal(configuredB.rows[0].deduction, 0);
 assert.ok(configuredA.rows.some(row => row.name === 'Cover' && row.expensePlan === '計畫A'));
 assert.ok(configuredB.rows.some(row => row.name === 'Cover' && row.expensePlan === '計畫B'));
 assert.equal(configured.blocking.length, 0);

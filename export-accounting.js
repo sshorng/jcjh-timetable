@@ -387,10 +387,30 @@
   function teacherFromMap(map, email, name) {
     return (map && (map[teacherEmail(email)] || map['name:' + String(name || '').trim()])) || {};
   }
+  function teacherOrderMap(teachers) {
+    var order = {};
+    (teachers || []).forEach(function (teacher, index) {
+      teacherIdentityKeys(teacher).forEach(function (key) {
+        if (order[key] === undefined) order[key] = index;
+      });
+    });
+    return order;
+  }
+  function teacherOrderValue(order, value) {
+    var keys = teacherIdentityKeys(value);
+    for (var i = 0; i < keys.length; i += 1) {
+      if (order[keys[i]] !== undefined) return order[keys[i]];
+    }
+    return Number.MAX_SAFE_INTEGER;
+  }
+  function compareTeacherOrder(order, left, right) {
+    var rankDiff = teacherOrderValue(order, left) - teacherOrderValue(order, right);
+    if (rankDiff) return rankDiff;
+    return teacherName(left, '').localeCompare(teacherName(right, ''), 'zh-Hant');
+  }
   function isAdjunctTeacher(teacher) {
     var title = teacherTitle(teacher);
-    // 共聘教師仍使用「兼課教師鐘點」會計工作表，但清冊保留實際職務名稱。
-    return title.indexOf('兼課') >= 0 || title.indexOf('共聘') >= 0;
+    return title.indexOf('兼課') >= 0 && title.indexOf('共聘') < 0;
   }
 
   function feeRate(record, fallback) {
@@ -1064,7 +1084,8 @@
           reduceNote: reduce ? ('空堂調降 ' + reduce + ' 節') : '',
           note: notes
         };
-        rows.push(row);
+        // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。
+        if (config.key !== 'overtime' || actualHours !== 0) rows.push(row);
         if (config.key === 'overtime' && chargedItems) {
           chargedItems.forEach(function (item) {
             rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
@@ -1083,6 +1104,7 @@
 
   function publicRows(opts, period, chargedMap) {
     var teacherMap = {};
+    var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     var groups = {};
     (opts.substitutionRecords || []).filter(function (r) {
@@ -1118,7 +1140,10 @@
       groups[email].attributeDetails = (groups[email].attributeDetails || []).concat(details);
       groups[email].hours += details.length;
     });
-    return Object.keys(groups).sort().map(function (email, idx) {
+    return Object.keys(groups).sort(function (leftEmail, rightEmail) {
+      var result = compareTeacherOrder(teacherOrder, groups[leftEmail], groups[rightEmail]);
+      return result || leftEmail.localeCompare(rightEmail);
+    }).map(function (email, idx) {
       var group = groups[email];
       var firstRecord = group.records[0] || {};
       var t = teacherFromMap(teacherMap, email, group.name || firstRecord.actualTeacherName);
@@ -1141,13 +1166,18 @@
 
   function selfRows(opts, period, chargedMap) {
     var teacherMap = {};
+    var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     return (opts.substitutionRecords || []).filter(function (r) {
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isSelfPaidRecord(r) && r.actualTeacherEmail
         && !(chargedMap && chargedMap.byKey[substitutionKey(r)]);
     }).sort(function (a, b) {
-      return String(a.date || '').localeCompare(String(b.date || '')) || Number(a.period || 0) - Number(b.period || 0);
+      return compareTeacherOrder(teacherOrder,
+        { email: a.actualTeacherEmail, name: a.actualTeacherName },
+        { email: b.actualTeacherEmail, name: b.actualTeacherName })
+        || String(a.date || '').localeCompare(String(b.date || ''))
+        || Number(a.period || 0) - Number(b.period || 0);
     }).map(function (r) {
       var t = teacherFromMap(teacherMap, r.actualTeacherEmail, r.actualTeacherName);
       return {
@@ -1167,10 +1197,14 @@
   }
 
   function mentorRows(opts, period) {
+    var teacherOrder = teacherOrderMap(opts.teachers || []);
     return (opts.homeroomRecords || []).filter(function (r) {
       return isActiveHomeroom(r) && r.actualTeacherEmail && dateInPeriod(r.date, period);
     }).sort(function (a, b) {
-      return String(a.date || '').localeCompare(String(b.date || ''));
+      return compareTeacherOrder(teacherOrder,
+        { email: a.actualTeacherEmail, name: a.actualTeacherName },
+        { email: b.actualTeacherEmail, name: b.actualTeacherName })
+        || String(a.date || '').localeCompare(String(b.date || ''));
     }).map(function (r) {
       var count = periodCount(r, true);
       var rate = feeRate(r, FEE_DEFAULT);
