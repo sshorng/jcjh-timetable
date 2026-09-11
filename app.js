@@ -9455,7 +9455,7 @@ createApp({
           note: req.note || req['備註'] || '',
           printed: req.printed === true || req.printed === 'TRUE'
         };
-        const classValue = String(className || req.className || req['班級'] || '').trim();
+        const classValue = String(req.className || req['班級'] || className || '').trim();
         const subjectValue = req.subject || req['科目'] || '';
         const targetDateValue = req.targetDate || req['對調目標日期'] || '';
         const targetPeriodValue = req.targetPeriod != null ? req.targetPeriod : req['對調目標節次'];
@@ -9472,13 +9472,27 @@ createApp({
             || window.DomainSchedule.isActiveOnDate(schedule, targetDateValue))
         );
         const targetClassValue = String(req.targetClassName || req['對調目標班級'] || (targetSchedule && targetSchedule.className) || classValue).trim();
-        const targetSubjectValue = req.targetSubject || req['對調目標科目'] || (targetSchedule && targetSchedule.subject) || (targetClassValue === classValue ? subjectValue : '');
+        const targetSubjectValue = req.targetSubject || req['對調目標科目'] || (targetSchedule && targetSchedule.subject) || '';
         const type = req.type || req['異動類型'] || 'substitution';
         const requestDate = req.requestDate || req['異動日期'] || '';
         const requestPeriod = req.requestPeriod != null ? req.requestPeriod : req['異動節次'];
         const requesterName = req.requesterName || req['申請人姓名'] || '';
         const targetName = req.targetTeacherName || req['受邀人姓名'] || '';
+        if (type === 'triangle' || type === '三角調') {
+          out.push(Object.assign({}, base, {
+            id: base.requestId,
+            date: targetDateValue,
+            period: targetPeriodValue,
+            originalTeacherName: targetName,
+            actualTeacherName: requesterName,
+            className: classValue,
+            subject: subjectValue,
+            type: 'triangle'
+          }));
+          return;
+        }
         if (type === 'exchange' || type === '對調') {
+          // 調課只交換時段：班級與科目必須跟著原授課教師移動。
           out.push(Object.assign({}, base, {
             id: String(base.requestId) + '_class_1',
             requestId: base.requestId,
@@ -9486,8 +9500,8 @@ createApp({
             period: targetPeriodValue,
             originalTeacherName: targetName,
             actualTeacherName: requesterName,
-             className: targetClassValue,
-             subject: targetSubjectValue || subjectValue,
+            className: classValue,
+            subject: subjectValue,
             type: 'exchange'
           }));
           out.push(Object.assign({}, base, {
@@ -9497,8 +9511,8 @@ createApp({
             period: requestPeriod,
             originalTeacherName: requesterName,
             actualTeacherName: targetName,
-             className: classValue,
-             subject: subjectValue,
+            className: targetClassValue,
+            subject: targetSubjectValue,
             type: 'exchange'
           }));
           return;

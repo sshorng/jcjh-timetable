@@ -297,10 +297,76 @@ function runPublicClassExchangeMappingTest() {
   }], '904');
   const targetDateRecord = records.find(record => record.id.endsWith('_class_1'));
   const sourceDateRecord = records.find(record => record.id.endsWith('_class_2'));
-  assert.equal(targetDateRecord.subject, '輔導');
+  assert.equal(targetDateRecord.subject, '國文');
   assert.equal(targetDateRecord.actualTeacherName, '洪筱仙');
-  assert.equal(sourceDateRecord.subject, '國文');
+  assert.equal(sourceDateRecord.subject, '輔導');
   assert.equal(sourceDateRecord.actualTeacherName, '吳冠萱');
+}
+
+function runPublicClassCourseFollowsTeacherTest() {
+  const map = loadPublicClassRequestMapper();
+  const convert = loadApprovedExchangeConverter();
+  const examples = [
+    ['2026-09-01', 6, '視覺藝術', '黃奕慈', '2026-09-04', 2, '國文'],
+    ['2026-09-07', 5, '音樂', '林衣穎', '2026-09-07', 4, '國文'],
+    ['2026-09-16', 6, '輔導', '吳冠萱', '2026-09-14', 6, '閱思'],
+    ['2026-09-16', 4, '數學', '陳海新', '2026-09-21', 6, '閱思']
+  ];
+  examples.forEach(([date, period, subject, teacher, targetDate, targetPeriod, targetSubject], i) => {
+    const req = {
+      id: 'course-follows-' + i, status: 'approved', type: 'exchange',
+      requesterName: teacher, targetTeacherName: '洪筱仙',
+      requestDate: date, requestPeriod: period, className: '904', subject,
+      targetDate, targetPeriod, targetClassName: '904', targetSubject
+    };
+    const records = map([req], '904');
+    assert.equal(records[0].date, targetDate);
+    assert.equal(records[0].period, targetPeriod);
+    assert.equal(records[0].actualTeacherName, teacher);
+    assert.equal(records[0].subject, subject, '原科目跟著授課教師調入');
+    assert.equal(records[1].date, date);
+    assert.equal(records[1].period, period);
+    assert.equal(records[1].actualTeacherName, '洪筱仙');
+    assert.equal(records[1].subject, targetSubject, '洪老師帶著該堂原課調入');
+    const arrangement = rows => JSON.stringify(rows.map(r => [
+      r.date, r.period, r.className, r.subject, r.actualTeacherName, r.type
+    ]));
+    assert.equal(arrangement(records), arrangement(convert([req])),
+      '唯讀班級課表與登入後核准課表應呈現相同安排');
+  });
+
+  const crossClass = map([{
+    '申請單ID': 'cross-class', '狀態': 'approved', '異動類型': '對調',
+    '申請人姓名': '洪筱仙', '受邀人姓名': '吳冠萱',
+    '異動日期': '2026-09-14', '異動節次': 6, '班級': '903', '科目': '閱思',
+    '對調目標日期': '2026-09-16', '對調目標節次': 6,
+    '對調目標班級': '904', '對調目標科目': '輔導'
+  }], '904');
+  assert.equal(crossClass[0].className, '903', '選取班級不可覆蓋教師原課班級');
+  assert.equal(crossClass[0].subject, '閱思');
+  assert.equal(crossClass[1].className, '904');
+  assert.equal(crossClass[1].subject, '輔導');
+
+  const triangle = map([{
+    id: 'triangle-leg', status: 'approved', type: 'triangle',
+    requesterName: '洪筱仙', targetTeacherName: '陳海新',
+    requestDate: '2026-09-14', requestPeriod: 6, className: '904', subject: '閱思',
+    targetDate: '2026-09-16', targetPeriod: 4, targetClassName: '904', targetSubject: '數學'
+  }], '904');
+  assert.equal(triangle.length, 1);
+  assert.equal(triangle[0].type, 'triangle');
+  assert.equal(triangle[0].date, '2026-09-16');
+  assert.equal(triangle[0].period, 4);
+  assert.equal(triangle[0].actualTeacherName, '洪筱仙');
+  assert.equal(triangle[0].subject, '閱思');
+
+  const substitution = map([{
+    id: 'sub', status: 'approved', type: 'substitution',
+    requesterName: '洪筱仙', targetTeacherName: '吳冠萱',
+    requestDate: '2026-09-14', requestPeriod: 6, className: '904', subject: '閱思'
+  }], '904');
+  assert.equal(substitution[0].subject, '閱思', '代課仍保留被代課的科目');
+  assert.equal(substitution[0].actualTeacherName, '吳冠萱');
 }
 
 function runNoSyntheticStudySubjectTest() {
@@ -320,6 +386,7 @@ runApprovedExchangeRecordMappingTest();
 runApprovedCombinedReturnMappingTest();
 runApprovedBatchRecordMappingTest();
 runPublicClassExchangeMappingTest();
+runPublicClassCourseFollowsTeacherTest();
 runNoSyntheticStudySubjectTest();
 
 function loadProgressSteps() {
