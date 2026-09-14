@@ -8627,7 +8627,7 @@ createApp({
       if (mode === 'triangle') {
         const source = activeCell.value || {};
         if (!source.classData || !triangleCellIsUsable(source.classData)) {
-          showToast('三角調只能從尚未異動的有效一般課程開始', 'warning');
+          showToast('三角調只能從有效一般課程開始', 'warning');
           return;
         }
         matchMode.value = 'triangle';

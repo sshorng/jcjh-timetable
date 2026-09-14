@@ -5791,11 +5791,11 @@ function validateTriangleRequestRows_(rows, semesterId, ignoreTriangleId) {
     if (!source || !target || sourceSlot.period === null || targetSlot.period === null) return;
     var sourceCell = triangleCurrentCell_(context, source, sourceSlot.date, sourceSlot.day, sourceSlot.period);
     var targetCell = triangleCurrentCell_(context, target, targetSlot.date, targetSlot.day, targetSlot.period);
-    if (!sourceCell || sourceCell.changed || !triangleCourseUsable_(sourceCell)) {
-      errors.push("第" + no + "列來源課堂必須是尚未異動的有效一般課程");
+    if (!sourceCell || !triangleCourseUsable_(sourceCell)) {
+      errors.push("第" + no + "列來源課堂必須是有效一般課程");
     }
-    if (!targetCell || targetCell.changed || !triangleCourseUsable_(targetCell)) {
-      errors.push("第" + no + "列目標課堂必須是尚未異動的有效一般課程");
+    if (!targetCell || !triangleCourseUsable_(targetCell)) {
+      errors.push("第" + no + "列目標課堂必須是有效一般課程");
     }
     if (context.pending[triangleCellKey_(source, sourceSlot.date, sourceSlot.period)]
         || context.pending[triangleCellKey_(target, targetSlot.date, targetSlot.period)]) {
