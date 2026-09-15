@@ -9,7 +9,7 @@ require('../domain-schedule.js');
 require('../domain-match.js');
 require('../ui-request.js');
 
-const { DateUtils, DomainMatch, UiSubmitHelpers } = window;
+const { DateUtils, DomainSchedule, DomainMatch, UiSubmitHelpers } = window;
 
 assert.equal(DateUtils.getExchangeTargetDate('2026-09-07', '2-8', 1), '2026-09-15');
 assert.equal(DateUtils.getExchangeTargetDate('2026-09-07', '2-8', 2), '2026-09-22');
@@ -50,6 +50,37 @@ assert.equal(listCandidate(true, '2026-09-15').length, 1);
 assert.equal(listCandidate(true, '2026-09-15')[0].subject, '單週課');
 assert.equal(listCandidate(false, '2026-09-22').length, 1);
 assert.equal(listCandidate(false, '2026-09-22')[0].subject, '雙週課');
+
+assert.deepEqual(DomainMatch.listExchangeCandidates({
+  allSchedules: schedules,
+  className: '701',
+  leaveEmail: undefined,
+  leaveDate: '2026-09-07',
+  leavePeriod: 8,
+  leaveDay: 1,
+  weekDates: DateUtils.getWeekDatesFrom('2026-09-15'),
+  getScheduleForDate
+}), [], '缺少請假教師鍵時應停止調課候選解析');
+
+assert.doesNotThrow(() => DomainSchedule.resolveApprovedSchedule({
+  teacherEmail: undefined,
+  dateStr: '2026-09-15',
+  dayOfWeek: 2,
+  period: 8,
+  allSchedules: [],
+  scheduleIndex: DomainSchedule.buildScheduleIndex([]),
+  periodSubs: [{
+    date: '2026-09-15',
+    period: 8,
+    originalTeacherEmail: 'target@example.com',
+    actualTeacherEmail: 'cover@example.com',
+    className: '701',
+    subject: '單週課',
+    type: 'substitution'
+  }],
+  allSubs: [],
+  helpers: {}
+}), '課表解析遇到空教師鍵時不應拋出例外');
 
 // 空堂事件取消的課不能拿來交換；其他班級釋出的空堂仍可用於互調。
 const holidaySchedule = {

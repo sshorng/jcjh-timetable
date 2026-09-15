@@ -330,7 +330,8 @@ window.DomainMatch = (function () {
   function listExchangeCandidates(opts) {
     const allSchedules = opts.allSchedules || [];
     const cls = opts.className || '';
-    const leaveTeacher = opts.leaveEmail;
+    const leaveTeacher = String(opts.leaveEmail || '').trim();
+    if (!leaveTeacher) return [];
     const leaveDate = opts.leaveDate;
     const leavePeriod = opts.leavePeriod;
     const leaveDay = opts.leaveDay;

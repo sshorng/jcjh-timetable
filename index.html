@@ -1778,7 +1778,7 @@
                     <span class="status-badge" style="background:#e8f4ff;color:#1864ab;font-size:0.78rem;">共 {{ currentMonthHomeroomRecords.length }} 筆</span>
                     <span class="status-badge" style="background:#e6fcf5;color:#0ca678;font-size:0.78rem;">已指定 {{ currentMonthHomeroomAssignedCount }} 筆</span>
                     <span v-if="currentMonthHomeroomPendingCount > 0" class="status-badge status-pending-admin" style="font-size:0.78rem;">待指定 {{ currentMonthHomeroomPendingCount }} 筆</span>
-                    <span style="font-size:0.9rem;font-weight:bold;color:#c92a2a;margin-left:4px;">小計 NT$ {{ currentMonthHomeroomFeeTotal }} 元</span>
+                     <span style="font-size:0.9rem;font-weight:bold;color:#c92a2a;margin-left:4px;">小計 NT$ {{ formatMoney(currentMonthHomeroomFeeTotal) }} 元</span>
                   </div>
                   <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.82rem;background:#fff;border:1px solid #d9b86c;color:#6b4e0a;" @click="openManualHomeroomModal">
                     ➕ 手動新增代導費
@@ -1799,7 +1799,7 @@
                         <span v-if="r.sourceRequestId === 'manual'" class="status-badge" style="background:#fff3bf;color:#f59f00;font-size:0.72rem;padding:1px 5px;">手動建立</span>
                       </div>
                       <div class="text-xs-sec-78" >
-                         請假時間：{{ r.leaveTimeType || '' }} {{ r.leaveTime || '未填' }}｜鐘點費：1節（NT$ {{ r.feeAmount || 455 }}）
+                          請假時間：{{ r.leaveTimeType || '' }} {{ r.leaveTime || '未填' }}｜鐘點費：1節（NT$ {{ formatMoney(r.feeAmount || 455) }}）
                         <span v-if="r.note" style="margin-left:6px;color:#868e96;">({{ r.note }})</span>
                       </div>
                     </div>
@@ -1872,13 +1872,13 @@
                        <td class="num warn">{{ row.publicOvertimeUsed ? ('−' + row.publicOvertimeUsed) : '無' }}</td>
                        <td class="num warn">{{ row.substituteAdditionalDeduction ? ('−' + row.substituteAdditionalDeduction) : '無' }}</td>
                       <td class="num result" :class="{ danger: row.actualOvertime < 0 }" :title="row.actualOvertime < 0 ? '超鐘不足，自費請假請自行付代課費' : ''">{{ row.actualOvertime }}</td>
-                       <td class="num result" :class="{ danger: row.overtimeFee < 0 }" :title="row.overtimeFee < 0 ? '負數＝應自付代課費約此金額' : ''">{{ row.overtimeFee ? ('$' + row.overtimeFee) : (row.overtimeFee === 0 ? '$0' : '無') }}</td>
+                        <td class="num result" :class="{ danger: row.overtimeFee < 0 }" :title="row.overtimeFee < 0 ? '負數＝應自付代課費約此金額' : ''">{{ row.overtimeFee ? ('$' + formatMoney(row.overtimeFee)) : (row.overtimeFee === 0 ? '$0' : '無') }}</td>
                        <td class="num">{{ row.pubSubCount || '無' }}</td>
-                       <td class="num ok">{{ row.pubSubFee ? ('$' + row.pubSubFee) : '無' }}</td>
+                        <td class="num ok">{{ row.pubSubFee ? ('$' + formatMoney(row.pubSubFee)) : '無' }}</td>
                        <td class="num">{{ row.selfSubCount || '無' }}</td>
-                       <td class="num ok" :title="row.selfSubDetail && row.selfSubDetail !== '無' ? row.selfSubDetail : ''">{{ row.selfSubFee ? ('$' + row.selfSubFee) : '無' }}</td>
+                        <td class="num ok" :title="row.selfSubDetail && row.selfSubDetail !== '無' ? row.selfSubDetail : ''">{{ row.selfSubFee ? ('$' + formatMoney(row.selfSubFee)) : '無' }}</td>
                        <td class="num">{{ row.period8SubCount || '無' }}</td>
-                     <td class="num result-p8">{{ row.period8Fee ? ('$' + row.period8Fee) : '無' }}</td>
+                      <td class="num result-p8">{{ row.period8Fee ? ('$' + formatMoney(row.period8Fee)) : '無' }}</td>
                      </tr>
                      <tr v-if="monthlyReportData.length > 0" class="billing-total-row">
                        <td colspan="3" class="billing-sticky-name"><strong>合計</strong></td>
@@ -1890,13 +1890,13 @@
                        <td class="num warn">{{ monthlyReportTotals.publicOvertimeUsed }}</td>
                        <td class="num warn">{{ monthlyReportTotals.substituteAdditionalDeduction }}</td>
                        <td class="num result">{{ monthlyReportTotals.actualOvertime }}</td>
-                       <td class="num result">${{ monthlyReportTotals.overtimeFee }}</td>
+                        <td class="num result">${{ formatMoney(monthlyReportTotals.overtimeFee) }}</td>
                        <td class="num">{{ monthlyReportTotals.pubSubCount }}</td>
-                       <td class="num ok">${{ monthlyReportTotals.pubSubFee }}</td>
+                        <td class="num ok">${{ formatMoney(monthlyReportTotals.pubSubFee) }}</td>
                        <td class="num">{{ monthlyReportTotals.selfSubCount }}</td>
-                       <td class="num ok">${{ monthlyReportTotals.selfSubFee }}</td>
+                        <td class="num ok">${{ formatMoney(monthlyReportTotals.selfSubFee) }}</td>
                        <td class="num">{{ monthlyReportTotals.period8SubCount }}</td>
-                       <td class="num result-p8">${{ monthlyReportTotals.period8Fee }}</td>
+                        <td class="num result-p8">${{ formatMoney(monthlyReportTotals.period8Fee) }}</td>
                      </tr>
                      <tr v-if="monthlyReportData.length === 0">
                        <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再選擇月份統計。</td>
@@ -4485,9 +4485,9 @@
      <script defer src="date-utils.js?v=20260904-calendar-new-tab"></script>
      <script defer src="gas-api.js?v=20260904-calendar-new-tab"></script>
      <script defer src="domain-school-swap.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="domain-schedule.js?v=20260904-calendar-new-tab"></script>
+      <script defer src="domain-schedule.js?v=20260915-schedule-email-guard1"></script>
      <script defer src="domain-triangle.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="domain-match.js?v=20260904-calendar-new-tab"></script>
+      <script defer src="domain-match.js?v=20260915-schedule-email-guard1"></script>
   <!-- domain-activity-cover：活動互代／空堂任務時 ensureDomainActivityCover -->
      <script defer src="domain-class-away.js?v=20260904-calendar-new-tab"></script>
      <script defer src="fee-utils.js?v=20260904-calendar-new-tab"></script>
@@ -4497,7 +4497,7 @@
      <script defer src="ui-approval.js?v=20260904-calendar-new-tab"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
      <script defer src="app-shell-utils.js?v=20260904-calendar-new-tab"></script>
-              <script defer src="app.js?v=20260915-overtime-period-end1"></script>
+               <script defer src="app.js?v=20260915-homeroom-revoke-money-format1"></script>
   <script>
     (function () {
       function loadScript(src) {

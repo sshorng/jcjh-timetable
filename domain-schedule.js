@@ -327,7 +327,7 @@ window.DomainSchedule = (function () {
         }
       });
 
-      const emailLower = teacherEmail.toLowerCase();
+      const emailLower = String(teacherEmail || '').toLowerCase();
 
       function findIncomingInfo(excludeRecord) {
         var incomingEdge = null;

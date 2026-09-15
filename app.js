@@ -4658,7 +4658,8 @@ createApp({
     const deleteHomeroomRecord = async (record) => {
       if (!record || !record.id) return;
       const ok = await showConfirm(`確定要撤銷／刪除【${record.date} ${record.className || ''} ${record.originalTeacherName}】的代導紀錄嗎？`, '撤銷代導紀錄確認');
-      if (!ok || !ok.ok) return;
+      const confirmed = ok && typeof ok === 'object' ? ok.ok : ok;
+      if (!confirmed) return;
 
       await executeOptimisticAction({
         optimistic: () => {
@@ -8639,6 +8640,10 @@ createApp({
     const getPeriodTimeSpan = (p) => window.DateUtils.getPeriodTimeSpan(p);
     const getWeekDayText = (d) => window.DateUtils.getWeekDayText(d);
     const formatDateMMDD = (dateStr) => window.DateUtils.formatDateMMDD(dateStr);
+    const formatMoney = (value) => {
+      const number = Number(String(value == null ? '' : value).replace(/,/g, '').trim());
+      return Number.isFinite(number) ? number.toLocaleString('zh-TW') : '0';
+    };
     const getTodayString = () => window.DateUtils.getTodayString();
 
     // P4：name/loginEmail → teacher O(1) lookup.
@@ -11922,7 +11927,7 @@ createApp({
       devSwitchUser, restoreAdmin,
        getTeacherNameByEmail, getTeacherSubjectByEmail, getTeacherIdentityTooltip, getTeacherTimetableHours, getRealTeacherName, startSecondSub,
         getTeacherJobTitleByEmail, isHomeroomTeacher,
-      getSubjectStyle, getClassBadgeStyle,
+      getSubjectStyle, getClassBadgeStyle, formatMoney,
       changeHistoryPage, openHistoryEditModal, saveHistoryEdit, onHistoryEditDateChange, changePendingPage,
       openAddSemesterModal, openEditSemesterModal, saveSemester, deleteSemester, setDefaultSemester,
       // 工具函數
