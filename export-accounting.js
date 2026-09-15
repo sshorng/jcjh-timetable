@@ -260,6 +260,12 @@
     return (a.getMonth() + 1) + '/' + a.getDate() + '-' + (b.getMonth() + 1) + '/' + b.getDate();
   }
 
+  function dateRangeFileLabel(period, reportMonth) {
+    var normalized = normalizePeriod(period, defaultPeriod(reportMonth));
+    return normalized.start.slice(5, 7) + normalized.start.slice(8, 10)
+      + '-' + normalized.end.slice(5, 7) + normalized.end.slice(8, 10);
+  }
+
   function normalizeExpensePlan(value) {
     var plan = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
     return plan === '未分配' ? '預設' : plan;
@@ -1833,10 +1839,10 @@
       workbook.calcProperties.calcMode = 'auto';
     }
     var outputBuffer = await workbook.xlsx.writeBuffer();
-    var parts = reportParts(opts.reportMonth);
+    var fileRange = dateRangeFileLabel(getPeriod(data.periods, 'overtime', opts.reportMonth), opts.reportMonth);
     return {
       buffer: outputBuffer,
-      fileName: (parts.month + '月會計核銷明細.xlsx'),
+      fileName: (fileRange + '會計核銷明細.xlsx'),
       summary: data.summary,
       warnings: data.warnings,
       blocking: data.blocking,
@@ -1850,6 +1856,7 @@
     defaultPeriodSettings: defaultPeriodSettings,
     loadPeriodSettings: loadPeriodSettings,
     savePeriodSettings: savePeriodSettings,
+    dateRangeFileLabel: dateRangeFileLabel,
     buildExportData: buildExportData,
     exportWorkbook: exportWorkbook
   };

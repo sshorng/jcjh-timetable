@@ -10,6 +10,16 @@ require('../domain-billing.js');
 require('../export-accounting.js');
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
+assert.equal(
+  window.ExportAccounting.dateRangeFileLabel({ start: '2026-09-01', end: '2026-09-30' }, '2026-09'),
+  '0901-0930',
+  '會計 Excel 檔名應使用 MMDD-MMDD 日期區間'
+);
+assert.equal(
+  window.ExportAccounting.dateRangeFileLabel({ start: '2026-07-31', end: '2026-08-03' }, '2026-07'),
+  '0731-0803',
+  '跨月會計 Excel 檔名應保留完整日期區間'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
