@@ -6,6 +6,9 @@ const assert = require('node:assert/strict');
 global.window = global;
 require('../field-map.js');
 require('../domain-school-swap.js');
+require('../date-utils.js');
+require('../domain-schedule.js');
+require('../domain-class-away.js');
 require('../domain-billing.js');
 require('../export-accounting.js');
 
@@ -145,8 +148,8 @@ assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cove
 assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代課應建立獨立工作表資料');
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -166,7 +169,7 @@ const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   substitutionRecords: []
 });
 assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.plan), ['計畫A', '計畫B'], '課表代課不同來源應分表');
-assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [4, 4]);
+assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [1, 1]);
 
 const fallbackClassNote = build([], 2, schedules);
 assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '1*1(701、702、703班)', 'legacy/default overtime rows must include class names in notes');
@@ -341,5 +344,55 @@ assert.equal(defaultPlan.rows[0].grossHours, 1);
 assert.equal(defaultPlan.rows[0].actualHours, 1);
 assert.equal(missingSource.blocking.length, 0, 'default overtime plan must not block accounting export');
 assert.ok(missingSource.summary.some(item => item.key === 'overtime:國教' && item.hours === 1), 'default overtime plan must be included in export summary');
+
+const fixedExportSchedules = [];
+for (let i = 0; i < 13; i += 1) {
+  fixedExportSchedules.push({
+    teacherEmail: 'fixed-export@x', dayOfWeek: Math.floor(i / 7) + 1, period: (i % 7) + 1,
+    className: 'B' + String(i + 1).padStart(2, '0'), attr: '基本'
+  });
+}
+[
+  { dayOfWeek: 2, period: 7, className: 'O01' },
+  { dayOfWeek: 3, period: 1, className: 'O02' },
+  { dayOfWeek: 3, period: 2, className: 'O03' },
+  { dayOfWeek: 3, period: 3, className: 'O04' }
+].forEach(slot => fixedExportSchedules.push(Object.assign({
+  teacherEmail: 'fixed-export@x', attr: '一般', specialTags: '超鐘點'
+}, slot)));
+[
+  { dayOfWeek: 3, period: 4, className: 'O05' },
+  { dayOfWeek: 3, period: 5, className: 'O06' }
+].forEach(slot => fixedExportSchedules.push(Object.assign({
+  teacherEmail: 'fixed-export@x', attr: '一般', specialTags: '超鐘點',
+  activeFrom: '2026-06-29', activeTo: '2026-07-03'
+}, slot)));
+const fixedExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-06',
+  reportStartDate: '2026-06-01',
+  reportEndDate: '2026-07-03',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-06-01', end: '2026-07-03' } },
+  teachers: [{ email: 'fixed-export@x', name: '固定匯出教師', baseHours: 13 }],
+  allSchedules: fixedExportSchedules,
+  classAwayEvents: [
+    { name: '不調降事件', startDate: '2026-06-08', endDate: '2026-06-12', classes: ['O01'], billingRule: 'keep', enabled: true },
+    { name: '調降事件', startDate: '2026-06-15', endDate: '2026-06-19', classes: ['O02'], billingRule: 'reduce', enabled: true }
+  ],
+  substitutionRecords: [{
+    date: '2026-06-24', period: 1, className: 'O02', type: 'substitution',
+    originalTeacherEmail: 'fixed-export@x', actualTeacherEmail: 'cover@x', subFee: '公費代課'
+  }]
+});
+const fixedExportPlan = fixedExport.overtimePlans.find(group => group.plan === '國教');
+assert.ok(fixedExportPlan, '固定超鐘點教師應建立國教分表');
+assert.deepEqual([
+  fixedExportPlan.rows[0].weeklyOvertime,
+  fixedExportPlan.rows[0].weeks,
+  fixedExportPlan.rows[0].grossHours,
+  fixedExportPlan.rows[0].deduction,
+  fixedExportPlan.rows[0].actualHours
+], [6, 5, 28, 1, 27], '會計表應以固定週超鐘點乘週數後再扣被代與空堂');
+assert.ok(Number.isInteger(fixedExportPlan.rows[0].weeklyOvertime), '會計表每週超鐘點必須是整數');
 
 console.log('export accounting tests PASS');

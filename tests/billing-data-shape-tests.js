@@ -7,6 +7,7 @@ global.window = global;
 require('../field-map.js');
 require('../domain-school-swap.js');
 require('../date-utils.js');
+require('../domain-schedule.js');
 require('../domain-class-away.js');
 require('../domain-billing.js');
 
@@ -135,6 +136,107 @@ const rangedReport = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(rangedReport.weeklyPeriods, 1, '日期區間月報應保留每週課表節數');
 assert.equal(rangedReport.scheduledOvertime, 2, '日期區間涵蓋兩週時應自動計兩週超鐘');
 
+const fixedSchedules = [];
+for (let i = 0; i < 13; i += 1) {
+  fixedSchedules.push({
+    teacherEmail: 'fixed@x', dayOfWeek: Math.floor(i / 7) + 1, period: (i % 7) + 1,
+    className: 'B' + String(i + 1).padStart(2, '0'), attr: '基本'
+  });
+}
+[
+  { dayOfWeek: 2, period: 7, className: 'O01' },
+  { dayOfWeek: 3, period: 1, className: 'O02' },
+  { dayOfWeek: 3, period: 2, className: 'O03' },
+  { dayOfWeek: 3, period: 3, className: 'O04' }
+].forEach(slot => fixedSchedules.push(Object.assign({
+  teacherEmail: 'fixed@x', attr: '一般', specialTags: '超鐘點'
+}, slot)));
+[
+  { dayOfWeek: 3, period: 4, className: 'O05' },
+  { dayOfWeek: 3, period: 5, className: 'O06' }
+].forEach(slot => fixedSchedules.push(Object.assign({
+  teacherEmail: 'fixed@x', attr: '一般', specialTags: '超鐘點',
+  activeFrom: '2026-06-29', activeTo: '2026-07-03'
+}, slot)));
+const fixedInput = {
+  teachers: [{ email: 'fixed@x', name: '固定教師', baseHours: 13 }],
+  allSchedules: fixedSchedules,
+  substitutionRecords: [],
+  reportMonth: '2026-06',
+  reportStartDate: '2026-06-01',
+  reportEndDate: '2026-07-03',
+  reportWeeksCount: 5
+};
+const fixedRow = window.DomainBilling.buildMonthlyReportRows(fixedInput)[0];
+assert.deepEqual([
+  fixedRow.weeklyPeriods,
+  fixedRow.baseHours,
+  fixedRow.weeklyOvertime,
+  fixedRow.scheduledOvertime,
+  fixedRow.expensePlanAllocations[0].rawHours,
+  fixedRow.expensePlanAllocations[0].weeklyHours
+], [19, 13, 6, 30, 30, 6], '大鐘點應固定週超鐘點乘結算週數');
+assert.ok(Number.isInteger(fixedRow.expensePlanAllocations[0].weeklyHours));
+
+const awayFixedRow = window.DomainBilling.buildMonthlyReportRows(Object.assign({}, fixedInput, {
+  classAwayEvents: [
+    { name: '不調降事件', startDate: '2026-06-08', endDate: '2026-06-12', classes: ['O01'], billingRule: 'keep', enabled: true },
+    { name: '調降事件', startDate: '2026-06-15', endDate: '2026-06-19', classes: ['O02'], billingRule: 'reduce', enabled: true }
+  ]
+}))[0];
+assert.deepEqual([
+  awayFixedRow.reduceDeduction,
+  awayFixedRow.actualOvertime,
+  awayFixedRow.expensePlanAllocations[0].grossHours,
+  awayFixedRow.expensePlanAllocations[0].deduction,
+  awayFixedRow.expensePlanAllocations[0].actualHours
+], [2, 28, 28, 0, 28], '任何空堂事件未授課都應扣固定超鐘點');
+
+const substitutedFixedRow = window.DomainBilling.buildMonthlyReportRows(Object.assign({}, fixedInput, {
+  substitutionRecords: [{
+    date: '2026-06-24', period: 1, className: 'O02', type: 'substitution',
+    originalTeacherEmail: 'fixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課'
+  }]
+}))[0];
+assert.deepEqual([
+  substitutedFixedRow.scheduledOvertime,
+  substitutedFixedRow.publicOvertimeUsed,
+  substitutedFixedRow.actualOvertime,
+  substitutedFixedRow.expensePlanAllocations[0].rawHours,
+  substitutedFixedRow.expensePlanAllocations[0].grossHours,
+  substitutedFixedRow.expensePlanAllocations[0].deduction,
+  substitutedFixedRow.expensePlanAllocations[0].actualHours
+], [30, 1, 29, 30, 30, 1, 29], '被代課應從固定超鐘點總額扣除');
+
+const fixedSmallSchedules = [
+  { teacherEmail: 'small-fixed@x', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
+  { teacherEmail: 'small-fixed@x', dayOfWeek: 1, period: 2, className: 'S02', attr: '代課' },
+  { teacherEmail: 'small-fixed@x', dayOfWeek: 2, period: 1, className: 'S03', attr: '代課', activeFrom: '2026-06-29', activeTo: '2026-07-03' }
+];
+const fixedSmallRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'small-fixed@x', name: '固定小鐘點', baseHours: 0 }],
+  allSchedules: fixedSmallSchedules,
+  substitutionRecords: [{
+    date: '2026-06-30', period: 1, className: 'S03', type: 'substitution',
+    originalTeacherEmail: 'small-fixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課'
+  }],
+  classAwayEvents: [{
+    name: '小鐘點空堂', startDate: '2026-06-08', endDate: '2026-06-12',
+    classes: ['S02'], billingRule: 'keep', enabled: true
+  }],
+  reportMonth: '2026-06',
+  reportStartDate: '2026-06-01',
+  reportEndDate: '2026-07-03',
+  reportWeeksCount: 5
+})[0];
+assert.deepEqual([
+  fixedSmallRow.substituteScheduledCount,
+  fixedSmallRow.substitutePaidCount,
+  fixedSmallRow.substituteDeduction,
+  fixedSmallRow.substituteLeaveAdditionalDeduction,
+  fixedSmallRow.substituteKeepAwayDeduction
+], [15, 13, 2, 1, 1], '小鐘點應固定週節數乘週數再扣被代與空堂');
+
 const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],
   allSchedules: [substituteSchedule],
@@ -152,8 +254,9 @@ const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
 })[0];
 assert.equal(substituteLeaveRow.substituteDeduction, 1, '代課屬性請假應扣一節');
 assert.equal(substituteLeaveRow.substituteLeaveAdditionalDeduction, 1);
-assert.equal(substituteLeaveRow.substitutePaidCount, 3, '代課屬性已授課應列入公付代課');
-assert.equal(substituteLeaveRow.pubSubCount, 3, '代課屬性已授課應列入公付代課');
+assert.equal(substituteLeaveRow.substituteScheduledCount, 1, '小鐘點應依結算週數計算');
+assert.equal(substituteLeaveRow.substitutePaidCount, 0, '代課屬性未授課不應列入公付代課');
+assert.equal(substituteLeaveRow.pubSubCount, 0, '代課屬性未授課不應列入公付代課');
 assert.equal(substituteLeaveRow.actualOvertime, 0);
 
 const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({
@@ -169,8 +272,9 @@ const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({
 })[0];
 assert.equal(substituteAwayRow.substituteKeepAwayDeduction, 1, '代課屬性空堂應扣一節');
 assert.equal(substituteAwayRow.substituteAdditionalDeduction, 1);
-assert.equal(substituteAwayRow.substitutePaidCount, 3, '代課屬性非空堂應列入公付代課');
-assert.equal(substituteAwayRow.pubSubCount, 3, '代課屬性非空堂應列入公付代課');
+assert.equal(substituteAwayRow.substituteScheduledCount, 1, '小鐘點空堂仍應先計固定週節數');
+assert.equal(substituteAwayRow.substitutePaidCount, 0, '代課屬性空堂未授課不應列入公付代課');
+assert.equal(substituteAwayRow.pubSubCount, 0, '代課屬性空堂未授課不應列入公付代課');
 assert.equal(substituteAwayRow.actualOvertime, 0);
 assert.equal(substituteAwayRow.expensePlanAllocations.length, 0, '代課屬性不應產生超鐘點經費分配');
 

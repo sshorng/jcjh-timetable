@@ -1849,7 +1849,7 @@
                         <th title="每週早自習＋1～7＋午休；基本／一般／抽離（超鐘點另以標記判定；不含巡堂／第8）">排課</th>
                       <th title="教師基本授課鐘點">基鐘</th>
                       <th title="排課 − 基鐘（每週）">超時/週</th>
-                      <th title="畢業等 reduce：只扣起日後週 × 1～7">空堂調降</th>
+                      <th title="最後完整結算週的固定超鐘點；空堂事件未授課時扣減，keep／reduce皆適用">空堂扣減</th>
                        <th title="自己請假且自費代課；早自習、1～7、午休皆扣">自費扣</th>
                         <th title="自己請假且公費代課；正式課程原堂為超鐘點才扣，代課屬性另列代課另扣，含早自習、1～7、午休">公費扣</th>
                        <th title="課程屬性為代課，且假別不是標準自費／公費，或不調降空堂事件未授課的另扣">代課另扣</th>
@@ -1933,7 +1933,7 @@
                     <th>職務</th>
                     <th>超鐘點計畫</th>
                      <th>基本鐘點（基鐘）</th>
-                     <th title="依目前選定週次的正式排課節數扣除基本鐘點">每週超鐘點</th>
+                      <th title="最後完整結算週的正式排課節數扣除基本鐘點">每週超鐘點</th>
                     <th title="可用餘額；點數字可看額度帳本歷程">折抵額度</th>
                     <th>系統角色</th>
                      <th style="width: 220px;">操作</th>
@@ -2009,7 +2009,7 @@
               <div style="margin-bottom:16px;font-size:0.88rem;color:var(--text-secondary);line-height:1.55;">
                 <p class="mb-8-block"><strong>策略 S1：</strong>匯入時<strong>只清除目前選取學期</strong>的課表（其他學期保留），再一次寫入。</p>
                  <p class="mb-8-block"><strong>格式：</strong>一列一節；以<strong>教師姓名</strong>對應已匯入的教師名單；同節多班可多列。</p>
-                  <p class="m-0">一般課必填：教師姓名、星期、節次、班級、科目。<strong>巡堂</strong>可省略班級／科目（科目或屬性寫「巡堂」即可）。節次可填<strong>早自習／0</strong>、1～8，或<strong>午休／45</strong>（12:35～13:15）。併班可填<strong>701、702</strong> 或 701/702。選填：課堂屬性、調課限制、特殊標記、啟用起日、啟用迄日。課堂屬性選<strong>代課</strong>代表小鐘點，實際授課列入公付代課；請假或空堂未授課會扣除該節。啟用日期請填 YYYY-MM-DD；兩欄皆空白代表整個學期有效。姓名重複或名單沒有時，請先修正教師名單。</p>
+                    <p class="m-0">一般課必填：教師姓名、星期、節次、班級、科目。<strong>巡堂</strong>可省略班級／科目（科目或屬性寫「巡堂」即可）。節次可填<strong>早自習／0</strong>、1～8，或<strong>午休／45</strong>（12:35～13:15）。併班可填<strong>701、702</strong> 或 701/702。選填：課堂屬性、調課限制、特殊標記、啟用起日、啟用迄日。課堂屬性選<strong>代課</strong>代表小鐘點，實際授課列入公付代課；小鐘點未授課或遇空堂事件會扣除該節。超鐘點以最後完整結算週的固定每週節數乘結算週數，被代課依經費規則扣減，空堂事件未授課一律扣減。啟用日期請填 YYYY-MM-DD；兩欄皆空白代表整個學期有效。姓名重複或名單沒有時，請先修正教師名單。</p>
               </div>
 
               <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid var(--border-color);margin-bottom:16px;">
@@ -2080,8 +2080,7 @@
               </div>
               <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;margin:0 0 12px 0;">
                  期間內符合範圍與節次的班級：課表<strong>淡化顯示</strong>，媒合／衝堂／匯出<strong>視同空堂</strong>。
-                 鐘點：<strong>不調降</strong>（畢旅）月報超鐘不變；
-                 <strong>調降</strong>（畢業）只扣起日之後的週。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
+                 超鐘點以最後完整結算週的固定每週節數計算；事件期間該超鐘課格未授課，<strong>不論不調降或調降都扣除</strong>。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
                  段考可設定<strong>全校／第8節</strong>，不需修改教師課表或建立代課申請。各事件可匯出<strong>活動輪值通知單</strong>（只匯已送出；第1～7節入表、第8節附註）。
               </p>
               <div class="table-responsive">
@@ -3814,8 +3813,8 @@
              <div class="form-group">
               <label class="form-label">鐘點規則</label>
               <select class="form-select" v-model="classAwayForm.billingRule">
-                <option value="keep">不調降（畢旅：課表空、超鐘不變）</option>
-                <option value="reduce">調降（畢業：只扣起日之後的週）</option>
+                 <option value="keep">不調降（事件期間未授課仍扣超鐘）</option>
+                 <option value="reduce">調降（事件期間未授課扣超鐘）</option>
               </select>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;">

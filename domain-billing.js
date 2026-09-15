@@ -175,6 +175,14 @@ window.DomainBilling = (function () {
     return order.map(function (monday) { return groups[monday]; });
   }
 
+  function lastCompleteWeekIndex(weeklyGroups) {
+    var groups = Array.isArray(weeklyGroups) ? weeklyGroups : [];
+    for (var i = groups.length - 1; i >= 0; i -= 1) {
+      if (Array.isArray(groups[i]) && groups[i].length >= 5) return i;
+    }
+    return groups.length ? groups.length - 1 : -1;
+  }
+
   function isScheduleActiveOnDate(schedule, dateStr) {
     if (!dateStr || !window.DomainSchedule || !window.DomainSchedule.isActiveOnDate) return true;
     return window.DomainSchedule.isActiveOnDate(schedule, dateStr);
@@ -275,8 +283,8 @@ window.DomainBilling = (function () {
       var period = schedulePeriod(schedule);
       if (!Number.isFinite(period)) return;
       var hasValidDay = Number.isFinite(day) && day >= 1 && day <= 5;
-      var activeThisWeek = !weekDates.length || weekDates.some(function (dateStr, index) {
-        return (!hasValidDay || index + 1 === day) && isScheduleActiveOnDate(schedule, dateStr);
+      var activeThisWeek = !weekDates.length || weekDates.some(function (dateStr) {
+        return (!hasValidDay || dayOfWeekFromDate(dateStr) === day) && isScheduleActiveOnDate(schedule, dateStr);
       });
       if (!activeThisWeek) return;
       var key = (hasValidDay ? day : 'unknown') + '|' + period;
@@ -290,6 +298,34 @@ window.DomainBilling = (function () {
 
   function weeklyPeriodsForDates(teacherIdentity, schedules, dates) {
     return weeklyScheduleSlotsForDates(teacherIdentity, schedules, dates, false).length;
+  }
+
+  function substituteScheduleSlotsForDates(teacherIdentity, schedules, dates) {
+    var weekDates = Array.isArray(dates) ? dates : [];
+    var slots = {};
+    (schedules || []).forEach(function (schedule) {
+      var day = scheduleDay(schedule);
+      var period = schedulePeriod(schedule);
+      if (!hasCommonKey(teacherIdentity, scheduleTeacherKeys(schedule))
+          || !isSubstituteScheduleSlot(schedule)
+          || !isWeeklyHoursPeriod(period)
+          || isPatrolScheduleSlot(schedule)
+          || schedule.isPreplanned
+          || String(schedule.attr || schedule['課堂屬性'] || '').trim() === '預排'
+          || hasScheduleTag(schedule, '預排')
+          || !Number.isFinite(day) || day < 1 || day > 5
+          || !Number.isFinite(period)) return;
+      var activeThisWeek = !weekDates.length || weekDates.some(function (dateStr) {
+        return dayOfWeekFromDate(dateStr) === day && isScheduleActiveOnDate(schedule, dateStr);
+      });
+      if (!activeThisWeek) return;
+      var key = day + '|' + period;
+      if (!slots[key]) slots[key] = [];
+      slots[key].push(schedule);
+    });
+    return Object.keys(slots).map(function (key) {
+      return mergeWeeklySlotRows(slots[key]);
+    });
   }
 
   function emailKey(em) {
@@ -551,7 +587,7 @@ window.DomainBilling = (function () {
   }
 
   /**
-   * 依每週超鐘點課格建立來源桶。陣列配置只記課格，節數由目前課表自動推導。
+   * 依最後完整週的固定超鐘點課格建立來源桶，總節數為固定每週節數 × 結算週數。
    * 舊的單一文字計畫仍沿用整位教師的超鐘點，避免既有資料失效。
    */
   function buildOvertimeExpenseBuckets(opts) {
@@ -566,6 +602,15 @@ window.DomainBilling = (function () {
     var bucketMap = {};
     var warnings = [];
     var teacherIdentity = teacherKeys(teacher);
+    var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
+    var fixedWeeklyOvertime = fixedWeekIndex >= 0
+      ? Math.max(0, (Number(weeklyPeriodCounts[fixedWeekIndex]) || 0) - baseHours)
+      : 0;
+    var fixedWeekDates = fixedWeekIndex >= 0 ? weeklyGroups[fixedWeekIndex] : [];
+    var fixedCandidates = parsed.mode === 'slots'
+      ? weeklyScheduleSlotsForDates(teacherIdentity, allSchedules, fixedWeekDates, true)
+        .sort(sortOvertimeSchedules)
+      : [];
     function getBucket(source) {
       var name = normalizeExpenseSource(source);
       if (!bucketMap[name]) {
@@ -600,7 +645,7 @@ window.DomainBilling = (function () {
     }
 
     weeklyGroups.forEach(function (dates, weekIndex) {
-      var target = Math.max(0, (Number(weeklyPeriodCounts[weekIndex]) || 0) - baseHours);
+      var target = fixedWeeklyOvertime;
       if (!target) return;
 
       if (parsed.mode !== 'slots') {
@@ -610,8 +655,7 @@ window.DomainBilling = (function () {
         return;
       }
 
-      var candidates = weeklyScheduleSlotsForDates(teacherIdentity, allSchedules, dates, true)
-        .sort(sortOvertimeSchedules);
+      var candidates = fixedCandidates;
       var usable = Math.min(target, candidates.length);
       candidates.slice(0, usable).forEach(function (schedule) {
         addHours(sourceForOvertimeSchedule(teacher, schedule) || DEFAULT_EXPENSE_SOURCE, 1, weekIndex, schedule);
@@ -625,7 +669,10 @@ window.DomainBilling = (function () {
     });
 
     buckets.forEach(function (bucket) {
-      bucket.weeklyHours = weeklyGroups.length ? bucket.rawHours / weeklyGroups.length : bucket.rawHours;
+      var fixedWeeklyHours = fixedWeekIndex >= 0
+        ? (Number(bucket.weekCounts[fixedWeekIndex]) || 0)
+        : (Number(bucket.rawHours) || 0);
+      bucket.weeklyHours = Math.max(0, Math.round(fixedWeeklyHours));
       bucket.schedule = bucket.slots.join('、');
     });
     return { buckets: buckets, warnings: warnings, parsed: parsed };
@@ -828,6 +875,55 @@ window.DomainBilling = (function () {
     );
   }
 
+  function recordMatchesFixedScheduleSlot(record, schedule, dateStr, schoolSwapIndex) {
+    if (!record || !schedule || recordDate(record) !== normalizeDateKey(dateStr)) return false;
+    if (!hasCommonKey(originalTeacherKeys(record), scheduleTeacherKeys(schedule))) return false;
+    var slot = resolveBillingSlot(record, schoolSwapIndex);
+    if (slot.dayOfWeek !== scheduleDay(schedule) || slot.period !== schedulePeriod(schedule)) return false;
+    return expenseClassNamesOverlap(
+      record.className || record['班級'],
+      schedule.className || schedule['班級']
+    );
+  }
+
+  /** 空堂事件只要該固定超鐘課格未上課，keep／reduce 均扣一節。 */
+  function countClassAwayDeduction(opts) {
+    opts = opts || {};
+    var weeklyGroups = opts.weeklyGroups || [];
+    var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
+    var teacherIdentity = teacherKeys(opts.teacher);
+    var DCA = window.DomainClassAway;
+    if (!teacherIdentity.length || fixedWeekIndex < 0 || !opts.classAwayEvents || !opts.classAwayEvents.length
+        || !DCA || typeof DCA.isClassAwayOnDate !== 'function') return 0;
+
+    var fixedSlots = weeklyScheduleSlotsForDates(
+      teacherIdentity,
+      opts.allSchedules || [],
+      weeklyGroups[fixedWeekIndex],
+      true
+    );
+    var leaveRecords = opts.leaveRecords || [];
+    var count = 0;
+    weeklyGroups.forEach(function (dates) {
+      fixedSlots.forEach(function (schedule) {
+        var day = scheduleDay(schedule);
+        var dateStr = (dates || []).find(function (date) { return dayOfWeekFromDate(date) === day; });
+        if (!dateStr) return;
+        if (leaveRecords.some(function (record) {
+          return recordMatchesFixedScheduleSlot(record, schedule, dateStr, opts.schoolSwapIndex);
+        })) return;
+        if (DCA.isClassAwayOnDate(
+          schedule.className || schedule['班級'],
+          dateStr,
+          opts.classAwayEvents,
+          opts.semesterEndDate,
+          schedulePeriod(schedule)
+        )) count += 1;
+      });
+    });
+    return count;
+  }
+
   function isSubstituteScheduleRecord(record, schedules, schoolSwapIndex) {
     var originalKeys = originalTeacherKeys(record);
     if (!originalKeys.length || !isSubstitutionRecord(record)) return false;
@@ -842,59 +938,43 @@ window.DomainBilling = (function () {
   function buildSubstituteAttributePayout(opts) {
     opts = opts || {};
     var schedules = opts.allSchedules || [];
-    var reportMonth = opts.reportMonth || '';
     var monthlyRecords = opts.monthlyRecords || [];
     var events = opts.classAwayEvents || [];
     var semesterEndDate = opts.semesterEndDate || '';
     var teacherIdentity = teacherKeys(opts.teacher);
     var DCA = window.DomainClassAway;
-    var range = reportRange(opts);
-    var weekdays = (opts.reportStartDate || opts.reportEndDate)
-      ? listWeekdaysInRange(range.start, range.end)
-      : listWeekdaysInMonth(reportMonth);
-    if (!teacherIdentity.length || !weekdays.length) {
+    var weeklyGroups = opts.weeklyGroups || [];
+    var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
+    if (!teacherIdentity.length || !weeklyGroups.length || fixedWeekIndex < 0) {
       return { scheduled: 0, paid: 0, deduction: 0, leaveDeduction: 0, awayDeduction: 0, paidDetails: [] };
     }
 
-    var slotSchedules = {};
-    schedules.forEach(function (schedule) {
-      var period = schedulePeriod(schedule);
-      var day = scheduleDay(schedule);
-      if (!hasCommonKey(teacherIdentity, scheduleTeacherKeys(schedule))
-          || !isSubstituteScheduleSlot(schedule) || !isWeeklyHoursPeriod(period)
-          || isPatrolScheduleSlot(schedule)
-          || schedule.isPreplanned
-          || String(schedule.attr || schedule['課堂屬性'] || '').trim() === '預排'
-          || hasScheduleTag(schedule, '預排')
-          || !Number.isFinite(day) || day < 1 || day > 5
-          || !Number.isFinite(period)) return;
-      var key = day + '|' + period;
-      if (!slotSchedules[key]) slotSchedules[key] = [];
-      slotSchedules[key].push(schedule);
-    });
+    // 小鐘點也採最後完整週的固定課格 × 結算週數，再扣未授課日。
+    var fixedSlots = substituteScheduleSlotsForDates(
+      teacherIdentity,
+      schedules,
+      weeklyGroups[fixedWeekIndex]
+    );
 
     var seen = {};
     var result = { scheduled: 0, paid: 0, deduction: 0, leaveDeduction: 0, awayDeduction: 0, paidDetails: [] };
-    Object.keys(slotSchedules).forEach(function (slotKey) {
-      var slot = slotSchedules[slotKey];
-      var day = scheduleDay(slot[0]);
-      var period = schedulePeriod(slot[0]);
-      weekdays.forEach(function (dateStr) {
+    weeklyGroups.forEach(function (dates) {
+      fixedSlots.forEach(function (slot) {
+        var day = scheduleDay(slot);
+        var period = schedulePeriod(slot);
+        var dateStr = (dates || []).find(function (date) { return dayOfWeekFromDate(date) === day; });
+        if (!dateStr) return;
         if (dayOfWeekFromDate(dateStr) !== day) return;
-        if (slot.every(function (schedule) { return !isScheduleActiveOnDate(schedule, dateStr); })) return;
         var key = normalizeDateKey(dateStr) + '|' + period;
         if (seen[key]) return;
         seen[key] = true;
         result.scheduled += 1;
 
         var away = !!(DCA && typeof DCA.isClassAwayOnDate === 'function')
-          && slot.some(function (schedule) {
-              return isScheduleActiveOnDate(schedule, dateStr)
-                && DCA.isClassAwayOnDate(schedule.className || schedule['班級'], dateStr, events, semesterEndDate, period);
-          });
+          && DCA.isClassAwayOnDate(slot.className || slot['班級'], dateStr, events, semesterEndDate, period);
         var leave = monthlyRecords.some(function (record) {
           return !isCombinedReturnRecord(record)
-            && recordMatchesScheduleSlot(record, slot[0], dateStr, opts.schoolSwapIndex);
+            && recordMatchesFixedScheduleSlot(record, slot, dateStr, opts.schoolSwapIndex);
         });
         if (away || leave) {
           result.deduction += 1;
@@ -906,9 +986,9 @@ window.DomainBilling = (function () {
         result.paidDetails.push({
           date: dateStr,
           period: period,
-          className: String(slot[0].className || slot[0]['班級'] || '').trim(),
-          subject: String(slot[0].subject || slot[0]['科目'] || '').trim(),
-          source: normalizeExpenseSource(sourceForOvertimeSchedule(opts.teacher, slot[0]) || DEFAULT_EXPENSE_SOURCE)
+          className: String(slot.className || slot['班級'] || '').trim(),
+          subject: String(slot.subject || slot['科目'] || '').trim(),
+          source: normalizeExpenseSource(sourceForOvertimeSchedule(opts.teacher, slot) || DEFAULT_EXPENSE_SOURCE)
         });
       });
     });
@@ -1202,34 +1282,20 @@ window.DomainBilling = (function () {
         ? 0
         : (parseInt(t.baseHours, 10) || 16);
 
-      // 週鐘點：依每個報表週的啟用日期計算，避免中途換課仍沿用整學期課表。
-       var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
-         ? reportWeekGroupsForRange(startDay, endDay)
-         : reportWeekGroups(reportMonth, reportWeeksCount);
+      // 每週超鐘點固定採最後一個完整結算週；本期總節數再乘結算週數。
+      var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
+        ? reportWeekGroupsForRange(startDay, endDay)
+        : reportWeekGroups(reportMonth, reportWeeksCount);
       var weeklyPeriodCounts = weeklyGroups.map(function (dates) {
         return weeklyPeriodsForDates(teacherIdentity, allSchedules, dates);
       });
-      var weeklyPeriods = weeklyPeriodCounts.length
-        ? weeklyPeriodCounts[0]
+      var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
+      var weeklyPeriods = fixedWeekIndex >= 0
+        ? (Number(weeklyPeriodCounts[fixedWeekIndex]) || 0)
         : weeklyScheduleSlotsForDates(teacherIdentity, allSchedules, [], false).length;
-      var reduceDeduction = 0;
-      if (window.DomainClassAway && classAwayEvents.length) {
-        reduceDeduction = window.DomainClassAway.computeReduceDeduction({
-          teacherEmail: email,
-          allSchedules: allSchedules,
-          events: classAwayEvents,
-           semesterEndDate: semesterEndDate,
-           reportMonth: reportMonth,
-           reportWeeksCount: reportWeeksCount,
-           reportStartDate: startDay,
-           reportEndDate: endDay
-        }) || 0;
-      }
       var weeklyOvertime = Math.max(0, weeklyPeriods - baseHours);
       var scheduledOvertime = weeklyGroups.length
-        ? weeklyPeriodCounts.reduce(function (total, count) {
-          return total + Math.max(0, count - baseHours);
-        }, 0)
+        ? weeklyOvertime * weeklyGroups.length
         : weeklyOvertime * reportWeeksCount;
 
       // 早自習0＋1～7＋午休的一般／超鐘點課程請假（不含第8）
@@ -1238,6 +1304,15 @@ window.DomainBilling = (function () {
           && isSubstitutionRecord(r)
           && isWeeklyHoursPeriod(recordPeriod(r))
           && !isSubstituteScheduleRecord(r, allSchedules, schoolSwapIndex);
+      });
+      var reduceDeduction = countClassAwayDeduction({
+        teacher: t,
+        allSchedules: allSchedules,
+        weeklyGroups: weeklyGroups,
+        leaveRecords: leaveRecords,
+        classAwayEvents: classAwayEvents,
+        schoolSwapIndex: schoolSwapIndex,
+        semesterEndDate: semesterEndDate
       });
       var selfPaidDeduction = leaveRecords.filter(function (r) {
         return isSelfPaidFee(r);
@@ -1268,6 +1343,7 @@ window.DomainBilling = (function () {
         reportMonth: reportMonth,
         reportStartDate: startDay,
         reportEndDate: endDay,
+        weeklyGroups: weeklyGroups,
         monthlyRecords: monthlyRecords,
         classAwayEvents: classAwayEvents,
         schoolSwapIndex: schoolSwapIndex,
@@ -1380,7 +1456,7 @@ window.DomainBilling = (function () {
          "每週排課(早自習+1-7+午休)": row.weeklyPeriods,
         "基本授課鐘點": row.baseHours,
         "預設超時/週": row.weeklyOvertime,
-        "空堂調降(1-7)": row.reduceDeduction || 0,
+        "空堂扣減(1-7)": row.reduceDeduction || 0,
         "代課扣減(自費1-7)": row.selfPaidDeduction,
         "代課扣減(公費1-7)": row.publicOvertimeUsed,
         "代課屬性另扣(未授課)": row.substituteAdditionalDeduction || 0,

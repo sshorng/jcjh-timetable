@@ -874,7 +874,9 @@
 
   function overtimeClassNote(opts, source, weeks, period, allocation) {
     var weekly = allocation
-      ? (Number(allocation.weeklyHours) || (weeks ? (Number(allocation.rawHours) || 0) / weeks : 0))
+      ? (allocation.weeklyHours !== undefined
+        ? (Number(allocation.weeklyHours) || 0)
+        : (Number(source && source.weeklyOvertime) || 0))
       : (Number(source && source.weeklyOvertime) || 0);
     var weekCount = Number(weeks) || 0;
     if (!weekly || !weekCount) return '';
@@ -1174,7 +1176,9 @@
           ? Number(allocation.actualHours) || 0
           : grossHours - deduction;
         var weeklyOvertime = allocation
-          ? (Number(allocation.weeklyHours) || (weeks ? scheduledOvertime / weeks : scheduledOvertime))
+          ? (allocation.weeklyHours !== undefined
+            ? (Number(allocation.weeklyHours) || 0)
+            : (Number(sourceRow.weeklyOvertime) || 0))
           : (Number(sourceRow.weeklyOvertime) || 0);
         var rate = Number(opts.overtimeRate) || FEE_DEFAULT;
         var schedule = allocation && allocation.schedule
@@ -1198,7 +1202,7 @@
           actualHours: actualHours,
           rate: rate,
           amount: actualHours * rate,
-          reduceNote: reduce ? ('空堂調降 ' + reduce + ' 節') : '',
+          reduceNote: reduce ? ('空堂扣減 ' + reduce + ' 節') : '',
           note: notes
         };
         // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。

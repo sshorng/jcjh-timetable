@@ -2,7 +2,7 @@
   * 空堂事件（畢旅 keep／畢業 reduce）
  * - 迄日空白 → 學期結束日
  * - 課表：事件期間內該班視為空堂
- * - 月報：reduce 只扣「起日之後的週」；keep 不扣
+ * - 月報：固定超鐘點以結算週為基準；未授課的空堂事件皆列入扣減
  */
 window.DomainClassAway = (function () {
   var RULE_KEEP = 'keep';
