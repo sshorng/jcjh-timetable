@@ -129,6 +129,15 @@ window.FieldMap = (function () {
           .filter(function (x) { return x && !/^0+$/.test(x); });
       }
     }
+    const dca = window.DomainClassAway;
+    const scopeRaw = pick(e, ['適用範圍', 'scope', 'awayScope']);
+    const periodRaw = pick(e, ['停課節次', 'period', 'awayPeriod']);
+    const scope = dca && dca.normalizeScope
+      ? dca.normalizeScope(scopeRaw)
+      : (/^(all|school|全校)/i.test(String(scopeRaw == null ? '' : scopeRaw).trim()) ? 'all' : 'classes');
+    const period = dca && dca.normalizePeriod
+      ? dca.normalizePeriod(periodRaw)
+      : (/^(?:第\s*)?8\s*(?:節)?$/.test(String(periodRaw == null ? '' : periodRaw).trim()) ? '8' : 'all');
     let rule = String(pick(e, ['鐘點規則', 'billingRule']) || 'keep').toLowerCase();
     if (rule === '調降' || rule === 'reduce') rule = 'reduce';
     else rule = 'keep';
@@ -150,6 +159,8 @@ window.FieldMap = (function () {
       startDate: asDateStr(pick(e, ['起日', 'startDate'])),
       endDate: asDateStr(pick(e, ['迄日', 'endDate'])),
       classes: classes,
+      scope: scope,
+      period: period,
       billingRule: rule,
       forMutual: asBool(pick(e, ['可進互代', 'forMutual'])),
       enabled: pick(e, ['啟用', 'enabled']) === undefined || pick(e, ['啟用', 'enabled']) === null || pick(e, ['啟用', 'enabled']) === ''

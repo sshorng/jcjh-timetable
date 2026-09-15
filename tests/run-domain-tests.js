@@ -13,11 +13,13 @@ global.window = global;
 
 const DIR = path.join(__dirname, '..');
 const FILES = [
+  'date-utils.js',
   'domain-match.js',
   'domain-school-swap.js',
   'domain-schedule.js',
   'domain-triangle.js',
   'domain-class-away.js',
+  'field-map.js',
   'domain-activity-cover.js',
   'domain-billing.js',
   'fee-utils.js'

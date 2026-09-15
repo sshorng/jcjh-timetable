@@ -617,6 +617,68 @@ createApp({
     const homeroomRecords = ref([]);
     const homeroomAssignSelections = ref({});
     const homeroomRecordsLoading = ref(false);
+    const isCourseAdjustmentOnlyRequest = (record) => {
+      if (window.FieldMap && typeof window.FieldMap.isCourseAdjustmentOnly === 'function') {
+        return window.FieldMap.isCourseAdjustmentOnly(record || {});
+      }
+      const raw = record && (record.courseAdjustmentOnly !== undefined
+        ? record.courseAdjustmentOnly : record['僅課務調整']);
+      const normalized = String(raw == null ? '' : raw).trim().toLowerCase();
+      return raw === true || raw === 1
+        || normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes'
+        || String(record && (record.reason || record['請假事由']) || '').trim() === '課務調整';
+    };
+    const homeroomTimeRangeBounds = (raw) => {
+      const normalized = String(raw == null ? '' : raw).trim()
+        .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+      const match = normalized.match(/^(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})$/);
+      if (!match) return null;
+      const start = Number(match[1]) * 60 + Number(match[2]);
+      const end = Number(match[3]) * 60 + Number(match[4]);
+      if (Number(match[1]) > 23 || Number(match[3]) > 23
+          || Number(match[2]) > 59 || Number(match[4]) > 59 || end <= start) return null;
+      return { start, end };
+    };
+    const homeroomFullDayEndMinutes = (record, teacherKey) => {
+      const key = String(record && (record.leaveEmail || record.originalTeacherEmail
+        || record.requesterEmail || record['申請人Email'] || record['原導師Email']
+        || record.originalTeacherName || record.requesterName || record['申請人姓名'] || record['原導師姓名']
+        || teacherKey) || '').trim().toLowerCase();
+      const teacher = (teachersList.value || []).find(t => {
+        const email = String(t && (t.loginEmail || t.email) || '').trim().toLowerCase();
+        const name = String(t && (t.teacherName || t.name) || '').trim().toLowerCase();
+        return key && (key === email || key === name);
+      });
+      const role = String(teacher && teacher.role || '').trim().toLowerCase();
+      return role === 'admin' || role === 'staff' ? 17 * 60 : 16 * 60;
+    };
+    const isFullDayHomeroomLeave = (record, teacherKey) => {
+      const type = String(record && (record.leaveTimeType || record['請假時間類型']) || '').trim();
+      if (/^(上午|下午|半日|半天)$/.test(type)) return false;
+      const raw = record && (record.leaveTime || record['請假時間'] || record.timeRange || '');
+      const normalized = String(raw == null ? '' : raw).trim()
+        .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+      if (!normalized || normalized === '全天' || normalized === '全日') {
+        return !type || type === '全天' || type === '全日';
+      }
+      const bounds = homeroomTimeRangeBounds(normalized);
+      return !!bounds && bounds.start <= 8 * 60 && bounds.end >= homeroomFullDayEndMinutes(record, teacherKey);
+    };
+    const isBillableHomeroomRecord = (record) => {
+      if (isCourseAdjustmentOnlyRequest(record)) return false;
+      const ids = String(record && (record.sourceRequestId || record['來源申請單ID']) || '')
+        .split(/[,，;；\s]+/).map(value => String(value || '').trim()).filter(Boolean);
+      const matched = substitutionRecords.value.filter(request => {
+        const requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
+        return requestId && ids.includes(requestId);
+      });
+      if (!matched.length) return isFullDayHomeroomLeave(record);
+      const teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
+        || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
+      if (matched.some(request => !isCourseAdjustmentOnlyRequest(request) && isFullDayHomeroomLeave(request, teacherKey))) return true;
+      // Requests are time-windowed; keep the persisted full-day record when older source IDs are not loaded.
+      return matched.length < ids.length && isFullDayHomeroomLeave(record, teacherKey);
+    };
     /**
      * 從「已組裝的 substitution 列 + 基礎課表」解析教師在該日該節的有效班科
      * 支援多段調代鏈：沿 original→actual 走到目前 email，班科取鏈上第一筆有值的 record／起點基礎課
@@ -879,7 +941,7 @@ createApp({
             reason: req.reason,
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',
-            courseAdjustmentOnly: !!req.courseAdjustmentOnly,
+              courseAdjustmentOnly: isCourseAdjustmentOnlyRequest(req),
             note: req.note,
             specialFlow: req.specialFlow || '',
             isEmptySlotAssign: emptyAssign
@@ -1028,12 +1090,12 @@ createApp({
       return sem ? (sem.endDate || '') : '';
     });
     /** 該班該日是否落在空堂事件（視覺淡化用；不再把格子當空堂刪除） */
-    const isClassAwayOnDate = (className, dateStr) => {
+    const isClassAwayOnDate = (className, dateStr, period) => {
       if (!className || !window.DomainClassAway) return false;
       const d = dateStr || getTodayString();
       const events = getClassAwayEventsForView();
       return window.DomainClassAway.isClassAwayOnDate(
-        className, d, events, semesterEndDate.value
+        className, d, events, semesterEndDate.value, period
       );
     };
     const getClassAwayEventsForView = () => {
@@ -1041,7 +1103,7 @@ createApp({
         || (activeTab.value === 'class' && userRole.value === 'teacher');
       return useClassViewEvents ? classViewClassAwayEvents.value : classAwayEvents.value;
     };
-    const getClassAwayEventName = (className, dateStr) => {
+    const getClassAwayEventName = (className, dateStr, period) => {
       if (!className || !window.DomainClassAway) return '';
       const parseClasses = typeof window.DomainClassAway.parseClassList === 'function'
         ? window.DomainClassAway.parseClassList
@@ -1049,14 +1111,17 @@ createApp({
       const classNames = parseClasses(className);
       if (!classNames.length || typeof window.DomainClassAway.eventsActiveOnDate !== 'function') return '';
       const activeEvents = window.DomainClassAway.eventsActiveOnDate(
-        dateStr || getTodayString(), getClassAwayEventsForView(), semesterEndDate.value
+        dateStr || getTodayString(), getClassAwayEventsForView(), semesterEndDate.value, period
       );
       const names = [];
       activeEvents.forEach(event => {
         const eventClasses = typeof window.DomainClassAway.eventClasses === 'function'
           ? window.DomainClassAway.eventClasses(event)
           : parseClasses(event && (event.classes || event.classList || event['班級清單']));
-        if (!classNames.some(classValue => eventClasses.includes(classValue))) return;
+        const matchesClass = typeof window.DomainClassAway.eventAppliesToClass === 'function'
+          ? classNames.some(classValue => window.DomainClassAway.eventAppliesToClass(event, classValue))
+          : classNames.some(classValue => eventClasses.includes(classValue));
+        if (!matchesClass) return;
         const name = String(event && (event.name || event['事件名稱']) || '').trim();
         if (name && !names.includes(name)) names.push(name);
       });
@@ -1068,12 +1133,12 @@ createApp({
       if (!window.DomainClassAway) return null;
       const today = getTodayString();
       const active = window.DomainClassAway.eventsActiveOnDate(
-        today, classAwayEvents.value, semesterEndDate.value
+        today, getClassAwayEventsForView(), semesterEndDate.value
       );
       if (!active.length) return null;
       const names = active.map(e => e.name || '未命名').join('、');
       const classes = window.DomainClassAway.getActiveAwayClasses(
-        today, classAwayEvents.value, semesterEndDate.value
+        today, getClassAwayEventsForView(), semesterEndDate.value, undefined, { allClasses: classList.value }
       );
       return { names, classes, count: classes.length };
     });
@@ -2614,15 +2679,39 @@ createApp({
     };
 
     const printSingleRequest = async (req, formType = 'Notice') => {
+      const records = substitutionRecords.value || [];
+      const detailRecord = req && detailRequest.value && showDetailModal.value
+        && (req === detailRequest.value || String(req.id) === String(detailRequest.value.id))
+        ? detailSubRecord.value
+        : null;
+      const requestedRecordId = req && (req.recordId || req.substitutionRecordId)
+        || (detailRecord && detailRecord.id);
+      let seedRecord = requestedRecordId
+        ? records.find(record => String(record.id) === String(requestedRecordId))
+        : null;
+      if (!seedRecord && req && req.id) {
+        seedRecord = records.find(record => String(record.id) === String(req.id))
+          || records.find(record => String(record.requestId) === String(req.id));
+      }
+
       let targetIds = [];
-      const triangleId = req && (req.triangleId || req.batchId);
-      if (triangleId && isTriangleRequest(req)) {
-        targetIds = substitutionRecords.value
+      const triangleId = (req && (req.triangleId || req.batchId))
+        || (seedRecord && (seedRecord.triangleId || seedRecord.batchId));
+      if (seedRecord && isTriangleRequest(seedRecord) && triangleId) {
+        targetIds = records
           .filter(r => r && r.triangleId && String(r.triangleId) === String(triangleId))
           .map(r => r.id);
-      } else if (substitutionRecords.value && substitutionRecords.value.length > 0) {
-        targetIds = substitutionRecords.value
-          .filter(r => String(r.requestId) === String(req.id))
+      } else if (seedRecord && isExchangeLikeRequest(seedRecord)) {
+        const requestId = String(seedRecord.requestId || '').trim();
+        targetIds = requestId
+          ? records.filter(r => r && isExchangeLikeRequest(r) && String(r.requestId || '').trim() === requestId).map(r => r.id)
+          : [seedRecord.id];
+      } else if (seedRecord) {
+        // 一般批次每一列都是獨立申請，單列列印不得依 requestId 展開整批。
+        targetIds = [seedRecord.id];
+      } else if (req && isTriangleRequest(req) && triangleId) {
+        targetIds = records
+          .filter(r => r && r.triangleId && String(r.triangleId) === String(triangleId))
           .map(r => r.id);
       }
       if (targetIds.length === 0 && detailSubRecord.value) {
@@ -3430,6 +3519,7 @@ createApp({
       targetDayOfWeek: 1,
       targetPeriod: 1,
       reason: '',
+      courseAdjustmentOnly: false,
       leaveTimeType: '',
       leaveTime: '',
       subFee: '自費代課',
@@ -3443,55 +3533,45 @@ createApp({
 
     // 基礎課表編輯模式
     const isScheduleEditMode = ref(false);
-    // 月底報表統計
-    const reportMonth = ref(new Date().toISOString().slice(0, 7)); // 格式: YYYY-MM
-    const ACCOUNTING_WEEKS_STORAGE_KEY = 'jcjh_accounting_report_weeks';
-    const normalizeAccountingWeeksSetting = (value) => {
-      const weeks = Number(value);
-      return Number.isInteger(weeks) && weeks >= 1 && weeks <= 6 ? weeks : null;
+    // 月底報表統計：日期區間是唯一設定，週數由區間自動計算。
+    const reportMonth = ref(new Date().toISOString().slice(0, 7));
+    const monthEndDate = (month) => {
+      const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+      if (!match) return '';
+      const date = new Date(Number(match[1]), Number(match[2]), 0);
+      return `${match[1]}-${match[2]}-${String(date.getDate()).padStart(2, '0')}`;
     };
-    const loadAccountingWeeksSetting = (month) => {
-      try {
-        const saved = JSON.parse(window.localStorage.getItem(ACCOUNTING_WEEKS_STORAGE_KEY) || '{}');
-        return normalizeAccountingWeeksSetting(saved && saved[month]) || 4;
-      } catch (e) {
-        return 4;
+    const defaultReportPeriod = {
+      start: `${reportMonth.value}-01`,
+      end: monthEndDate(reportMonth.value)
+    };
+    const reportStartDate = ref(defaultReportPeriod.start);
+    const reportEndDate = ref(defaultReportPeriod.end);
+    const accountingPeriod = computed(() => ({
+      start: reportStartDate.value,
+      end: reportEndDate.value
+    }));
+    const reportWeeksCount = computed(() => {
+      if (window.DateUtils && typeof window.DateUtils.countWeeksInRange === 'function') {
+        return window.DateUtils.countWeeksInRange(reportStartDate.value, reportEndDate.value);
       }
-    };
-    const saveAccountingWeeksSetting = (month, value) => {
-      const weeks = normalizeAccountingWeeksSetting(value);
-      const monthKey = String(month || '');
-      if (!weeks || !/^\d{4}-\d{2}$/.test(monthKey)) return;
-      try {
-        const saved = JSON.parse(window.localStorage.getItem(ACCOUNTING_WEEKS_STORAGE_KEY) || '{}');
-        saved[monthKey] = weeks;
-        window.localStorage.setItem(ACCOUNTING_WEEKS_STORAGE_KEY, JSON.stringify(saved));
-      } catch (e) {
-        // 私密瀏覽或瀏覽器封鎖 localStorage 時，仍可正常使用月報。
-      }
-    };
-    const reportWeeksCount = ref(loadAccountingWeeksSetting(reportMonth.value));
+      return 0;
+    });
     const monthlyReportData = ref([]);
     const monthlyReportTotals = computed(() =>
       window.DomainBilling && typeof window.DomainBilling.sumMonthlyReportRows === 'function'
         ? window.DomainBilling.sumMonthlyReportRows(monthlyReportData.value)
         : {}
     );
-    const accountingPeriod = ref(
-      window.ExportAccounting && window.ExportAccounting.loadPeriodSettings
-        ? window.ExportAccounting.loadPeriodSettings(reportMonth.value)
-        : {}
-    );
-
     const accountingExportLoading = ref(false);
-    watch(reportMonth, (month) => {
-      reportWeeksCount.value = loadAccountingWeeksSetting(month);
-      if (window.ExportAccounting && window.ExportAccounting.loadPeriodSettings) {
-        accountingPeriod.value = window.ExportAccounting.loadPeriodSettings(month);
+    watch([reportStartDate, reportEndDate], ([start, end]) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) {
+        reportMonth.value = String(start).slice(0, 7);
       }
-    });
-    watch(reportWeeksCount, (weeks) => {
-      saveAccountingWeeksSetting(reportMonth.value, weeks);
+      if (window.ExportAccounting && typeof window.ExportAccounting.savePeriodSettings === 'function'
+          && reportWeeksCount.value > 0) {
+        window.ExportAccounting.savePeriodSettings(reportMonth.value, { start: start, end: end });
+      }
     });
 
     // 行政直接審核生效開關
@@ -3531,7 +3611,7 @@ createApp({
 
       // P2：月報只在後台「經費／鐘點」分頁時重算（避免全校異動就掃全表）
       watch(
-        [substitutionRecords, teachersList, allSchedules, reportMonth, reportWeeksCount, adminSubTab, activeTab],
+        [substitutionRecords, teachersList, allSchedules, classAwayEvents, semesterEndDate, reportMonth, reportWeeksCount, adminSubTab, activeTab],
         () => {
           if (activeTab.value === 'admin' && adminSubTab.value === 'billing') {
             calculateMonthlyReport(); // async 延後載入 billing
@@ -4359,6 +4439,7 @@ createApp({
     const pendingHomeroomRecords = computed(() => {
       return (homeroomRecords.value || [])
         .filter(r => r && r.enabled !== false && String(r.status || '').toLowerCase() !== 'cancelled')
+        .filter(isBillableHomeroomRecord)
         .filter(r => !r.actualTeacherName);
     });
     const getHomeroomCoverCandidates = (record) => {
@@ -4546,9 +4627,9 @@ createApp({
     const manualHomeroomForm = ref({
       leaveEmail: '',
       className: '',
-      date: getTodayYmdStr(),
-      leaveTimeType: '全天',
-      leaveTime: '08:00~16:00',
+         date: getTodayYmdStr(),
+         leaveTimeType: '全天',
+         leaveTime: '08:00~16:00',
       actualTeacherEmail: '',
       note: ''
     });
@@ -4561,7 +4642,7 @@ createApp({
         leaveTimeType: '全天',
         leaveTime: '08:00~16:00',
         actualTeacherEmail: '',
-        note: '導師無課/調課請假，手動新增代導費'
+         note: '導師整日請假，系統未自動產生代導費，手動補建'
       };
       showManualHomeroomModal.value = true;
     };
@@ -4571,6 +4652,9 @@ createApp({
       if (!email) return;
       const t = teachersList.value.find(x => x.email === email);
       if (t) {
+        const defaults = getLeaveTimeDefaults(email);
+        manualHomeroomForm.value.leaveTimeType = defaults.type;
+        manualHomeroomForm.value.leaveTime = defaults.range;
         const title = String(t.jobTitle || '').trim();
         const m = title.match(/([0-9一二三四五六七八九十0-9\-]+(?:\s*年\s*[0-9一二三四五六七八九十]+)?(?:\s*班)?)\s*導師/);
         if (m && m[1]) {
@@ -4582,11 +4666,14 @@ createApp({
     };
 
     const currentMonthHomeroomRecords = computed(() => {
-      const m = reportMonth.value;
+      const start = String(reportStartDate.value || '').trim();
+      const end = String(reportEndDate.value || '').trim();
       const list = (homeroomRecords.value || []).filter(r => {
         if (!r || r.enabled === false || String(r.status || '').toLowerCase() === 'cancelled') return false;
-        if (!m) return true;
-        return String(r.date || '').slice(0, 7) === m;
+        if (!isBillableHomeroomRecord(r)) return false;
+        const date = String(r.date || '').slice(0, 10).replace(/\//g, '-');
+        if (!start || !end) return false;
+        return date >= start && date <= end;
       });
       return list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     });
@@ -4607,6 +4694,10 @@ createApp({
       const form = manualHomeroomForm.value;
       if (!form.leaveEmail) { showToast('請選擇請假導師', 'warning'); return; }
       if (!form.date) { showToast('請選擇代導日期', 'warning'); return; }
+      if (!isFullDayHomeroomLeave(form)) {
+        showToast('代導鐘點費僅適用整日請假；純課務調整、上午／下午或不足全天不建立代導費', 'warning');
+        return;
+      }
 
       const origTeacher = teachersList.value.find(t => t.email === form.leaveEmail);
       const origName = origTeacher ? origTeacher.name : form.leaveEmail;
@@ -4712,31 +4803,6 @@ createApp({
     });
 
 
-
-    // 月底報表月份選項 — 只顯示有資料的月份
-    const reportMonthOptions = computed(() => {
-      const months = new Set();
-      substitutionRecords.value.forEach(r => {
-        if (r.date) months.add(r.date.slice(0, 7));
-      });
-      if (months.size === 0) {
-        const d = new Date();
-        months.add(d.toISOString().slice(0, 7));
-      }
-      return Array.from(months).sort().reverse();
-    });
-
-    watch(substitutionRecords, (records) => {
-      if (records.length > 0) {
-        const months = [...new Set(records.map(r => r.date ? r.date.slice(0, 7) : null).filter(Boolean))].sort();
-        if (months.length > 0) {
-          const latest = months[months.length - 1];
-          if (!reportMonthOptions.value.includes(reportMonth.value)) {
-            reportMonth.value = latest;
-          }
-        }
-      }
-    }, { immediate: true });
 
     // 所有歷史紀錄 (掛載虛擬屬性以供前端表格渲染)
     // P3：reqById／peerByRequestId 一次建表，避免 map 內 O(n) find
@@ -6965,9 +7031,9 @@ createApp({
       }
     });
 
-    const isAwayClassCell = (className, dateStr) => {
+    const isAwayClassCell = (className, dateStr, period) => {
       const a = getTimetableApi();
-      return a ? a.isAwayClassCell(className, dateStr) : false;
+      return a ? a.isAwayClassCell(className, dateStr, period) : false;
     };
     const getClassCellClassForDate = (teacherEmail, dateStr, period, dayOfWeek) => {
       const a = getTimetableApi();
@@ -6976,8 +7042,8 @@ createApp({
 
     const getClassCellClassForClass = (className, day, period) => {
       const a = getTimetableApi();
-      return a
-        ? a.getClassCellClassForClass({ classSchedules, selectedClassWeekDates, classSubstitutionMap }, className, day, period)
+       return a
+         ? a.getClassCellClassForClass({ classSchedules, selectedClassWeekDates, classSubstitutionMap, isClassAwayOnDate }, className, day, period)
         : 'is-empty';
     };
 
@@ -7043,9 +7109,10 @@ createApp({
         classSchedules, selectedClassWeekDates, classSubstitutionMap, detailSubRecord, detailRequest,
          showDetailModal, resolveDetailRequest, classReadonlyMode: classViewerReadonly, isAdmin, getTeacherNameByEmail,
         activeCell, inputRequestDate, matchMode, exchangeTargetDate, exchangeWeekOffset, exchangePeriodId,
-        exchangeTeacherEmail, matchPreview, recommendedTeachers, matchSearchQuery, matchDisplayCount,
-        showMatchModal, fetchRecommendations,
-        canOperateOnTeacherEmail: canOperateOnTeacherEmail,
+         exchangeTeacherEmail, matchPreview, recommendedTeachers, matchSearchQuery, matchDisplayCount,
+         showMatchModal, fetchRecommendations,
+         showToast, isClassAwayOnDate,
+         canOperateOnTeacherEmail: canOperateOnTeacherEmail,
         ensureProxyTargetForTeacher: ensureProxyTargetForTeacher
       }, cls, day, period, entryOrIndex);
     };
@@ -7105,6 +7172,10 @@ createApp({
       if (!window.DomainBilling) throw new Error('大鐘點模組未載入');
     };
     const calculateMonthlyReport = async () => {
+      if (!reportWeeksCount.value) {
+        monthlyReportData.value = [];
+        return;
+      }
       try {
         await ensureBillingReady();
       } catch (e) {
@@ -7118,6 +7189,8 @@ createApp({
         substitutionRecords: substitutionRecords.value,
         reportMonth: reportMonth.value,
         reportWeeksCount: reportWeeksCount.value,
+        reportStartDate: reportStartDate.value,
+        reportEndDate: reportEndDate.value,
         getTeacherNameByEmail,
         classAwayEvents: classAwayEvents.value,
         semesterEndDate: semesterEndDate.value,
@@ -7138,14 +7211,17 @@ createApp({
         showToast('Excel 模組未載入', 'error');
         return;
       }
-      if (!monthlyReportData.value || !monthlyReportData.value.length) await calculateMonthlyReport();
+      await calculateMonthlyReport();
       const data = window.DomainBilling.toExcelRows(monthlyReportData.value);
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `${reportMonth.value}大鐘點1-7午休`);
-      if (window.DomainBilling.toPeriod8ExcelRows) {
-        const p8 = window.DomainBilling.toPeriod8ExcelRows({
-          reportMonth: reportMonth.value,
+       const rangeLabel = `${reportStartDate.value}_${reportEndDate.value}`;
+       XLSX.utils.book_append_sheet(wb, ws, `${rangeLabel}大鐘點1-7午休`);
+       if (window.DomainBilling.toPeriod8ExcelRows) {
+         const p8 = window.DomainBilling.toPeriod8ExcelRows({
+           reportMonth: reportMonth.value,
+           reportStartDate: reportStartDate.value,
+           reportEndDate: reportEndDate.value,
           allSchedules: allSchedules.value,
           substitutionRecords: substitutionRecords.value,
           classAwayEvents: classAwayEvents.value,
@@ -7153,13 +7229,13 @@ createApp({
           getTeacherNameByEmail,
           isSingleWeek
         });
-        const ws8 = XLSX.utils.json_to_sheet(p8.length ? p8 : [{ "日期": "", "說明": "本月無第8節應發或空堂列" }]);
-        XLSX.utils.book_append_sheet(wb, ws8, `${reportMonth.value}第8節明細`);
-      }
-       XLSX.writeFile(wb, `全校大鐘點早自習1-7午休與第8節費_${reportMonth.value}.xlsx`);
+         const ws8 = XLSX.utils.json_to_sheet(p8.length ? p8 : [{ "日期": "", "說明": "本期無第8節應發或空堂列" }]);
+         XLSX.utils.book_append_sheet(wb, ws8, `${rangeLabel}第8節明細`);
+       }
+        XLSX.writeFile(wb, `全校大鐘點早自習1-7午休與第8節費_${rangeLabel}.xlsx`);
     };
 
-    // 匯出會計版五類 Excel（套用範本；扣勞健保／實際金額留白）
+    // 匯出會計版五類 Excel（套用上方日期區間；扣勞健保／實際金額留白）
     const exportSubFeeToExcel = async () => {
       if (accountingExportLoading.value) return;
       accountingExportLoading.value = true;
@@ -7167,135 +7243,56 @@ createApp({
         await ensureBillingReady();
         if (typeof window.ensureExportAccounting === 'function') await window.ensureExportAccounting();
         if (typeof window.ensureExcelJS === 'function') await window.ensureExcelJS();
-      } catch (e) {
-        accountingExportLoading.value = false;
-        showToast('會計匯出模組或 ExcelJS 載入失敗', 'error');
-        return;
-      }
-      try {
         if (!window.ExportAccounting || !window.ExportAccounting.buildExportData || !window.ExportAccounting.exportWorkbook) {
           throw new Error('會計匯出模組未載入');
         }
-        if ((!accountingPeriod.value || !accountingPeriod.value.start || !accountingPeriod.value.end) && window.ExportAccounting.loadPeriodSettings) {
-          accountingPeriod.value = window.ExportAccounting.loadPeriodSettings(reportMonth.value);
+        const start = String(reportStartDate.value || '').trim();
+        const end = String(reportEndDate.value || '').trim();
+        const weeks = reportWeeksCount.value;
+        if (!weeks || start > end) {
+          showToast('請先設定有效的結算起日與迄日。', 'warning');
+          return;
         }
-        if (!monthlyReportData.value.length) await calculateMonthlyReport();
-        const periodDefault = window.ExportAccounting.defaultPeriodSettings
-          ? window.ExportAccounting.defaultPeriodSettings(reportMonth.value)
-          : accountingPeriod.value;
-        const normalizeAccountingPeriod = (period) => {
-          const start = String(period && period.start || '').trim();
-          const end = String(period && period.end || '').trim();
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) return null;
-          return { start, end };
-        };
-        const initialPeriod = normalizeAccountingPeriod(accountingPeriod.value) || normalizeAccountingPeriod(periodDefault);
-        if (!initialPeriod) throw new Error('會計匯出期間無效，請重新整理後再試。');
-        const normalizeReportWeeks = (value) => {
-          const weeks = Number(value);
-          return Number.isInteger(weeks) && weeks >= 1 && weeks <= 6 ? weeks : null;
-        };
-        const initialWeeks = normalizeReportWeeks(reportWeeksCount.value) || 4;
-        let monthlyRowsCache = null;
-        let monthlyRowsCacheWeeks = null;
-        const buildMonthlyRowsForExport = (weeks) => {
-          if (monthlyRowsCache && monthlyRowsCacheWeeks === weeks) return monthlyRowsCache;
-          let rows = monthlyReportData.value;
-          if (window.DomainBilling && typeof window.DomainBilling.buildMonthlyReportRows === 'function') {
-            rows = window.DomainBilling.buildMonthlyReportRows({
-              teachers: teachersList.value,
-              allSchedules: allSchedules.value,
-              schoolSwaps: schoolSwaps.value,
-              substitutionRecords: substitutionRecords.value,
-              reportMonth: reportMonth.value,
-              reportWeeksCount: weeks,
-              getTeacherNameByEmail,
-              classAwayEvents: classAwayEvents.value,
-              semesterEndDate: semesterEndDate.value,
-              isSingleWeek
-            });
-          }
-          monthlyRowsCacheWeeks = weeks;
-          monthlyRowsCache = rows;
-          return rows;
-        };
+        reportMonth.value = start.slice(0, 7);
+        const period = { start, end };
+        await calculateMonthlyReport();
         const exportOpts = {
           reportMonth: reportMonth.value,
-          reportWeeksCount: initialWeeks,
-          periods: initialPeriod,
+          reportStartDate: start,
+          reportEndDate: end,
+          reportWeeksCount: weeks,
+          periods: period,
           teachers: teachersList.value,
           allSchedules: allSchedules.value,
           schoolSwaps: schoolSwaps.value,
           substitutionRecords: substitutionRecords.value,
           homeroomRecords: homeroomRecords.value,
-          monthlyReportRows: buildMonthlyRowsForExport(initialWeeks),
+          monthlyReportRows: monthlyReportData.value,
           getTeacherNameByEmail,
           classAwayEvents: classAwayEvents.value,
           semesterEndDate: semesterEndDate.value,
           isSingleWeek
         };
-        const buildPopupState = (period) => {
-          const reportWeeks = initialWeeks;
-          const monthlyRows = buildMonthlyRowsForExport(reportWeeks);
-           const preview = window.ExportAccounting.buildExportData({
-             ...exportOpts,
-             reportWeeksCount: reportWeeks,
-             monthlyReportRows: monthlyRows,
-             periods: period
-           });
-           const summaryLines = preview.summary.map((item) => item.label + '：' + item.count + ' 筆／' + Number(item.hours || 0).toLocaleString() + ' 節／NT$ ' + Number(item.amount || 0).toLocaleString());
-           const blockingLines = (preview.blocking || []).length
-             ? '\n\n無法匯出：\n' + preview.blocking.map((w) => '⛔ ' + w).join('\n')
-             : '';
-           const warningLines = preview.warnings.length
-             ? '\n\n匯出前提示：\n' + preview.warnings.map((w) => '⚠️ ' + w).join('\n')
-             : '';
-          return {
-            period,
-            reportWeeksCount: reportWeeks,
-            monthlyReportRows: monthlyRows,
-             blocking: preview.blocking || [],
-             message: '將套用會計範本下載單一 Excel：\n\n授課週數：' + reportWeeks + ' 週\n\n' + summaryLines.join('\n') + blockingLines + warningLines + '\n\n扣勞健保與實際金額欄位會留白。'
-           };
-        };
-        let popupState = buildPopupState(initialPeriod);
-        const confirmed = await showConfirm(
-          popupState.message,
-          '匯出會計版五類 Excel',
-          {
-            withAccountingPeriod: true,
-            periodStart: popupState.period.start,
-            periodEnd: popupState.period.end,
-            periodDefault,
-            onAccountingPeriodChange: (draftPeriod) => {
-               const nextPeriod = normalizeAccountingPeriod(draftPeriod);
-               if (!nextPeriod) return '請先填寫有效的會計匯出起訖日，再確認下載。';
-               popupState = buildPopupState(nextPeriod);
-               return popupState.message;
-            },
-            validateAccountingPeriod: (draftPeriod) => {
-               const nextPeriod = normalizeAccountingPeriod(draftPeriod);
-               if (!nextPeriod) return false;
-               popupState = buildPopupState(nextPeriod);
-               return !(popupState.blocking && popupState.blocking.length);
-             }
-           }
-         );
-         if (!confirmed || !confirmed.ok) return;
-         if (popupState.blocking && popupState.blocking.length) {
-           showToast('請先補齊超鐘點經費來源，才能匯出會計 Excel。', 'warning');
-           return;
-         }
-        const finalPeriod = normalizeAccountingPeriod(confirmed.period) || popupState.period;
-        const finalWeeks = initialWeeks;
-        const finalPopupState = buildPopupState(finalPeriod);
-        exportOpts.periods = finalPeriod;
-        exportOpts.reportWeeksCount = finalWeeks;
-        exportOpts.monthlyReportRows = finalPopupState.monthlyReportRows;
-        monthlyReportData.value = finalPopupState.monthlyReportRows;
-        accountingPeriod.value = finalPeriod;
+        const preview = window.ExportAccounting.buildExportData(exportOpts);
+        const summaryLines = preview.summary.map((item) => item.label + '：' + item.count + ' 筆／'
+          + Number(item.hours || 0).toLocaleString() + ' 節／NT$ ' + Number(item.amount || 0).toLocaleString());
+        const blockingLines = (preview.blocking || []).length
+          ? '\n\n無法匯出：\n' + preview.blocking.map((w) => '⛔ ' + w).join('\n')
+          : '';
+        const warningLines = (preview.warnings || []).length
+          ? '\n\n匯出前提示：\n' + preview.warnings.map((w) => '⚠️ ' + w).join('\n')
+          : '';
+        const message = '將套用上方結算日期區間下載單一 Excel：\n\n結算區間：' + start + '～' + end
+          + '\n自動計算：' + weeks + ' 週\n\n' + summaryLines.join('\n')
+          + blockingLines + warningLines + '\n\n扣勞健保與實際金額欄位會留白。';
+        const confirmed = await showConfirm(message, '匯出會計版五類 Excel');
+        if (!confirmed) return;
+        if (preview.blocking && preview.blocking.length) {
+          showToast('請先補齊超鐘點經費來源，才能匯出會計 Excel。', 'warning');
+          return;
+        }
         if (window.ExportAccounting.savePeriodSettings) {
-          window.ExportAccounting.savePeriodSettings(reportMonth.value, finalPeriod);
+          window.ExportAccounting.savePeriodSettings(reportMonth.value, period);
         }
         const result = await window.ExportAccounting.exportWorkbook(exportOpts);
         const blob = new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -7451,7 +7448,7 @@ createApp({
         getCell: (email, dateStr, period, dayOfWeek) =>
           getApprovedScheduleForDate(email, dateStr, period, dayOfWeek),
         // 空堂事件班：匯出留白（與課表邏輯一致；畫面仍淡化）
-        isClassAway: (className, dateStr) => isClassAwayOnDate(className, dateStr)
+         isClassAway: (className, dateStr, period) => isClassAwayOnDate(className, dateStr, period)
       });
       if (!res || !res.ok) {
         showToast((res && res.error) || '匯出失敗', 'warning');
@@ -7497,17 +7494,28 @@ createApp({
         return;
       }
       const startDate = String(ev.startDate || '').slice(0, 10);
-      let endDate = String(ev.endDate || ev.startDate || '').slice(0, 10);
+      let endDate = String(ev.endDate || semesterEndDate.value || ev.startDate || '').slice(0, 10);
       if (!startDate) {
         showToast('此事件沒有起日，無法匯出', 'warning');
         return;
       }
       if (!endDate) endDate = startDate;
       const activityName = String(ev.name || '').trim() || '活動';
+      const eventPeriod = window.DomainClassAway && window.DomainClassAway.eventPeriod
+        ? window.DomainClassAway.eventPeriod(ev)
+        : 'all';
+      const awayClasses = window.DomainClassAway && window.DomainClassAway.getAwayClassesInRange
+        ? window.DomainClassAway.getAwayClassesInRange(
+          startDate,
+          endDate,
+          [ev],
+          semesterEndDate.value,
+          { allClasses: classList.value, period: eventPeriod }
+        )
+        : (ev.classes || []).slice();
       const grade = window.ExportActivityCover.gradesFromClasses
-        ? window.ExportActivityCover.gradesFromClasses(ev.classes || [])
+        ? window.ExportActivityCover.gradesFromClasses(awayClasses)
         : '';
-      const awayClasses = (ev.classes || []).slice();
       // 僅活動互代經費（扣額度／活動公費／第8節代課）；排除一般公費／自費
       const isActFee = (fee, period) => {
         const f = String(fee || '').trim();
@@ -7571,7 +7579,8 @@ createApp({
         requests: allReqs,
         demand,
         getTeacherName: (em) => getTeacherNameByEmail(em),
-        onlyActivityFee: true
+        onlyActivityFee: true,
+        requireActivityHint: true
       });
       if (!res || !res.ok) {
         showToast((res && res.error) || '匯出失敗', 'warning');
@@ -8150,7 +8159,7 @@ createApp({
       const root = meta.requestId || ('PAPER' + Date.now());
       const serialRoot = meta.serial || root;
       const combinedReturn = isCombinedReturnRequest(p);
-      const courseAdjustmentOnly = !combinedReturn && !!p.courseAdjustmentOnly;
+       const courseAdjustmentOnly = !combinedReturn && isCourseAdjustmentOnlyRequest(p);
       const common = {
         type: p.mode || 'substitution',
         reason: p.reason || '請假',
@@ -8276,16 +8285,21 @@ createApp({
         const typeRaw = String(getValue(source, ['異動類型', 'type'], 'substitution')).toLowerCase();
         const isExchange = typeRaw === 'exchange' || typeRaw === '對調' || typeRaw === '調課';
         const original = resolvePaperTeacher(getValue(source, ['申請人Email', 'requesterEmail', '申請人姓名', 'requesterName']));
-        const combinedReturn = isCombinedReturnRequest(source);
+         const combinedReturn = isCombinedReturnRequest(source);
         const actual = resolvePaperTeacher(getValue(source, ['受邀人Email', 'targetTeacherEmail', '受邀人姓名', 'targetTeacherName']));
         const date = getValue(source, ['異動日期', 'requestDate', 'date']);
         const period = getValue(source, ['異動節次', 'requestPeriod', 'period']);
         const printedRaw = getValue(source, ['是否已印', 'printed']);
         const printed = printedRaw === true || String(printedRaw || '').trim().toLowerCase() === 'true' || String(printedRaw || '').trim() === '1' || String(printedRaw || '').trim() === '是';
         const isTriangle = typeRaw === 'triangle' || typeRaw === '三角調';
-        const reasonValue = getValue(source, ['請假事由', 'reason'], '請假');
-        const base = {
-          reason: reasonValue,
+         const reasonValue = getValue(source, ['請假事由', 'reason'], '請假');
+         const courseAdjustmentOnly = !combinedReturn && isCourseAdjustmentOnlyRequest(Object.assign({}, source, {
+           reason: reasonValue,
+           courseAdjustmentOnly: getValue(source, ['僅課務調整', 'courseAdjustmentOnly'])
+         }));
+         const base = {
+           reason: reasonValue,
+           courseAdjustmentOnly: courseAdjustmentOnly,
           subFee: getValue(source, ['經費來源', 'subFee'], '自費代課'),
           note: getValue(source, ['備註', 'note']),
           printed: printed,
@@ -8374,8 +8388,8 @@ createApp({
             className: getValue(source, ['班級', 'className']),
             subject: getValue(source, ['科目', 'subject']),
             specialFlow: combinedReturn ? 'combined_return' : '',
-            leaveTimeType: getValue(source, ['請假時間類型', 'leaveTimeType']),
-            leaveTime: getValue(source, ['請假時間', 'leaveTime', 'timeRange'])
+             leaveTimeType: courseAdjustmentOnly ? '' : getValue(source, ['請假時間類型', 'leaveTimeType']),
+             leaveTime: courseAdjustmentOnly ? '' : getValue(source, ['請假時間', 'leaveTime', 'timeRange'])
           }));
         }
       });
@@ -11416,8 +11430,13 @@ createApp({
     };
     /** 假別變更時自動帶入預設經費（第8節／活動模式不覆寫） */
     const onLeaveReasonChange = () => {
-      if (pendingRequestData.value.mode !== 'substitution') return;
-      if (pendingRequestData.value.courseAdjustmentOnly) return;
+      const mode = pendingRequestData.value.mode;
+      if (mode !== 'substitution' && mode !== 'exchange') return;
+      if (String(pendingRequestData.value.reason || '').trim() === '課務調整') {
+        toggleCourseAdjustmentOnly({ target: { checked: true } });
+        return;
+      }
+      if (mode !== 'substitution' || pendingRequestData.value.courseAdjustmentOnly) return;
       if (isPeriod8FeeLocked.value) {
         pendingRequestData.value.subFee = PERIOD8_FEE;
         batchSubFee.value = PERIOD8_FEE;
@@ -11872,7 +11891,7 @@ createApp({
         showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
-       reportMonth, reportWeeksCount, monthlyReportData, monthlyReportTotals,
+        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals,
       accountingPeriod, accountingExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
@@ -11896,7 +11915,7 @@ createApp({
        paginatedMyPending, paginatedMySent, paginatedAdminPending,
        pendingMyPendingTotal, pendingMySentTotal, pendingAdminTotal, filteredAdminPendingRequests,
          isBatchGroupExpanded, toggleBatchGroup, getBatchGroupSlotSummary, getBatchGroupTeacherSummary, getBatchGroupStatusText, getBatchGroupStatusClass, isAdminPendingPageFullySelected,
-      reportMonthOptions, personalChanges, recommendedExchangeList, displayedExchangeList,
+       personalChanges, recommendedExchangeList, displayedExchangeList,
       loginWithGoogle, logout, gsiButtonReady, gsiButtonError, gsiLoggingIn, reloadGsiLoginButton,
       changeWeek,       getPeriodTimeSpan, getWeekDayText, formatDateMMDD,
         timetablePeriods, getPeriodLabel, formatPeriodText, isLunchPeriod, getPeriodClass, formatClassName, isCombinedClass, getScheduleSpecialTags, hasScheduleSpecialTag, isTimetablePullout, isTimetableRestricted,
@@ -11927,7 +11946,7 @@ createApp({
       devSwitchUser, restoreAdmin,
        getTeacherNameByEmail, getTeacherSubjectByEmail, getTeacherIdentityTooltip, getTeacherTimetableHours, getRealTeacherName, startSecondSub,
         getTeacherJobTitleByEmail, isHomeroomTeacher,
-      getSubjectStyle, getClassBadgeStyle, formatMoney,
+       getSubjectStyle, getClassBadgeStyle, formatMoney,
       changeHistoryPage, openHistoryEditModal, saveHistoryEdit, onHistoryEditDateChange, changePendingPage,
       openAddSemesterModal, openEditSemesterModal, saveSemester, deleteSemester, setDefaultSemester,
       // 工具函數

@@ -91,7 +91,7 @@ window.ExportSchoolTimetable = (function () {
     if (!cn) return '';
     // 空堂事件：學生班不在 → 匯出留白
     if (cell.isClassAway) return '';
-    if (typeof opts.isClassAway === 'function' && opts.isClassAway(cn, opts.dateStr)) return '';
+    if (typeof opts.isClassAway === 'function' && opts.isClassAway(cn, opts.dateStr, opts.period)) return '';
     return cn;
   }
 
@@ -119,10 +119,10 @@ window.ExportSchoolTimetable = (function () {
           var changed = isChangedCell(cell);
           if (changed) hasChange = true;
           // 空堂事件班也標灰底，方便辨識「為何空白」
-          var away = !!(cell && (cell.isClassAway || (typeof isClassAway === 'function' && cell.className && isClassAway(cell.className, dateStr))));
+           var away = !!(cell && (cell.isClassAway || (typeof isClassAway === 'function' && cell.className && isClassAway(cell.className, dateStr, p))));
           if (away) hasChange = true;
           cells.push({
-            text: cellDisplayText(cell, { isClassAway: isClassAway, dateStr: dateStr }),
+             text: cellDisplayText(cell, { isClassAway: isClassAway, dateStr: dateStr, period: p }),
             changed: changed || away
           });
         }

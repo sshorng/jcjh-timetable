@@ -52,20 +52,57 @@ const courseAdjustmentRequest = window.FieldMap.mapRequest({
   '僅課務調整': '是'
 });
 assert.equal(courseAdjustmentRequest.courseAdjustmentOnly, true, '僅課務調整欄位應正規化為 true');
+assert.equal(window.DomainBilling.isBillableHomeroomRecord({
+  sourceRequestId: 'req-partial,req-older-full',
+  leaveTimeType: '全天',
+  leaveTime: '08:00~16:00'
+}, [{ requestId: 'req-partial', reason: '事假', leaveTimeType: '下午', leaveTime: '12:00~16:00' }]), true, '未載入的舊來源仍應依已建立的整日紀錄計費');
+assert.equal(window.DomainBilling.isBillableHomeroomRecord({
+  sourceRequestId: 'req-staff-full',
+  originalTeacherName: '行政導師',
+  leaveTimeType: '自訂',
+  leaveTime: '08:00~16:00'
+}, [{ requestId: 'req-staff-full', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00' }], [
+  { email: '行政導師', name: '行政導師', role: 'staff' }
+]), false, '行政／職員整日應依 17:00 結束');
 
 const mentorWorkbook = window.DomainBilling.buildSubFeeExcelWorkbook({
   reportMonth: '2026-07',
   substitutionRecords: [
     { requestId: 'req-course-only', date: '2026-07-13', reason: '課務調整', status: 'approved' },
-    { requestId: 'req-normal', date: '2026-07-14', reason: '事假', status: 'approved' }
+    { requestId: 'req-normal', date: '2026-07-14', reason: '事假', status: 'approved' },
+    { requestId: 'req-partial', date: '2026-07-15', reason: '事假', leaveTimeType: '下午', leaveTime: '12:00~16:00', status: 'approved' },
+    { requestId: 'req-full-custom', date: '2026-07-16', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00', status: 'approved' }
   ],
   homeroomRecords: [
     { sourceRequestId: 'req-course-only', date: '2026-07-13', actualTeacherEmail: 'Cover', actualTeacherName: 'Cover', originalTeacherName: '701導師', className: '701', status: 'assigned' },
-    { sourceRequestId: 'req-normal', date: '2026-07-14', actualTeacherEmail: 'Cover2', actualTeacherName: 'Cover2', originalTeacherName: '702導師', className: '702', status: 'assigned' }
+    { sourceRequestId: 'req-normal', date: '2026-07-14', actualTeacherEmail: 'Cover2', actualTeacherName: 'Cover2', originalTeacherName: '702導師', className: '702', status: 'assigned' },
+    { sourceRequestId: 'req-partial', date: '2026-07-15', actualTeacherEmail: 'Cover3', actualTeacherName: 'Cover3', originalTeacherName: '703導師', className: '703', status: 'assigned' },
+    { sourceRequestId: 'req-full-custom', date: '2026-07-16', actualTeacherEmail: 'Cover4', actualTeacherName: 'Cover4', originalTeacherName: '704導師', className: '704', status: 'assigned' }
   ]
 });
-assert.equal(mentorWorkbook.mentorAoa.length, 3, '月度代導清冊應排除僅課務調整並保留一般代導');
+assert.equal(mentorWorkbook.mentorAoa.length, 4, '月度代導清冊應排除僅課務調整與非整日請假');
 assert.equal(mentorWorkbook.mentorAoa[2][6], 'Cover2', '月度代導清冊仍應保留一般代導教師');
+assert.equal(mentorWorkbook.mentorAoa[3][6], 'Cover4', '月度代導清冊仍應保留完整自訂全天');
+
+const rangedWorkbook = window.DomainBilling.buildSubFeeExcelWorkbook({
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-31',
+  reportEndDate: '2026-08-03',
+  substitutionRecords: [
+    { date: '2026-07-30', period: 1, className: '701', type: 'substitution', originalTeacherName: 'Outside', actualTeacherName: 'Cover', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-31', period: 1, className: '702', type: 'substitution', originalTeacherName: 'Inside', actualTeacherName: 'Cover', subFee: '公費代課', status: 'approved' },
+    { date: '2026-08-04', period: 1, className: '703', type: 'substitution', originalTeacherName: 'Outside', actualTeacherName: 'Cover', subFee: '公費代課', status: 'approved' }
+  ],
+  homeroomRecords: [
+    { date: '2026-07-30', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', originalTeacherName: 'Outside導師', className: '701', status: 'assigned' },
+    { date: '2026-08-03', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', originalTeacherName: 'Inside導師', className: '702', status: 'assigned' }
+  ]
+});
+assert.equal(rangedWorkbook.pubAoa.length, 3, '逐筆公付清冊應只取指定日期區間');
+assert.equal(rangedWorkbook.mentorAoa.length, 3, '逐筆代導清冊應只取指定日期區間');
+assert.equal(rangedWorkbook.pubAoa[2][2], '115.07.31(五)', '跨月份日期區間應保留區間內資料');
+assert.equal(rangedWorkbook.mentorAoa[2][2], '115.08.03(一)', '跨月份日期區間應保留迄日資料');
 
 const row = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'Billing', name: 'Billing', baseHours: 0 }],
@@ -86,6 +123,17 @@ const row = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(row.publicOvertimeUsed, 1);
 assert.equal(row.schoolPublicPayout, 0);
 assert.equal(row.actualOvertime, 0);
+
+const rangedReport = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'RangeTeacher', name: 'RangeTeacher', baseHours: 0 }],
+  allSchedules: [{ teacherEmail: 'RangeTeacher', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' }],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-13',
+  reportEndDate: '2026-07-24'
+})[0];
+assert.equal(rangedReport.weeklyPeriods, 1, '日期區間月報應保留每週課表節數');
+assert.equal(rangedReport.scheduledOvertime, 2, '日期區間涵蓋兩週時應自動計兩週超鐘');
 
 const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],

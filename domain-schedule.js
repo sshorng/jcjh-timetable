@@ -314,7 +314,7 @@ window.DomainSchedule = (function () {
           subRecord: combinedOwn,
           isSubstituted: false,
           isSubstitutionDuty: false,
-          isClassAway: !!(h.isClassAway && h.isClassAway(combinedClass, dateStr))
+           isClassAway: !!(h.isClassAway && h.isClassAway(combinedClass, dateStr, period))
         });
       }
       const forwardMap = {};
@@ -436,7 +436,7 @@ window.DomainSchedule = (function () {
           isMutualCover: incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結',
           subText: subTextIn,
           subRecord: incomingEdge,
-          isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr))
+           isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr, period))
         };
       }
 
@@ -599,7 +599,7 @@ window.DomainSchedule = (function () {
             isMutualCover: firstEdge.subFee === '扣額度' || firstEdge.subFee === '互代不結',
             subText: subText,
             subRecord: firstEdge,
-            isClassAway: !!(h.isClassAway && h.isClassAway(ownOutClass || outBase.className, dateStr))
+             isClassAway: !!(h.isClassAway && h.isClassAway(ownOutClass || outBase.className, dateStr, period))
           });
           var incomingAlongside = buildIncomingCell(findIncomingInfo(firstEdge));
           var sameCourse = incomingAlongside
@@ -655,7 +655,7 @@ window.DomainSchedule = (function () {
       className: patrol ? (baseCn && baseCn !== '巡堂' ? baseCn : '巡堂') : base.className,
       subject: patrol ? '巡堂' : base.subject,
       attr: patrol ? (base.attr || '巡堂') : base.attr,
-      isClassAway: !!(h.isClassAway && h.isClassAway(base.className, dateStr))
+       isClassAway: !!(h.isClassAway && h.isClassAway(base.className, dateStr, period))
     });
   }
 

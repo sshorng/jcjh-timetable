@@ -64,6 +64,16 @@ window.UiSubmitHelpers = (function () {
     return mode === 'substitution' || mode === 'exchange';
   }
 
+  function isCourseAdjustmentReason(value) {
+    return String(value || '').trim() === '課務調整';
+  }
+
+  function requestIsCourseAdjustmentOnly(request, combinedReturn) {
+    return !combinedReturn
+      && supportsCourseAdjustmentOnly(request.mode)
+      && (!!request.courseAdjustmentOnly || isCourseAdjustmentReason(request.reason));
+  }
+
   async function validateSubmitRequest(deps) {
     var pending = deps.pendingRequestData.value;
     var showToast = deps.showToast;
@@ -124,9 +134,7 @@ window.UiSubmitHelpers = (function () {
         return false;
       }
     }
-    var courseAdjustmentOnly = !combinedReturn
-      && supportsCourseAdjustmentOnly(pending.mode)
-      && !!pending.courseAdjustmentOnly;
+    var courseAdjustmentOnly = requestIsCourseAdjustmentOnly(pending, combinedReturn);
     if (pending.mode === 'substitution' && !combinedReturn && !courseAdjustmentOnly && (!pending.leaveTimeType || !pending.leaveTimeStart || !pending.leaveTimeEnd || pending.leaveTimeStart >= pending.leaveTimeEnd)) {
       showToast('請填寫有效的請假時間（可選全天／上午／下午或自行修改）', 'info');
       return false;
@@ -246,9 +254,7 @@ window.UiSubmitHelpers = (function () {
       ? 'pending_admin'
       : (doDirectApprove ? 'approved' : (proxyActive ? 'pending_admin' : 'pending_teacher')));
     var isExchange = pending.mode === 'exchange';
-    var courseAdjustmentOnly = !combinedReturn
-      && supportsCourseAdjustmentOnly(pending.mode)
-      && !!pending.courseAdjustmentOnly;
+    var courseAdjustmentOnly = requestIsCourseAdjustmentOnly(pending, combinedReturn);
     var finalFeeType = '無';
     if (!isExchange) {
       var tk0 = (window.DateUtils && window.DateUtils.decodeTimeKey)
@@ -430,7 +436,7 @@ window.UiSubmitHelpers = (function () {
   /**
    * 模擬格是否視為空（無課／調出被代／空堂事件）
    */
-  function isCompareEmptySlot(cell, dateStr, isClassAwayOnDate) {
+   function isCompareEmptySlot(cell, dateStr, isClassAwayOnDate, period) {
     if (!cell) return true;
     if (cell.isSubstituted) return true;
     if (cell.isClassAway) return true;
@@ -439,7 +445,7 @@ window.UiSubmitHelpers = (function () {
       return true;
     }
     if (dateStr && cell.className && typeof isClassAwayOnDate === 'function'
-        && isClassAwayOnDate(cell.className, dateStr)) {
+         && isClassAwayOnDate(cell.className, dateStr, period != null ? period : cell.period)) {
       return true;
     }
     return false;
@@ -783,7 +789,7 @@ window.UiSubmitHelpers = (function () {
         if (slot) {
           if (!email) return slot.className || '代入';
           var currentCell = getScheduleForDate(email, dateStr, period, day);
-          if (currentCell && !isCompareEmptySlot(currentCell, dateStr, isClassAwayOnDate)) {
+           if (currentCell && !isCompareEmptySlot(currentCell, dateStr, isClassAwayOnDate, period)) {
             return String(currentCell.className) + ' ⚠';
           }
           return slot.className || '代入';
@@ -791,7 +797,7 @@ window.UiSubmitHelpers = (function () {
       }
       if (!email) return '';
       var batchCell = getScheduleForDate(email, dateStr, period, day);
-      if (isCompareEmptySlot(batchCell, dateStr, isClassAwayOnDate)) return '';
+       if (isCompareEmptySlot(batchCell, dateStr, isClassAwayOnDate, period)) return '';
       if (batchCell.isSubstitutionDuty) {
         var tag = batchCell.subType === 'exchange' ? '(調)' : '(代)';
         return String(batchCell.className) + ' ' + tag;
@@ -825,7 +831,7 @@ window.UiSubmitHelpers = (function () {
         var clsIn = draft.className || pending.cls || '代入';
         // 代入格若原本有課 → 衝堂標示
         var baseCell = getScheduleForDate(email, dateStr, period, day);
-        if (baseCell && !isCompareEmptySlot(baseCell, dateStr, isClassAwayOnDate)) {
+         if (baseCell && !isCompareEmptySlot(baseCell, dateStr, isClassAwayOnDate, period)) {
           return String(clsIn) + ' ⚠';
         }
         return '暫:' + clsIn;
@@ -833,7 +839,7 @@ window.UiSubmitHelpers = (function () {
     }
 
     var cell = getScheduleForDate(email, dateStr, period, day);
-    if (isCompareEmptySlot(cell, dateStr, isClassAwayOnDate)) return '';
+     if (isCompareEmptySlot(cell, dateStr, isClassAwayOnDate, period)) return '';
     if (cell.isSubstitutionDuty) {
       var tag2 = cell.subType === 'exchange' ? '(調)' : '(代)';
       return String(cell.className) + ' ' + tag2;
@@ -869,7 +875,7 @@ window.UiSubmitHelpers = (function () {
         if (slot) {
           if (!email) return 'mini-cell-new';
           var currentCell = getScheduleForDate(email, dateStr, period, day);
-          if (currentCell && !isCompareEmptySlot(currentCell, dateStr, isClassAwayOnDate)
+           if (currentCell && !isCompareEmptySlot(currentCell, dateStr, isClassAwayOnDate, period)
               && isSlotConflict(currentCell)) {
             return 'mini-cell-conflict';
           }
@@ -878,7 +884,7 @@ window.UiSubmitHelpers = (function () {
       }
       if (!email) return '';
       var batchCell = getScheduleForDate(email, dateStr, period, day);
-      if (isCompareEmptySlot(batchCell, dateStr, isClassAwayOnDate)) return '';
+       if (isCompareEmptySlot(batchCell, dateStr, isClassAwayOnDate, period)) return '';
       return 'mini-cell-in';
     }
 
@@ -898,7 +904,7 @@ window.UiSubmitHelpers = (function () {
       if (leaveEm === me) return 'mini-cell-out mini-cell-draft';
       if (subEm === me) {
         var baseCell = getScheduleForDate(email, dateStr, period, day);
-        if (baseCell && !isCompareEmptySlot(baseCell, dateStr, isClassAwayOnDate)
+         if (baseCell && !isCompareEmptySlot(baseCell, dateStr, isClassAwayOnDate, period)
             && isSlotConflict(baseCell)) {
           return 'mini-cell-conflict mini-cell-draft';
         }
@@ -907,7 +913,7 @@ window.UiSubmitHelpers = (function () {
     }
 
     var cell = getScheduleForDate(email, dateStr, period, day);
-    if (isCompareEmptySlot(cell, dateStr, isClassAwayOnDate)) return '';
+     if (isCompareEmptySlot(cell, dateStr, isClassAwayOnDate, period)) return '';
     if (who === 'B' && pending.mode === 'substitution' && !pending.isBatch) {
       if (timeKey === pending.timeKey) return 'mini-cell-conflict';
     }

@@ -1776,6 +1776,13 @@ window.UiAdmin = (function () {
       return normalized === 'combined_return' || normalized === '合班回原班';
     }
 
+    function isHistoryCourseAdjustment(form) {
+      if (!form) return false;
+      if (window.FieldMap && typeof window.FieldMap.isCourseAdjustmentOnly === 'function'
+          && window.FieldMap.isCourseAdjustmentOnly(form)) return true;
+      return !!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整';
+    }
+
     function syncHistoryEditFee(force) {
       var form = historyEditForm && historyEditForm.value;
       if (!form) return;
@@ -1798,6 +1805,15 @@ window.UiAdmin = (function () {
     }
 
     function onHistoryEditReasonChange() {
+      var form = historyEditForm && historyEditForm.value;
+      if (form) {
+        form.courseAdjustmentOnly = isHistoryCourseAdjustment(form);
+        if (form.courseAdjustmentOnly) {
+          form.reason = '課務調整';
+          form.leaveTimeType = '';
+          form.leaveTime = '';
+        }
+      }
       syncHistoryEditFee(true);
     }
 
@@ -1820,16 +1836,19 @@ window.UiAdmin = (function () {
       } catch (e) { matched = null; }
       var src = matched || rec;
 
-      var reason = src.reason || rec.reason || '';
-      var opts = leaveReasonOptions || [];
-      if (reason && opts.indexOf(reason) < 0) {
+       var rawReason = src.reason || rec.reason || '';
+       var isEx = (src.type || rec.type) === 'exchange' || (src.type || rec.type) === '對調';
+       var combinedReturn = isCombinedReturnHistory(src) || isCombinedReturnHistory(rec);
+       var courseAdjustmentOnly = !combinedReturn
+         && (isHistoryCourseAdjustment(src) || isHistoryCourseAdjustment(rec));
+       var reason = courseAdjustmentOnly ? '課務調整' : rawReason;
+       var opts = leaveReasonOptions || [];
+       if (!courseAdjustmentOnly && reason && opts.indexOf(reason) < 0) {
         if (reason === '公差') reason = '公假';
         else if (reason === '分娩假' || reason.indexOf('分娩') >= 0) reason = '產前假/分娩假';
         else reason = '其他';
       }
-      var isEx = (src.type || rec.type) === 'exchange' || (src.type || rec.type) === '對調';
-      var combinedReturn = isCombinedReturnHistory(src) || isCombinedReturnHistory(rec);
-      if (combinedReturn) isEx = false;
+       if (combinedReturn) isEx = false;
       var reqDate = src.requestDate || rec.requestDate || rec.date || '';
       var tgtRaw = src.targetDate || rec.targetDate || '';
       var unknownDate = String.fromCharCode(0x2014);
@@ -1865,12 +1884,13 @@ window.UiAdmin = (function () {
         requestDate: reqDate,
         requestPeriodDay: src.requestPeriodDay || dayOfWeekFromDateStr(reqDate),
          requestPeriod: readHistoryPeriod(src.requestPeriod, rec.requestPeriod, rec.period),
-        targetDate: tgtDate,
-        targetDayOfWeek: src.targetDayOfWeek || dayOfWeekFromDateStr(tgtDate),
-         targetPeriod: readHistoryPeriod(src.targetPeriod, rec.targetPeriod),
-         reason: reason,
-        leaveTimeType: combinedReturn ? '' : (src.leaveTimeType || rec.leaveTimeType || ''),
-        leaveTime: combinedReturn ? '' : (src.leaveTime || rec.leaveTime || ''),
+         targetDate: tgtDate,
+         targetDayOfWeek: src.targetDayOfWeek || dayOfWeekFromDateStr(tgtDate),
+          targetPeriod: readHistoryPeriod(src.targetPeriod, rec.targetPeriod),
+         courseAdjustmentOnly: courseAdjustmentOnly,
+          reason: reason,
+         leaveTimeType: combinedReturn || courseAdjustmentOnly ? '' : (src.leaveTimeType || rec.leaveTimeType || ''),
+         leaveTime: combinedReturn || courseAdjustmentOnly ? '' : (src.leaveTime || rec.leaveTime || ''),
          subFee: isEx ? '無' : (combinedReturn ? existingSubFee : (existingSubFee || '自費代課')),
         note: src.note || rec.note || '',
         printed: !!(src.printed != null ? src.printed : rec.printed)
@@ -1935,7 +1955,9 @@ window.UiAdmin = (function () {
           targetDayOfWeek: isEx ? (form.targetDayOfWeek || dayOfWeekFromDateStr(form.targetDate)) : '',
           targetPeriod: isEx ? (parseInt(form.targetPeriod, 10) || 1) : '',
            reason: form.reason || '',
-          leaveTimeType: isEx || combinedReturn ? '' : (form.leaveTimeType || ''),
+           courseAdjustmentOnly: !!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整',
+           "僅課務調整": (!!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整') ? '是' : '',
+           leaveTimeType: isEx || combinedReturn ? '' : (form.leaveTimeType || ''),
           leaveTime: isEx || combinedReturn ? '' : (form.leaveTime || ''),
           subFee: isEx ? '無' : (form.subFee || '自費代課'),
           specialFlow: combinedReturn ? 'combined_return' : '',

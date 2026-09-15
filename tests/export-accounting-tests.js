@@ -69,25 +69,53 @@ assert.deepEqual(teacherOrder.sheets.publicSub.map(row => row.name), ['Zeta', 'A
 assert.deepEqual(teacherOrder.sheets.selfSub.map(row => row.actualName), ['Zeta', 'Alpha'], '自付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.mentor.map(row => row.actualName), ['Zeta', 'Alpha'], '代導明細應依教師名單排序');
 
+const crossMonthRange = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-31',
+  reportEndDate: '2026-08-03',
+  reportWeeksCount: 2,
+  periods: { start: '2026-07-31', end: '2026-08-03' },
+  teachers: [{ email: 'cover@x', name: 'Cover', baseHours: 16 }],
+  allSchedules: [],
+  substitutionRecords: [],
+  homeroomRecords: [
+    { date: '2026-07-30', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', className: '701', status: 'assigned' },
+    { date: '2026-08-03', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', className: '702', status: 'assigned' },
+    { date: '2026-08-04', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', className: '703', status: 'assigned' }
+  ]
+});
+assert.deepEqual(crossMonthRange.periods, { start: '2026-07-31', end: '2026-08-03' }, '會計匯出應沿用統一日期區間');
+assert.equal(crossMonthRange.sheets.mentor.length, 1, '會計代導明細應只取跨月份區間內資料');
+assert.equal(crossMonthRange.sheets.mentor[0].date, '115.08.03(一)', '會計代導明細應保留迄日資料');
+
 const courseAdjustmentMentor = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
   periods: { mentor: period },
   teachers: [
     { email: 'cover@x', name: 'Cover', baseHours: 16 },
-    { email: 'cover2@x', name: 'Cover2', baseHours: 16 }
+    { email: 'cover2@x', name: 'Cover2', baseHours: 16 },
+    { email: 'cover3@x', name: 'Cover3', baseHours: 16 },
+    { email: 'cover4@x', name: 'Cover4', baseHours: 16 }
   ],
   allSchedules: [],
   substitutionRecords: [
     { requestId: 'req-course-only', date: '2026-07-03', reason: '課務調整', status: 'approved' },
-    { requestId: 'req-normal', date: '2026-07-04', reason: '事假', status: 'approved' }
+    { requestId: 'req-normal', date: '2026-07-04', reason: '事假', status: 'approved' },
+    { requestId: 'req-am', date: '2026-07-05', reason: '事假', leaveTimeType: '上午', leaveTime: '08:00~12:00', status: 'approved' },
+    { requestId: 'req-short', date: '2026-07-06', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~15:00', status: 'approved' },
+    { requestId: 'req-custom-full', date: '2026-07-07', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00', status: 'approved' }
   ],
   homeroomRecords: [
     { sourceRequestId: 'req-course-only', date: '2026-07-03', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', className: '701', status: 'assigned' },
-    { sourceRequestId: 'req-normal', date: '2026-07-04', actualTeacherEmail: 'cover2@x', actualTeacherName: 'Cover2', className: '702', status: 'assigned' }
+    { sourceRequestId: 'req-normal', date: '2026-07-04', actualTeacherEmail: 'cover2@x', actualTeacherName: 'Cover2', className: '702', status: 'assigned' },
+    { sourceRequestId: 'req-am', date: '2026-07-05', actualTeacherEmail: 'cover3@x', actualTeacherName: 'Cover3', className: '703', status: 'assigned' },
+    { sourceRequestId: 'req-short', date: '2026-07-06', actualTeacherEmail: 'cover3@x', actualTeacherName: 'Cover3', className: '704', status: 'assigned' },
+    { sourceRequestId: 'req-custom-full', date: '2026-07-07', actualTeacherEmail: 'cover4@x', actualTeacherName: 'Cover4', className: '705', status: 'assigned' }
   ]
 });
-assert.equal(courseAdjustmentMentor.sheets.mentor.length, 1, '僅課務調整不應列入代導鐘點費');
+assert.equal(courseAdjustmentMentor.sheets.mentor.length, 2, '僅課務調整與非整日請假不應列入代導鐘點費');
 assert.equal(courseAdjustmentMentor.sheets.mentor[0].actualName, 'Cover2', '一般代導仍應列入代導鐘點費');
+assert.equal(courseAdjustmentMentor.sheets.mentor[1].actualName, 'Cover4', '完整自訂全天仍應列入代導鐘點費');
 
 const publicOvertime = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',

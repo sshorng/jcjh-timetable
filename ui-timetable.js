@@ -126,7 +126,7 @@ window.UiTimetable = (function () {
           schoolSwapSourcePeriod: baseSlot.period
         });
       }
-      if (merged && merged.className && !merged.isClassAway && isClassAwayOnDate(merged.className, dateStr)) {
+       if (merged && merged.className && !merged.isClassAway && isClassAwayOnDate(merged.className, dateStr, period)) {
         merged = Object.assign({}, merged, { isClassAway: true });
       }
       _scheduleCache.set(memoKey, merged);
@@ -177,7 +177,7 @@ window.UiTimetable = (function () {
             var cell = getScheduleForDate(t.email, dateStr, period, day);
             var draft = mutualOn ? draftAt(t.email, dateStr, period) : null;
             var batchOn = batchSelectMode.value && isBatchSlotSelected(t.email, dateStr, period);
-            var awayLabel = !!(cell && cell.className && (isAwayClassCell(cell.className, dateStr) || cell.isClassAway) && !draft);
+             var awayLabel = !!(cell && cell.className && (isAwayClassCell(cell.className, dateStr, period) || cell.isClassAway) && !draft);
             var cls = cellClassFromCell(cell, !!draft, batchOn, awayLabel);
             var feeShort = '';
             if (draft) {
@@ -251,11 +251,11 @@ window.UiTimetable = (function () {
       return 'has-class' + batchCls;
     }
 
-    function isAwayClassCell(className, dateStr) {
+     function isAwayClassCell(className, dateStr, period) {
       if (!className) return false;
       var cls = String(className).trim();
       if (!cls) return false;
-      if (isClassAwayOnDate(cls, dateStr)) return true;
+       if (isClassAwayOnDate(cls, dateStr, period)) return true;
       if (!isMutualCover.value) return false;
       if (!(mutualAwayClasses.value || []).includes(cls)) return false;
       var start = mutualActivityStart.value;
@@ -277,7 +277,7 @@ window.UiTimetable = (function () {
       var draftOn = isMutualCover.value && !!draftAt(teacherEmail, dateStr, period);
       var batchOn = batchSelectMode.value && isBatchSlotSelected(teacherEmail, dateStr, period);
       var cls = cellClassFromCell(cell, draftOn, batchOn);
-      if (cell && (isAwayClassCell(cell.className, dateStr) || cell.isClassAway) && !draftOn && !cell.isPending && !cell.isSubstituted && !cell.isSubstitutionDuty) {
+       if (cell && (isAwayClassCell(cell.className, dateStr, period) || cell.isClassAway) && !draftOn && !cell.isPending && !cell.isSubstituted && !cell.isSubstitutionDuty) {
         return 'is-away-class' + (batchOn ? ' is-batch-selected' : '');
       }
       return cls;
@@ -522,7 +522,7 @@ window.UiTimetable = (function () {
 
       // 調代課／進行中：先開資訊框（空堂排班改由詳情內按鈕）
       // 真的空堂／巡堂：admin 可直接開空堂排班
-      if (!cell) {
+       if (!cell) {
         var canEmpty0 = !!(isAdmin && isAdmin.value);
         if (!canEmpty0 && clickDeps.canOperateOnTeacherEmail) {
           canEmpty0 = !!clickDeps.canOperateOnTeacherEmail(teacherEmail);
@@ -531,10 +531,17 @@ window.UiTimetable = (function () {
           clickDeps.openEmptySlotAssign(teacherEmail, dayOfWeek, period, dateStr, null);
           return;
         }
-        return;
-      }
+         return;
+       }
 
-      if (isMutualCover.value && !batchSelectMode.value) {
+       // 一般／批次模式下，空堂事件代表該班本節停課，不應再建立代課需求。
+       if (cell.isClassAway && !isMutualCover.value && !cell.isPending
+           && !cell.isSubstituted && !cell.isSubstitutionDuty) {
+         showToast('此班本節為空堂事件，不需申請代課。若要安排活動互代，請切換至活動模式。', 'info');
+         return;
+       }
+
+       if (isMutualCover.value && !batchSelectMode.value) {
         if (!isMutualLead(teacherEmail)) {
           showToast('請先將該老師加入「帶隊老師」，或點帶隊名單定位課表', 'info');
           return;
@@ -1081,11 +1088,16 @@ window.UiTimetable = (function () {
         var classSchedules = deps.classSchedules;
         var selectedClassWeekDates = deps.selectedClassWeekDates;
         var classSubstitutionMap = deps.classSubstitutionMap;
+        var isClassAwayOnDate = deps.isClassAwayOnDate;
         var entries = classSchedules.value[className] && classSchedules.value[className][day + '-' + period];
         if (!entries || !entries.length) return 'is-empty';
         var dateForDay = selectedClassWeekDates.value[day - 1];
         if (dateForDay && classSubstitutionMap.value[className + '|' + dateForDay + '|' + period]) {
           return 'has-substitution';
+        }
+        if (dateForDay && typeof isClassAwayOnDate === 'function'
+            && isClassAwayOnDate(className, dateForDay, period)) {
+          return 'is-away-class';
         }
         if (entries.some(function (e) { return e.attr === '巡堂' || e.isPatrol; })) return 'is-patrol';
         // 超鐘點：外觀與一般課相同，僅課名後標（超）
@@ -1114,9 +1126,10 @@ window.UiTimetable = (function () {
         var matchPreview = deps.matchPreview;
         var recommendedTeachers = deps.recommendedTeachers;
         var matchSearchQuery = deps.matchSearchQuery;
-        var matchDisplayCount = deps.matchDisplayCount;
-        var showMatchModal = deps.showMatchModal;
-        var fetchRecommendations = deps.fetchRecommendations;
+         var matchDisplayCount = deps.matchDisplayCount;
+         var showMatchModal = deps.showMatchModal;
+         var fetchRecommendations = deps.fetchRecommendations;
+         var isClassAwayOnDate = deps.isClassAwayOnDate;
 
         var entries = classSchedules.value[cls] && classSchedules.value[cls][day + '-' + period];
         if (!entries || !entries.length) return;
@@ -1131,16 +1144,21 @@ window.UiTimetable = (function () {
         if (classReadonlyMode && classReadonlyMode.value) return;
         var subKey = cls + '|' + dateForDay + '|' + period;
         var subRecord = classSubstitutionMap.value[subKey];
-        if (subRecord) {
+         if (subRecord) {
           detailSubRecord.value = subRecord;
           var resolved = resolveDetailRequest(subRecord.requestId, subRecord);
           detailRequest.value = resolved || {
             id: 'N/A', serial: '---', type: 'substitution', requestDate: subRecord.date
           };
           showDetailModal.value = true;
-          return;
-        }
-        var canClassAct = !!(isAdmin && isAdmin.value);
+           return;
+         }
+         if (typeof isClassAwayOnDate === 'function'
+             && isClassAwayOnDate(cls, dateForDay, period)) {
+           if (deps.showToast) deps.showToast('此班本節為空堂事件，不需申請代課。', 'info');
+           return;
+         }
+         var canClassAct = !!(isAdmin && isAdmin.value);
         if (!canClassAct && deps.canOperateOnTeacherEmail) {
           canClassAct = !!deps.canOperateOnTeacherEmail(cellData.teacherEmail);
         }

@@ -168,7 +168,7 @@ assert.match(styleSource, /\.official-audience-label-retain \{[^}]*border: none;
 assert.match(styleSource, /\.official-signature-hint \{[^}]*color: #9ca3af/);
 assert.match(context.window.getPrintPreviewCss(), /\.official-subject-row \.official-slot-value \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-all;/);
 assert.match(styleSource, /\.official-subject-row \.official-slot-value \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-all;/);
-assert.match(indexSource, /title="列印此筆通知單"[^>]*@click="printSingleRequest\(\{ id: (?:rec|row)\.requestId \|\| (?:rec|row)\.id \}, 'Notice'\)"/);
+assert.match(indexSource, /title="列印此筆通知單"[^>]*@click="printSingleRequest\(\{ recordId: row\.id \}, 'Notice'\)"/);
 assert.match(context.window.getPrintPreviewCss(), /official-serial-mark \{[^}]*right: 4\.78mm;[^}]*bottom: -4\.5mm[^}]*text-align: right/);
 assert.match(styleSource, /\.official-serial-mark \{[^}]*right: 4\.78mm;[^}]*bottom: -4\.5mm[^}]*text-align: right/);
 assert.match(appSource, /data:image\/svg\+xml;charset=utf-8,['"] \+ encodeURIComponent\(svg\)/);
@@ -224,13 +224,15 @@ const combinedCandidates = findCombinedReturnCandidates({
   classData: { className: '音樂班' }
 });
 assert.equal(combinedCandidates.map(candidate => candidate.email).sort().join(','), 'invitee@school.example,unrelated@school.example', '併班代課候選人應依同節併班課列入，不應要求班名重疊');
-  assert.match(indexSource, /app\.js\?v=20260915-overtime-period-end1/);
+  assert.match(indexSource, /app\.js\?v=20260915-[^"]+/);
 assert.doesNotMatch(preview.documentHtml, /<script\b/i, '列印預覽 srcdoc 不應注入腳本');
 assert.doesNotMatch(appSource, /seedClassKey/, '列印預覽不應依舊版班級鍵擴展資料');
 assert.match(appSource, /const printSingleRequest = async \(req, formType = 'Notice'\)/, '單筆列印入口應存在');
+assert.match(appSource, /const requestedRecordId = req && \(req\.recordId \|\| req\.substitutionRecordId\)/, '單列列印應使用明細紀錄 ID');
+assert.match(appSource, /targetIds = \[seedRecord\.id\]/, '一般批次單列列印只能使用目前明細');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
-assert.match(indexSource, /print-helper\.js\?v=20260915-single-page-confirm/);
+assert.match(indexSource, /print-helper\.js\?v=20260915-[^"]+/);
 assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
 assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
 assert.match(indexSource, /class="teacher-email-cell"/);

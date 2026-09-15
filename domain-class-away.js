@@ -7,6 +7,9 @@
 window.DomainClassAway = (function () {
   var RULE_KEEP = 'keep';
   var RULE_REDUCE = 'reduce';
+  var SCOPE_ALL = 'all';
+  var SCOPE_CLASSES = 'classes';
+  var PERIOD_ALL = 'all';
 
   function normDate(d) {
     return String(d || '').trim().slice(0, 10);
@@ -55,6 +58,38 @@ window.DomainClassAway = (function () {
       .filter(Boolean);
   }
 
+  function pickEventValue(ev, keys) {
+    ev = ev || {};
+    for (var i = 0; i < keys.length; i++) {
+      if (ev[keys[i]] !== undefined && ev[keys[i]] !== null && ev[keys[i]] !== '') {
+        return ev[keys[i]];
+      }
+    }
+    return '';
+  }
+
+  /** 事件適用範圍：all＝全校；classes＝班級清單。舊資料預設指定班級。 */
+  function normalizeScope(raw) {
+    var s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (s === SCOPE_ALL || s === 'school' || s === 'all_school' || s === '*'
+        || s === '全校' || s === '全校適用' || s === '全校班級') {
+      return SCOPE_ALL;
+    }
+    return SCOPE_CLASSES;
+  }
+
+  /** 節次欄只支援「全部」或「第8節」，內部統一成 all 或 8。 */
+  function normalizePeriod(raw) {
+    if (Array.isArray(raw)) raw = raw.length ? raw[0] : '';
+    var s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s || s === PERIOD_ALL || s === 'all' || s === '*' || s === '全部'
+        || s === '全部節次' || s === '全天' || s === '全日') {
+      return PERIOD_ALL;
+    }
+    var match = s.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+    return match && parseInt(match[1], 10) === 8 ? '8' : PERIOD_ALL;
+  }
+
   function classListToStore(list) {
     return parseClassList(list).join(',');
   }
@@ -89,7 +124,33 @@ window.DomainClassAway = (function () {
   }
 
   function eventClasses(ev) {
-    return parseClassList(ev.classes || ev.classList || ev['班級清單'] || '');
+    return parseClassList(pickEventValue(ev, ['classes', 'classList', '班級清單']));
+  }
+
+  function eventScope(ev) {
+    return normalizeScope(pickEventValue(ev, ['scope', '適用範圍', 'awayScope']));
+  }
+
+  function eventPeriod(ev) {
+    return normalizePeriod(pickEventValue(ev, ['period', '停課節次', 'awayPeriod']));
+  }
+
+  function eventAppliesToPeriod(ev, period) {
+    if (period === undefined || period === null || String(period).trim() === '') return true;
+    var eventP = eventPeriod(ev);
+    return eventP === PERIOD_ALL || eventP === normalizePeriod(period);
+  }
+
+  function eventAppliesToClass(ev, className) {
+    if (eventScope(ev) === SCOPE_ALL) return true;
+    return eventClasses(ev).indexOf(normClass(className)) >= 0;
+  }
+
+  function classesForEvent(ev, allClasses) {
+    if (eventScope(ev) === SCOPE_ALL && Array.isArray(allClasses)) {
+      return parseClassList(allClasses);
+    }
+    return eventClasses(ev);
   }
 
   /**
@@ -116,7 +177,7 @@ window.DomainClassAway = (function () {
     return true;
   }
 
-  function isClassAwayOnDate(className, dateStr, events, semesterEndDate) {
+  function isClassAwayOnDate(className, dateStr, events, semesterEndDate, period) {
     // 併班「701、702」：任一班外出即視為該格外出
     var candidates = [];
     if (window.DateUtils && typeof window.DateUtils.parseCombinedClasses === 'function') {
@@ -131,19 +192,25 @@ window.DomainClassAway = (function () {
     for (var i = 0; i < list.length; i++) {
       var ev = list[i];
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) continue;
-      var classes = eventClasses(ev);
+      if (!eventAppliesToPeriod(ev, period)) continue;
       for (var j = 0; j < candidates.length; j++) {
-        if (classes.indexOf(candidates[j]) >= 0) return true;
+        if (eventAppliesToClass(ev, candidates[j])) return true;
       }
     }
     return false;
   }
 
-  function getActiveAwayClasses(dateStr, events, semesterEndDate) {
+  function getActiveAwayClasses(dateStr, events, semesterEndDate, period, opts) {
+    if (period && typeof period === 'object') {
+      opts = period;
+      period = undefined;
+    }
+    opts = opts || {};
     var set = {};
     (events || []).forEach(function (ev) {
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) return;
-      eventClasses(ev).forEach(function (c) { set[c] = 1; });
+      if (!eventAppliesToPeriod(ev, period)) return;
+      classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
     });
     return Object.keys(set).sort();
   }
@@ -161,12 +228,13 @@ window.DomainClassAway = (function () {
     (events || []).forEach(function (ev) {
       if (!isEnabled(ev)) return;
       if (opts.forMutualOnly && !canMutual(ev)) return;
+      if (!eventAppliesToPeriod(ev, opts.period)) return;
       var s = eventStart(ev);
       var e = effectiveEnd(ev, semesterEndDate);
       if (!s) return;
       // 區間重疊：s<=b && e>=a
       if (s > b || e < a) return;
-      eventClasses(ev).forEach(function (c) { set[c] = 1; });
+      classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
     });
     return Object.keys(set).sort();
   }
@@ -186,9 +254,10 @@ window.DomainClassAway = (function () {
     return { startDate: start, endDate: end === '9999-12-31' ? '' : end };
   }
 
-  function eventsActiveOnDate(dateStr, events, semesterEndDate) {
+  function eventsActiveOnDate(dateStr, events, semesterEndDate, period) {
     return (events || []).filter(function (ev) {
-      return isDateInEvent(dateStr, ev, semesterEndDate);
+      return isDateInEvent(dateStr, ev, semesterEndDate)
+        && eventAppliesToPeriod(ev, period);
     });
   }
 
@@ -236,6 +305,24 @@ window.DomainClassAway = (function () {
     return out;
   }
 
+  function mondaysInDateRange(startDate, endDate) {
+    var start = normDate(startDate);
+    var end = normDate(endDate);
+    if (!start || !end || start > end) return [];
+    var cursor = new Date(start.replace(/-/g, '/') + ' 00:00:00');
+    var last = new Date(end.replace(/-/g, '/') + ' 00:00:00');
+    if (isNaN(cursor.getTime()) || isNaN(last.getTime())) return [];
+    var day = cursor.getDay();
+    cursor.setDate(cursor.getDate() - (day === 0 ? 6 : day - 1));
+    var out = [];
+    while (cursor <= last) {
+      out.push(cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0') + '-'
+        + String(cursor.getDate()).padStart(2, '0'));
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    return out;
+  }
+
   /**
    * 某週一是否落在 reduce 事件生效後（monday >= start 且 monday <= end）
    */
@@ -253,6 +340,24 @@ window.DomainClassAway = (function () {
    * 教師基礎課表中，屬於「reduce 空堂班」的週鐘點節數
     * （早自習0＋1–7＋午休45；基本／一般／代課／抽離；超鐘點由特殊標記判定；不含巡堂／第8）
    */
+  function periodSetMatches(value, period) {
+    if (!value) return false;
+    // 舊呼叫端若傳 1／true，代表所有節次。
+    if (value === true || value === 1 || value === '1') return true;
+    if (value.all) return true;
+    return !!value[normalizePeriod(period)];
+  }
+
+  function addEventToReduceSet(awayClassSet, ev) {
+    var targets = eventScope(ev) === SCOPE_ALL ? ['*'] : eventClasses(ev);
+    var p = eventPeriod(ev);
+    targets.forEach(function (target) {
+      if (!awayClassSet[target]) awayClassSet[target] = {};
+      if (p === PERIOD_ALL) awayClassSet[target].all = true;
+      else awayClassSet[target][p] = true;
+    });
+  }
+
   function countReduceSlotsForTeacher(teacherEmail, allSchedules, awayClassSet, weekDates) {
     var em = String(teacherEmail || '').toLowerCase();
     var n = 0;
@@ -277,7 +382,9 @@ window.DomainClassAway = (function () {
         if (one) classes = [one];
       }
       for (var i = 0; i < classes.length; i++) {
-        if (awayClassSet[classes[i]]) {
+        var period = parseInt(s.period, 10);
+        if (periodSetMatches(awayClassSet[classes[i]], period)
+            || periodSetMatches(awayClassSet['*'], period)) {
           var scheduleDay = parseInt(s.dayOfWeek != null ? s.dayOfWeek : s['星期'], 10);
           var activeDate = (weekDates || [])[scheduleDay - 1] || '';
           if (!activeDate || !window.DomainSchedule || !window.DomainSchedule.isActiveOnDate
@@ -301,7 +408,9 @@ window.DomainClassAway = (function () {
     var semesterEnd = opts.semesterEndDate || '';
     var reportMonth = opts.reportMonth;
     var reportWeeksCount = opts.reportWeeksCount || 4;
-    var mondays = mondaysInReportMonth(reportMonth, reportWeeksCount);
+    var mondays = (opts.reportStartDate || opts.reportEndDate)
+      ? mondaysInDateRange(opts.reportStartDate, opts.reportEndDate)
+      : mondaysInReportMonth(reportMonth, reportWeeksCount);
     if (!mondays.length) return 0;
 
     var total = 0;
@@ -310,7 +419,7 @@ window.DomainClassAway = (function () {
       var awaySet = {};
       events.forEach(function (ev) {
         if (!mondayInReduceWindow(mon, ev, semesterEnd)) return;
-        eventClasses(ev).forEach(function (c) { awaySet[c] = 1; });
+        addEventToReduceSet(awaySet, ev);
       });
       if (!Object.keys(awaySet).length) return;
       var weekStart = new Date(String(mon).replace(/-/g, '/'));
@@ -372,14 +481,23 @@ window.DomainClassAway = (function () {
   return {
     RULE_KEEP: RULE_KEEP,
     RULE_REDUCE: RULE_REDUCE,
+    SCOPE_ALL: SCOPE_ALL,
+    SCOPE_CLASSES: SCOPE_CLASSES,
+    PERIOD_ALL: PERIOD_ALL,
     normClass: normClass,
     parseClassList: parseClassList,
+    normalizeScope: normalizeScope,
+    normalizePeriod: normalizePeriod,
     classListToStore: classListToStore,
     isPlausibleClassName: isPlausibleClassName,
     isEnabled: isEnabled,
     getRule: getRule,
     canMutual: canMutual,
     eventClasses: eventClasses,
+    eventScope: eventScope,
+    eventPeriod: eventPeriod,
+    eventAppliesToClass: eventAppliesToClass,
+    eventAppliesToPeriod: eventAppliesToPeriod,
     effectiveEnd: effectiveEnd,
     isDateInEvent: isDateInEvent,
     isClassAwayOnDate: isClassAwayOnDate,

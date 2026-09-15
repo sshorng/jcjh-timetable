@@ -10,6 +10,24 @@ const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
+assert.match(source, /"空堂事件": \[[^\]]*"適用範圍"[^\]]*"停課節次"/, '空堂事件 schema 應包含範圍與節次欄位');
+assert.match(source, /function normalizeClassAwayScope_\(value\)/, '空堂事件範圍應由後端正規化');
+assert.match(source, /function normalizeClassAwayPeriod_\(value\)/, '空堂事件節次應由後端正規化');
+const awayNormStart = source.indexOf('function normalizeClassAwayScope_');
+const awayNormEnd = source.indexOf('/** 經費是否為', awayNormStart);
+const awayNormContext = { String, parseInt };
+vm.createContext(awayNormContext);
+vm.runInContext(source.slice(awayNormStart, awayNormEnd), awayNormContext, { filename: 'code.gs.class-away-normalize' });
+assert.equal(awayNormContext.normalizeClassAwayScope_('全校'), '全校');
+assert.equal(awayNormContext.normalizeClassAwayScope_('901'), '指定班級');
+assert.equal(awayNormContext.normalizeClassAwayPeriod_('第8節'), '第8節');
+assert.equal(awayNormContext.normalizeClassAwayPeriod_('第7節'), '全部');
+const classAwaySaveStart = source.indexOf('} else if (action === "saveClassAwayEvent")');
+const classAwaySaveEnd = source.indexOf('} else if (action === "deleteClassAwayEvent")', classAwaySaveStart);
+assert.ok(classAwaySaveStart >= 0 && classAwaySaveEnd > classAwaySaveStart, '空堂事件儲存 action 必須存在');
+const classAwaySaveSource = source.slice(classAwaySaveStart, classAwaySaveEnd);
+assert.match(classAwaySaveSource, /cae\["適用範圍"\] = awayScope/, '儲存空堂事件應寫入適用範圍');
+assert.match(classAwaySaveSource, /cae\["停課節次"\] = normalizeClassAwayPeriod_/, '儲存空堂事件應寫入停課節次');
 const scheduleKeyStart = source.indexOf('function scheduleSlotKey_');
 const scheduleKeyEnd = source.indexOf('function scheduleClassTokens_', scheduleKeyStart);
 assert.ok(scheduleKeyStart >= 0 && scheduleKeyEnd > scheduleKeyStart, 'schedule version key helpers must remain discoverable');
@@ -108,15 +126,39 @@ assert.throws(() => flowContext.validateCombinedReturnRequest_(Object.assign({},
 const homeroomCourseOnlyStart = source.indexOf('function homeroomRequestIsCourseAdjustmentOnly_');
 const homeroomCourseOnlyEnd = source.indexOf('function homeroomRequestStatus_', homeroomCourseOnlyStart);
 assert.ok(homeroomCourseOnlyStart >= 0 && homeroomCourseOnlyEnd > homeroomCourseOnlyStart, 'homeroom course adjustment helper must remain discoverable');
-const homeroomCourseContext = { String };
+const homeroomCourseContext = {
+  String,
+  Number,
+  parseInt,
+  isCombinedReturnRequest_: () => false,
+  homeroomNormalizeRange_: value => String(value == null ? '' : value).trim()
+    .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~'),
+  homeroomDefaultTime_: () => ({ range: '08:00~16:00' })
+};
 vm.createContext(homeroomCourseContext);
 vm.runInContext(source.slice(homeroomCourseOnlyStart, homeroomCourseOnlyEnd), homeroomCourseContext, { filename: 'code.gs.homeroom-course-only' });
 assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '僅課務調整': '是', '請假事由': '事假' }), true);
 assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '請假事由': '課務調整' }), true);
 assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '請假事由': '事假' }), false);
+assert.equal(homeroomCourseContext.homeroomRequestIsFullDay_({ '請假時間類型': '全天', '請假時間': '08:00~16:00' }, {}), true);
+assert.equal(homeroomCourseContext.homeroomRequestIsFullDay_({ '請假時間類型': '上午', '請假時間': '08:00~12:00' }, {}), false);
+assert.equal(homeroomCourseContext.homeroomRequestIsFullDay_({ '請假時間類型': '自訂', '請假時間': '08:00~15:00' }, {}), false);
+const normalizedCourseRequest = homeroomCourseContext.normalizeCourseAdjustmentRequest_({
+  reason: '課務調整',
+  leaveTimeType: '全天',
+  leaveTime: '08:00~16:00'
+});
+assert.equal(normalizedCourseRequest['僅課務調整'], '是');
+assert.equal(normalizedCourseRequest['請假時間類型'], '');
+assert.equal(normalizedCourseRequest['請假時間'], '');
 const homeroomSyncStart = source.indexOf('function syncHomeroomRecordForRequest_');
 const homeroomSyncEnd = source.indexOf('function getSemesterTeachersCached_', homeroomSyncStart);
 assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /!homeroomRequestIsCourseAdjustmentOnly_\(requestRow\)/, '代導同步不得建立僅課務調整紀錄');
+assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /homeroomRequestIsFullDay_\(requestRow, teacher\)/, '代導同步只建立整日請假紀錄');
+const manualHomeroomStart = source.indexOf('} else if (action === "saveManualHomeroomRecord")');
+const manualHomeroomEnd = source.indexOf('} else if (action === "deleteHomeroomRecord")', manualHomeroomStart);
+assert.ok(manualHomeroomStart >= 0 && manualHomeroomEnd > manualHomeroomStart, '手動代導 action 必須存在');
+assert.match(source.slice(manualHomeroomStart, manualHomeroomEnd), /!homeroomRequestIsFullDay_\(\{\s*"請假時間類型": timeType,\s*"請假時間": timeRange\s*\}, origTeacher\)/, '手動代導也必須由後端限制整日請假');
 
 const start = source.indexOf('function _resolveExchangeSides_');
 const end = source.indexOf('function _googleCalendarUrl_', start);

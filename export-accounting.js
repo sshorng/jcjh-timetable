@@ -658,6 +658,65 @@
       && matched.every(isCourseAdjustmentOnlyRecord);
   }
 
+  function homeroomTimeRangeBounds(raw) {
+    var s = String(raw == null ? '' : raw).trim()
+      .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+    if (!s || s === '全天' || s === '全日') return null;
+    var m = s.match(/^(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    var sh = Number(m[1]);
+    var sm = Number(m[2]);
+    var eh = Number(m[3]);
+    var em = Number(m[4]);
+    if (sh > 23 || eh > 23 || sm > 59 || em > 59) return null;
+    var start = sh * 60 + sm;
+    var end = eh * 60 + em;
+    return end > start ? { start: start, end: end } : null;
+  }
+
+  function homeroomFullDayEndMinutes(record, teachers, teacherKey) {
+    var key = String(record && (record.leaveEmail || record.originalTeacherEmail
+      || record.requesterEmail || record['申請人Email'] || record['原導師Email']
+      || record.originalTeacherName || record.requesterName || record['申請人姓名'] || record['原導師姓名']
+      || teacherKey) || '').trim().toLowerCase();
+    var teacher = (teachers || []).find(function (t) {
+      var email = String(t && (t.loginEmail || t.email) || '').trim().toLowerCase();
+      var name = String(t && (t.teacherName || t.name) || '').trim().toLowerCase();
+      return key && (key === email || key === name);
+    });
+    var role = String(teacher && teacher.role || '').trim().toLowerCase();
+    return role === 'admin' || role === 'staff' ? 17 * 60 : 16 * 60;
+  }
+
+  function homeroomIsFullDayLeave(record, teachers, teacherKey) {
+    var type = String(record && (record.leaveTimeType || record['請假時間類型']) || '').trim();
+    if (/^(上午|下午|半日|半天)$/.test(type)) return false;
+    var raw = record && (record.leaveTime || record['請假時間'] || record.timeRange || '');
+    var normalized = String(raw == null ? '' : raw).trim()
+      .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+    if (!normalized || normalized === '全天' || normalized === '全日') {
+      return !type || type === '全天' || type === '全日';
+    }
+    var bounds = homeroomTimeRangeBounds(normalized);
+    return !!bounds && bounds.start <= 8 * 60 && bounds.end >= homeroomFullDayEndMinutes(record, teachers, teacherKey);
+  }
+
+  function homeroomIsBillable(record, substitutionRecords, teachers) {
+    if (isCourseAdjustmentOnlyRecord(record)) return false;
+    var ids = sourceRequestIds(record);
+    var matched = (substitutionRecords || []).filter(function (request) {
+      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
+      return requestId && ids.indexOf(requestId) >= 0;
+    });
+    if (!matched.length) return homeroomIsFullDayLeave(record, teachers);
+    var teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
+      || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
+    if (matched.some(function (request) {
+      return !isCourseAdjustmentOnlyRecord(request) && homeroomIsFullDayLeave(request, teachers, teacherKey);
+    })) return true;
+    return matched.length < ids.length && homeroomIsFullDayLeave(record, teachers);
+  }
+
   function isCombinedReturnRecord(record) {
     var raw = record && record.specialFlow;
     if (String(raw == null ? '' : raw).trim() === '') raw = record && record['特殊流程'];
@@ -1084,7 +1143,9 @@
         var reduce = allocation
           ? Math.max(0, Number(allocation.reduceHours) || 0)
           : (Number(sourceRow.reduceDeduction) || 0);
-        if (period.start.slice(0, 7) !== String(opts.reportMonth || '') || period.end.slice(0, 7) !== String(opts.reportMonth || '')) {
+        if (!opts.reportStartDate && !opts.reportEndDate
+            && (period.start.slice(0, 7) !== String(opts.reportMonth || '')
+              || period.end.slice(0, 7) !== String(opts.reportMonth || ''))) {
           reduce = 0;
         }
         var scheduledOvertime = allocation
@@ -1280,7 +1341,7 @@
   function mentorRows(opts, period) {
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     return (opts.homeroomRecords || []).filter(function (r) {
-      return !homeroomIsCourseAdjustmentOnly(r, opts.substitutionRecords)
+       return homeroomIsBillable(r, opts.substitutionRecords, opts.teachers)
         && isActiveHomeroom(r) && r.actualTeacherEmail && dateInPeriod(r.date, period);
     }).sort(function (a, b) {
       return compareTeacherOrder(teacherOrder,

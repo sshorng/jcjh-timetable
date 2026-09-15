@@ -629,7 +629,7 @@ function prepareNameKeyRequestRow_(row, semesterId, teacherRows) {
 function nameKeyCanonicalHeaders_(sheetName) {
   var map = {
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
-    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
+    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "額度帳本": ["學期代號", "流水ID", "時間", "教師姓名", "異動", "餘額後", "類型", "包ID", "事件ID", "事件名稱", "起日", "迄日", "申請單ID", "操作者", "備註", "索引鍵"]
   };
@@ -891,8 +891,8 @@ function getHeadersForSheet(sheetName) {
     // Teacher roster keeps login Email; the four domain sheets use names as relation keys.
     "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度"],
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
-    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
-    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "班級清單", "鐘點規則", "可進互代", "啟用", "備註"],
+    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
+    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "全校對調": ["學期代號", "對調ID", "事件名稱", "日期A", "星期A", "節次A", "日期B", "星期B", "節次B", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     // Ledger truth: index = semester|teacher name; roster quota remains a cache.
@@ -1018,8 +1018,9 @@ function rowArrayToObject_(sheetName, headers, row) {
       }
     }
     if (sheetName === "空堂事件") {
-      if (headers[j] === "班級清單" || headers[j] === "事件ID" || headers[j] === "事件名稱"
-          || headers[j] === "鐘點規則" || headers[j] === "可進互代" || headers[j] === "啟用"
+       if (headers[j] === "班級清單" || headers[j] === "事件ID" || headers[j] === "事件名稱"
+           || headers[j] === "適用範圍" || headers[j] === "停課節次"
+           || headers[j] === "鐘點規則" || headers[j] === "可進互代" || headers[j] === "啟用"
           || headers[j] === "備註" || headers[j] === "學期代號") {
         if (val !== "" && val !== null && val !== undefined) {
           val = String(val);
@@ -2632,6 +2633,49 @@ function homeroomRequestIsCourseAdjustmentOnly_(row) {
   return String(row["請假事由"] || row.reason || "").trim() === "課務調整";
 }
 
+function homeroomTimeRangeBounds_(raw) {
+  var s = homeroomNormalizeRange_(raw);
+  if (!s || s === "全天" || s === "全日") return null;
+  var m = s.match(/^(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  var start = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  var end = parseInt(m[3], 10) * 60 + parseInt(m[4], 10);
+  if (parseInt(m[1], 10) > 23 || parseInt(m[3], 10) > 23
+      || parseInt(m[2], 10) > 59 || parseInt(m[4], 10) > 59 || end <= start) return null;
+  return { start: start, end: end };
+}
+
+/** 代導鐘點費只適用整日請假；空白舊資料仍依原規則視為整日。 */
+function homeroomRequestIsFullDay_(row, teacher) {
+  if (!row) return false;
+  var type = String(row["請假時間類型"] || row.leaveTimeType || "").trim();
+  if (/^(上午|下午|半日|半天)$/.test(type)) return false;
+  var rawRange = row["請假時間"] || row.leaveTime || row.timeRange || "";
+  var normalized = homeroomNormalizeRange_(rawRange);
+  if (!normalized || normalized === "全天" || normalized === "全日") {
+    return !type || type === "全天" || type === "全日";
+  }
+  var actual = homeroomTimeRangeBounds_(normalized);
+  if (!actual) return false;
+  var fallback = homeroomTimeRangeBounds_(homeroomDefaultTime_(teacher).range);
+  if (!fallback) return false;
+  return actual.start <= fallback.start && actual.end >= fallback.end;
+}
+
+function normalizeCourseAdjustmentRequest_(row) {
+  if (!row || isCombinedReturnRequest_(row)) return row;
+  if (!homeroomRequestIsCourseAdjustmentOnly_(row)) {
+    if (row["僅課務調整"] !== undefined) row["僅課務調整"] = "";
+    return row;
+  }
+  row["僅課務調整"] = "是";
+  row.courseAdjustmentOnly = true;
+  row["請假事由"] = "課務調整";
+  row["請假時間類型"] = "";
+  row["請假時間"] = "";
+  return row;
+}
+
 function homeroomRequestStatus_(row) {
   return String(translateStatusToEn(row && (row["狀態"] || row.status) || "") || "").trim().toLowerCase();
 }
@@ -2644,7 +2688,7 @@ function getSemesterHomeroomRecords_(semesterId) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」且不是僅課務調整才建立；不看原代課經費。
+ * 規則：請假教師職務含「導師」、不是僅課務調整且為整日請假才建立；不看原代課經費。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function extractHomeroomClass_(teacher, fallbackClassName) {
@@ -2656,7 +2700,7 @@ function extractHomeroomClass_(teacher, fallbackClassName) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」且不是僅課務調整才建立；不看原代課經費。
+ * 規則：請假教師職務含「導師」、不是僅課務調整且為整日請假才建立；不看原代課經費。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
@@ -2676,7 +2720,8 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
   var keyMatch = function (r) {
     return homeroomRecordIsActive_(r)
       && String(r["原導師Email"] || "").toLowerCase().trim() === leaveEmail
-      && String(r["代導日期"] || "").slice(0, 10) === dateStr;
+      && String(r["代導日期"] || "").slice(0, 10) === dateStr
+      && String(r["班級"] || "").trim() === String(className || "").trim();
   };
   var related = rows.filter(function (r) { return homeroomSourceHas_(r, rid) || keyMatch(r); });
   var now = toLocalTimeStr(new Date());
@@ -2685,6 +2730,7 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
     && type === "substitution"
     && !!sid && !!rid && !!leaveEmail && !!dateStr
     && !homeroomRequestIsCourseAdjustmentOnly_(requestRow)
+    && homeroomRequestIsFullDay_(requestRow, teacher)
     && isHomeroomTeacher_(sid, leaveEmail);
 
   if (!eligible) {
@@ -2838,6 +2884,21 @@ function getSemesterClassAwayCached_(semesterId) {
   });
   try { putCacheChunked(key, JSON.stringify(rows), CACHE_TTL_TEACHERS_); } catch (e2) {}
   return rows;
+}
+
+/** 空堂事件欄位正規化：試算表以中文顯示值保存，前端再轉成 all／classes、all／8。 */
+function normalizeClassAwayScope_(value) {
+  var s = String(value == null ? "" : value).trim().toLowerCase();
+  return (s === "all" || s === "school" || s === "all_school" || s === "*"
+    || s === "全校" || s === "全校適用" || s === "全校班級") ? "全校" : "指定班級";
+}
+
+function normalizeClassAwayPeriod_(value) {
+  var s = String(value == null ? "" : value).trim().toLowerCase();
+  if (!s || s === "all" || s === "*" || s === "全部" || s === "全部節次"
+      || s === "全天" || s === "全日") return "全部";
+  var match = s.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+  return match && parseInt(match[1], 10) === 8 ? "第8節" : "全部";
 }
 
 /** 經費是否為「扣額度」（含舊資料別名「互代不結」） */
@@ -4854,7 +4915,16 @@ function buildPublicClassPayload_(semesterId, className) {
     return String(s["學期代號"] || s.id || "").trim() === sid;
   });
 
-  var classAwayEvents = getSemesterClassAwayCached_(sid);
+  var classAwayEvents = getSemesterClassAwayCached_(sid).filter(function (event) {
+    var scope = String(event["適用範圍"] || event.scope || "").trim().toLowerCase();
+    var isSchoolWide = scope === "all" || scope === "school" || scope === "all_school" || scope === "*"
+      || scope === "全校" || scope === "全校適用" || scope === "全校班級";
+    if (isSchoolWide) return true;
+    var eventClasses = event["班級清單"] || event.classes || event.classList || "";
+    return classNames.some(function (className) {
+      return classFieldIncludes_(eventClasses, className);
+    });
+  });
   var schoolSwaps = getActiveSchoolSwapRows_(sid).map(schoolSwapPublicRow_).filter(function (row) { return !!row; });
 
   return {
@@ -6328,14 +6398,22 @@ function doPost(e) {
       } else {
         clsParts = String(clsRaw || "").replace(/^'+/, "").split(/[,，、;\s]+/);
       }
-      clsParts = clsParts.map(function (c) {
-        c = String(c || "").trim().replace(/^'+/, "");
-        if (!c || /^0+$/.test(c)) return "";
-        if (/^\d{4}-\d{2}-\d{2}/.test(c)) return "";
-        return c;
-      }).filter(Boolean);
-      // 存成前導單引號＋逗號清單，Sheets 不會當數字／日期
-      cae["班級清單"] = clsParts.length ? ("'" + clsParts.join(",")) : "";
+       clsParts = clsParts.map(function (c) {
+         c = String(c || "").trim().replace(/^'+/, "");
+         if (!c || /^0+$/.test(c)) return "";
+         if (/^\d{4}-\d{2}-\d{2}/.test(c)) return "";
+         return c;
+       }).filter(Boolean);
+       var awayScopeRaw = cae["適用範圍"] != null ? cae["適用範圍"] : cae.scope;
+       var awayScope = normalizeClassAwayScope_(awayScopeRaw);
+       if (awayScope !== "全校" && !clsParts.length) {
+         throw new Error("指定班級事件至少需要一個有效班級");
+       }
+       var awayPeriodRaw = cae["停課節次"] != null ? cae["停課節次"] : (cae.period != null ? cae.period : cae.awayPeriod);
+       // 存成前導單引號＋逗號清單，Sheets 不會當數字／日期
+       cae["適用範圍"] = awayScope;
+       cae["班級清單"] = awayScope === "全校" ? "" : ("'" + clsParts.join(","));
+       cae["停課節次"] = normalizeClassAwayPeriod_(awayPeriodRaw);
       // 起迄日強制字串 YYYY-MM-DD
       cae["起日"] = String(cae["起日"] || "").slice(0, 10);
       cae["迄日"] = cae["迄日"] ? String(cae["迄日"]).slice(0, 10) : "";
@@ -6839,15 +6917,29 @@ function doPost(e) {
       var leaveEmail = leaveName ? nameKeyEmailForName_(semesterId, leaveName, manualDirectory) : "";
       var dateStr = String(reqData.date || reqData.dateStr || "").trim().slice(0, 10);
       if (!leaveEmail || !dateStr) throw new Error("請提供原導師與代導日期");
-      var origTeacher = findSemesterTeacher_(semesterId, leaveEmail);
-      if (!origTeacher) throw new Error("原導師不在目前學期教師名單");
-      var origName = String(origTeacher["教師姓名"] || origTeacher.name || leaveName);
-      var className = extractHomeroomClass_(origTeacher, reqData.className);
-      var fallbackTime = homeroomDefaultTime_(origTeacher);
-      var timeType = String(reqData.leaveTimeType || "").trim() || fallbackTime.type;
-      var timeRange = homeroomNormalizeRange_(reqData.leaveTime || "") || fallbackTime.range;
+       var origTeacher = findSemesterTeacher_(semesterId, leaveEmail);
+       if (!origTeacher) throw new Error("原導師不在目前學期教師名單");
+       if (!isHomeroomTeacher_(semesterId, leaveEmail)) throw new Error("原教師不是目前學期導師");
+       var origName = String(origTeacher["教師姓名"] || origTeacher.name || leaveName);
+       var className = extractHomeroomClass_(origTeacher, reqData.className);
+       var manualDuplicate = getSemesterHomeroomRecords_(semesterId).some(function (r) {
+         if (!homeroomRecordIsActive_(r)) return false;
+         var existingOriginal = String(r["原導師Email"] || r["原導師姓名"] || "").trim().toLowerCase();
+         var sameOriginal = existingOriginal === String(leaveEmail).toLowerCase()
+           || existingOriginal === String(origName).trim().toLowerCase();
+         return sameOriginal
+           && String(r["代導日期"] || "").slice(0, 10) === dateStr
+           && String(r["班級"] || "").trim() === String(className || "").trim();
+       });
+       if (manualDuplicate) throw new Error("同一導師、日期與班級已有啟用中的代導紀錄");
+       var fallbackTime = homeroomDefaultTime_(origTeacher);
+       var timeType = String(reqData.leaveTimeType || "").trim() || fallbackTime.type;
+       var timeRange = homeroomNormalizeRange_(reqData.leaveTime || "") || fallbackTime.range;
+       if (!homeroomRequestIsFullDay_({ "請假時間類型": timeType, "請假時間": timeRange }, origTeacher)) {
+         throw new Error("代導鐘點費僅適用整日請假");
+       }
 
-       var actualRaw = nameKeyText_(reqData.actualTeacherName || reqData.actualTeacherEmail);
+        var actualRaw = nameKeyText_(reqData.actualTeacherName || reqData.actualTeacherEmail);
        var actualName = actualRaw
          ? resolveNameKeyTeacher_(actualRaw, semesterId, manualDirectory, "代導教師", false)
          : "";
@@ -7148,12 +7240,17 @@ function doPost(e) {
       targetReq["異動日期"] = reqDate;
       targetReq["異動星期"] = reqDow;
       targetReq["異動節次"] = reqPeriod;
-      targetReq["異動類型"] = isEx ? "exchange" : "substitution";
-        targetReq["請假事由"] = combinedReturnEdit
-          ? (reqData.reason != null ? reqData.reason : (targetReq["請假事由"] || ""))
-          : (reqData.reason != null ? reqData.reason : (targetReq["請假事由"] || ""));
-       targetReq["請假時間類型"] = combinedReturnEdit ? "" : (reqData.leaveTimeType != null ? reqData.leaveTimeType : (targetReq["請假時間類型"] || ""));
-       targetReq["請假時間"] = combinedReturnEdit ? "" : (reqData.leaveTime != null ? reqData.leaveTime : (targetReq["請假時間"] || ""));
+       targetReq["異動類型"] = isEx ? "exchange" : "substitution";
+       var historyCourseAdjustmentEdit = !combinedReturnEdit && homeroomRequestIsCourseAdjustmentOnly_(reqData);
+         targetReq["請假事由"] = combinedReturnEdit
+           ? (reqData.reason != null ? reqData.reason : (targetReq["請假事由"] || ""))
+           : (reqData.reason != null ? reqData.reason : (targetReq["請假事由"] || ""));
+       if (historyCourseAdjustmentEdit) {
+         targetReq["請假事由"] = "課務調整";
+       }
+       targetReq["僅課務調整"] = historyCourseAdjustmentEdit ? "是" : "";
+       targetReq["請假時間類型"] = combinedReturnEdit || historyCourseAdjustmentEdit ? "" : (reqData.leaveTimeType != null ? reqData.leaveTimeType : (targetReq["請假時間類型"] || ""));
+       targetReq["請假時間"] = combinedReturnEdit || historyCourseAdjustmentEdit ? "" : (reqData.leaveTime != null ? reqData.leaveTime : (targetReq["請假時間"] || ""));
       targetReq["備註"] = reqData.note != null ? reqData.note : (targetReq["備註"] || "");
       if (reqData.printed !== undefined) {
         targetReq["是否已印"] = (reqData.printed === true || reqData.printed === "TRUE" || reqData.printed === "true") ? "TRUE" : "FALSE";
@@ -7350,11 +7447,12 @@ function doPost(e) {
 
     } else if (action === "submitRequest") {
        assertNotTooFrequent_(userEmail, "submitRequest");
-        // 發起調代課申請（狀態一律由伺服器決定，忽略前端竄改）
-        if (!reqData.request || typeof reqData.request !== "object") throw new Error("缺少申請單資料！");
-        reqData.request = prepareNameKeyRequestRow_(reqData.request, semesterId, teachers);
-        var combinedReturnOne = isCombinedReturnRequest_(reqData.request);
-        if (combinedReturnOne && !isAdmin) throw new Error("合班回原班僅限教學組建立！");
+         // 發起調代課申請（狀態一律由伺服器決定，忽略前端竄改）
+         if (!reqData.request || typeof reqData.request !== "object") throw new Error("缺少申請單資料！");
+         reqData.request = prepareNameKeyRequestRow_(reqData.request, semesterId, teachers);
+         var combinedReturnOne = isCombinedReturnRequest_(reqData.request);
+         normalizeCourseAdjustmentRequest_(reqData.request);
+         if (combinedReturnOne && !isAdmin) throw new Error("合班回原班僅限教學組建立！");
         var leaveEmailOne = normalizeEmail_(reqData.request["申請人Email"], "申請人 Email");
         var targetEmailOne = normalizeEmail_(reqData.request["受邀人Email"], "受邀人 Email");
         if (!findSemesterTeacher_(semesterId, leaveEmailOne)) throw new Error("申請人不在目前學期教師名單！");
@@ -7490,9 +7588,9 @@ function doPost(e) {
        var rawList = reqData.requests || [];
        if (!rawList.length) throw new Error("批次申請清單為空！");
        if (rawList.length > 20) throw new Error("單次批次最多 20 節！");
-        var list = rawList.map(function (rawRow) {
-          return prepareNameKeyRequestRow_(rawRow, semesterId, teachers);
-        });
+         var list = rawList.map(function (rawRow) {
+           return normalizeCourseAdjustmentRequest_(prepareNameKeyRequestRow_(rawRow, semesterId, teachers));
+         });
        if (list.some(function (row) { return isCombinedReturnRequest_(row); })) {
          throw new Error("合班回原班目前只能建立單筆申請，不可使用批次申請！");
        }

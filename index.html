@@ -6,9 +6,9 @@
   <title>建成國中線上課表系統</title>
   <meta name="application-name" content="JCJH Timetable">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
-  <link rel="stylesheet" href="style.css?v=20260904-calendar-new-tab">
+  <link rel="stylesheet" href="style.css?v=20260915-billing-range-final1">
   <!-- 手機版獨立樣式：不影響桌機 -->
-  <link rel="stylesheet" href="mobile.css?v=20260904-calendar-new-tab" media="(max-width: 768px)">
+  <link rel="stylesheet" href="mobile.css?v=20260915-billing-range-final1" media="(max-width: 768px)">
   
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
@@ -677,7 +677,7 @@
                                   </div>
                                    <div class="cell-subject" :class="{ 'cell-subject-away': slot.isAwayLabel }">
                                       {{ slot.cell.subject }}<span v-if="slot.cell.isSubstitute || slot.cell.attr === '代課'" title="代課">（代）</span><span v-else-if="slot.cell.isOvertime || slot.cell.attr === '超鐘點'" title="超鐘點">（超）</span>
-                                     <span v-if="slot.isAwayLabel" class="away-class-badge">{{ getClassAwayEventName(slot.cell.className, currentWeekDates[day-1]) || '空堂事件' }}</span>
+                                      <span v-if="slot.isAwayLabel" class="away-class-badge">{{ getClassAwayEventName(slot.cell.className, currentWeekDates[day-1], period) || '空堂事件' }}</span>
                                    </div>
                                   <div v-if="slot.draft" class="cell-sub-text mutual-draft-label">
                                     暫定：{{ slot.draftSubName }}
@@ -908,7 +908,7 @@
                           <template v-if="classSchedules[selectedClass] && classSchedules[selectedClass][(dayIdx+1) + '-' + period]">
                             <template v-if="classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period]">
                               <div class="class-entry-block" :class="{ 'is-readonly': classReadonlyMode || classViewerReadonly }" @click="handleClassCellClick(selectedClass, dayIdx+1, period, 0)">
-                                <div class="cell-subject">
+                                 <div class="cell-subject">
                                   <span class="subject-color-tag" :style="getSubjectStyle(classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].subject || classSchedules[selectedClass][(dayIdx+1) + '-' + period][0].subject)">
                                     {{ classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].subject || classSchedules[selectedClass][(dayIdx+1) + '-' + period][0].subject }}
                                   </span>
@@ -938,7 +938,8 @@
                                     <span v-if="entry.attr === '單週' || entry.attr === '雙週'" style="font-size:0.65rem;color:var(--text-muted);margin-left:2px;">({{ entry.attr }})</span>
                                      <span v-if="entry.restriction === 'restricted' || hasScheduleSpecialTag(entry, '綁課')" class="cell-badge tag-restricted">綁課</span>
                                       <span v-if="hasScheduleSpecialTag(entry, '預排')" class="cell-badge tag-preplanned">預排</span>
-                                      <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
+                                     <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
+                                     <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="cell-badge tag-warning">空堂事件</span>
                                   </div>
                                   <div class="cell-class-name">
                                     {{ getRealTeacherName(entry) }}
@@ -1593,7 +1594,7 @@
                       </td>
                         <td v-if="isAdmin" @click.stop>
                           <div class="hist-actions">
-                             <button type="button" class="btn btn-secondary" title="列印此筆通知單" aria-label="列印此筆通知單" @click="printSingleRequest({ id: row.requestId || row.id }, 'Notice')">🖨️</button>
+                             <button type="button" class="btn btn-secondary" title="列印此筆通知單" aria-label="列印此筆通知單" @click="printSingleRequest({ recordId: row.id }, 'Notice')">🖨️</button>
                             <button type="button" class="btn btn-secondary" @click="openHistoryEditModal(row)">編輯</button>
                             <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: rgba(220, 38, 38, 0.18);" @click="deleteSubstitutionRecord(row.id, row.requestId)">撤銷</button>
                           </div>
@@ -1747,16 +1748,17 @@
             <div class="card">
               <div class="card-title billing-report-title">
                 <div class="billing-report-title-main">
-                  <span>💰 月底大鐘點與代課費</span>
+                  <span>💰 大鐘點與代課費結算</span>
                   <div class="billing-month-control">
-                    <label class="form-label" for="billing-report-month">結算月份</label>
-                    <select id="billing-report-month" class="form-select" v-model="reportMonth" @change="calculateMonthlyReport">
-                      <option v-for="m in reportMonthOptions" :key="m" :value="m">{{ m }}</option>
-                    </select>
+                    <label class="form-label" for="billing-report-start">結算起日</label>
+                    <input id="billing-report-start" type="date" class="form-input" v-model="reportStartDate" @change="calculateMonthlyReport">
+                    <span class="billing-range-separator">至</span>
+                    <label class="form-label" for="billing-report-end">結算迄日</label>
+                    <input id="billing-report-end" type="date" class="form-input" v-model="reportEndDate" @change="calculateMonthlyReport">
                   </div>
-                  <div class="billing-weeks-control">
-                    <label class="form-label" for="billing-report-weeks">授課週數</label>
-                    <input id="billing-report-weeks" type="number" class="form-input" min="1" max="6" step="1" inputmode="numeric" v-model.number="reportWeeksCount" @change="calculateMonthlyReport">
+                  <div class="billing-weeks-control" aria-live="polite">
+                    <span class="form-label">自動週數</span>
+                    <strong class="billing-weeks-value">{{ reportWeeksCount }}</strong>
                     <span class="billing-weeks-suffix">週</span>
                   </div>
                 </div>
@@ -1768,13 +1770,13 @@
               </div>
 
               <div class="report-toolbar billing-toolbar billing-toolbar-note">
-                <p class="billing-toolbar-hint">授課週數請先在上方設定，系統會記錄在本機；月報與下載會計版會使用同一數值。下載彈窗只調整五類共用的會計起訖日，扣勞健保與實際金額留白。</p>
+                <p class="billing-toolbar-hint">請設定結算起日與迄日（建議週一至週五）；同一週只計 1 週，週數會自動計算。月報與下載會計版 Excel 會沿用同一日期區間，不需重複設定。</p>
               </div>
 
               <div v-if="isAdmin" class="card" style="margin:14px 0;padding:16px;background:#fffdf6;border:1px solid #ebd9a2;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.03);">
                 <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f2e4bd;">
                   <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;">
-                    <strong style="font-size:1.02rem;color:#5a4310;">👩‍🏫 本月代導紀錄與費用管理（{{ reportMonth || '全期' }}）</strong>
+                    <strong style="font-size:1.02rem;color:#5a4310;">👩‍🏫 本期代導紀錄與費用管理（{{ reportStartDate || '起日' }}～{{ reportEndDate || '迄日' }}）</strong>
                     <span class="status-badge" style="background:#e8f4ff;color:#1864ab;font-size:0.78rem;">共 {{ currentMonthHomeroomRecords.length }} 筆</span>
                     <span class="status-badge" style="background:#e6fcf5;color:#0ca678;font-size:0.78rem;">已指定 {{ currentMonthHomeroomAssignedCount }} 筆</span>
                     <span v-if="currentMonthHomeroomPendingCount > 0" class="status-badge status-pending-admin" style="font-size:0.78rem;">待指定 {{ currentMonthHomeroomPendingCount }} 筆</span>
@@ -1787,7 +1789,7 @@
 
                 <div v-if="homeroomRecordsLoading" style="font-size:0.84rem;color:var(--text-secondary);padding:8px 0;">正在同步最新代導清冊…</div>
                 <div v-else-if="currentMonthHomeroomRecords.length === 0" style="font-size:0.84rem;color:var(--text-secondary);padding:10px 0;">
-                  目前本月份尚無代導紀錄。若有導師無課或已調課請假，可點選上方「➕ 手動新增代導費」補建。
+                   目前本期尚無代導紀錄。若有導師無課或已調課請假，可點選上方「➕ 手動新增代導費」補建。
                 </div>
                 <div v-else style="display:flex;flex-direction:column;gap:10px;">
                   <div v-for="r in currentMonthHomeroomRecords" :key="r.id" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid #f0e2b8;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
@@ -1899,7 +1901,7 @@
                         <td class="num result-p8">${{ formatMoney(monthlyReportTotals.period8Fee) }}</td>
                      </tr>
                      <tr v-if="monthlyReportData.length === 0">
-                       <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再選擇月份統計。</td>
+                        <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再設定有效的結算日期區間。</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2075,20 +2077,22 @@
                 <button class="btn btn-primary btn-sm-pad" @click="openAddClassAwayModal">＋ 新增事件</button>
               </div>
               <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;margin:0 0 12px 0;">
-                期間內被勾選班級：課表<strong>淡化顯示</strong>，媒合／衝堂／匯出<strong>視同空堂</strong>。
-                鐘點：<strong>不調降</strong>（畢旅）月報超鐘不變；
-                <strong>調降</strong>（畢業）只扣起日之後的週。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
-                各事件可匯出<strong>活動輪值通知單</strong>（只匯已送出；第1～7節入表、第8節附註）。
+                 期間內符合範圍與節次的班級：課表<strong>淡化顯示</strong>，媒合／衝堂／匯出<strong>視同空堂</strong>。
+                 鐘點：<strong>不調降</strong>（畢旅）月報超鐘不變；
+                 <strong>調降</strong>（畢業）只扣起日之後的週。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
+                 段考可設定<strong>全校／第8節</strong>，不需修改教師課表或建立代課申請。各事件可匯出<strong>活動輪值通知單</strong>（只匯已送出；第1～7節入表、第8節附註）。
               </p>
               <div class="table-responsive">
                 <table class="custom-table fs-85" >
                   <thead>
                     <tr>
                       <th>名稱</th>
-                      <th>起日</th>
-                      <th>迄日</th>
-                      <th>班級</th>
-                      <th>鐘點</th>
+                       <th>起日</th>
+                       <th>迄日</th>
+                       <th>範圍</th>
+                       <th>班級</th>
+                       <th>節次</th>
+                       <th>鐘點</th>
                       <th>互代</th>
                       <th>啟用</th>
                       <th>操作</th>
@@ -2098,9 +2102,11 @@
                     <tr v-for="ev in classAwayEvents" :key="ev.id">
                       <td><strong>{{ ev.name }}</strong></td>
                        <td>{{ ev.startDate || '未設定' }}</td>
-                      <td>{{ ev.endDate || '學期結束' }}</td>
-                       <td style="max-width:180px;font-size:0.78rem;">{{ (ev.classes || []).join('、') || '無' }}</td>
-                      <td>{{ ev.billingRule === 'reduce' ? '調降' : '不調降' }}</td>
+                       <td>{{ ev.endDate || '學期結束' }}</td>
+                       <td>{{ ev.scope === 'all' ? '全校' : '指定班級' }}</td>
+                        <td style="max-width:180px;font-size:0.78rem;">{{ (ev.classes || []).join('、') || '無' }}</td>
+                       <td>{{ ev.period === '8' ? '第8節' : '全部' }}</td>
+                       <td>{{ ev.billingRule === 'reduce' ? '調降' : '不調降' }}</td>
                       <td>{{ ev.forMutual ? '是' : '否' }}</td>
                       <td>{{ ev.enabled !== false ? '是' : '否' }}</td>
                       <td>
@@ -2112,7 +2118,7 @@
                       </td>
                     </tr>
                     <tr v-if="!classAwayEvents.length">
-                      <td colspan="8" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級</span></td>
+                       <td colspan="10" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可選全校第8節</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -3106,7 +3112,7 @@
                       </div>
                         <select class="form-select" v-model="pendingRequestData.reason" :disabled="pendingRequestData.courseAdjustmentOnly" @change="onLeaveReasonChange">
                           <option value="" disabled>請選擇假別...</option>
-                          <option v-if="pendingRequestData.courseAdjustmentOnly" value="課務調整">課務調整（無請假）</option>
+                          <option v-if="(pendingRequestData.mode === 'substitution' || pendingRequestData.mode === 'exchange') && pendingRequestData.specialFlow !== 'combined_return'" value="課務調整">課務調整（無請假）</option>
                          <option v-for="r in leaveReasonOptions" :key="r" :value="r">{{ r }}</option>
                        </select>
                     </div>
@@ -3781,9 +3787,29 @@
               <div class="form-group flex-1-min-140">
                 <label class="form-label">迄日（空白＝學期結束）</label>
                 <input type="date" class="form-input" v-model="classAwayForm.endDate">
-              </div>
-            </div>
-            <div class="form-group">
+               </div>
+             </div>
+             <div class="form-group">
+               <label class="form-label">適用範圍</label>
+               <div style="display:flex;flex-wrap:wrap;gap:16px;">
+                 <label class="label-check-sm">
+                   <input type="radio" value="all" v-model="classAwayForm.scope" class="chk-box-15">
+                   全校
+                 </label>
+                 <label class="label-check-sm">
+                   <input type="radio" value="classes" v-model="classAwayForm.scope" class="chk-box-15">
+                   指定班級
+                 </label>
+               </div>
+             </div>
+             <div class="form-group">
+               <label class="form-label">停課節次</label>
+               <select class="form-select" v-model="classAwayForm.period">
+                 <option value="all">全部節次</option>
+                 <option value="8">第8節（段考常用）</option>
+               </select>
+             </div>
+             <div class="form-group">
               <label class="form-label">鐘點規則</label>
               <select class="form-select" v-model="classAwayForm.billingRule">
                 <option value="keep">不調降（畢旅：課表空、超鐘不變）</option>
@@ -3792,16 +3818,16 @@
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;">
               <label class="label-check-sm">
-                <input type="checkbox" v-model="classAwayForm.forMutual" class="chk-box-15">
-                可進活動互代
+               <input type="checkbox" v-model="classAwayForm.forMutual" class="chk-box-15">
+                 可進活動互代<span v-if="classAwayForm.period === '8'" style="color:var(--text-muted);">（第8節事件建議關閉）</span>
               </label>
               <label class="label-check-sm">
                 <input type="checkbox" v-model="classAwayForm.enabled" class="chk-box-15">
                 啟用
               </label>
             </div>
-            <div class="form-group">
-              <label class="form-label">班級（核取多選）</label>
+             <div v-if="classAwayForm.scope === 'classes'" class="form-group">
+               <label class="form-label">班級（核取多選）</label>
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
                 <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayGrade('7')">全選七年級</button>
                 <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayGrade('8')">全選八年級</button>
@@ -3823,8 +3849,11 @@
                   >
                   {{ c }}
                 </label>
-              </div>
-            </div>
+               </div>
+             </div>
+             <div v-else class="form-group" style="margin-bottom:12px;color:var(--text-secondary);font-size:0.82rem;">
+               此事件會套用到學期內所有班級，不必逐班勾選。
+             </div>
             <div class="form-group">
               <label class="form-label">備註</label>
               <input type="text" class="form-input" v-model="classAwayForm.note" placeholder="選填">
@@ -3925,8 +3954,9 @@
               <label class="form-label">原因 / 假別</label>
                <select class="form-select" v-model="historyEditForm.reason" @change="onHistoryEditReasonChange">
                  <option value="" disabled>請選擇假別...</option>
-                 <option v-for="r in leaveReasonOptions" :key="'he-r-'+r" :value="r">{{ r }}</option>
-              </select>
+                 <option v-if="(historyEditForm.type === 'substitution' || historyEditForm.type === 'exchange' || historyEditForm.type === '對調') && historyEditForm.specialFlow !== 'combined_return'" value="課務調整">課務調整（無請假）</option>
+                  <option v-for="r in leaveReasonOptions" :key="'he-r-'+r" :value="r">{{ r }}</option>
+               </select>
             </div>
             <div class="form-group m-0" v-if="historyEditForm.type !== 'exchange' && historyEditForm.type !== '對調' && historyEditForm.specialFlow !== 'combined_return'">
               <label class="form-label">請假時間（代課清冊）</label>
@@ -3939,6 +3969,7 @@
                   <option value="自訂">自訂</option>
                 </select>
                 <input type="text" class="form-input" placeholder="如 08:00~16:00" v-model="historyEditForm.leaveTime">
+                <small v-if="historyEditForm.courseAdjustmentOnly" style="color:var(--text-muted);">課務調整不建立請假或代導鐘點費。</small>
               </div>
             </div>
              <div class="form-group m-0" v-if="historyEditForm.type !== 'exchange' && historyEditForm.type !== '對調'">
@@ -4351,7 +4382,7 @@
           </div>
           <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
             <p style="margin:0;font-size:0.82rem;color:var(--text-secondary);line-height:1.45;">
-              常用於導師無課或已調課請假、系統未自動產生代課單時，手動補建一筆代導費（每筆 1 節 / NT$ 455 元）。
+               僅供導師整日請假、系統未自動產生代課單時補建代導費；純課務調整或不到一天請假不列入代導鐘點費。
             </p>
 
             <div class="form-group m-0" >
@@ -4383,6 +4414,7 @@
             <div class="form-group m-0" >
               <label class="form-label">請假時間區間</label>
               <input type="text" class="form-input" v-model="manualHomeroomForm.leaveTime" placeholder="例如：08:00~16:00">
+              <small style="display:block;margin-top:5px;color:var(--text-muted);">此處只補建整日請假代導費；純課務調整、上午／下午或不足全天請回調代課申請處理。</small>
             </div>
 
             <div class="form-group m-0" >
@@ -4480,24 +4512,24 @@
   <!-- App Main JS Logic -->
 
   <!-- 模組：defer 依文件順序執行，不擋 HTML 解析；billing/print/export 另延後 -->
-     <script defer src="name-key-contract.js?v=20260904-calendar-new-tab"></script>
-       <script defer src="field-map.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="date-utils.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="gas-api.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="domain-school-swap.js?v=20260904-calendar-new-tab"></script>
-      <script defer src="domain-schedule.js?v=20260915-schedule-email-guard1"></script>
-     <script defer src="domain-triangle.js?v=20260904-calendar-new-tab"></script>
-      <script defer src="domain-match.js?v=20260915-schedule-email-guard1"></script>
+     <script defer src="name-key-contract.js?v=20260915-billing-range-final1"></script>
+       <script defer src="field-map.js?v=20260915-billing-range-final1"></script>
+     <script defer src="date-utils.js?v=20260915-billing-range-final1"></script>
+     <script defer src="gas-api.js?v=20260915-billing-range-final1"></script>
+     <script defer src="domain-school-swap.js?v=20260915-billing-range-final1"></script>
+      <script defer src="domain-schedule.js?v=20260915-billing-range-final1"></script>
+     <script defer src="domain-triangle.js?v=20260915-billing-range-final1"></script>
+      <script defer src="domain-match.js?v=20260915-billing-range-final1"></script>
   <!-- domain-activity-cover：活動互代／空堂任務時 ensureDomainActivityCover -->
-     <script defer src="domain-class-away.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="fee-utils.js?v=20260904-calendar-new-tab"></script>
-       <script defer src="ui-activity.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="ui-request.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="ui-timetable.js?v=20260904-calendar-new-tab"></script>
-     <script defer src="ui-approval.js?v=20260904-calendar-new-tab"></script>
+      <script defer src="domain-class-away.js?v=20260915-billing-range-final1"></script>
+     <script defer src="fee-utils.js?v=20260915-billing-range-final1"></script>
+        <script defer src="ui-activity.js?v=20260915-billing-range-final1"></script>
+      <script defer src="ui-request.js?v=20260915-billing-range-final1"></script>
+      <script defer src="ui-timetable.js?v=20260915-billing-range-final1"></script>
+      <script defer src="ui-approval.js?v=20260915-billing-range-final1"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
-     <script defer src="app-shell-utils.js?v=20260904-calendar-new-tab"></script>
-               <script defer src="app.js?v=20260915-homeroom-revoke-money-format1"></script>
+      <script defer src="app-shell-utils.js?v=20260915-billing-range-final1"></script>
+                <script defer src="app.js?v=20260915-billing-range-final1"></script>
   <script>
     (function () {
       function loadScript(src) {
@@ -4519,47 +4551,47 @@
       var _uiAdminP = null;
       window.ensureDomainBilling = function () {
         if (window.DomainBilling) return Promise.resolve();
-           if (!_billingP) _billingP = loadScript('domain-billing.js?v=20260915-single-row-paper-total');
+          if (!_billingP) _billingP = loadScript('domain-billing.js?v=20260915-billing-range-final1');
         return _billingP;
       };
       window.ensureExportAccounting = function () {
         if (window.ExportAccounting) return Promise.resolve();
-           if (!_accountingP) _accountingP = loadScript('export-accounting.js?v=20260903-cohired-adjunct1');
+           if (!_accountingP) _accountingP = loadScript('export-accounting.js?v=20260915-billing-range-final1');
         return _accountingP;
       };
       /** 活動互代／額度／空堂任務邏輯（首屏不載） */
       window.ensureDomainActivityCover = function () {
         if (window.DomainActivityCover) return Promise.resolve();
-          if (!_domainActivityP) _domainActivityP = loadScript('domain-activity-cover.js?v=20260831-combined3');
+          if (!_domainActivityP) _domainActivityP = loadScript('domain-activity-cover.js?v=20260915-billing-range-final1');
         return _domainActivityP;
       };
       /** 後台匯入／教師／課表編輯（教師首屏不載） */
       window.ensureUiAdmin = function () {
         if (window.UiAdmin) return Promise.resolve();
-            if (!_uiAdminP) _uiAdminP = loadScript('ui-admin.js?v=20260915-overtime-period-end2');
+          if (!_uiAdminP) _uiAdminP = loadScript('ui-admin.js?v=20260915-billing-range-final1');
         return _uiAdminP;
       };
       window.ensurePrintHelper = function () {
         if (typeof window.generateFormHtml === 'function') return Promise.resolve();
-           if (!_printP) _printP = loadScript('print-helper.js?v=20260915-single-page-confirm');
+           if (!_printP) _printP = loadScript('print-helper.js?v=20260915-billing-range-final1');
         return _printP;
       };
       window.ensureExportSchoolTimetable = function () {
         if (window.ExportSchoolTimetable) return Promise.resolve();
-          if (!_exportP) _exportP = loadScript('export-school-timetable.js?v=20260901-slot-format1');
+          if (!_exportP) _exportP = loadScript('export-school-timetable.js?v=20260915-billing-range-final1');
         return _exportP;
       };
       var _activityCoverP = null;
       window.ensureExportActivityCover = function () {
         if (window.ExportActivityCover) return Promise.resolve();
-          if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260831-combined3');
+          if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260915-billing-range-final1');
         return _activityCoverP;
       };
       var _invigP = null;
       var _excelJsP = null;
       window.ensureExportInvigilation = function () {
         if (window.ExportInvigilation) return Promise.resolve();
-          if (!_invigP) _invigP = loadScript('export-invigilation.js?v=20260901-slot-format1');
+          if (!_invigP) _invigP = loadScript('export-invigilation.js?v=20260915-billing-range-final1');
         return _invigP;
       };
       window.ensureExcelJS = function () {

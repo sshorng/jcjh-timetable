@@ -15,12 +15,14 @@
   <h1>domain-match / domain-school-swap / domain-schedule / domain-class-away 單元測試</h1>
   <p id="summary"></p>
   <pre id="log"></pre>
+  <script src="../date-utils.js"></script>
   <script src="../domain-match.js"></script>
   <script src="../domain-school-swap.js"></script>
-  <script src="../domain-schedule.js"></script>
-  <script src="../domain-triangle.js"></script>
-  <script src="../domain-class-away.js"></script>
-  <script src="../domain-activity-cover.js"></script>
+      <script src="../domain-schedule.js"></script>
+      <script src="../domain-triangle.js"></script>
+      <script src="../domain-class-away.js"></script>
+      <script src="../field-map.js"></script>
+      <script src="../domain-activity-cover.js"></script>
   <script src="../domain-billing.js"></script>
   <script src="../fee-utils.js"></script>
   <script>
@@ -478,6 +480,39 @@
         assert('畢旅隔日 901 不空', DCA.isClassAwayOnDate('901', '2026-04-23', [trip], '2026-06-30') === false);
         assert('畢業迄日空白到學期結束', DCA.isClassAwayOnDate('901', '2026-06-20', [grad], '2026-06-30') === true);
         assert('畢業後學期外不空', DCA.isClassAwayOnDate('901', '2026-07-01', [grad], '2026-06-30') === false);
+        assert('舊事件未指定節次仍套用第8節', DCA.isClassAwayOnDate('901', '2026-04-21', [trip], '2026-06-30', 8) === true);
+        var exam = {
+          name: '段考第8節', startDate: '2026-05-05', endDate: '2026-05-05',
+          scope: 'all', period: '8', classes: [], billingRule: 'keep', forMutual: false, enabled: true
+        };
+        assert('全校事件套用任一班第8節', DCA.isClassAwayOnDate('701', '2026-05-05', [exam], '2026-06-30', 8) === true);
+        assert('全校事件不影響其他節次', DCA.isClassAwayOnDate('701', '2026-05-05', [exam], '2026-06-30', 7) === false);
+        assert('全校第8節事件不出現在第7節活動清單', DCA.eventsActiveOnDate('2026-05-05', [exam], '2026-06-30', 7).length === 0);
+        assert('全校事件可用全校班級清單展開', DCA.getActiveAwayClasses(
+          '2026-05-05', [exam], '2026-06-30', { allClasses: ['701', '901'] }
+        ).join() === '701,901');
+        var examSchedules = [
+          { teacherEmail: 'exam@x', dayOfWeek: 2, period: 7, className: '701', subject: '數學' },
+          { teacherEmail: 'exam@x', dayOfWeek: 2, period: 8, className: '701', subject: '輔導' }
+        ];
+        var examScheduleIndex = window.DomainSchedule.buildScheduleIndex(examSchedules);
+        function resolveExamPeriod(period) {
+          return window.DomainSchedule.resolveApprovedSchedule({
+            teacherEmail: 'exam@x', dateStr: '2026-05-05', period: period, dayOfWeek: 2,
+            allSchedules: examSchedules, scheduleIndex: examScheduleIndex, periodSubs: [], allSubs: [],
+            helpers: {
+              getTeacherNameByEmail: function () { return '段考教師'; },
+              getTeacherSubjectByEmail: function () { return '數學'; },
+              formatDateMMDD: function (d) { return d; },
+              isSingleWeek: function () { return true; },
+              isClassAway: function (className, dateStr, p) {
+                return DCA.isClassAwayOnDate(className, dateStr, [exam], '2026-06-30', p);
+              }
+            }
+          });
+        }
+        assert('課表第8節套用段考事件', resolveExamPeriod(8).isClassAway === true);
+        assert('課表第7節不套用段考事件', resolveExamPeriod(7).isClassAway === false);
         assert('可進互代篩選班', DCA.getAwayClassesInRange('2026-04-20', '2026-04-25', [trip, grad], '2026-06-30', { forMutualOnly: true }).join() === '901,902');
         var ded = DCA.computeReduceDeduction({
           teacherEmail: 't@x',
@@ -501,17 +536,40 @@
           reportMonth: '2026-04',
           reportWeeksCount: 4
         }) === 0);
-        assert('班級淨化 000', DCA.parseClassList('0,701,000,902').join() === '701,902');
-        assert('數字 901', DCA.parseClassList(901).join() === '901');
-      }
+        assert('只停第8節不扣1至7節 reduce', DCA.computeReduceDeduction({
+          teacherEmail: 't@x',
+          allSchedules: [{ teacherEmail: 't@x', period: 1, attr: '基本', className: '901' }],
+          events: [{
+            name: '段考', startDate: '2026-06-01', endDate: '2026-06-30',
+            scope: 'all', period: '8', billingRule: 'reduce', enabled: true
+          }],
+          semesterEndDate: '2026-06-30',
+          reportMonth: '2026-06',
+          reportWeeksCount: 4
+        }) === 0);
+       assert('班級淨化 000', DCA.parseClassList('0,701,000,902').join() === '701,902');
+       assert('數字 901', DCA.parseClassList(901).join() === '901');
+       assert('非第8節值回到全部節次', DCA.normalizePeriod('第7節') === 'all');
+       assert('第8節格式正規化', DCA.normalizePeriod('第 8 節') === '8');
+       var mappedExam = window.FieldMap.mapClassAwayEvent({
+         '事件名稱': '段考', '適用範圍': '全校', '停課節次': '第8節', '班級清單': ''
+       });
+       assert('事件欄位映射全校第8節', mappedExam.scope === 'all' && mappedExam.period === '8' && mappedExam.classes.length === 0);
+       var mappedLegacy = window.FieldMap.mapClassAwayEvent({ '班級清單': '901' });
+       assert('舊事件映射為指定班級全部節次', mappedLegacy.scope === 'classes' && mappedLegacy.period === 'all' && mappedLegacy.classes.join() === '901');
+       assert('結算週數：週一至週五為一週', window.DateUtils.countWeeksInRange('2026-09-07', '2026-09-11') === 1);
+       assert('結算週數：跨週日期算兩週', window.DateUtils.countWeeksInRange('2026-09-09', '2026-09-15') === 2);
+       assert('結算週數：單日也算一週', window.DateUtils.countWeeksInRange('2026-09-11', '2026-09-11') === 1);
+     }
 
       // ── 活動互代進度／空堂邏輯 ──
       var DAC = window.DomainActivityCover;
       assert('DomainActivityCover 載入', !!DAC);
       if (DAC) {
-        var cellAway = { className: '901', isClassAway: true };
-        assert('isClassAway 可代', DAC.isFreeForActivity(cellAway, []).free === true);
-        assert('isClassAway 不衝堂', DAC.isConflictCell(cellAway, true, []) === false);
+         var cellAway = { className: '901', isClassAway: true };
+         assert('isClassAway 可代', DAC.isFreeForActivity(cellAway, []).free === true);
+         assert('isClassAway 不衝堂', DAC.isConflictCell(cellAway, true, []) === false);
+         assert('併班含外出班可代', DAC.isFreeForActivity({ className: '701、702' }, ['702']).free === true);
         assert('isQuota 含舊別名', DAC.isQuotaDeductFee('互代不結') === true);
         assert('isQuota 扣額度', DAC.isQuotaDeductFee('扣額度') === true);
 
@@ -551,8 +609,21 @@
           allSchedules: schedules, requests: reqs, weekDates: ['2026-07-13'],
           leaderEmails: [], teachers: []
         });
-        assert('未勾帶隊需求0', st0.demand === 0 && st0.arranged === 0);
-      }
+         assert('未勾帶隊需求0', st0.demand === 0 && st0.arranged === 0);
+         var combinedAwayStats = DAC.buildStats({
+           active: true,
+           awayClasses: ['702'],
+           startDate: '2026-07-13',
+           endDate: '2026-07-13',
+           allSchedules: [{ teacherEmail: 'combined-away@x', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' }],
+           weekDates: ['2026-07-13'],
+           leaderEmails: [{ email: 'combined-away@x', name: '併班教師' }],
+           teachers: [{ email: 'combined-away@x', name: '併班教師' }],
+           getScheduleForDate: function () { return { className: '701、702', attr: '一般' }; }
+         });
+         assert('併班外出釋出計入', combinedAwayStats.releasedSlots === 1 && combinedAwayStats.demand === 0,
+           'released=' + combinedAwayStats.releasedSlots + ' demand=' + combinedAwayStats.demand);
+       }
 
       // ── 巡堂 ──
       if (window.DomainSchedule) {
@@ -741,7 +812,29 @@
          // 2026-07 有多個週一；至少有一節非 7/13 應發
          assert('非空堂日第8有發', paid >= 1, 'paid=' + paid);
 
-         var p8MixedFees = window.DomainBilling.buildPeriod8Payout({
+         var p8Exam = window.DomainBilling.buildPeriod8Payout({
+           reportMonth: '2026-07',
+           allSchedules: [
+             { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },
+             { teacherEmail: 'b@x', dayOfWeek: 2, period: 8, className: '702', subject: '課輔', attr: '課輔' }
+           ],
+           substitutionRecords: [],
+           classAwayEvents: [{
+             name: '段考', startDate: '2026-07-13', endDate: '2026-07-14',
+             scope: 'all', period: '8', classes: [], billingRule: 'keep', enabled: true
+           }],
+           semesterEndDate: '2026-12-31',
+           getTeacherNameByEmail: function (e) { return e; },
+           isSingleWeek: function () { return true; }
+         });
+          var examRows = (p8Exam.details || []).filter(function (r) {
+            return r.date >= '2026-07-13' && r.date <= '2026-07-14';
+          });
+          var examAway = examRows.filter(function (r) { return r.source === 'away'; });
+          assert('全校段考第8不發當日教師鐘點', examAway.length === 2 && examRows.every(function (r) { return r.fee === 0; }),
+            'away=' + examAway.length + ' rows=' + examRows.length);
+
+          var p8MixedFees = window.DomainBilling.buildPeriod8Payout({
            reportMonth: '2026-07',
            allSchedules: [
              { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },

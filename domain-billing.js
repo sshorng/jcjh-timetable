@@ -41,6 +41,65 @@ window.DomainBilling = (function () {
       && matched.every(isCourseAdjustmentOnlyRecord);
   }
 
+  function homeroomTimeRangeBounds(raw) {
+    var s = String(raw == null ? '' : raw).trim()
+      .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+    if (!s || s === '全天' || s === '全日') return null;
+    var m = s.match(/^(\d{1,2}):(\d{2})~(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    var sh = Number(m[1]);
+    var sm = Number(m[2]);
+    var eh = Number(m[3]);
+    var em = Number(m[4]);
+    if (sh > 23 || eh > 23 || sm > 59 || em > 59) return null;
+    var start = sh * 60 + sm;
+    var end = eh * 60 + em;
+    return end > start ? { start: start, end: end } : null;
+  }
+
+  function homeroomFullDayEndMinutes(record, teachers, teacherKey) {
+    var key = String(record && (record.leaveEmail || record.originalTeacherEmail
+      || record.requesterEmail || record['申請人Email'] || record['原導師Email']
+      || record.originalTeacherName || record.requesterName || record['申請人姓名'] || record['原導師姓名']
+      || teacherKey) || '').trim().toLowerCase();
+    var teacher = (teachers || []).find(function (t) {
+      var email = String(t && (t.loginEmail || t.email) || '').trim().toLowerCase();
+      var name = String(t && (t.teacherName || t.name) || '').trim().toLowerCase();
+      return key && (key === email || key === name);
+    });
+    var role = String(teacher && teacher.role || '').trim().toLowerCase();
+    return role === 'admin' || role === 'staff' ? 17 * 60 : 16 * 60;
+  }
+
+  function homeroomIsFullDayLeave(record, teachers, teacherKey) {
+    var type = String(record && (record.leaveTimeType || record['請假時間類型']) || '').trim();
+    if (/^(上午|下午|半日|半天)$/.test(type)) return false;
+    var raw = record && (record.leaveTime || record['請假時間'] || record.timeRange || '');
+    var normalized = String(raw == null ? '' : raw).trim()
+      .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
+    if (!normalized || normalized === '全天' || normalized === '全日') {
+      return !type || type === '全天' || type === '全日';
+    }
+    var bounds = homeroomTimeRangeBounds(normalized);
+    return !!bounds && bounds.start <= 8 * 60 && bounds.end >= homeroomFullDayEndMinutes(record, teachers, teacherKey);
+  }
+
+  function homeroomIsBillable(record, substitutionRecords, teachers) {
+    if (isCourseAdjustmentOnlyRecord(record)) return false;
+    var ids = homeroomSourceRequestIds(record);
+    var matched = (substitutionRecords || []).filter(function (request) {
+      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
+      return requestId && ids.indexOf(requestId) >= 0;
+    });
+    if (!matched.length) return homeroomIsFullDayLeave(record, teachers);
+    var teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
+      || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
+    if (matched.some(function (request) {
+      return !isCourseAdjustmentOnlyRecord(request) && homeroomIsFullDayLeave(request, teachers, teacherKey);
+    })) return true;
+    return matched.length < ids.length && homeroomIsFullDayLeave(record, teachers);
+  }
+
   function getWeekKey(dateStr) {
     var d = new Date(String(dateStr).replace(/-/g, '/'));
     var dow = d.getDay();
@@ -70,6 +129,50 @@ window.DomainBilling = (function () {
       d.setDate(d.getDate() + 1);
     }
     return out;
+  }
+
+  function reportRange(opts) {
+    opts = opts || {};
+    var start = normalizeDateKey(opts.reportStartDate || opts.startDate);
+    var end = normalizeDateKey(opts.reportEndDate || opts.endDate);
+    if (start && end && start <= end) return { start: start, end: end };
+    var month = String(opts.reportMonth || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) return { start: '', end: '' };
+    var parts = month.split('-').map(Number);
+    var lastDay = new Date(parts[0], parts[1], 0).getDate();
+    return { start: month + '-01', end: month + '-' + String(lastDay).padStart(2, '0') };
+  }
+
+  function listWeekdaysInRange(startDate, endDate) {
+    var range = reportRange({ reportStartDate: startDate, reportEndDate: endDate });
+    if (!range.start || !range.end) return [];
+    var current = new Date(range.start.replace(/-/g, '/') + ' 00:00:00');
+    var end = new Date(range.end.replace(/-/g, '/') + ' 00:00:00');
+    var out = [];
+    while (current <= end) {
+      var day = current.getDay();
+      if (day >= 1 && day <= 5) out.push(toLocalDateStr(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return out;
+  }
+
+  function reportWeekGroupsForRange(startDate, endDate) {
+    var weekdays = listWeekdaysInRange(startDate, endDate);
+    var groups = {};
+    var order = [];
+    weekdays.forEach(function (dateStr) {
+      var date = new Date(dateStr.replace(/-/g, '/') + ' 00:00:00');
+      var day = date.getDay();
+      date.setDate(date.getDate() - (day - 1));
+      var monday = toLocalDateStr(date);
+      if (!groups[monday]) {
+        groups[monday] = [];
+        order.push(monday);
+      }
+      groups[monday].push(dateStr);
+    });
+    return order.map(function (monday) { return groups[monday]; });
   }
 
   function isScheduleActiveOnDate(schedule, dateStr) {
@@ -745,7 +848,10 @@ window.DomainBilling = (function () {
     var semesterEndDate = opts.semesterEndDate || '';
     var teacherIdentity = teacherKeys(opts.teacher);
     var DCA = window.DomainClassAway;
-    var weekdays = listWeekdaysInMonth(reportMonth);
+    var range = reportRange(opts);
+    var weekdays = (opts.reportStartDate || opts.reportEndDate)
+      ? listWeekdaysInRange(range.start, range.end)
+      : listWeekdaysInMonth(reportMonth);
     if (!teacherIdentity.length || !weekdays.length) {
       return { scheduled: 0, paid: 0, deduction: 0, leaveDeduction: 0, awayDeduction: 0, paidDetails: [] };
     }
@@ -783,8 +889,8 @@ window.DomainBilling = (function () {
 
         var away = !!(DCA && typeof DCA.isClassAwayOnDate === 'function')
           && slot.some(function (schedule) {
-            return isScheduleActiveOnDate(schedule, dateStr)
-              && DCA.isClassAwayOnDate(schedule.className || schedule['班級'], dateStr, events, semesterEndDate);
+              return isScheduleActiveOnDate(schedule, dateStr)
+                && DCA.isClassAwayOnDate(schedule.className || schedule['班級'], dateStr, events, semesterEndDate, period);
           });
         var leave = monthlyRecords.some(function (record) {
           return !isCombinedReturnRecord(record)
@@ -819,6 +925,7 @@ window.DomainBilling = (function () {
   function buildPeriod8Payout(opts) {
     opts = opts || {};
     var reportMonth = opts.reportMonth;
+    var range = reportRange(opts);
     var allSchedules = opts.allSchedules || [];
     var substitutionRecords = opts.substitutionRecords || [];
     var classAwayEvents = opts.classAwayEvents || [];
@@ -827,18 +934,20 @@ window.DomainBilling = (function () {
     var isSingleWeek = opts.isSingleWeek || function () { return true; };
 
     var details = [];
-    if (!reportMonth) {
+    if (!range.start || !range.end) {
       return { details: [], byEmail: {}, FEE_8TH: FEE_8TH };
     }
 
-    var startDay = reportMonth + '-01';
-    var endDay = reportMonth + '-31';
-    var weekdays = listWeekdaysInMonth(reportMonth);
+    var startDay = range.start;
+    var endDay = range.end;
+    var weekdays = (opts.reportStartDate || opts.reportEndDate)
+      ? listWeekdaysInRange(startDay, endDay)
+      : listWeekdaysInMonth(reportMonth);
 
     var DCA = window.DomainClassAway;
-    function isAway(className, dateStr) {
-      if (!DCA || !DCA.isClassAwayOnDate) return false;
-      return !!DCA.isClassAwayOnDate(className, dateStr, classAwayEvents, semesterEndDate);
+     function isAway(className, dateStr, period) {
+       if (!DCA || !DCA.isClassAwayOnDate) return false;
+       return !!DCA.isClassAwayOnDate(className, dateStr, classAwayEvents, semesterEndDate, period);
     }
 
     function pickBaseSched(email, dayOfWeek, dateStr) {
@@ -914,7 +1023,7 @@ window.DomainBilling = (function () {
         if (!className) return;
 
         // 空堂事件（颱風／畢旅 keep 等）：該班第8 不發
-        if (isAway(className, dateStr)) {
+        if (isAway(className, dateStr, 8)) {
           details.push({
             date: dateStr,
             period: 8,
@@ -1045,10 +1154,12 @@ window.DomainBilling = (function () {
    * @param {object} opts
    */
   function buildMonthlyReportRows(opts) {
+    opts = opts || {};
     var teachers = opts.teachers || [];
     var allSchedules = opts.allSchedules || [];
     var reportMonth = opts.reportMonth;
     var reportWeeksCount = opts.reportWeeksCount || 4;
+    var range = reportRange(opts);
     var getTeacherNameByEmail = opts.getTeacherNameByEmail || function (e) { return e; };
     var classAwayEvents = opts.classAwayEvents || [];
     var semesterEndDate = opts.semesterEndDate || '';
@@ -1057,10 +1168,13 @@ window.DomainBilling = (function () {
       ? window.DomainSchoolSwap.buildIndex(opts.schoolSwaps || [])
       : null;
 
-    if (!reportMonth || teachers.length === 0) return [];
+    if ((!reportMonth && (!range.start || !range.end)) || teachers.length === 0) return [];
 
-    var startDay = reportMonth + '-01';
-    var endDay = reportMonth + '-31';
+    var startDay = range.start;
+    var endDay = range.end;
+    var weekdays = (opts.reportStartDate || opts.reportEndDate)
+      ? listWeekdaysInRange(startDay, endDay)
+      : listWeekdaysInMonth(reportMonth);
     var monthlyRecords = (opts.substitutionRecords || []).filter(function (r) {
       if (!isActiveSubstitutionRecord(r)) return false;
       var date = recordDate(r);
@@ -1070,6 +1184,8 @@ window.DomainBilling = (function () {
     // 第8節獨立結算
     var p8 = buildPeriod8Payout({
       reportMonth: reportMonth,
+      reportStartDate: startDay,
+      reportEndDate: endDay,
       allSchedules: allSchedules,
       substitutionRecords: monthlyRecords,
       classAwayEvents: classAwayEvents,
@@ -1087,7 +1203,9 @@ window.DomainBilling = (function () {
         : (parseInt(t.baseHours, 10) || 16);
 
       // 週鐘點：依每個報表週的啟用日期計算，避免中途換課仍沿用整學期課表。
-      var weeklyGroups = reportWeekGroups(reportMonth, reportWeeksCount);
+       var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
+         ? reportWeekGroupsForRange(startDay, endDay)
+         : reportWeekGroups(reportMonth, reportWeeksCount);
       var weeklyPeriodCounts = weeklyGroups.map(function (dates) {
         return weeklyPeriodsForDates(teacherIdentity, allSchedules, dates);
       });
@@ -1100,9 +1218,11 @@ window.DomainBilling = (function () {
           teacherEmail: email,
           allSchedules: allSchedules,
           events: classAwayEvents,
-          semesterEndDate: semesterEndDate,
-          reportMonth: reportMonth,
-          reportWeeksCount: reportWeeksCount
+           semesterEndDate: semesterEndDate,
+           reportMonth: reportMonth,
+           reportWeeksCount: reportWeeksCount,
+           reportStartDate: startDay,
+           reportEndDate: endDay
         }) || 0;
       }
       var weeklyOvertime = Math.max(0, weeklyPeriods - baseHours);
@@ -1146,6 +1266,8 @@ window.DomainBilling = (function () {
         teacher: t,
         allSchedules: allSchedules,
         reportMonth: reportMonth,
+        reportStartDate: startDay,
+        reportEndDate: endDay,
         monthlyRecords: monthlyRecords,
         classAwayEvents: classAwayEvents,
         schoolSwapIndex: schoolSwapIndex,
@@ -1317,9 +1439,12 @@ window.DomainBilling = (function () {
    * 含「YYY.MM 公付」與「YYY.MM 自付」兩張工作表
    */
   function buildSubFeeExcelWorkbook(opts) {
+    opts = opts || {};
     var reportMonth = opts.reportMonth || '';
+    var range = reportRange(opts);
     var substitutionRecords = opts.substitutionRecords || [];
     var homeroomRecords = opts.homeroomRecords || [];
+    var teachers = opts.teachers || [];
     var getTeacherNameByEmail = opts.getTeacherNameByEmail || function (e) { return e || ''; };
 
     var year = parseInt(reportMonth.slice(0, 4), 10);
@@ -1341,6 +1466,8 @@ window.DomainBilling = (function () {
     var sheetNameMentor = rocYear + '.' + monthStr + ' 代導公付';
 
     var monthPrefix = year + '-' + monthStr;
+    var filterStart = range.start || monthPrefix + '-01';
+    var filterEnd = range.end || monthPrefix + '-' + String(new Date(year, month, 0).getDate()).padStart(2, '0');
     var monthRecords = (substitutionRecords || []).filter(function (r) {
       if (!r || !r.date) return false;
       if (!isActiveSubstitutionRecord(r)) return false;
@@ -1349,16 +1476,16 @@ window.DomainBilling = (function () {
       if (fee === '扣額度' || fee === '互代不結' || fee === '第8節代課') return false;
       var p = r.period != null ? Number(r.period) : NaN;
       if (p === 8 || String(r.period).trim() === '8') return false;
-      var rDate = String(r.date).replace(/\//g, '-');
-      return rDate.indexOf(monthPrefix) === 0;
+       var rDate = normalizeDateKey(r.date);
+       return rDate && rDate >= filterStart && rDate <= filterEnd;
     });
 
     var monthHomeroomRecords = (homeroomRecords || []).filter(function (r) {
       if (!r || !r.date || !r.actualTeacherEmail) return false;
       if (r.enabled === false || String(r.status || '').toLowerCase() === 'cancelled') return false;
-      if (homeroomIsCourseAdjustmentOnly(r, substitutionRecords)) return false;
-      var rDate = String(r.date).replace(/\//g, '-');
-      return rDate.indexOf(monthPrefix) === 0;
+       if (!homeroomIsBillable(r, substitutionRecords, teachers)) return false;
+       var rDate = normalizeDateKey(r.date);
+       return rDate && rDate >= filterStart && rDate <= filterEnd;
     }).map(function (r) {
       return Object.assign({}, r, {
         type: 'homeroom',
@@ -1538,6 +1665,7 @@ window.DomainBilling = (function () {
     toExcelRows: toExcelRows,
     sumMonthlyReportRows: sumMonthlyReportRows,
     toPeriod8ExcelRows: toPeriod8ExcelRows,
-    buildSubFeeExcelWorkbook: buildSubFeeExcelWorkbook
+    buildSubFeeExcelWorkbook: buildSubFeeExcelWorkbook,
+    isBillableHomeroomRecord: homeroomIsBillable
   };
 })();

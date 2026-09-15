@@ -205,6 +205,30 @@ window.DateUtils = (function () {
     return dates;
   }
 
+  /** 結算日期區間包含的週數；同一個週一至週日只算一週。 */
+  function countWeeksInRange(startDate, endDate) {
+    function parseDateOnly(value) {
+      var parts = String(value == null ? '' : value).slice(0, 10).split('-').map(Number);
+      if (parts.length !== 3 || parts.some(function (n) { return !Number.isFinite(n); })) return null;
+      var date = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+      return date;
+    }
+    var start = parseDateOnly(startDate);
+    var end = parseDateOnly(endDate);
+    if (!start || !end || start > end) return 0;
+    var weeks = {};
+    var cursor = new Date(start);
+    while (cursor <= end) {
+      var monday = new Date(cursor);
+      var day = monday.getDay();
+      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+      weeks[toLocalDateStr(monday)] = true;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return Object.keys(weeks).length;
+  }
+
   /** 依原課日期、目標星期與週次偏移，計算調課目標日期。 */
   function getExchangeTargetDate(dateStr, timeKey, weekOffset) {
     const dateParts = String(dateStr || '').slice(0, 10).split('-').map(Number);
@@ -233,6 +257,7 @@ window.DateUtils = (function () {
     getPeriodTimeSpan,
     getWeekDatesFrom,
     getWeekDatesFromDate,
+    countWeeksInRange,
     getExchangeTargetDate,
     TIMETABLE_PERIODS,
     LUNCH_PERIOD,

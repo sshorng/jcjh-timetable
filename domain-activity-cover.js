@@ -48,6 +48,12 @@ window.DomainActivityCover = (function () {
     return String(c || '').trim();
   }
 
+  function classTokens(value) {
+    return normalizeClass(value).split(/[,，、\/／|｜\s]+/)
+      .map(function (item) { return item.trim(); })
+      .filter(Boolean);
+  }
+
   function normalizeDate(d) {
     var s = String(d || '').trim().slice(0, 10);
     return s;
@@ -102,10 +108,13 @@ window.DomainActivityCover = (function () {
   function toAwaySet(awayClasses) {
     var set = {};
     (awayClasses || []).forEach(function (c) {
-      var k = normalizeClass(c);
-      if (k) set[k] = true;
+      classTokens(c).forEach(function (k) { set[k] = true; });
     });
     return set;
+  }
+
+  function isAnyClassAway(value, awaySet) {
+    return classTokens(value).some(function (token) { return !!awaySet[token]; });
   }
 
   function toAwayList(awayClasses) {
@@ -121,8 +130,7 @@ window.DomainActivityCover = (function () {
     if (!cell || cell.isSubstituted) return false;
     if (cell.isClassAway) return true;
     var set = toAwaySet(awayClasses);
-    var cn = normalizeClass(cell.className);
-    return !!(cn && set[cn]);
+    return isAnyClassAway(cell.className, set);
   }
 
   /**
@@ -177,7 +185,7 @@ window.DomainActivityCover = (function () {
     }
     var n = 0;
     slots.forEach(function (s) {
-      if (!s || !away[normalizeClass(s.className)]) return;
+      if (!s || !isAnyClassAway(s.className, away)) return;
       var p = parseInt(s.period, 10);
       if (p > 7) return;
       var d = parseInt(s.dayOfWeek, 10);
@@ -649,7 +657,7 @@ window.DomainActivityCover = (function () {
         (opts.allSchedules || []).forEach(function (s) {
           if (!s || !s.className) return;
            var cn = normalizeClass(s.className);
-           if (!away[cn]) return;
+            if (!isAnyClassAway(cn, away)) return;
            if (parseInt(s.dayOfWeek, 10) !== dow) return;
            if (window.DomainSchedule && window.DomainSchedule.isActiveOnDate
                && !window.DomainSchedule.isActiveOnDate(s, dateStr)) return;
@@ -752,7 +760,7 @@ window.DomainActivityCover = (function () {
       var cn = normalizeClass(cell.className);
       if (!cn) return false;
       if (cn === '巡堂') return false;
-      if (awayCount && away[cn]) return false;
+       if (awayCount && isAnyClassAway(cn, away)) return false;
       if (cell.isClassAway) return false;
       return true;
     }
@@ -810,7 +818,7 @@ window.DomainActivityCover = (function () {
           }
           var cn = normalizeClass(s.className);
           if (!cn || cn === '巡堂') return;
-          if (awayCount && away[cn]) return;
+           if (awayCount && isAnyClassAway(cn, away)) return;
           slotKeys[dateStr + '|' + per] = true;
         });
       });

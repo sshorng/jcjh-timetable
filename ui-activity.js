@@ -24,7 +24,8 @@ window.UiClassAwayAdmin = (function () {
     var classAwayModalMode = ref('add');
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
-      classes: [], billingRule: 'keep', forMutual: true, enabled: true, note: ''
+      scope: 'classes', classes: [], period: 'all',
+      billingRule: 'keep', forMutual: true, enabled: true, note: ''
     });
 
     function sanitizeClassNames(list) {
@@ -39,7 +40,8 @@ window.UiClassAwayAdmin = (function () {
       classAwayModalMode.value = 'add';
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
-        classes: [], billingRule: 'keep', forMutual: true, enabled: true, note: ''
+        scope: 'classes', classes: [], period: 'all',
+        billingRule: 'keep', forMutual: true, enabled: true, note: ''
       };
       showClassAwayModal.value = true;
     }
@@ -52,9 +54,11 @@ window.UiClassAwayAdmin = (function () {
         name: ev.name || '',
         startDate: ev.startDate || '',
         endDate: ev.endDate || '',
+        scope: ev.scope === 'all' ? 'all' : 'classes',
         classes: clean,
+        period: ev.period === '8' ? '8' : 'all',
         billingRule: ev.billingRule === 'reduce' ? 'reduce' : 'keep',
-        forMutual: !!ev.forMutual,
+        forMutual: ev.period === '8' ? false : !!ev.forMutual,
         enabled: ev.enabled !== false,
         note: ev.note || ''
       };
@@ -98,8 +102,15 @@ window.UiClassAwayAdmin = (function () {
       var f = classAwayForm.value;
       if (!String(f.name || '').trim()) { showToast('請填事件名稱', 'info'); return; }
       if (!f.startDate) { showToast('請填起日', 'info'); return; }
+      var scope = f.scope === 'all' ? 'all' : 'classes';
+      var period = f.period === '8' ? '8' : 'all';
+      var forMutual = period === '8' ? false : !!f.forMutual;
       var cleanClasses = sanitizeClassNames(f.classes || []);
-      if (!cleanClasses.length) { showToast('請至少勾選一個有效班級（勿含 000）', 'info'); return; }
+      if (scope === 'classes' && !cleanClasses.length) {
+        showToast('請至少勾選一個有效班級（勿含 000）', 'info');
+        return;
+      }
+      if (scope === 'all') cleanClasses = [];
       loading.value = true;
       try {
         var id = f.id || ('cae_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
@@ -110,9 +121,11 @@ window.UiClassAwayAdmin = (function () {
           "事件名稱": String(f.name).trim(),
           "起日": String(f.startDate || '').slice(0, 10),
           "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
-          "班級清單": "'" + classListStr,
+          "適用範圍": scope === 'all' ? '全校' : '指定班級',
+          "班級清單": scope === 'all' ? '' : ("'" + classListStr),
+          "停課節次": period === '8' ? '第8節' : '全部',
           "鐘點規則": f.billingRule === 'reduce' ? 'reduce' : 'keep',
-          "可進互代": f.forMutual ? 'TRUE' : 'FALSE',
+          "可進互代": forMutual ? 'TRUE' : 'FALSE',
           "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
           "備註": f.note || ''
         };
@@ -127,7 +140,11 @@ window.UiClassAwayAdmin = (function () {
         else list.push(mapped);
         classAwayEvents.value = list;
         showClassAwayModal.value = false;
-        showToast('空堂事件已儲存（' + mapped.classes.length + ' 班）', 'success');
+        showToast(
+          '空堂事件已儲存（' + (mapped.scope === 'all' ? '全校' : mapped.classes.length + ' 班')
+            + (mapped.period === '8' ? '／第8節' : '') + '）',
+          'success'
+        );
         clearScheduleCache();
         softRefreshInBackground({ force: true, delay: 700 });
       } catch (e) {
@@ -205,7 +222,10 @@ window.UiMutualBridge = (function () {
 
     var mutualImportableEvents = computed(function () {
       return (classAwayEvents.value || []).filter(function (e) {
-        return e.enabled !== false && e.forMutual;
+        // 活動互代面板是全天活動；單節事件（如段考第8節）不直接帶入。
+        var isWholeDay = !(window.DomainClassAway && window.DomainClassAway.eventPeriod)
+          || window.DomainClassAway.eventPeriod(e) === 'all';
+        return e.enabled !== false && e.forMutual && isWholeDay;
       });
     });
     var mutualImportEventId = ref('');
@@ -221,9 +241,17 @@ window.UiMutualBridge = (function () {
         showToast('找不到該空堂事件', 'warning');
         return;
       }
-      var classes = [];
-      if (window.DomainClassAway && window.DomainClassAway.parseClassList) {
-        classes = window.DomainClassAway.parseClassList(ev.classes || ev.classList || '');
+       var classes = [];
+       if (window.DomainClassAway && window.DomainClassAway.getAwayClassesInRange) {
+         classes = window.DomainClassAway.getAwayClassesInRange(
+           ev.startDate,
+           ev.endDate || (semesterEndDate && semesterEndDate.value) || ev.startDate,
+           [ev],
+           semesterEndDate && semesterEndDate.value,
+           { forMutualOnly: true, allClasses: (classList && classList.value) || [] }
+         );
+       } else if (window.DomainClassAway && window.DomainClassAway.parseClassList) {
+         classes = window.DomainClassAway.parseClassList(ev.classes || ev.classList || '');
       } else if (Array.isArray(ev.classes)) {
         classes = ev.classes.map(function (c) { return String(c || '').trim(); }).filter(Boolean);
       } else {
@@ -1164,9 +1192,10 @@ window.UiBatchSubmit = (function () {
       showToast('批次至少 2 節', 'info');
       return;
     }
-    var isPerSlot = !!(pendingRequestData.value.isPerSlot || batchAssignMode.value === 'perSlot');
-    var courseAdjustmentOnly = !!pendingRequestData.value.courseAdjustmentOnly;
-    var reason = pendingRequestData.value.reason || batchReason.value;
+     var isPerSlot = !!(pendingRequestData.value.isPerSlot || batchAssignMode.value === 'perSlot');
+     var reason = pendingRequestData.value.reason || batchReason.value;
+     var courseAdjustmentOnly = !!pendingRequestData.value.courseAdjustmentOnly
+       || String(reason || '').trim() === '課務調整';
     var note = pendingRequestData.value.note || batchNote.value || '';
     if (!reason) {
       showToast('請選擇請假事由', 'info');

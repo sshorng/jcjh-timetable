@@ -2359,6 +2359,16 @@ body {
   padding: 7px 9px;
   font-size: 0.82rem;
 }
+.billing-month-control .form-input {
+  width: 138px;
+  padding: 7px 9px;
+  font-size: 0.82rem;
+}
+.billing-range-separator {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
 .billing-weeks-control {
   display: flex;
   align-items: center;
@@ -3466,6 +3476,12 @@ td.table-empty {
   font-size: 0.72rem;
   font-weight: 700;
   white-space: nowrap;
+}
+.billing-weeks-value {
+  min-width: 24px;
+  text-align: center;
+  color: var(--primary-color);
+  font-size: 0.95rem;
 }
 .batch-group-action-button {
   min-width: 48px;
