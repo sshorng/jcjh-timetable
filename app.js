@@ -2627,29 +2627,6 @@ createApp({
       if (targetIds.length === 0 && detailSubRecord.value) {
         targetIds = [detailSubRecord.value.id];
       }
-      const seedRecord = (substitutionRecords.value || []).find(record => targetIds.includes(record.id));
-      const batchId = String((req && req.batchId) || (seedRecord && (seedRecord.batchId || seedRecord['批次ID'])) || '').trim().toLowerCase();
-      if (batchId && seedRecord) {
-        const teacherKey = (record, side) => {
-          const email = side === 'original'
-            ? (record.originalTeacherEmail || record.requesterEmail || '')
-            : (record.actualTeacherEmail || record.targetTeacherEmail || '');
-          const name = side === 'original'
-            ? (record.originalTeacherName || record.requesterName || '')
-            : (record.actualTeacherName || record.targetTeacherName || '');
-          return String((email && getTeacherNameByEmail(email)) || name || email || '').trim().toLowerCase();
-        };
-        const applicantKey = teacherKey(seedRecord, 'original');
-        const targetKey = teacherKey(seedRecord, 'actual');
-        if (applicantKey && targetKey) {
-          targetIds = (substitutionRecords.value || []).filter(record =>
-            String(record && (record.batchId || record['批次ID']) || '').trim().toLowerCase() === batchId
-            && String(record && record.type || '') === String(seedRecord.type || '')
-            && teacherKey(record, 'original') === applicantKey
-            && teacherKey(record, 'actual') === targetKey
-          ).map(record => record.id);
-        }
-      }
       if (targetIds.length === 0) {
         showToast("⚠️ 找不到該筆核准的代課明細，無法執行列印。", "error");
         return;
@@ -2860,27 +2837,15 @@ createApp({
 
     const copyLineMessageForRequest = (req) => {
       const isExchange = isExchangeLikeRequest(req);
-      // 紙本模式不應讓一般申請誤帶線上簽核網址；行政代申請仍保留線上行政流程。
+      // 紙本與待行政核准案件不應帶線上簽核網址；行政代申請仍保留線上行政流程。
       const paperFlowRequest = !isProxySubmitRequest(req)
-        && (isPaperFlowRequest(req) || notificationsSuppressed.value);
+        && (isPaperFlowRequest(req) || notificationsSuppressed.value || req.status === 'pending_admin');
       const currentUrl = window.location.origin + window.location.pathname;
 
-      // 同批次多筆：只組「同一受邀人」的節次（不混入其他人）
+      // LINE 按鈕是單筆操作；批次中的其他節次需各自確認，避免誤把整批課程傳給對方。
       let lineText = '';
       if (paperFlowRequest) {
-        const targetName = String(req.targetTeacherName || '').toLowerCase();
-        const peers = req.batchId
-          ? (requestsList.value || []).filter(r =>
-            r.batchId && r.batchId === req.batchId && isPaperFlowRequest(r)
-           && (!targetName || String(r.targetTeacherName || '').toLowerCase() === targetName)
-          ).sort((a, b) => {
-             const slotA = getLineHandledSlot(a);
-             const slotB = getLineHandledSlot(b);
-             if (slotA.date !== slotB.date) return String(slotA.date || '').localeCompare(String(slotB.date || ''));
-             return (parseInt(slotA.period, 10) || 0) - (parseInt(slotB.period, 10) || 0);
-          })
-          : [req];
-         const rows = peers.length ? peers : [req];
+         const rows = [req];
          const first = rows[0];
          const firstIsExchange = first.type === 'exchange' || first.type === '對調';
          const firstSlot = getLineHandledSlot(first);
@@ -2919,18 +2884,7 @@ createApp({
         }
         lineText = buildAskFirstLineText(askOptions);
       } else if (req.batchId && !isExchange) {
-        const targetEmail = String(req.targetTeacherEmail || '').toLowerCase();
-        const peers = (requestsList.value || []).filter(r =>
-          r.batchId && r.batchId === req.batchId &&
-           (r.status === 'pending_teacher' || r.status === req.status) &&
-           (!targetEmail || String(r.targetTeacherEmail || '').toLowerCase() === targetEmail)
-         ).sort((a, b) => {
-           const slotA = getLineHandledSlot(a);
-           const slotB = getLineHandledSlot(b);
-           if (slotA.date !== slotB.date) return String(slotA.date || '').localeCompare(String(slotB.date || ''));
-           return (parseInt(slotA.period, 10) || 0) - (parseInt(slotB.period, 10) || 0);
-        });
-         const slots = (peers.length ? peers : [req]).map(r => {
+         const slots = [req].map(r => {
            const slot = getLineHandledSlot(r);
            return {
              id: r.id,
@@ -3517,6 +3471,11 @@ createApp({
     };
     const reportWeeksCount = ref(loadAccountingWeeksSetting(reportMonth.value));
     const monthlyReportData = ref([]);
+    const monthlyReportTotals = computed(() =>
+      window.DomainBilling && typeof window.DomainBilling.sumMonthlyReportRows === 'function'
+        ? window.DomainBilling.sumMonthlyReportRows(monthlyReportData.value)
+        : {}
+    );
     const accountingPeriod = ref(
       window.ExportAccounting && window.ExportAccounting.loadPeriodSettings
         ? window.ExportAccounting.loadPeriodSettings(reportMonth.value)
@@ -8493,9 +8452,10 @@ createApp({
     const openPaperPrintForRequest = (request) => {
       if (!request) return false;
       const batchId = String(request.batchId || '').trim();
-      const requestPaperFlow = isPaperFlowRequest(request);
-      const rows = batchId
-        ? (requestsList.value || []).filter(r => r && isPaperFlowRequest(r) === requestPaperFlow && String(r.batchId || '').trim() === batchId)
+      const triangleId = String(request.triangleId || batchId).trim();
+      const rows = isTriangleRequest(request) && triangleId
+        ? (requestsList.value || []).filter(r => r && isTriangleRequest(r)
+          && String(r.triangleId || r.batchId || '').trim() === triangleId)
         : [];
       return openPaperPrintDraftForSubmittedRequests(rows.length ? rows : [request]);
     };
@@ -9401,9 +9361,9 @@ createApp({
       const currentTeacher = lookupTeacher(email);
       if (currentTeacher) {
         const raw = currentTeacher.role || 'teacher';
-        userRole.value = (window.FieldMap && window.FieldMap.normalizeRole)
-          ? window.FieldMap.normalizeRole(raw)
-          : raw;
+        userRole.value = (window.FieldMap && window.FieldMap.normalizeTeacherRole)
+          ? window.FieldMap.normalizeTeacherRole(raw, currentTeacher.jobTitle)
+          : ((window.FieldMap && window.FieldMap.normalizeRole) ? window.FieldMap.normalizeRole(raw) : raw);
         return true;
       }
       if (teachersList.value.length === 0) {
@@ -11022,6 +10982,7 @@ createApp({
     const showOvertimePlanModal = ref(false);
     const overtimePlanTeacher = ref(null);
     const overtimePlanRows = ref([]);
+    const overtimePlanPeriodEnd = ref('');
     const excelData = ref([]);
     const excelHeaders = ref([]);
     const mappingFields = ref({
@@ -11078,6 +11039,9 @@ createApp({
          showOvertimePlanModal,
          overtimePlanTeacher,
          overtimePlanRows,
+         overtimePlanPeriodEnd,
+         accountingPeriod,
+         reportMonth,
          accountingPlanOptions,
          excelData,
         excelHeaders,
@@ -11615,9 +11579,9 @@ createApp({
           photoURL: 'https://www.gstatic.com/images/branding/product/1x/avatar_circle_blue_512dp.png'
         };
         const raw = match.role || 'teacher';
-        userRole.value = (window.FieldMap && window.FieldMap.normalizeRole)
-          ? window.FieldMap.normalizeRole(raw)
-          : raw;
+        userRole.value = (window.FieldMap && window.FieldMap.normalizeTeacherRole)
+          ? window.FieldMap.normalizeTeacherRole(raw, match.jobTitle)
+          : ((window.FieldMap && window.FieldMap.normalizeRole) ? window.FieldMap.normalizeRole(raw) : raw);
         proxyTargetEmail.value = '';
         // 先用目前已載入的全量資料，依「被模擬者 Email」重算待辦／送出列表
         recomputeRequestBuckets();
@@ -11899,10 +11863,10 @@ createApp({
       adminSubTab,
       showImportTeachersModal, teacherExcelData, teacherExcelHeaders, teacherMappingFields, teacherImportPreview, runTeacherImportPreview, handleTeacherExcelChange, importTeachersBatch,
       isScheduleEditMode, showScheduleEditModal, scheduleForm,
-       showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows,
+        showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
-      reportMonth, reportWeeksCount, monthlyReportData,
+       reportMonth, reportWeeksCount, monthlyReportData, monthlyReportTotals,
       accountingPeriod, accountingExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,

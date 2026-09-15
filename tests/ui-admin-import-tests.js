@@ -17,6 +17,7 @@ require('../ui-admin.js');
 const ref = value => ({ value });
 let importPayload = null;
 const schedules = ref([]);
+const accountingPeriod = ref({ start: '2026-08-01', end: '2026-08-31' });
 const admin = window.UiAdmin.create({
   ref,
   callGasApi: async () => ({ count: 1 }),
@@ -32,6 +33,8 @@ const admin = window.UiAdmin.create({
   loadWeeklyData: async () => {},
   getTeacherNameByEmail: value => value,
   currentSemester: ref('S1'),
+  reportMonth: ref('2026-08'),
+  accountingPeriod,
   teachersList: ref([{ loginEmail: 'teacher@example.com', email: '教師', name: '教師' }]),
   allSchedules: schedules,
   leaveReasonOptions: [],
@@ -55,6 +58,16 @@ admin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師'
 assert.equal(admin.overtimePlanRows.value.length, 1, '登入 Email 與課表姓名鍵不同時仍應找到超鐘點課格');
 admin.overtimePlanRows.value[0].source = '校務自訂計畫';
 assert.ok(admin.getOvertimeExpenseSourceOptions().includes('校務自訂計畫'), '目前輸入的新計畫也應立即成為下拉建議');
+
+schedules.value = [
+  { teacherEmail: '教師', dayOfWeek: 1, period: 1, className: '700', attr: '一般', specialTags: '超鐘點', activeTo: '2026-07-31' },
+  { teacherEmail: '教師', dayOfWeek: 1, period: 2, className: '701', attr: '一般', specialTags: '超鐘點', activeFrom: '2026-08-01', activeTo: '2026-08-15' },
+  { teacherEmail: '教師', dayOfWeek: 1, period: 3, className: '702', attr: '一般', specialTags: '超鐘點', activeFrom: '2026-08-16' },
+  { teacherEmail: '教師', dayOfWeek: 1, period: 4, className: '703', attr: '一般', specialTags: '超鐘點', activeFrom: '2026-09-01' }
+];
+admin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師', name: '教師' });
+assert.deepEqual(admin.overtimePlanRows.value.map(row => row.className), ['702'], '來源設定應以結算最後一天判斷有效課程');
+assert.equal(admin.overtimePlanPeriodEnd.value, '2026-08-31');
 
 schedules.value = [{
   teacherEmail: '教師',

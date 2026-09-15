@@ -224,10 +224,10 @@ const combinedCandidates = findCombinedReturnCandidates({
   classData: { className: '音樂班' }
 });
 assert.equal(combinedCandidates.map(candidate => candidate.email).sort().join(','), 'invitee@school.example,unrelated@school.example', '併班代課候選人應依同節併班課列入，不應要求班名重疊');
-assert.match(indexSource, /app\.js\?v=20260915-paper-line-single-page/);
+  assert.match(indexSource, /app\.js\?v=20260915-overtime-period-end1/);
 assert.doesNotMatch(preview.documentHtml, /<script\b/i, '列印預覽 srcdoc 不應注入腳本');
-assert.doesNotMatch(appSource, /seedClassKey/, 'single-request batch printing should include the same recipient across classes');
-assert.match(appSource, /teacherKey\(record, 'actual'\) === targetKey/, 'single-request batch printing should group by recipient teacher');
+assert.doesNotMatch(appSource, /seedClassKey/, '列印預覽不應依舊版班級鍵擴展資料');
+assert.match(appSource, /const printSingleRequest = async \(req, formType = 'Notice'\)/, '單筆列印入口應存在');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
 assert.match(indexSource, /print-helper\.js\?v=20260915-single-page-confirm/);

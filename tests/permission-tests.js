@@ -13,6 +13,7 @@ const STAFF_EMAIL = 'staff@school.example';
 const TEACHER_EMAIL = 'teacher@school.example';
 const OWNER_EMAIL = 'owner@school.example';
 const INVITEE_EMAIL = 'invitee@school.example';
+const TEACHING_GROUP_EMAIL = 'teaching-group@school.example';
 const OUTSIDER_EMAIL = 'outsider@school.example';
 
 const teachers = [
@@ -20,7 +21,8 @@ const teachers = [
   { '學期代號': semesterId, '教師Email': STAFF_EMAIL, '教師姓名': '行政', '系統角色': 'staff' },
   { '學期代號': semesterId, '教師Email': TEACHER_EMAIL, '教師姓名': '教師', '系統角色': 'teacher' },
   { '學期代號': semesterId, '教師Email': OWNER_EMAIL, '教師姓名': '申請人', '系統角色': 'teacher' },
-  { '學期代號': semesterId, '教師Email': INVITEE_EMAIL, '教師姓名': '受邀人', '系統角色': 'teacher' }
+  { '學期代號': semesterId, '教師Email': INVITEE_EMAIL, '教師姓名': '受邀人', '系統角色': 'teacher' },
+  { '學期代號': semesterId, '教師Email': TEACHING_GROUP_EMAIL, '教師姓名': '教學組承辦', '職務': '教學組長', '系統角色': 'teacher' }
 ];
 
 let activeEmail = TEACHER_EMAIL;
@@ -87,14 +89,30 @@ global.LockService = {
 };
 
 vm.runInThisContext(fs.readFileSync(path.join(root, 'code.gs'), 'utf8'), { filename: 'code.gs' });
+global.window = global;
+vm.runInThisContext(fs.readFileSync(path.join(root, 'field-map.js'), 'utf8'), { filename: 'field-map.js' });
+assert.strictEqual(
+  window.FieldMap.mapTeacher({ '教師Email': TEACHING_GROUP_EMAIL, '職務': '教學組長', '系統角色': 'teacher' }).role,
+  'admin',
+  '前端教師資料也應將教學組職務解析為最高權限'
+);
+assert.strictEqual(
+  window.FieldMap.teacherToSheet({ email: TEACHING_GROUP_EMAIL, name: '教學組承辦', jobTitle: '教學組長', role: 'teacher' }, semesterId)['系統角色'],
+  'admin',
+  '儲存教師資料時應保留教學組最高權限'
+);
 
 // Replace external services and data access with deterministic fixtures.
 resetRequestContext_ = function () {};
 ensureInit_ = function () {};
 verifyGoogleIdToken = function () { return { email: activeEmail }; };
 getSemesterTeachersCached_ = function () { return teachers; };
-resolveIsAdmin_ = function (email) { return String(email).toLowerCase() === ADMIN_EMAIL; };
-resolveIsStaff_ = function (email) { return String(email).toLowerCase() === STAFF_EMAIL; };
+resolveIsAdmin_ = function (email, roster) {
+  return resolveTeacherRole_(email, roster || teachers) === 'admin';
+};
+resolveIsStaff_ = function (email, roster) {
+  return resolveTeacherRole_(email, roster || teachers) === 'staff';
+};
 canUserProxySubmit_ = function (email) { return proxyAllowed && String(email).toLowerCase() === STAFF_EMAIL; };
 beginDeferredMails_ = function () {};
 flushDeferredMails_ = function () {};
@@ -121,6 +139,7 @@ findRowByKey_ = function (sheet, key, id, sid) {
   return String(id) === String(requestRow['申請單ID']) ? requestRow : null;
 };
 buildSettingsMap_ = function () { return { onlineSubstitutionEnabled: onlineEnabled ? 'true' : 'false' }; };
+assert.strictEqual(resolveTeacherRole_(TEACHING_GROUP_EMAIL, teachers), 'admin', '教學組職務應解析為最高權限');
 sanitizeTeacherRowsForReader_ = function (rows) { return rows; };
 sanitizeSettingsForReader_ = function (settings) { return settings; };
 getTableData = function (sheet) { return sheet === '教師課表' ? scheduleRows : []; };
@@ -233,6 +252,17 @@ const authorizedStaffProxy = invoke({
 assert.strictEqual(authorizedStaffProxy.success, true);
 assert.strictEqual(persistedRows[0]['狀態'], 'pending_admin');
 assert.strictEqual(persistedRows[0]['代申請人Email'], STAFF_EMAIL);
+
+resetMutationState();
+const teachingGroupProxy = invoke({
+  email: TEACHING_GROUP_EMAIL,
+  action: 'submitRequest',
+  data: { request: makeRequest({
+    '申請單ID': 'req-teaching-group-proxy'
+  }) }
+});
+assert.strictEqual(teachingGroupProxy.success, true, '教學組應可代表他人送出申請');
+assert.strictEqual(persistedRows[0]['狀態'], 'pending_admin');
 
 proxyAllowed = false;
 resetMutationState();

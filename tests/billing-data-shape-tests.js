@@ -204,4 +204,36 @@ const defaultJobRow = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(defaultJobRow.jobTitle, '教師');
 assert.equal(window.DomainBilling.toExcelRows([defaultJobRow])[0]['職務'], '教師');
 
+const reportTotals = window.DomainBilling.sumMonthlyReportRows([
+  {
+    weeklyPeriods: 20, baseHours: 16, weeklyOvertime: 4, reduceDeduction: 1,
+    selfPaidDeduction: 2, publicOvertimeUsed: 3, substituteAdditionalDeduction: 1,
+    actualOvertime: -2, overtimeFee: -910, pubSubCount: 4, pubSubFee: 1820,
+    selfSubCount: 1, selfSubFee: 455, period8SubCount: 2, period8Fee: 1200
+  },
+  {
+    weeklyPeriods: 18, baseHours: 16, weeklyOvertime: 2, reduceDeduction: 0,
+    selfPaidDeduction: 1, publicOvertimeUsed: 0, substituteAdditionalDeduction: 2,
+    actualOvertime: 1, overtimeFee: 455, pubSubCount: 0, pubSubFee: 0,
+    selfSubCount: 2, selfSubFee: 910, period8SubCount: 1, period8Fee: 600
+  }
+]);
+assert.deepEqual(reportTotals, {
+  weeklyPeriods: 38,
+  baseHours: 32,
+  weeklyOvertime: 6,
+  reduceDeduction: 1,
+  selfPaidDeduction: 3,
+  publicOvertimeUsed: 3,
+  substituteAdditionalDeduction: 3,
+  actualOvertime: -1,
+  overtimeFee: -455,
+  pubSubCount: 4,
+  pubSubFee: 1820,
+  selfSubCount: 3,
+  selfSubFee: 1365,
+  period8SubCount: 3,
+  period8Fee: 1800
+});
+
 console.log('billing data shape tests PASS');

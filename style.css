@@ -2503,6 +2503,34 @@ body {
   color: #b45309;
   background: #fffbeb;
 }
+.billing-table .billing-total-row td {
+  font-weight: 700;
+  background: #f1f5f9;
+  border-top: 2px solid #cbd5e1;
+  border-bottom: 0;
+}
+.billing-table .billing-total-row .billing-sticky-name {
+  z-index: 2;
+  background: #e2e8f0;
+}
+.billing-table .billing-total-row td.num.result {
+  color: var(--color-primary);
+  background: #dbeafe;
+}
+.billing-table .billing-total-row td.num.result-p8 {
+  color: #92400e;
+  background: #fef3c7;
+}
+.billing-table tbody tr.billing-total-row:hover td,
+.billing-table tbody tr.billing-total-row:hover .billing-sticky-name {
+  background: #e2e8f0;
+}
+.billing-table tbody tr.billing-total-row:hover td.num.result {
+  background: #dbeafe;
+}
+.billing-table tbody tr.billing-total-row:hover td.num.result-p8 {
+  background: #fef3c7;
+}
 .billing-table .billing-th-job,
 .billing-table td.billing-job,
 .billing-table .billing-th-subject,

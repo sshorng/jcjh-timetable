@@ -193,6 +193,12 @@ window.FieldMap = (function () {
     return 'teacher';
   }
 
+  /** 教學組職務具最高權限；相容舊資料只填職務的教師列。 */
+  function normalizeTeacherRole(rawRole, jobTitle) {
+    if (String(jobTitle == null ? '' : jobTitle).trim().indexOf('教學組') >= 0) return 'admin';
+    return normalizeRole(rawRole || 'teacher');
+  }
+
   /**
    * 超鐘點經費配置共用格式：教師名單的單一儲存格存 JSON 陣列。
    * 舊資料若是一般文字，視為該教師所有超鐘點的單一來源。
@@ -411,6 +417,7 @@ window.FieldMap = (function () {
   function mapTeacher(t) {
     const loginEmail = String(pick(t, ['教師Email', 'loginEmail', 'email']) || '').trim().toLowerCase();
     const name = pick(t, ['教師姓名', 'teacherName', 'name']) || '';
+    const jobTitle = String(pick(t, ['職務', '職稱', 'jobTitle']) || '');
     return {
       loginEmail: loginEmail,
       // Email is retained only as the roster login field; domain keys use teacherName.
@@ -418,9 +425,9 @@ window.FieldMap = (function () {
       teacherName: name,
       name: name,
       subject: pick(t, ['授課科目', '任課科目', 'subject']) || '',
-      jobTitle: String(pick(t, ['職務', '職稱', 'jobTitle']) || ''),
+      jobTitle: jobTitle,
       expensePlan: String(pick(t, ['鐘點支出計畫', '鐘點支出來源', '支出計畫', '計畫', 'expensePlan', 'plan']) || '').trim(),
-      role: normalizeRole(pick(t, ['系統角色', 'role']) || 'teacher'),
+      role: normalizeTeacherRole(pick(t, ['系統角色', 'role']), jobTitle),
       baseHours: asInt(pick(t, ['基本鐘點', 'baseHours']), 16),
       // 折抵額度：釋出 1 節＝0.5；扣額度須滿 1 才扣 1
       mutualQuota: asFloat(pick(t, ['折抵額度', 'mutualQuota']), 0)
@@ -625,6 +632,7 @@ window.FieldMap = (function () {
   /** 前端 → Sheets：教師寫入列（同時寫入授課科目/任課科目別名，相容舊表頭） */
   function teacherToSheet(t, semesterId) {
     const subject = t.subject || t["授課科目"] || t["任課科目"] || '';
+    const jobTitle = t.jobTitle || t["職務"] || t["職稱"] || "";
     const rawExpensePlan = t.expensePlan !== undefined ? t.expensePlan
       : (t["鐘點支出計畫"] !== undefined ? t["鐘點支出計畫"]
         : (t["鐘點支出來源"] !== undefined ? t["鐘點支出來源"] : (t["計畫"] || "")));
@@ -639,9 +647,9 @@ window.FieldMap = (function () {
       "教師姓名": t.name || t["教師姓名"],
       "授課科目": subject,
       "任課科目": subject,
-      "職務": t.jobTitle || t["職務"] || t["職稱"] || "",
+      "職務": jobTitle,
       "鐘點支出計畫": expensePlan,
-      "系統角色": normalizeRole(t.role || t["系統角色"] || 'teacher'),
+      "系統角色": normalizeTeacherRole(t.role || t["系統角色"], jobTitle),
       "基本鐘點": (function () {
         if (t.baseHours === 0 || t.baseHours === '0') return 0;
         if (t.baseHours !== undefined && t.baseHours !== null && t.baseHours !== '') {
@@ -802,6 +810,7 @@ window.FieldMap = (function () {
     asInt,
     asFloat,
     normalizeRole,
+    normalizeTeacherRole,
     normalizeExpenseSource,
     expenseClassesOverlap,
     parseExpensePlan,

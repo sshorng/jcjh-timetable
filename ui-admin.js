@@ -23,6 +23,8 @@ window.UiAdmin = (function () {
     var historyEditForm = deps.historyEditForm;
     var showHistoryEditModal = deps.showHistoryEditModal;
     var requestsList = deps.requestsList;
+    var accountingPeriod = deps.accountingPeriod;
+    var reportMonth = deps.reportMonth;
 
     var executeOptimisticAction = deps.executeOptimisticAction || async function (opts) {
       opts = opts || {};
@@ -69,6 +71,7 @@ window.UiAdmin = (function () {
     var showOvertimePlanModal = useRef('showOvertimePlanModal', false);
     var overtimePlanTeacher = useRef('overtimePlanTeacher', null);
     var overtimePlanRows = useRef('overtimePlanRows', []);
+    var overtimePlanPeriodEnd = useRef('overtimePlanPeriodEnd', '');
     var accountingPlanOptions = deps.accountingPlanOptions || { value: [] };
 
     var excelData = useRef('excelData', []);
@@ -959,13 +962,71 @@ window.UiAdmin = (function () {
       return '';
     }
 
+    function normalizeExpensePlanDate(value) {
+      if (value === undefined || value === null || String(value).trim() === '') return '';
+      if (window.DomainSchedule && typeof window.DomainSchedule.normalizeScheduleDate === 'function') {
+        return window.DomainSchedule.normalizeScheduleDate(value);
+      }
+      var raw = String(value).trim().split(/[T ]/)[0].replace(/\//g, '-');
+      var match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (!match) return '';
+      var year = parseInt(match[1], 10);
+      var month = parseInt(match[2], 10);
+      var day = parseInt(match[3], 10);
+      var date = new Date(year, month - 1, day);
+      if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
+      return year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+    }
+
+    function refValue(value) {
+      return value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')
+        ? value.value : value;
+    }
+
+    function monthEndForExpensePlan(month) {
+      var match = String(month || '').trim().match(/^(\d{4})-(\d{2})$/);
+      if (!match) return '';
+      var date = new Date(parseInt(match[1], 10), parseInt(match[2], 10), 0);
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-'
+        + String(date.getDate()).padStart(2, '0');
+    }
+
+    function getOvertimePlanPeriodEnd() {
+      var configured = refValue(accountingPeriod) || {};
+      var end = normalizeExpensePlanDate(configured.end);
+      var month = String(refValue(reportMonth) || '').trim();
+      if (!end && window.ExportAccounting
+          && typeof window.ExportAccounting.loadPeriodSettings === 'function' && month) {
+        var saved = window.ExportAccounting.loadPeriodSettings(month) || {};
+        end = normalizeExpensePlanDate(saved.end);
+      }
+      return end || monthEndForExpensePlan(month);
+    }
+
+    function isScheduleActiveAtExpensePlanEnd(schedule, periodEnd) {
+      if (!periodEnd) return true;
+      var from = normalizeExpensePlanDate(schedule && (schedule.activeFrom || schedule['啟用起日']));
+      var to = normalizeExpensePlanDate(schedule && (schedule.activeTo || schedule['啟用迄日']));
+      if (from && to && from > to) return false;
+      if (from && from > periodEnd) return false;
+      if (to && to < periodEnd) return false;
+      return true;
+    }
+
+    function expensePlanSlotKey(row) {
+      return [row && row.day, row && row.period, String(row && row.className || '').trim()].join('|');
+    }
+
     function openOvertimePlanModal(teacher) {
       if (!teacher) return;
+      var periodEnd = getOvertimePlanPeriodEnd();
+      overtimePlanPeriodEnd.value = periodEnd;
       var rows = (allSchedules.value || []).filter(function (schedule) {
         var scheduleKeys = teacherIdentityKeys(schedule);
         return teacherIdentityKeys(teacher).some(function (key) {
           return scheduleKeys.indexOf(key) >= 0;
-        }) && (isOvertimeScheduleEntry(schedule) || isSubstituteScheduleEntry(schedule));
+        }) && (isOvertimeScheduleEntry(schedule) || isSubstituteScheduleEntry(schedule))
+          && isScheduleActiveAtExpensePlanEnd(schedule, periodEnd);
       }).slice().sort(function (a, b) {
         return (parseInt(a.dayOfWeek, 10) || 0) - (parseInt(b.dayOfWeek, 10) || 0)
           || (parseInt(a.period, 10) || 0) - (parseInt(b.period, 10) || 0)
@@ -993,7 +1054,7 @@ window.UiAdmin = (function () {
       var rows = overtimePlanRows.value || [];
       if (!teacher) return;
       // 空白來源代表預設經費；序列化時會略過未指定的課格。
-      var slots = rows.map(function (row) {
+      var visibleSlots = rows.map(function (row) {
         return {
           day: row.day,
           period: row.period,
@@ -1001,8 +1062,23 @@ window.UiAdmin = (function () {
           source: String(row.source || '').trim()
         };
       });
-      var serialized = window.FieldMap && window.FieldMap.serializeExpensePlanSlots
-        ? window.FieldMap.serializeExpensePlanSlots(slots) : JSON.stringify(slots);
+      var visibleKeys = {};
+      visibleSlots.forEach(function (slot) { visibleKeys[expensePlanSlotKey(slot)] = true; });
+      var existingPlan = teacher.expensePlan !== undefined
+        ? teacher.expensePlan
+        : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || '');
+      var parsedPlan = window.FieldMap && window.FieldMap.parseExpensePlan
+        ? window.FieldMap.parseExpensePlan(existingPlan) : null;
+      // 期間外的歷史課格不顯示，但保留其來源設定供舊結算期間回查。
+      var historicalSlots = parsedPlan && parsedPlan.mode === 'slots'
+        ? parsedPlan.slots.filter(function (slot) { return !visibleKeys[expensePlanSlotKey(slot)]; })
+        : [];
+      var slots = historicalSlots.concat(visibleSlots);
+      var serialized = !visibleSlots.length && parsedPlan
+        && (parsedPlan.mode === 'legacy' || parsedPlan.mode === 'invalid')
+        ? String(existingPlan || '').trim()
+        : (window.FieldMap && window.FieldMap.serializeExpensePlanSlots
+          ? window.FieldMap.serializeExpensePlanSlots(slots) : JSON.stringify(slots));
       var quota = parseFloat(teacher.mutualQuota);
       var reqPayload = {
         '教師Email': teacher.loginEmail || teacher['教師Email'] || teacher.email,
@@ -1441,18 +1517,17 @@ window.UiAdmin = (function () {
           }
           baseHours = rawVal;
         }
+        var rawRole = teacherMappingFields.value.role &&
+          row[teacherMappingFields.value.role] !== undefined
+          ? String(row[teacherMappingFields.value.role]).trim() : '';
         var role = 'teacher';
-        if (teacherMappingFields.value.role &&
-            row[teacherMappingFields.value.role] !== undefined) {
-          var rawRole = String(row[teacherMappingFields.value.role]).trim();
-          if (window.FieldMap && window.FieldMap.normalizeRole) {
-            role = window.FieldMap.normalizeRole(rawRole);
-          } else if (rawRole.indexOf('管理') >= 0 || rawRole.indexOf('主管') >= 0 ||
-              rawRole.indexOf('教學組') >= 0 || rawRole.toLowerCase() === 'admin') {
-            role = 'admin';
-          } else if (rawRole.indexOf('行政') >= 0 || rawRole.toLowerCase() === 'staff') {
-            role = 'staff';
-          }
+        if (window.FieldMap && window.FieldMap.normalizeTeacherRole) {
+          role = window.FieldMap.normalizeTeacherRole(rawRole, jobTitle);
+        } else if (rawRole.indexOf('管理') >= 0 || rawRole.indexOf('主管') >= 0 ||
+            rawRole.indexOf('教學組') >= 0 || rawRole.toLowerCase() === 'admin') {
+          role = 'admin';
+        } else if (rawRole.indexOf('行政') >= 0 || rawRole.toLowerCase() === 'staff') {
+          role = 'staff';
         }
          var exists = (teachersList.value || []).some(function (t) {
            return (t.loginEmail || '').toLowerCase() === email;
@@ -1911,6 +1986,7 @@ window.UiAdmin = (function () {
       showOvertimePlanModal: showOvertimePlanModal,
       overtimePlanTeacher: overtimePlanTeacher,
       overtimePlanRows: overtimePlanRows,
+      overtimePlanPeriodEnd: overtimePlanPeriodEnd,
       getOvertimeExpenseSourceOptions: getOvertimeExpenseSourceOptions,
       openOvertimePlanModal: openOvertimePlanModal,
       saveOvertimePlan: saveOvertimePlan,

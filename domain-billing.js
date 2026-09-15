@@ -1243,6 +1243,24 @@ window.DomainBilling = (function () {
     });
   }
 
+  function sumMonthlyReportRows(reportRows) {
+    var fields = [
+      'weeklyPeriods', 'baseHours', 'weeklyOvertime', 'reduceDeduction',
+      'selfPaidDeduction', 'publicOvertimeUsed', 'substituteAdditionalDeduction',
+      'actualOvertime', 'overtimeFee', 'pubSubCount', 'pubSubFee',
+      'selfSubCount', 'selfSubFee', 'period8SubCount', 'period8Fee'
+    ];
+    var totals = {};
+    fields.forEach(function (field) { totals[field] = 0; });
+    (reportRows || []).forEach(function (row) {
+      fields.forEach(function (field) {
+        var value = Number(row && row[field]);
+        if (isFinite(value)) totals[field] += value;
+      });
+    });
+    return totals;
+  }
+
   /** 第8節明細（匯出用） */
   function toPeriod8ExcelRows(opts) {
     var p8 = buildPeriod8Payout(opts);
@@ -1485,6 +1503,7 @@ window.DomainBilling = (function () {
     buildPeriod8Payout: buildPeriod8Payout,
     buildMonthlyReportRows: buildMonthlyReportRows,
     toExcelRows: toExcelRows,
+    sumMonthlyReportRows: sumMonthlyReportRows,
     toPeriod8ExcelRows: toPeriod8ExcelRows,
     buildSubFeeExcelWorkbook: buildSubFeeExcelWorkbook
   };

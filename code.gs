@@ -117,6 +117,14 @@ function normalizeRole_(raw) {
   return "teacher";
 }
 
+/** 教學組職務具最高權限；相容舊資料只填職務、系統角色仍為 teacher 的情況。 */
+function normalizeTeacherRole_(teacher) {
+  var rawRole = teacher && (teacher["系統角色"] != null ? teacher["系統角色"] : teacher.role);
+  var title = teacher && (teacher["職務"] != null ? teacher["職務"] : teacher.jobTitle);
+  if (String(title == null ? "" : title).trim().indexOf("教學組") >= 0) return "admin";
+  return normalizeRole_(rawRole || "teacher");
+}
+
 function resolveTeacherRole_(userEmail, teachers) {
   var email = String(userEmail || "").trim().toLowerCase();
   var supers = getSuperAdminEmails_();
@@ -129,7 +137,7 @@ function resolveTeacherRole_(userEmail, teachers) {
     return String(t["教師Email"] || t.email || t.loginEmail || "").trim().toLowerCase() === email;
   });
   if (!currentTeacher) return "";
-  return normalizeRole_(currentTeacher["系統角色"] || currentTeacher.role || "teacher");
+  return normalizeTeacherRole_(currentTeacher);
 }
 
 function resolveIsAdmin_(userEmail, teachers) {
@@ -2192,7 +2200,7 @@ function slimTeacherRows_(rows, fallbackSemesterId) {
       "授課科目": t["授課科目"] || t["任課科目"] || t.subject || "",
       "職務": t["職務"] || t.jobTitle || "",
       "鐘點支出計畫": t["鐘點支出計畫"] || t["鐘點支出來源"] || t["支出計畫"] || t["計畫"] || t.expensePlan || t.plan || "",
-      "系統角色": normalizeRole_(t["系統角色"] || t.role || "teacher"),
+      "系統角色": normalizeTeacherRole_(t),
       "基本鐘點": t["基本鐘點"] != null && t["基本鐘點"] !== "" ? t["基本鐘點"] : (t.baseHours != null ? t.baseHours : 16),
       "折抵額度": t["折抵額度"] != null && t["折抵額度"] !== "" ? t["折抵額度"] : (t.mutualQuota != null ? t.mutualQuota : 0)
     };
@@ -2210,7 +2218,7 @@ function sanitizeTeacherRowsForReader_(rows, readerEmail, isAdmin, isStaff) {
       "教師姓名": t["教師姓名"] || "",
       "授課科目": t["授課科目"] || "",
       // 行政需要角色來顯示授權對象；一般教師一律視為普通教師。
-      "系統角色": isStaff ? normalizeRole_(t["系統角色"] || "teacher") : "teacher",
+      "系統角色": isStaff ? normalizeTeacherRole_(t) : "teacher",
       "目前登入者": String(t["教師Email"] || "").toLowerCase().trim() === me
     };
   });
@@ -2572,7 +2580,7 @@ function homeroomNormalizeRange_(raw) {
 }
 
 function homeroomDefaultTime_(teacher) {
-  var role = normalizeRole_(teacher && (teacher["系統角色"] || teacher.role || ""));
+  var role = normalizeTeacherRole_(teacher);
   if (role === "admin" || role === "staff") {
     return { type: "全天", range: "08:00~17:00" };
   }
@@ -6367,8 +6375,9 @@ function doPost(e) {
       if (oldTeacher && nameKeyNorm_(nameKeyTeacherName_(oldTeacher)) !== nameKeyNorm_(reqData["教師姓名"])) {
         renameTeacherNameKey_(semesterId, nameKeyTeacherName_(oldTeacher), reqData["教師姓名"]);
       }
-      if (reqData["系統角色"] != null || reqData.role != null) {
-        reqData["系統角色"] = normalizeRole_(reqData["系統角色"] != null ? reqData["系統角色"] : reqData.role);
+      if (reqData["系統角色"] != null || reqData.role != null
+          || reqData["職務"] != null || reqData.jobTitle != null) {
+        reqData["系統角色"] = normalizeTeacherRole_(reqData);
       }
       saveRows("教師名單", [reqData], "教師Email");
       invalidateScheduleCaches_(semesterId);
@@ -6389,8 +6398,8 @@ function doPost(e) {
         t["教師Email"] = normalizeEmail_(t["教師Email"] || t.email, "教師 Email");
         t["教師姓名"] = nameKeyText_(t["教師姓名"] || t.name);
         if (!t["教師姓名"]) throw new Error("教師姓名不可空白");
-        if (t["系統角色"] != null || t.role != null) {
-          t["系統角色"] = normalizeRole_(t["系統角色"] != null ? t["系統角色"] : t.role);
+        if (t["系統角色"] != null || t.role != null || t["職務"] != null || t.jobTitle != null) {
+          t["系統角色"] = normalizeTeacherRole_(t);
         }
         return t;
       });
@@ -7188,7 +7197,7 @@ function doPost(e) {
         // 只保留目前角色為 staff 的 Email
         var staffSet = {};
         (teachers || []).forEach(function (t) {
-          if (normalizeRole_(t["系統角色"] || t.role) === "staff") {
+          if (normalizeTeacherRole_(t) === "staff") {
             var te = String(t["教師Email"] || t.email || "").toLowerCase();
             if (te) staffSet[te] = 1;
           }
