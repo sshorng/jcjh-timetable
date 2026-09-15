@@ -47,6 +47,26 @@ const request = window.FieldMap.mapRequest({
 });
 assert.equal(request.requestDate, '2026-07-13');
 
+const courseAdjustmentRequest = window.FieldMap.mapRequest({
+  '請假事由': '事假',
+  '僅課務調整': '是'
+});
+assert.equal(courseAdjustmentRequest.courseAdjustmentOnly, true, '僅課務調整欄位應正規化為 true');
+
+const mentorWorkbook = window.DomainBilling.buildSubFeeExcelWorkbook({
+  reportMonth: '2026-07',
+  substitutionRecords: [
+    { requestId: 'req-course-only', date: '2026-07-13', reason: '課務調整', status: 'approved' },
+    { requestId: 'req-normal', date: '2026-07-14', reason: '事假', status: 'approved' }
+  ],
+  homeroomRecords: [
+    { sourceRequestId: 'req-course-only', date: '2026-07-13', actualTeacherEmail: 'Cover', actualTeacherName: 'Cover', originalTeacherName: '701導師', className: '701', status: 'assigned' },
+    { sourceRequestId: 'req-normal', date: '2026-07-14', actualTeacherEmail: 'Cover2', actualTeacherName: 'Cover2', originalTeacherName: '702導師', className: '702', status: 'assigned' }
+  ]
+});
+assert.equal(mentorWorkbook.mentorAoa.length, 3, '月度代導清冊應排除僅課務調整並保留一般代導');
+assert.equal(mentorWorkbook.mentorAoa[2][6], 'Cover2', '月度代導清冊仍應保留一般代導教師');
+
 const row = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'Billing', name: 'Billing', baseHours: 0 }],
   allSchedules: [schedule],

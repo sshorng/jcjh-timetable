@@ -69,6 +69,26 @@ assert.deepEqual(teacherOrder.sheets.publicSub.map(row => row.name), ['Zeta', 'A
 assert.deepEqual(teacherOrder.sheets.selfSub.map(row => row.actualName), ['Zeta', 'Alpha'], '自付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.mentor.map(row => row.actualName), ['Zeta', 'Alpha'], '代導明細應依教師名單排序');
 
+const courseAdjustmentMentor = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  periods: { mentor: period },
+  teachers: [
+    { email: 'cover@x', name: 'Cover', baseHours: 16 },
+    { email: 'cover2@x', name: 'Cover2', baseHours: 16 }
+  ],
+  allSchedules: [],
+  substitutionRecords: [
+    { requestId: 'req-course-only', date: '2026-07-03', reason: '課務調整', status: 'approved' },
+    { requestId: 'req-normal', date: '2026-07-04', reason: '事假', status: 'approved' }
+  ],
+  homeroomRecords: [
+    { sourceRequestId: 'req-course-only', date: '2026-07-03', actualTeacherEmail: 'cover@x', actualTeacherName: 'Cover', className: '701', status: 'assigned' },
+    { sourceRequestId: 'req-normal', date: '2026-07-04', actualTeacherEmail: 'cover2@x', actualTeacherName: 'Cover2', className: '702', status: 'assigned' }
+  ]
+});
+assert.equal(courseAdjustmentMentor.sheets.mentor.length, 1, '僅課務調整不應列入代導鐘點費');
+assert.equal(courseAdjustmentMentor.sheets.mentor[0].actualName, 'Cover2', '一般代導仍應列入代導鐘點費');
+
 const publicOvertime = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
   originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'

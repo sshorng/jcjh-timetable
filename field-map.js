@@ -56,6 +56,14 @@ window.FieldMap = (function () {
     return s === 'true' || s === '1' || s === '是' || s === '紙本';
   }
 
+  function isCourseAdjustmentOnly(row) {
+    const raw = pick(row, ['僅課務調整', 'courseAdjustmentOnly']);
+    if (raw === true || raw === 1) return true;
+    const normalized = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes') return true;
+    return String(pick(row, ['請假事由', 'reason']) || '').trim() === '課務調整';
+  }
+
   function asInt(v, fallback) {
     // 明確允許 0（基本鐘點打 0 就是 0，不可被預設蓋掉）
     if (v === undefined || v === null || v === '') return fallback;
@@ -510,6 +518,7 @@ window.FieldMap = (function () {
       printed: asBool(pick(sub, ['是否已印', 'printed'])),
       subFee: pick(sub, ['經費來源', 'subFee']) || '',
       reason: pick(sub, ['請假事由', 'reason']) || '',
+      courseAdjustmentOnly: isCourseAdjustmentOnly(sub),
       note: pick(sub, ['備註', 'note']) || '',
       leaveTimeType: pick(sub, ['請假時間類型', 'leaveTimeType']) || '',
       leaveTime: pick(sub, ['請假時間', 'leaveTime', 'timeRange']) || '',
@@ -590,6 +599,7 @@ window.FieldMap = (function () {
       targetSubject: pick(r, ['對調目標科目', 'targetSubject']) || '',
       subFee: pick(r, ['經費來源', 'subFee']) || '',
       reason: pick(r, ['請假事由', 'reason']) || '',
+      courseAdjustmentOnly: isCourseAdjustmentOnly(r),
       leaveTimeType: pick(r, ['請假時間類型', 'leaveTimeType']) || '',
       leaveTime: pick(r, ['請假時間', 'leaveTime', 'timeRange']) || '',
       note: pick(r, ['備註', 'note']) || '',
@@ -807,6 +817,7 @@ window.FieldMap = (function () {
     SPECIAL_FLOW_COMBINED_RETURN_LABEL,
     pick,
     asBool,
+    isCourseAdjustmentOnly,
     asInt,
     asFloat,
     normalizeRole,

@@ -627,6 +627,37 @@
     return String(record && (record.reason || record['請假事由']) || '').trim();
   }
 
+  function isCourseAdjustmentOnlyRecord(record) {
+    if (root.FieldMap && typeof root.FieldMap.isCourseAdjustmentOnly === 'function') {
+      return root.FieldMap.isCourseAdjustmentOnly(record);
+    }
+    var raw = record && (record.courseAdjustmentOnly !== undefined
+      ? record.courseAdjustmentOnly : record['僅課務調整']);
+    var normalized = String(raw == null ? '' : raw).trim().toLowerCase();
+    return raw === true || raw === 1
+      || normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes'
+      || reason(record) === '課務調整';
+  }
+
+  function sourceRequestIds(record) {
+    return String(record && (record.sourceRequestId || record['來源申請單ID']) || '')
+      .split(/[,，;；\s]+/)
+      .map(function (value) { return String(value || '').trim(); })
+      .filter(Boolean);
+  }
+
+  function homeroomIsCourseAdjustmentOnly(record, substitutionRecords) {
+    if (isCourseAdjustmentOnlyRecord(record)) return true;
+    var ids = sourceRequestIds(record);
+    if (!ids.length) return false;
+    var matched = (substitutionRecords || []).filter(function (request) {
+      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
+      return requestId && ids.indexOf(requestId) >= 0;
+    });
+    return matched.length === ids.length && matched.length > 0
+      && matched.every(isCourseAdjustmentOnlyRecord);
+  }
+
   function isCombinedReturnRecord(record) {
     var raw = record && record.specialFlow;
     if (String(raw == null ? '' : raw).trim() === '') raw = record && record['特殊流程'];
@@ -1249,7 +1280,8 @@
   function mentorRows(opts, period) {
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     return (opts.homeroomRecords || []).filter(function (r) {
-      return isActiveHomeroom(r) && r.actualTeacherEmail && dateInPeriod(r.date, period);
+      return !homeroomIsCourseAdjustmentOnly(r, opts.substitutionRecords)
+        && isActiveHomeroom(r) && r.actualTeacherEmail && dateInPeriod(r.date, period);
     }).sort(function (a, b) {
       return compareTeacherOrder(teacherOrder,
         { email: a.actualTeacherEmail, name: a.actualTeacherName },

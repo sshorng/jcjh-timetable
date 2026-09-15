@@ -2622,6 +2622,16 @@ function homeroomRequestType_(row) {
   return String(translateTypeToEn(row && (row["異動類型"] || row.type) || "") || "").trim().toLowerCase();
 }
 
+function homeroomRequestIsCourseAdjustmentOnly_(row) {
+  if (!row) return false;
+  var raw = row["僅課務調整"];
+  if (raw === undefined || raw === null || String(raw).trim() === "") raw = row.courseAdjustmentOnly;
+  if (raw === true || raw === 1) return true;
+  var normalized = String(raw == null ? "" : raw).trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "是" || normalized === "yes") return true;
+  return String(row["請假事由"] || row.reason || "").trim() === "課務調整";
+}
+
 function homeroomRequestStatus_(row) {
   return String(translateStatusToEn(row && (row["狀態"] || row.status) || "") || "").trim().toLowerCase();
 }
@@ -2634,7 +2644,7 @@ function getSemesterHomeroomRecords_(semesterId) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」即建立；不看原代課經費與假別。
+ * 規則：請假教師職務含「導師」且不是僅課務調整才建立；不看原代課經費。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function extractHomeroomClass_(teacher, fallbackClassName) {
@@ -2646,7 +2656,7 @@ function extractHomeroomClass_(teacher, fallbackClassName) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」即建立；不看原代課經費與假別。
+ * 規則：請假教師職務含「導師」且不是僅課務調整才建立；不看原代課經費。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
@@ -2674,6 +2684,7 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
   var eligible = status === "approved"
     && type === "substitution"
     && !!sid && !!rid && !!leaveEmail && !!dateStr
+    && !homeroomRequestIsCourseAdjustmentOnly_(requestRow)
     && isHomeroomTeacher_(sid, leaveEmail);
 
   if (!eligible) {

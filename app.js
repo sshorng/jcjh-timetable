@@ -879,6 +879,7 @@ createApp({
             reason: req.reason,
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',
+            courseAdjustmentOnly: !!req.courseAdjustmentOnly,
             note: req.note,
             specialFlow: req.specialFlow || '',
             isEmptySlotAssign: emptyAssign

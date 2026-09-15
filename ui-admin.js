@@ -979,7 +979,7 @@ window.UiAdmin = (function () {
     }
 
     function refValue(value) {
-      return value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')
+      return value && typeof value === 'object' && 'value' in value
         ? value.value : value;
     }
 

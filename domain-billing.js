@@ -9,6 +9,38 @@ window.DomainBilling = (function () {
   var FEE_OVERTIME = 455;
   var FEE_8TH = 600;
 
+  function isCourseAdjustmentOnlyRecord(record) {
+    if (window.FieldMap && typeof window.FieldMap.isCourseAdjustmentOnly === 'function') {
+      return window.FieldMap.isCourseAdjustmentOnly(record);
+    }
+    var raw = record && (record.courseAdjustmentOnly !== undefined
+      ? record.courseAdjustmentOnly : record['僅課務調整']);
+    var normalized = String(raw == null ? '' : raw).trim().toLowerCase();
+    var reason = String(record && (record.reason || record['請假事由']) || '').trim();
+    return raw === true || raw === 1
+      || normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes'
+      || reason === '課務調整';
+  }
+
+  function homeroomSourceRequestIds(record) {
+    return String(record && (record.sourceRequestId || record['來源申請單ID']) || '')
+      .split(/[,，;；\s]+/)
+      .map(function (value) { return String(value || '').trim(); })
+      .filter(Boolean);
+  }
+
+  function homeroomIsCourseAdjustmentOnly(record, substitutionRecords) {
+    if (isCourseAdjustmentOnlyRecord(record)) return true;
+    var ids = homeroomSourceRequestIds(record);
+    if (!ids.length) return false;
+    var matched = (substitutionRecords || []).filter(function (request) {
+      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
+      return requestId && ids.indexOf(requestId) >= 0;
+    });
+    return matched.length === ids.length && matched.length > 0
+      && matched.every(isCourseAdjustmentOnlyRecord);
+  }
+
   function getWeekKey(dateStr) {
     var d = new Date(String(dateStr).replace(/-/g, '/'));
     var dow = d.getDay();
@@ -1324,6 +1356,7 @@ window.DomainBilling = (function () {
     var monthHomeroomRecords = (homeroomRecords || []).filter(function (r) {
       if (!r || !r.date || !r.actualTeacherEmail) return false;
       if (r.enabled === false || String(r.status || '').toLowerCase() === 'cancelled') return false;
+      if (homeroomIsCourseAdjustmentOnly(r, substitutionRecords)) return false;
       var rDate = String(r.date).replace(/\//g, '-');
       return rDate.indexOf(monthPrefix) === 0;
     }).map(function (r) {

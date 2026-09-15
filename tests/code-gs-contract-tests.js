@@ -105,6 +105,19 @@ assert.throws(() => flowContext.validateCombinedReturnRequest_(Object.assign({},
   '受邀人Email': ''
 })), /請指定同節併班代課教師/);
 
+const homeroomCourseOnlyStart = source.indexOf('function homeroomRequestIsCourseAdjustmentOnly_');
+const homeroomCourseOnlyEnd = source.indexOf('function homeroomRequestStatus_', homeroomCourseOnlyStart);
+assert.ok(homeroomCourseOnlyStart >= 0 && homeroomCourseOnlyEnd > homeroomCourseOnlyStart, 'homeroom course adjustment helper must remain discoverable');
+const homeroomCourseContext = { String };
+vm.createContext(homeroomCourseContext);
+vm.runInContext(source.slice(homeroomCourseOnlyStart, homeroomCourseOnlyEnd), homeroomCourseContext, { filename: 'code.gs.homeroom-course-only' });
+assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '僅課務調整': '是', '請假事由': '事假' }), true);
+assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '請假事由': '課務調整' }), true);
+assert.equal(homeroomCourseContext.homeroomRequestIsCourseAdjustmentOnly_({ '請假事由': '事假' }), false);
+const homeroomSyncStart = source.indexOf('function syncHomeroomRecordForRequest_');
+const homeroomSyncEnd = source.indexOf('function getSemesterTeachersCached_', homeroomSyncStart);
+assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /!homeroomRequestIsCourseAdjustmentOnly_\(requestRow\)/, '代導同步不得建立僅課務調整紀錄');
+
 const start = source.indexOf('function _resolveExchangeSides_');
 const end = source.indexOf('function _googleCalendarUrl_', start);
 assert.ok(start >= 0 && end > start, 'exchange notification helpers must remain discoverable');

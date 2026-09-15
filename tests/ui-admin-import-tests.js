@@ -69,6 +69,28 @@ admin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師'
 assert.deepEqual(admin.overtimePlanRows.value.map(row => row.className), ['702'], '來源設定應以結算最後一天判斷有效課程');
 assert.equal(admin.overtimePlanPeriodEnd.value, '2026-08-31');
 
+const vueLikeReportMonth = Object.create({ get value() { return '2026-09'; } });
+const vueLikeAccountingPeriod = Object.create({ get value() { return {}; } });
+const vueRefAdmin = window.UiAdmin.create({
+  ref,
+  callGasApi: async () => ({ count: 1 }),
+  showToast: () => {},
+  showConfirm: async () => true,
+  loading: ref(false),
+  loadingMessage: ref(''),
+  currentSemester: ref('S1'),
+  reportMonth: vueLikeReportMonth,
+  accountingPeriod: vueLikeAccountingPeriod,
+  teachersList: ref([]),
+  allSchedules: ref([]),
+  leaveReasonOptions: [],
+  historyEditForm: ref({}),
+  showHistoryEditModal: ref(false),
+  requestsList: ref([])
+});
+vueRefAdmin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師', name: '教師' });
+assert.equal(vueRefAdmin.overtimePlanPeriodEnd.value, '2026-09-30', '應讀取 Vue ref 原型上的月份值');
+
 schedules.value = [{
   teacherEmail: '教師',
   teacherName: '教師',
