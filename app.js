@@ -3535,18 +3535,19 @@ createApp({
     const isScheduleEditMode = ref(false);
     // 月底報表統計：日期區間是唯一設定，週數由區間自動計算。
     const reportMonth = ref(new Date().toISOString().slice(0, 7));
+    const accountingPeriodMonth = ref(reportMonth.value);
     const monthEndDate = (month) => {
       const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
       if (!match) return '';
       const date = new Date(Number(match[1]), Number(match[2]), 0);
       return `${match[1]}-${match[2]}-${String(date.getDate()).padStart(2, '0')}`;
     };
-    const defaultReportPeriod = {
-      start: `${reportMonth.value}-01`,
-      end: monthEndDate(reportMonth.value)
-    };
+    const defaultReportPeriod = window.DateUtils && typeof window.DateUtils.getAccountingPeriodForMonth === 'function'
+      ? window.DateUtils.getAccountingPeriodForMonth(reportMonth.value)
+      : { start: `${reportMonth.value}-01`, end: monthEndDate(reportMonth.value) };
     const reportStartDate = ref(defaultReportPeriod.start);
     const reportEndDate = ref(defaultReportPeriod.end);
+    let accountingPeriodNavigation = false;
     const accountingPeriod = computed(() => ({
       start: reportStartDate.value,
       end: reportEndDate.value
@@ -3565,14 +3566,33 @@ createApp({
     );
     const accountingExportLoading = ref(false);
     watch([reportStartDate, reportEndDate], ([start, end]) => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) {
+      if (!accountingPeriodNavigation && /^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) {
         reportMonth.value = String(start).slice(0, 7);
+        accountingPeriodMonth.value = reportMonth.value;
       }
       if (window.ExportAccounting && typeof window.ExportAccounting.savePeriodSettings === 'function'
           && reportWeeksCount.value > 0) {
         window.ExportAccounting.savePeriodSettings(reportMonth.value, { start: start, end: end });
       }
     });
+    const shiftReportPeriod = (direction) => {
+      if (!window.DateUtils || typeof window.DateUtils.shiftMonthKey !== 'function'
+          || typeof window.DateUtils.shiftAccountingPeriod !== 'function') return;
+      const targetMonth = window.DateUtils.shiftMonthKey(accountingPeriodMonth.value, direction);
+      const nextPeriod = window.DateUtils.shiftAccountingPeriod({
+        start: reportStartDate.value,
+        end: reportEndDate.value
+      }, targetMonth, direction);
+      if (!targetMonth || !nextPeriod.start || !nextPeriod.end) return;
+      accountingPeriodNavigation = true;
+      accountingPeriodMonth.value = targetMonth;
+      reportMonth.value = targetMonth;
+      reportStartDate.value = nextPeriod.start;
+      reportEndDate.value = nextPeriod.end;
+      nextTick(() => {
+        accountingPeriodNavigation = false;
+      });
+    };
 
     // 行政直接審核生效開關
     const directApproveMode = ref(true);
@@ -11891,7 +11911,7 @@ createApp({
         showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
-        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals,
+        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals, shiftReportPeriod,
       accountingPeriod, accountingExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,

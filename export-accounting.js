@@ -271,6 +271,11 @@
     return plan === '未分配' ? '預設' : plan;
   }
 
+  function outputExpensePlan(value) {
+    var plan = normalizeExpensePlan(value);
+    return !plan || plan === '預設' ? '國教' : plan;
+  }
+
   function teacherExpensePlan(teacher) {
     return normalizeExpensePlan(teacher && (
       teacher.expensePlan || teacher['鐘點支出計畫'] || teacher['鐘點支出來源']
@@ -325,7 +330,7 @@
   }
 
   function planLabel(value) {
-    return normalizeExpensePlan(value) || '預設';
+    return outputExpensePlan(value);
   }
 
   function titleFor(config, reportMonth, period, expensePlan) {
@@ -333,7 +338,7 @@
     var range = rangeLabel(period);
     var suffix = config.titleSuffix;
     if (config.key === 'overtime') {
-      var plan = normalizeExpensePlan(expensePlan);
+      var plan = outputExpensePlan(expensePlan);
       suffix = plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊';
     }
     if (config.key === 'substituteAttribute') {
@@ -346,7 +351,7 @@
   }
 
   function safeSheetPart(value) {
-    return normalizeExpensePlan(value).replace(/[\\/:*?\[\]]/g, '-').trim();
+    return outputExpensePlan(value).replace(/[\\/:*?\[\]]/g, '-').trim();
   }
 
   function sheetName(config, reportMonth, period, expensePlan) {
@@ -355,7 +360,7 @@
     var b = dateObj(period.end);
     var prefix = rocYear(parts.year) + '.' + (a ? (a.getMonth() + 1) : parts.month) + '.' + (a ? a.getDate() : 1)
       + '-' + (b ? (b.getMonth() + 1) : parts.month) + '.' + (b ? b.getDate() : 31);
-    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute') && normalizeExpensePlan(expensePlan)
+    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute') && outputExpensePlan(expensePlan)
       ? '-' + safeSheetPart(expensePlan)
       : '';
     var name = prefix + config.suffix + planSuffix;
@@ -1093,7 +1098,7 @@
     var allocations = Array.isArray(source && source.expensePlanAllocations)
       ? source.expensePlanAllocations : [];
     var matches = allocations.filter(function (allocation) {
-      return planLabel(allocation && allocation.source) === expectedPlan;
+      return normalizeExpensePlan(allocation && allocation.source) === expectedPlan;
     });
     if (matches.length) {
       return matches.map(function (allocation) {
@@ -1126,7 +1131,7 @@
         var t = teacherFromMap(teacherMap, sourceRow.email, sourceRow.name);
         var sourcePlan = allocation
           ? planLabel(allocation.source)
-          : normalizeExpensePlan(sourceRow.expensePlan || sourceRow['鐘點支出計畫'] || sourceRow.plan);
+          : outputExpensePlan(sourceRow.expensePlan || sourceRow['鐘點支出計畫'] || sourceRow.plan);
         var adjunct = isAdjunctTeacher(t);
         if (config.key === 'adjunct' ? !adjunct : adjunct) return;
         var title = teacherTitle(t) || (adjunct ? '兼課教師' : '教師');
@@ -1134,7 +1139,7 @@
         var chargedItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
         if (chargedItems) {
           chargedItems = config.key === 'overtime' && expectedPlan
-            ? chargedItems.filter(function (item) { return planLabel(item.plan) === expectedPlan; })
+            ? chargedItems.filter(function (item) { return normalizeExpensePlan(item.plan) === expectedPlan; })
             : chargedItems.slice();
         }
         var chargedRecordsForSource = chargedItems
@@ -1289,8 +1294,8 @@
       bySource[group.source].push(group);
     });
     return Object.keys(bySource).sort(function (left, right) {
-      if (left === '預設') return -1;
-      if (right === '預設') return 1;
+      if (left === '國教') return -1;
+      if (right === '國教') return 1;
       return left.localeCompare(right, 'zh-Hant', { numeric: true });
     }).map(function (source) {
       var rows = bySource[source].sort(function (left, right) {
@@ -1436,8 +1441,9 @@
     planKeys.forEach(function (plan) {
       var rows = buildSummaryRows(overtimeConfig, opts, overtimePeriod, plan, chargedMap, schoolSwapIndex);
       if (!rows.length) return;
-      data.overtimePlans.push({ plan: plan, rows: rows });
-      summaryFor('overtime:' + plan, '超鐘點-' + plan, rows);
+      var outputPlan = planLabel(plan);
+      data.overtimePlans.push({ plan: outputPlan, rows: rows });
+      summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
     });
 
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {

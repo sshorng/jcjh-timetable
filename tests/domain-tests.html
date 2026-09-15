@@ -560,6 +560,13 @@
        assert('結算週數：週一至週五為一週', window.DateUtils.countWeeksInRange('2026-09-07', '2026-09-11') === 1);
        assert('結算週數：跨週日期算兩週', window.DateUtils.countWeeksInRange('2026-09-09', '2026-09-15') === 2);
        assert('結算週數：單日也算一週', window.DateUtils.countWeeksInRange('2026-09-11', '2026-09-11') === 1);
+       var septemberPeriod = window.DateUtils.getAccountingPeriodForMonth('2026-09');
+       assert('結算區間九月起日含前一週週一', septemberPeriod.start === '2026-08-31');
+       assert('結算區間九月迄日含最後一週週五', septemberPeriod.end === '2026-10-02');
+       var octoberPeriod = window.DateUtils.shiftAccountingPeriod(septemberPeriod, '2026-10', 1);
+       assert('下一結算區間不與九月重疊', octoberPeriod.start === '2026-10-05' && octoberPeriod.end === '2026-10-30');
+       var augustPeriod = window.DateUtils.shiftAccountingPeriod(septemberPeriod, '2026-08', -1);
+       assert('上一結算區間不與九月重疊', augustPeriod.start === '2026-07-27' && augustPeriod.end === '2026-08-28');
      }
 
       // ── 活動互代進度／空堂邏輯 ──

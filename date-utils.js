@@ -25,6 +25,88 @@ window.DateUtils = (function () {
     return parts[1] + '/' + parts[2];
   }
 
+  function parseDateOnly(value) {
+    const parts = String(value == null ? '' : value).slice(0, 10).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(function (n) { return !Number.isFinite(n); })) return null;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+    return date;
+  }
+
+  function shiftMonthKey(month, offset) {
+    const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return '';
+    const date = new Date(Number(match[1]), Number(match[2]) - 1 + (Number(offset) || 0), 1);
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+  }
+
+  function mondayOfWeek(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    result.setDate(result.getDate() - (day === 0 ? 6 : day - 1));
+    return result;
+  }
+
+  function fridayOfWeek(date) {
+    const result = mondayOfWeek(date);
+    result.setDate(result.getDate() + 4);
+    return result;
+  }
+
+  /** 以曆月所屬週的週一至週五建立名目結算區間。 */
+  function getAccountingPeriodForMonth(month) {
+    const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return { start: '', end: '' };
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    const first = new Date(year, monthIndex, 1);
+    const last = new Date(year, monthIndex + 1, 0);
+    return {
+      start: toLocalDateStr(mondayOfWeek(first)),
+      end: toLocalDateStr(fridayOfWeek(last))
+    };
+  }
+
+  function nextMondayAfter(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    let days = (8 - day) % 7;
+    if (!days) days = 7;
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+
+  function previousFridayBefore(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    let days = (day - 5 + 7) % 7;
+    if (!days) days = 7;
+    result.setDate(result.getDate() - days);
+    return result;
+  }
+
+  /** 依目前區間切換相鄰月份，並把相鄰區間的重疊週切除。 */
+  function shiftAccountingPeriod(currentPeriod, targetMonth, direction) {
+    const nominal = getAccountingPeriodForMonth(targetMonth);
+    const currentStart = parseDateOnly(currentPeriod && currentPeriod.start);
+    const currentEnd = parseDateOnly(currentPeriod && currentPeriod.end);
+    if (!nominal.start || !nominal.end || !currentStart || !currentEnd) return nominal;
+
+    let start = parseDateOnly(nominal.start);
+    let end = parseDateOnly(nominal.end);
+    if (Number(direction) >= 0) {
+      start = nextMondayAfter(currentEnd);
+      const nominalStart = parseDateOnly(nominal.start);
+      if (start < nominalStart) start = nominalStart;
+    } else {
+      end = previousFridayBefore(currentStart);
+      const nominalEnd = parseDateOnly(nominal.end);
+      if (end > nominalEnd) end = nominalEnd;
+    }
+    if (start > end) return nominal;
+    return { start: toLocalDateStr(start), end: toLocalDateStr(end) };
+  }
+
   /**
    * 課表節次列：0＝早自習，45＝午休；1～8 保留原節次。
    */
@@ -254,6 +336,9 @@ window.DateUtils = (function () {
     getTodayString,
     getWeekDayText,
     formatDateMMDD,
+    shiftMonthKey,
+    getAccountingPeriodForMonth,
+    shiftAccountingPeriod,
     getPeriodTimeSpan,
     getWeekDatesFrom,
     getWeekDatesFromDate,

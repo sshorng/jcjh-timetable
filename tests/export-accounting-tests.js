@@ -42,7 +42,7 @@ const coEmployed = build([], 0, schedules, [], { jobTitle: '共聘教師' });
 assert.equal(coEmployed.sheets.adjunct.length, 0, '共聘教師不應列入兼課教師鐘點工作表');
 assert.equal(coEmployed.sheets.overtime.length, 1, '共聘教師應列入預設超鐘點工作表');
 assert.equal(coEmployed.sheets.overtime[0].title, '共聘教師', '預設超鐘點工作表應保留共聘職務名稱');
-assert.equal(coEmployed.overtimePlans[0].plan, '預設', '共聘教師應使用預設經費計畫');
+assert.equal(coEmployed.overtimePlans[0].plan, '國教', '共聘教師空白經費應輸出為國教經費');
 
 const noOvertime = build([], 3, schedules);
 assert.equal(noOvertime.sheets.overtime.length, 0, '沒有超鐘點的教師不應列入超鐘點工作表');
@@ -143,7 +143,7 @@ assert.equal(substituteAttribute.sheets.overtime.length, 0, '代課屬性請假�
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing'), undefined, '課表代課不應混入一般公付代課工作表');
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x').hours, 1, '實際代課教師仍應列入公付代課');
 assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代課應建立獨立工作表資料');
-assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '預設');
+assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節');
@@ -333,13 +333,13 @@ const missingSourceInput = Object.assign({}, configuredInput, {
 });
 missingSourceInput.monthlyReportRows = window.DomainBilling.buildMonthlyReportRows(missingSourceInput);
 const missingSource = window.ExportAccounting.buildExportData(missingSourceInput);
-const defaultPlan = missingSource.overtimePlans.find(group => group.plan === '預設');
+const defaultPlan = missingSource.overtimePlans.find(group => group.plan === '國教');
 assert.ok(defaultPlan, 'missing slot source must be grouped into the default overtime plan');
-assert.equal(missingSource.overtimePlans[0].plan, '預設', 'default overtime plan must be listed first');
-assert.equal(defaultPlan.rows[0].expensePlan, '預設');
+assert.equal(missingSource.overtimePlans[0].plan, '國教', 'default overtime plan must be listed first');
+assert.equal(defaultPlan.rows[0].expensePlan, '國教');
 assert.equal(defaultPlan.rows[0].grossHours, 1);
 assert.equal(defaultPlan.rows[0].actualHours, 1);
 assert.equal(missingSource.blocking.length, 0, 'default overtime plan must not block accounting export');
-assert.ok(missingSource.summary.some(item => item.key === 'overtime:預設' && item.hours === 1), 'default overtime plan must be included in export summary');
+assert.ok(missingSource.summary.some(item => item.key === 'overtime:國教' && item.hours === 1), 'default overtime plan must be included in export summary');
 
 console.log('export accounting tests PASS');
