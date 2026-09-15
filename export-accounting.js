@@ -1042,7 +1042,7 @@
     var result = { byKey: {}, byOriginal: {} };
     var records = opts.substitutionRecords || [];
     reportSourceRows(opts).forEach(function (source) {
-      if (!normalizeExpensePlan(source.expensePlan)) return;
+      if (!expensePlanSourcesForRow(source).length) return;
       chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex)
         .filter(function (record) { return !isCombinedReturnRecord(record); })
         .forEach(function (record) {
@@ -1081,6 +1081,8 @@
     return {
       expensePlan: planLabel(item.plan || source.expensePlan),
       serial: serial,
+      _rowKind: 'overtimeSubstitution',
+      _teacherKey: teacherEmail(record.actualTeacherEmail),
       title: teacherTitle(actualTeacher) || '\u6559\u5e2b',
       name: teacherName(actualTeacher, record.actualTeacherName || record.actualTeacherEmail),
       weeklyOvertime: count,
@@ -1094,6 +1096,39 @@
       reduceNote: '',
       note: detail
     };
+  }
+
+  function mergeOvertimeSubstitutionRows(rows) {
+    var output = [];
+    var groups = {};
+    (rows || []).forEach(function (row) {
+      if (!row || row._rowKind !== 'overtimeSubstitution') {
+        output.push(row);
+        return;
+      }
+      var key = String(row._teacherKey || row.name || '').trim().toLowerCase()
+        + '|' + (Number(row.rate) || 0);
+      if (!groups[key]) {
+        groups[key] = row;
+        output.push(row);
+        return;
+      }
+      var merged = groups[key];
+      merged.weeklyOvertime = (Number(merged.weeklyOvertime) || 0) + (Number(row.weeklyOvertime) || 0);
+      merged.grossHours = (Number(merged.grossHours) || 0) + (Number(row.grossHours) || 0);
+      merged.deduction = (Number(merged.deduction) || 0) + (Number(row.deduction) || 0);
+      merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
+      merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
+      merged.schedule = uniqueNotes([merged.schedule, row.schedule]).join('、');
+      merged.note = joinAccountingNotes([merged.note, row.note]);
+    });
+    output.forEach(function (row, index) {
+      if (!row) return;
+      row.serial = index + 1;
+      delete row._rowKind;
+      delete row._teacherKey;
+    });
+    return output;
   }
 
   function overtimeSourceVariants(source, expectedPlan) {
@@ -1166,6 +1201,7 @@
           : (sourceRow.scheduledOvertime !== undefined
             ? Number(sourceRow.scheduledOvertime) || 0
             : (Number(sourceRow.weeklyOvertime) || 0) * weeks);
+        if ((config.key === 'overtime' || config.key === 'adjunct') && scheduledOvertime <= 0) return;
         var grossHours = allocation && allocation.grossHours !== undefined
           ? Number(allocation.grossHours) || 0
           : Math.max(0, scheduledOvertime - reduce);
@@ -1206,7 +1242,7 @@
           note: notes
         };
         // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。
-        if (config.key !== 'overtime' || actualHours !== 0) rows.push(row);
+        if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0) rows.push(row);
         if (config.key === 'overtime' && chargedItems) {
           chargedItems.forEach(function (item) {
             rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
@@ -1214,7 +1250,7 @@
         }
       });
     });
-    return rows;
+    return config.key === 'overtime' ? mergeOvertimeSubstitutionRows(rows) : rows;
   }
 
   function courseText(record) {

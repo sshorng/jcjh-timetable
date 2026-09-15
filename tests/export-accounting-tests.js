@@ -50,6 +50,16 @@ assert.equal(coEmployed.overtimePlans[0].plan, '國教', '共聘教師空白經�
 const noOvertime = build([], 3, schedules);
 assert.equal(noOvertime.sheets.overtime.length, 0, '沒有超鐘點的教師不應列入超鐘點工作表');
 assert.equal(noOvertime.overtimePlans.length, 0, '沒有超鐘點時不應建立超鐘點計畫工作表');
+const noOvertimeWithLeave = build([{
+  date: '2026-07-13', period: 1, className: '701', type: 'substitution',
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
+}], 3, schedules);
+assert.equal(noOvertimeWithLeave.sheets.overtime.length, 0, '沒有超鐘點時即使有代課紀錄也不應建立超鐘點列');
+assert.equal(noOvertimeWithLeave.sheets.publicSub.length, 0, '沒有超鐘點的代課不應被重複列入公付代課表');
+const noAdjunctHours = build([], 16, [{
+  teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般'
+}], [], { jobTitle: '兼課教師' });
+assert.equal(noAdjunctHours.sheets.adjunct.length, 0, '沒有可計鐘點的兼課教師不應列入兼課鐘點表');
 
 const teacherOrderPeriod = { start: '2026-07-01', end: '2026-07-31' };
 const teacherOrder = window.ExportAccounting.buildExportData({
@@ -81,6 +91,41 @@ const teacherOrder = window.ExportAccounting.buildExportData({
 assert.deepEqual(teacherOrder.sheets.publicSub.map(row => row.name), ['Zeta', 'Alpha'], '公付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.selfSub.map(row => row.actualName), ['Zeta', 'Alpha'], '自付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.mentor.map(row => row.actualName), ['Zeta', 'Alpha'], '代導明細應依教師名單排序');
+
+const mergedOvertime = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-01',
+  reportEndDate: '2026-09-30',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-09-01', end: '2026-09-30' } },
+  teachers: [
+    { email: 'original@x', name: '黃美蘭', baseHours: 0 },
+    { email: 'cover-a@x', name: '莊英勝', jobTitle: '706導師', baseHours: 16 },
+    { email: 'cover-b@x', name: '洪筱仙', jobTitle: '教學組長', baseHours: 16 },
+    { email: 'lv@x', name: '呂哲瑜', baseHours: 0 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'original@x', dayOfWeek: 2, period: 5, className: '905', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'original@x', dayOfWeek: 2, period: 6, className: '906', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'lv@x', dayOfWeek: 5, period: 6, className: '906', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    { date: '2026-09-22', period: 5, className: '905', type: 'substitution', originalTeacherEmail: 'original@x', actualTeacherEmail: 'cover-a@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-09-22', period: 6, className: '906', type: 'substitution', originalTeacherEmail: 'original@x', actualTeacherEmail: 'cover-b@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-09-29', period: 5, className: '905', type: 'substitution', originalTeacherEmail: 'original@x', actualTeacherEmail: 'cover-a@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-09-29', period: 6, className: '906', type: 'substitution', originalTeacherEmail: 'original@x', actualTeacherEmail: 'cover-b@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-09-11', period: 6, className: '906', type: 'substitution', originalTeacherEmail: 'lv@x', actualTeacherEmail: 'cover-b@x', subFee: '公費代課', status: 'approved' }
+  ]
+});
+const mergedOvertimeRows = mergedOvertime.overtimePlans[0].rows.filter(row => row.weeks === '');
+assert.deepEqual(mergedOvertimeRows.map(row => [row.name, row.grossHours, row.amount]), [
+  ['莊英勝', 2, 910],
+  ['洪筱仙', 3, 1365]
+], '同一實際代課教師的超鐘點明細應合併');
+assert.equal(mergedOvertimeRows.length, 2, '相同代課人跨日期不應重複列出');
+assert.ok(mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/22')
+  && mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/29'), '合併列仍應保留各日期備註');
+assert.ok(mergedOvertimeRows.find(row => row.name === '洪筱仙').note.includes('9/11'), '跨原教師的代課備註仍應保留');
 
 const crossMonthRange = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -134,7 +179,9 @@ const publicOvertime = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
   originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
 }]);
-assert.equal(publicOvertime.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
+assert.equal(publicOvertime.sheets.overtime.length, 1, '超鐘點原課被公費代課時應保留代課明細列');
+assert.equal(publicOvertime.sheets.overtime[0].name, 'cover@x', '超鐘點代課明細應列實際代課教師');
+assert.equal(publicOvertime.sheets.publicSub.length, 0, '已列入超鐘點代課明細者不應再重複列入公付代課表');
 
 const substituteAttribute = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
@@ -199,7 +246,9 @@ const publicSpecial = build([
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
   }
 ], 1);
-assert.equal(publicSpecial.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
+assert.equal(publicSpecial.sheets.overtime.length, 1, '超鐘點原課被公費代課時應保留代課明細列');
+assert.equal(publicSpecial.sheets.overtime[0].name, 'cover@x');
+assert.equal(publicSpecial.sheets.overtime[0].grossHours, 2, '同一代課人不同節次應合併');
 
 const selfSpecial = build([
   {
@@ -212,7 +261,10 @@ const selfSpecial = build([
   }
 ]);
 assert.equal(selfSpecial.sheets.overtime[0].deduction, 2);
-assert.deepEqual(selfSpecial.sheets.selfSub.map(row => row.period), ['早自習', '午休']);
+assert.equal(selfSpecial.sheets.overtime.length, 2, '自費代課明細應保留在超鐘點表');
+assert.equal(selfSpecial.sheets.overtime[1].name, 'cover@x');
+assert.equal(selfSpecial.sheets.overtime[1].grossHours, 2, '同一自費代課人不同節次應合併');
+assert.equal(selfSpecial.sheets.selfSub.length, 0, '已列入超鐘點代課明細者不應重複列入自付代課表');
 
 const mixedSchedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
@@ -250,8 +302,7 @@ const combinedReturn = build([{
 }], 1, [{
    teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點'
 }]);
-assert.equal(combinedReturn.sheets.overtime[0].deduction, 1);
-assert.equal(combinedReturn.sheets.overtime[0].actualHours, -1, '超鐘不足仍保留提醒列');
+assert.equal(combinedReturn.sheets.overtime.length, 0, '沒有超鐘點時併班回原紀錄也不建立超鐘點列');
 assert.equal(combinedReturn.sheets.publicSub.length, 0);
 
 const swappedPublic = build([{
@@ -263,7 +314,8 @@ const swappedPublic = build([{
   id: 'swap-billing', name: '補課', dateA: '2026-07-13', periodA: 1,
   dateB: '2026-07-14', periodB: 3, enabled: true
 }]);
-assert.equal(swappedPublic.sheets.overtime.length, 0, '實得超鐘點為零時不列入超鐘點工作表');
+assert.equal(swappedPublic.sheets.overtime.length, 1, '調課後的超鐘點公費代課應保留代課明細列');
+assert.equal(swappedPublic.sheets.overtime[0].name, 'cover@x');
 
 const configuredPlan = JSON.stringify([
   { day: 1, period: 1, className: '701', source: '計畫A' },
