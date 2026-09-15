@@ -2860,7 +2860,9 @@ createApp({
 
     const copyLineMessageForRequest = (req) => {
       const isExchange = isExchangeLikeRequest(req);
-      const paperFlowRequest = isPaperFlowRequest(req);
+      // 紙本模式不應讓一般申請誤帶線上簽核網址；行政代申請仍保留線上行政流程。
+      const paperFlowRequest = !isProxySubmitRequest(req)
+        && (isPaperFlowRequest(req) || notificationsSuppressed.value);
       const currentUrl = window.location.origin + window.location.pathname;
 
       // 同批次多筆：只組「同一受邀人」的節次（不混入其他人）
@@ -10812,6 +10814,21 @@ createApp({
           return `${head}\n⏳ 三角調申請中\n${cell.pendingText || '等待三位教師完成同意'}`;
         }
         return `${head}\n${cell.pendingText || '申請處理中'}`;
+      }
+      if (cell.hasConcurrentDuty && cell.outgoingDuty) {
+        const outgoing = cell.outgoingDuty;
+        const incomingLabel = cell.subType === 'exchange' || cell.subType === 'triangle'
+          ? '⇄ 本節調入課'
+          : '➔ 本節代課';
+        const outgoingCourse = `${outgoing.className || ''} ${outgoing.subject || ''}`.trim();
+        return [
+          head,
+          incomingLabel,
+          cell.subText || '',
+          '↩ 原課已調出',
+          outgoingCourse,
+          outgoing.subText || ''
+        ].filter(Boolean).join('\n');
       }
       if (cell.isCombinedReturn) {
          return `${head}\n↩ 併班上課\n${cell.subText || ''}`;

@@ -1286,18 +1286,19 @@ function buildPrintPreview(ctx, options) {
     copyCount,
     records: recordsToPrint.slice(),
     recordIds: recordsToPrint.map(record => record && record.id != null ? String(record.id) : '').filter(Boolean),
+    // 圖片複製／下載只提供第一張表單，方便與他人確認；正式列印仍使用完整 forms。
+    confirmationFormHtml: forms[0],
     formsHtml: forms.join(''),
     documentHtml: buildPrintPreviewDocument(forms)
   };
 }
 
 function buildPrintPreviewImageSvg(preview) {
-  const formsHtml = String(preview && preview.formsHtml || '');
-  const formCount = Math.max(1, parseInt(preview && preview.formCount, 10) || 1);
+  const formsHtml = String(preview && preview.confirmationFormHtml || '');
   if (!formsHtml) return '';
 
   const widthMm = 166;
-  const heightMm = 8 + 12 + (formCount * 170) + (Math.max(0, formCount - 1) * 8);
+  const heightMm = 8 + 12 + 170;
   const pxPerMm = 96 / 25.4;
   const width = Math.ceil(widthMm * pxPerMm);
   const height = Math.ceil(heightMm * pxPerMm);

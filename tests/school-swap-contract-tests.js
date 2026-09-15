@@ -165,6 +165,48 @@ const courseAtSource = context.window.DomainSchedule.applyPendingOverlay({
 });
 assert.equal(courseAtSource.subject, '數學');
 
+const concurrentSchedules = [
+  { teacherEmail: 'alice@example.edu.tw', dayOfWeek: 1, period: 7, className: '807', subject: '原課' },
+  { teacherEmail: 'bob@example.edu.tw', dayOfWeek: 1, period: 7, className: '801', subject: '掉入課' }
+];
+const concurrentSubs = [
+  {
+    date: '2026-09-07', period: 7,
+    originalTeacherEmail: 'alice@example.edu.tw', actualTeacherEmail: 'cover@example.edu.tw',
+    className: '807', subject: '原課', type: 'substitution', subFee: '自費代課'
+  },
+  {
+    date: '2026-09-07', period: 7,
+    originalTeacherEmail: 'bob@example.edu.tw', actualTeacherEmail: 'alice@example.edu.tw',
+    className: '801', subject: '掉入課', type: 'substitution', subFee: '自費代課'
+  }
+];
+const concurrentCell = context.window.DomainSchedule.resolveApprovedSchedule({
+  cell: null,
+  teacherEmail: 'alice@example.edu.tw',
+  dateStr: '2026-09-07',
+  dayOfWeek: 1,
+  period: 7,
+  allSchedules: concurrentSchedules,
+  scheduleIndex: context.window.DomainSchedule.buildScheduleIndex(concurrentSchedules),
+  periodSubs: concurrentSubs,
+  allSubs: concurrentSubs,
+  helpers: {
+    getTeacherNameByEmail: email => String(email || ''),
+    getTeacherSubjectByEmail: () => '',
+    isSingleWeek: () => true,
+    isClassAway: () => false,
+    getWeekDayText: day => String(day)
+  }
+});
+assert.equal(concurrentCell.className, '801', '同節掉入課應作為實際上課主資料');
+assert.equal(concurrentCell.subject, '掉入課');
+assert.equal(concurrentCell.isSubstitutionDuty, true);
+assert.notEqual(concurrentCell.isSubstituted, true, '有掉入課時不可再被媒合視為空堂');
+assert.equal(concurrentCell.hasConcurrentDuty, true);
+assert.equal(concurrentCell.outgoingDuty.className, '807');
+assert.equal(concurrentCell.outgoingDuty.subject, '原課');
+
 const classSwapChanges = buildClassSchoolSwapChanges(
   '701',
   [

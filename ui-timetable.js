@@ -231,6 +231,7 @@ window.UiTimetable = (function () {
          if (cell.pendingType === 'triangle' || cell.pendingType === 'triangle_out') return 'is-pending-exc-out' + batchCls;
          if (cell.pendingType === 'triangle_in') return 'is-pending-exc-in' + batchCls;
        }
+       if (cell.hasConcurrentDuty) return 'is-concurrent-duty' + batchCls;
        if (cell.isSubstituted) {
          return ((cell.subType === 'exchange' || cell.subType === 'triangle') ? 'is-exchange-out' : 'is-substituted-out') + batchCls;
        }

@@ -961,9 +961,10 @@ function runApplicationFormContractTest() {
    assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
     assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
      assert.match(html, /ui-activity\.js\?v=20260904-calendar-new-tab/);
-      assert.match(html, /app\.js\?v=20260904-calendar-new-tab/);
-      assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
-     assert.match(appSource, /openPaperPrintDemo: \(\) => openPaperPrintDemoForTour\(\)/, 'paper tour should open a print preview demo');
+       assert.match(html, /app\.js\?v=20260915-paper-line-single-page/);
+       assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
+       assert.match(appSource, /const paperFlowRequest = !isProxySubmitRequest\(req\)\s*&& \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value\);/, '紙本模式傳訊不得帶線上簽核連結');
+      assert.match(appSource, /openPaperPrintDemo: \(\) => openPaperPrintDemoForTour\(\)/, 'paper tour should open a print preview demo');
      assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
     assert.match(appSource, /source: 'paperTour'/, 'paper tour preview must use an isolated source');
     assert.match(appSource, /snapshot\.source === 'paperTour'/, 'paper tour print actions must not print real data');

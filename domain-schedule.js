@@ -329,6 +329,117 @@ window.DomainSchedule = (function () {
 
       const emailLower = teacherEmail.toLowerCase();
 
+      function findIncomingInfo(excludeRecord) {
+        var incomingEdge = null;
+        var originalOwner = null;
+        var possibleOwners = getSlotOwnerEmails(index, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);
+
+        for (var ownerIndex = 0; ownerIndex < possibleOwners.length; ownerIndex++) {
+          var owner = possibleOwners[ownerIndex];
+          var cur = owner;
+          var vis = new Set();
+          var path = [];
+          while (forwardMap[cur] && !vis.has(cur)) {
+            vis.add(cur);
+            path.push(forwardMap[cur]);
+            cur = forwardMap[cur].target;
+          }
+          if (cur === emailLower && path.length > 0) {
+            var candidate = path[path.length - 1].record;
+            if (candidate !== excludeRecord) {
+              incomingEdge = candidate;
+              originalOwner = owner;
+              break;
+            }
+          }
+        }
+
+        // 直接以 actual 命中（含多段調代鏈末端；不依賴基礎課表 owners）。
+        if (!incomingEdge) {
+          for (var recordIndex = periodSubs.length - 1; recordIndex >= 0; recordIndex--) {
+            var record = periodSubs[recordIndex];
+            if (record && record !== excludeRecord && record.actualTeacherEmail
+                && String(record.actualTeacherEmail).toLowerCase() === emailLower) {
+              incomingEdge = record;
+              originalOwner = record.originalTeacherEmail
+                ? String(record.originalTeacherEmail).toLowerCase()
+                : null;
+              break;
+            }
+          }
+        }
+
+        return incomingEdge ? { edge: incomingEdge, originalOwner: originalOwner } : null;
+      }
+
+      function buildIncomingCell(incomingInfo) {
+        if (!incomingInfo) return null;
+        var incomingEdge = incomingInfo.edge;
+        var originalOwner = incomingInfo.originalOwner;
+        var inCands = originalOwner
+          ? getCandidates(index, originalOwner, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr)
+          : [];
+        var baseIn = inCands.find(function (s) {
+          return String(s.teacherEmail || '').toLowerCase() === originalOwner;
+        }) || inCands[0] || null;
+        // 調入主標＝實際授課教師帶到新時段的原課班科（edge 由交換轉換器寫入）。
+        // 對調後網頁課表以教師／班級／科目整組換時段為準。
+        // 代課：edge 存被代的那堂。
+        var isExIn = incomingEdge.type === 'exchange' || incomingEdge.type === 'triangle';
+        var finalClassIn = String(incomingEdge.className || (baseIn && baseIn.className) || '').trim();
+        var finalSubjIn = String(incomingEdge.subject || (baseIn && baseIn.subject) || '').trim();
+        // 對調 edge 缺班科：回到原位置所有者在目前日期／節次的基礎課。
+        if (isExIn && (!finalClassIn || !finalSubjIn)) {
+          if (baseIn) {
+            if (!finalClassIn) finalClassIn = String(baseIn.className || '').trim();
+            if (!finalSubjIn) finalSubjIn = String(baseIn.subject || '').trim();
+          }
+        }
+        finalClassIn = String(finalClassIn || '').trim();
+        finalSubjIn = String(finalSubjIn || '').trim();
+        if (!(finalClassIn || finalSubjIn || baseIn || incomingEdge)) return null;
+
+        var subTextIn = '';
+        var combinedReturnIn = isCombinedReturnRequest(incomingEdge);
+        if (combinedReturnIn) {
+          subTextIn = '↩ 併班上課：' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
+        } else if (isExIn) {
+          if (incomingEdge.type === 'triangle') {
+            var triangleSource = formatShortDateAndPeriod(
+              incomingEdge.triangleSourceDate,
+              incomingEdge.triangleSourcePeriod,
+              h.getWeekDayText
+            );
+            subTextIn = '△ 三角調自 ' + triangleSource + ' '
+              + h.getTeacherNameByEmail(incomingEdge.actualTeacherEmail);
+          } else {
+            var otherIn = allSubs.find(function (x) {
+              return x.requestId === incomingEdge.requestId
+                && (x.date !== incomingEdge.date || String(x.period) !== String(incomingEdge.period) || x.id !== incomingEdge.id);
+            });
+            var src = otherIn ? formatShortDateAndPeriod(otherIn.date, otherIn.period, h.getWeekDayText) : '他處';
+            subTextIn = '⇄ 調自 ' + src + ' ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
+          }
+        } else if (incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結') {
+          subTextIn = '🔁 互代: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
+        } else {
+          subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
+        }
+        return {
+          className: finalClassIn,
+          subject: finalSubjIn,
+          teacherEmail: teacherEmail,
+          isSubstitutionDuty: true,
+          subType: incomingEdge.type,
+          isCombinedReturn: combinedReturnIn,
+          isElastic: false,
+          isMutualCover: incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結',
+          subText: subTextIn,
+          subRecord: incomingEdge,
+          isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr))
+        };
+      }
+
       // 空堂排班：原＝實＝本人（扣額度任務，非請假調出）
       for (var se = 0; se < periodSubs.length; se++) {
         var selfRec = periodSubs[se];
@@ -479,7 +590,7 @@ window.DomainSchedule = (function () {
             dayOfWeek: dayOfWeek,
             period: period
           };
-          return Object.assign({}, outBase, {
+          var outgoingCell = Object.assign({}, outBase, {
             className: ownOutClass || outBase.className || '',
             subject: ownOutSubj || outBase.subject || '',
             isSubstituted: true,
@@ -490,109 +601,31 @@ window.DomainSchedule = (function () {
             subRecord: firstEdge,
             isClassAway: !!(h.isClassAway && h.isClassAway(ownOutClass || outBase.className, dateStr))
           });
-        }
-      }
-
-      var incomingEdge = null;
-      var originalOwner = null;
-       var possibleOwners = getSlotOwnerEmails(index, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);
-
-      for (var oi = 0; oi < possibleOwners.length; oi++) {
-        var owner = possibleOwners[oi];
-        var cur = owner;
-        var vis = new Set();
-        var pth = [];
-        while (forwardMap[cur] && !vis.has(cur)) {
-          vis.add(cur);
-          pth.push(forwardMap[cur]);
-          cur = forwardMap[cur].target;
-        }
-        if (cur === emailLower && pth.length > 0) {
-          incomingEdge = pth[pth.length - 1].record;
-          originalOwner = owner;
-          break;
-        }
-      }
-
-      // 直接以 actual 命中（含多段調代鏈末端；不依賴基礎課表 owners）
-      if (!incomingEdge) {
-        for (var pi = 0; pi < periodSubs.length; pi++) {
-          var pr = periodSubs[pi];
-          if (pr && pr.actualTeacherEmail
-              && String(pr.actualTeacherEmail).toLowerCase() === emailLower) {
-            incomingEdge = pr;
-            originalOwner = pr.originalTeacherEmail
-              ? String(pr.originalTeacherEmail).toLowerCase()
-              : null;
-            break;
+          var incomingAlongside = buildIncomingCell(findIncomingInfo(firstEdge));
+          var sameCourse = incomingAlongside
+            && String(incomingAlongside.className || '').trim() === String(outgoingCell.className || '').trim()
+            && String(incomingAlongside.subject || '').trim() === String(outgoingCell.subject || '').trim();
+          if (incomingAlongside && !sameCourse) {
+            return Object.assign({}, incomingAlongside, {
+              // 同一格同時有原課調出與新課調入：以實際要上的課為主，保留原課供 UI 呈現。
+              hasConcurrentDuty: true,
+              outgoingDuty: {
+                className: outgoingCell.className,
+                subject: outgoingCell.subject,
+                subType: outgoingCell.subType,
+                isCombinedReturn: !!outgoingCell.isCombinedReturn,
+                isMutualCover: !!outgoingCell.isMutualCover,
+                subText: outgoingCell.subText,
+                subRecord: outgoingCell.subRecord,
+                isClassAway: !!outgoingCell.isClassAway
+              }
+            });
           }
+          return outgoingCell;
         }
       }
-
-      if (incomingEdge) {
-        var inCands = originalOwner
-           ? getCandidates(index, originalOwner, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr)
-          : [];
-        var baseIn = inCands.find(function (s) {
-          return String(s.teacherEmail || '').toLowerCase() === originalOwner;
-        }) || inCands[0] || null;
-        // 調入主標＝實際授課教師帶到新時段的原課班科（edge 由交換轉換器寫入）。
-        // 對調後網頁課表以教師／班級／科目整組換時段為準。
-        // 代課：edge 存被代的那堂
-        var isExIn = incomingEdge.type === 'exchange' || incomingEdge.type === 'triangle';
-        var finalClassIn = String(incomingEdge.className || (baseIn && baseIn.className) || '').trim();
-        var finalSubjIn = String(incomingEdge.subject || (baseIn && baseIn.subject) || '').trim();
-        // 對調 edge 缺班科：回到原位置所有者在目前日期／節次的基礎課。
-        if (isExIn && (!finalClassIn || !finalSubjIn)) {
-          if (baseIn) {
-            if (!finalClassIn) finalClassIn = String(baseIn.className || '').trim();
-            if (!finalSubjIn) finalSubjIn = String(baseIn.subject || '').trim();
-          }
-        }
-        finalClassIn = String(finalClassIn || '').trim();
-        finalSubjIn = String(finalSubjIn || '').trim();
-        if (finalClassIn || finalSubjIn || baseIn || incomingEdge) {
-           var subTextIn = '';
-           var combinedReturnIn = isCombinedReturnRequest(incomingEdge);
-           if (combinedReturnIn) {
-             subTextIn = '↩ 併班上課：' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
-           } else if (isExIn) {
-            if (incomingEdge.type === 'triangle') {
-              var triangleSource = formatShortDateAndPeriod(
-                incomingEdge.triangleSourceDate,
-                incomingEdge.triangleSourcePeriod,
-                h.getWeekDayText
-              );
-              subTextIn = '△ 三角調自 ' + triangleSource + ' '
-                + h.getTeacherNameByEmail(incomingEdge.actualTeacherEmail);
-            } else {
-              var otherIn = allSubs.find(function (x) {
-                return x.requestId === incomingEdge.requestId
-                  && (x.date !== incomingEdge.date || String(x.period) !== String(incomingEdge.period) || x.id !== incomingEdge.id);
-              });
-              var src = otherIn ? formatShortDateAndPeriod(otherIn.date, otherIn.period, h.getWeekDayText) : '他處';
-              subTextIn = '⇄ 調自 ' + src + ' ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
-            }
-          } else if (incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結') {
-            subTextIn = '🔁 互代: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
-          } else {
-            subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
-          }
-          return {
-            className: finalClassIn,
-            subject: finalSubjIn,
-            teacherEmail: teacherEmail,
-             isSubstitutionDuty: true,
-             subType: incomingEdge.type,
-             isCombinedReturn: combinedReturnIn,
-             isElastic: false,
-            isMutualCover: incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結',
-            subText: subTextIn,
-            subRecord: incomingEdge,
-            isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr))
-          };
-        }
-      }
+      var incomingCell = buildIncomingCell(findIncomingInfo());
+      if (incomingCell) return incomingCell;
     }
 
      var candidates = getCandidates(index, teacherEmail, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);

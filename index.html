@@ -668,7 +668,8 @@
                                 <span class="cell-empty-label">巡堂</span>
                               </template>
                               <template v-else>
-                                <div class="cell-main">
+                                 <div class="cell-main" :class="{ 'cell-main-concurrent': slot.cell.hasConcurrentDuty }">
+                                   <div v-if="slot.cell.hasConcurrentDuty" class="cell-overlap-current-label">{{ slot.cell.subType === 'exchange' || slot.cell.subType === 'triangle' ? '本節調入課' : '本節代課' }}</div>
                                   <div class="cell-class-name" v-if="slot.cell.className && String(slot.cell.className).trim()">
                                     <span class="class-color-badge" :style="getClassBadgeStyle(slot.cell.className)">
                                       {{ formatClassName(slot.cell.className) || slot.cell.className }}
@@ -683,10 +684,21 @@
                                     <span class="opacity-85">（{{ slot.draftFeeShort }}）</span>
                                   </div>
                                   <div v-if="!isMobile && slot.cell.subText && String(slot.cell.subText).replace(/[📌\s]/g, '') !== String(slot.cell.subject || '').replace(/[📌\s]/g, '')" class="cell-sub-text cell-sub-muted">{{ slot.cell.subText }}</div>
-                                  <div v-if="!isMobile && slot.cell.pendingText" class="cell-sub-text cell-sub-pending">{{ slot.cell.pendingText }}</div>
-                                 </div>
-                                 <div class="cell-badges">
-                                    <span v-if="slot.cell.isCombinedReturn" class="cell-badge tag-combined">併班上課</span>
+                                   <div v-if="!isMobile && slot.cell.pendingText" class="cell-sub-text cell-sub-pending">{{ slot.cell.pendingText }}</div>
+                                   <div v-if="slot.cell.hasConcurrentDuty && slot.cell.outgoingDuty" class="cell-overlap-outgoing">
+                                     <div class="cell-overlap-label">原課調出</div>
+                                     <div v-if="slot.cell.outgoingDuty.className && String(slot.cell.outgoingDuty.className).trim()" class="cell-overlap-class">
+                                       <span class="class-color-badge" :style="getClassBadgeStyle(slot.cell.outgoingDuty.className)">
+                                         {{ formatClassName(slot.cell.outgoingDuty.className) || slot.cell.outgoingDuty.className }}
+                                       </span>
+                                     </div>
+                                     <div v-if="slot.cell.outgoingDuty.subject" class="cell-overlap-subject">{{ slot.cell.outgoingDuty.subject }}</div>
+                                     <div v-if="!isMobile && slot.cell.outgoingDuty.subText" class="cell-overlap-subtext">{{ slot.cell.outgoingDuty.subText }}</div>
+                                   </div>
+                                  </div>
+                                  <div class="cell-badges">
+                                     <span v-if="slot.cell.hasConcurrentDuty" class="cell-badge tag-gray" title="原課已調出，本節改上掉入課">原課調出</span>
+                                     <span v-if="slot.cell.isCombinedReturn" class="cell-badge tag-combined">併班上課</span>
                                     <span v-if="slot.cell.isSubstituted"
                                     class="cell-badge"
                                     :class="slot.cell.subType === 'exchange' ? 'tag-warning' : (slot.cell.isMutualCover ? 'tag-purple' : 'tag-red')"
@@ -3210,10 +3222,10 @@
           </div>
           <div class="modal-footer print-preview-modal-footer">
              <div v-if="printPreview && printPreview.canPrint !== false" class="print-preview-image-actions">
-                <button type="button" class="btn btn-secondary" :disabled="printPreviewImageBusy" @click="copyPrintPreviewImage">
-                 {{ printPreviewImageBusy ? '處理中…' : '複製圖片' }}
-               </button>
-                <button type="button" class="btn btn-secondary" :disabled="printPreviewImageBusy" @click="downloadPrintPreviewImage">下載圖片</button>
+                 <button type="button" class="btn btn-secondary" title="複製單頁確認版，不影響正式列印份數" :disabled="printPreviewImageBusy" @click="copyPrintPreviewImage">
+                  {{ printPreviewImageBusy ? '處理中…' : '複製單頁' }}
+                </button>
+                 <button type="button" class="btn btn-secondary" title="下載單頁確認版，不影響正式列印份數" :disabled="printPreviewImageBusy" @click="downloadPrintPreviewImage">下載單頁</button>
              </div>
              <div class="print-preview-confirm-actions">
                <button type="button" class="btn btn-secondary" @click="closePrintPreview(true)">返回</button>
@@ -4464,7 +4476,7 @@
      <script defer src="ui-approval.js?v=20260904-calendar-new-tab"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
      <script defer src="app-shell-utils.js?v=20260904-calendar-new-tab"></script>
-           <script defer src="app.js?v=20260904-calendar-new-tab"></script>
+            <script defer src="app.js?v=20260915-paper-line-single-page"></script>
   <script>
     (function () {
       function loadScript(src) {
@@ -4508,7 +4520,7 @@
       };
       window.ensurePrintHelper = function () {
         if (typeof window.generateFormHtml === 'function') return Promise.resolve();
-           if (!_printP) _printP = loadScript('print-helper.js?v=20260902-course-signature1');
+           if (!_printP) _printP = loadScript('print-helper.js?v=20260915-single-page-confirm');
         return _printP;
       };
       window.ensureExportSchoolTimetable = function () {

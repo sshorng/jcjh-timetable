@@ -765,6 +765,85 @@ body {
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.06);
 }
 
+/* 同一節同時有原課調出與新課掉入：以實際上課課程為主，原課另列於下方。 */
+.grid-cell-class.is-concurrent-duty {
+  background: linear-gradient(180deg, #eff6ff 0%, #eff6ff 55%, #f8fafc 55%, #f8fafc 100%) !important;
+  border: 1px solid #93c5fd !important;
+  border-left: 3.5px solid #2563eb !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+.cell-main-concurrent {
+  width: 100%;
+  align-items: stretch;
+}
+.cell-overlap-current-label {
+  padding-right: 52px;
+  color: #1d4ed8;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.cell-overlap-outgoing {
+  width: 100%;
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed #cbd5e1;
+  opacity: 0.72;
+  text-align: center;
+}
+.cell-overlap-label {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.cell-overlap-class {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+.cell-overlap-outgoing .class-color-badge {
+  filter: grayscale(0.55);
+  text-decoration: line-through;
+}
+.cell-overlap-subject {
+  color: #94a3b8;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-decoration: line-through;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.cell-overlap-subtext {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 0.6rem;
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .timetable-grid .cell-overlap-current-label,
+  .timetable-grid .cell-overlap-label {
+    font-size: 0.55rem;
+  }
+  .timetable-grid .cell-overlap-current-label {
+    padding-right: 0;
+  }
+  .timetable-grid .cell-overlap-outgoing {
+    margin-top: 3px;
+    padding-top: 3px;
+  }
+  .timetable-grid .cell-overlap-subject {
+    font-size: 0.58rem;
+  }
+  .timetable-grid .cell-overlap-subtext {
+    display: none;
+  }
+}
+
 .grid-cell-class.is-elastic {
   background: #f0fdf4 !important;
   border: 1px solid #bbf7d0 !important;

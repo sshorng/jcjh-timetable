@@ -224,13 +224,13 @@ const combinedCandidates = findCombinedReturnCandidates({
   classData: { className: '音樂班' }
 });
 assert.equal(combinedCandidates.map(candidate => candidate.email).sort().join(','), 'invitee@school.example,unrelated@school.example', '併班代課候選人應依同節併班課列入，不應要求班名重疊');
-assert.match(indexSource, /app\.js\?v=20260904-calendar-new-tab/);
+assert.match(indexSource, /app\.js\?v=20260915-paper-line-single-page/);
 assert.doesNotMatch(preview.documentHtml, /<script\b/i, '列印預覽 srcdoc 不應注入腳本');
 assert.doesNotMatch(appSource, /seedClassKey/, 'single-request batch printing should include the same recipient across classes');
 assert.match(appSource, /teacherKey\(record, 'actual'\) === targetKey/, 'single-request batch printing should group by recipient teacher');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
-assert.match(indexSource, /print-helper\.js\?v=20260902-course-signature1/);
+assert.match(indexSource, /print-helper\.js\?v=20260915-single-page-confirm/);
 assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
 assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
 assert.match(indexSource, /class="teacher-email-cell"/);
@@ -282,6 +282,9 @@ assert.match(mobileSource, /\.hist-actions \{[^}]*flex-direction:\s*row/);
 const previewSvg = context.window.buildPrintPreviewImageSvg(preview);
 assert.match(previewSvg, /foreignObject/);
 assert.match(previewSvg, /<br \/>/, 'preview image SVG should use XHTML-compatible line breaks');
+assert.equal((previewSvg.match(/class="substitute-form official-substitution-form/g) || []).length, 1, 'copy/download image must contain one confirmation form');
+assert.doesNotMatch(previewSvg, /班級：802/, 'copy/download image must not include the second recipient page');
+assert.match(preview.documentHtml, /班級：802/, 'full preview must retain the class recipient page');
 
 const adminOutput = context.window.generateFormHtml(substitution, 'Admin', Object.assign({}, fixtureContext, { isAdmin: true }));
 assert.match(adminOutput, /class="official-signature-name">王小明/);
