@@ -976,6 +976,8 @@ function runApplicationFormContractTest() {
     assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
       assert.match(html, /ui-activity\.js\?v=20260915-[^"]+/);
           assert.match(html, /app\.js\?v=20260915-[^"]+/);
+      assert.match(activitySource, /email: r\.loginEmail \|\| r\.email/,
+        '活動額度發放應傳送登入 Email，不得把姓名鍵 email 當作登入 Email');
        assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
          assert.match(appSource, /const paperFlowRequest = req\.status === 'pending_admin'\s*\|\|\s*\(!isProxySubmitRequest\(req\) && \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value\)\);/, '紙本與待行政核准傳訊不得帶線上簽核連結');
         assert.match(appSource, /const rows = \[req\];/, 'LINE 單筆操作不得展開整個批次');

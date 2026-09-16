@@ -347,6 +347,7 @@ window.DomainActivityCover = (function () {
       }
       rows.push({
         email: t.email,
+        loginEmail: t.loginEmail || t["教師Email"] || '',
         name: t.name || '',
         released: released,
         releasedSlots: releasedSlots,

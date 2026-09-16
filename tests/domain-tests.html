@@ -976,6 +976,16 @@
         assert('釋出3節＝3', DAC.slotsToEarnQuota(3) === 3);
         assert('餘額不足1不可扣', DAC.canSpendQuota(0.99) === false);
         assert('餘額1可扣', DAC.canSpendQuota(1) === true);
+        var quotaRows = DAC.buildQuotaRecalcRows({
+          mode: 'add',
+          teachers: [{ email: '王老師', loginEmail: 'wang@example.com', name: '王老師', mutualQuota: 0 }],
+          awayClasses: ['701'],
+          startDate: '2026-07-13', endDate: '2026-07-13',
+          allSchedules: [{ teacherEmail: '王老師', dayOfWeek: 1, period: 1, className: '701' }]
+        });
+        assert('額度發放列保留登入Email', quotaRows.length === 1
+          && quotaRows[0].loginEmail === 'wang@example.com'
+          && quotaRows[0].released === 1);
         var ep = DAC.buildEmptySlotPayload({
           date: '2026-07-23', period: 3, dayOfWeek: 4,
           teacherEmail: 't@x', teacherName: '測試',

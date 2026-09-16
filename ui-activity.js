@@ -550,7 +550,9 @@ window.UiMutualPanelState = (function () {
       var em = String(email || '').toLowerCase();
       var list = teachersList.value.slice();
       var i = list.findIndex(function (t) {
-        return t.email && String(t.email).toLowerCase() === em;
+        return [t.email, t.loginEmail].some(function (value) {
+          return value && String(value).toLowerCase() === em;
+        });
       });
       if (i < 0) return;
       list[i] = Object.assign({}, list[i], {
@@ -718,7 +720,7 @@ window.UiMutualPanelState = (function () {
       try {
         // 只送有釋出者，減輕 payload
         var payloadList = changed.map(function (r) {
-          return { email: r.email, name: r.name || '', released: r.released };
+          return { email: r.loginEmail || r.email, name: r.name || '', released: r.released };
         });
         loadingMessage.value = '正在批次寫入 ' + payloadList.length + ' 人…';
         var gasCall = (typeof callGasApi === 'function') ? callGasApi : null;
@@ -741,10 +743,16 @@ window.UiMutualPanelState = (function () {
               return;
             }
             var src = changed.find(function (c) {
-              return String(c.email).toLowerCase() === String(r.email).toLowerCase();
+              var resultEmail = String(r.email || '').toLowerCase();
+              return [c.email, c.loginEmail].some(function (value) {
+                return value && String(value).toLowerCase() === resultEmail;
+              });
             });
             var t = (teachersList.value || []).find(function (x) {
-              return x.email && String(x.email).toLowerCase() === String(r.email).toLowerCase();
+              var resultEmail = String(r.email || '').toLowerCase();
+              return [x.email, x.loginEmail].some(function (value) {
+                return value && String(value).toLowerCase() === resultEmail;
+              });
             });
             var prev = t ? (parseFloat(t.mutualQuota) || 0) : 0;
             patchLocalMutualQuota(r.email, prev + (src ? (src.released || 0) : 0));

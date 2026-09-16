@@ -3222,11 +3222,14 @@ function batchEarnMutualQuota_(semesterId, earnList, meta) {
   // 一次讀教師（快取；僅本學期）
   var teachersAll = getSemesterTeachersCached_(sid) || [];
   var tMap = {};
+  var teacherEmailByName = {};
   var sheetQuota = {};
   teachersAll.forEach(function (t) {
     var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
     if (!em) return;
     tMap[em] = t;
+    var teacherName = nameKeyText_(t["教師姓名"] || t.name || t.teacherName);
+    if (teacherName) teacherEmailByName[nameKeyNorm_(teacherName)] = em;
     var q = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
     if (isNaN(q) || q < 0) q = 0;
     sheetQuota[em] = Math.round(q * 1000) / 1000;
@@ -3241,7 +3244,17 @@ function batchEarnMutualQuota_(semesterId, earnList, meta) {
   var finalBal = {};
 
   (earnList || []).forEach(function (item) {
-    var em = String(item.email || "").toLowerCase().trim();
+    var rawIdentity = item.loginEmail != null ? item.loginEmail
+      : (item.email != null ? item.email : item.teacherEmail);
+    var em = String(rawIdentity || "").toLowerCase().trim();
+    if (!tMap[em]) {
+      var itemName = item.name || item.teacherName || rawIdentity;
+      var resolvedEmail = teacherEmailByName[nameKeyNorm_(itemName)];
+      if (resolvedEmail) em = resolvedEmail;
+    }
+    if (!em || !tMap[em]) {
+      throw new Error("發放教師無法對應目前學期教師名單：" + String(item.name || rawIdentity || ""));
+    }
     // 釋出額度按一節一額度傳入（前端已完成換算）
     var released = parseFloat(item.released != null ? item.released : item.earn);
     if (isNaN(released) || released <= 0) return;
