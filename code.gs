@@ -3129,6 +3129,32 @@ function getQuotaLedgerRows_(semesterId) {
   return rows;
 }
 
+/** 額度帳本對前端的唯讀格式；保留原始列順序供同秒交易重建歷程。 */
+function quotaLedgerPublicRow_(row, order) {
+  row = row || {};
+  var delta = parseFloat(row["異動"] != null ? row["異動"] : row.delta);
+  if (isNaN(delta)) delta = 0;
+  var balanceAfter = parseFloat(row["餘額後"] != null ? row["餘額後"] : row.balanceAfter);
+  if (isNaN(balanceAfter)) balanceAfter = 0;
+  return {
+    id: row["流水ID"] || row.id || "",
+    time: row["時間"] || row.time || "",
+    name: row["教師姓名"] || row.name || row.teacherName || "",
+    delta: Math.round(delta * 1000) / 1000,
+    balanceAfter: Math.round(balanceAfter * 1000) / 1000,
+    type: row["類型"] || row.type || "",
+    packageId: row["包ID"] || row.packageId || "",
+    eventId: row["事件ID"] || row.eventId || "",
+    eventName: row["事件名稱"] || row.eventName || "",
+    startDate: row["起日"] || row.startDate || "",
+    endDate: row["迄日"] || row.endDate || "",
+    requestId: row["申請單ID"] || row.requestId || "",
+    operator: row["操作者"] || row.operator || "",
+    note: row["備註"] || row.note || "",
+    historyOrder: order == null ? null : order
+  };
+}
+
 /**
  * 舊帳本列補「索引鍵」＝學期|教師姓名（正規化）。
  * 僅在寫入鎖內呼叫（earn／spend／adjust）；讀路徑不寫表。
@@ -5079,6 +5105,22 @@ function handleReadAction_(postData) {
   }
   var readerIsAdmin = readerRole === "admin";
   var readerIsStaff = readerRole === "staff";
+
+  // 匯出紙本時一次取得完整帳本；只允許管理員，避免逐位教師重複查詢造成數字不同步。
+  if (action === "getMutualQuotaLedger"
+      && (reqData.allTeachers === true || reqData.allTeachers === "true" || reqData.allTeachers === 1)) {
+    if (!readerIsAdmin) throw new Error("僅管理員可查看全校額度歷程");
+    var allLedgerRows = getQuotaLedgerRows_(semesterId) || [];
+    var allLedger = allLedgerRows.map(function (row, index) {
+      return quotaLedgerPublicRow_(row, index);
+    });
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      ledger: allLedger,
+      count: allLedger.length,
+      historyComplete: true
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   // 代課媒合候選（讀取、不佔寫鎖；短快取 45s，申請寫入時代次戳失效）
   if (action === "getMatchCandidates") {

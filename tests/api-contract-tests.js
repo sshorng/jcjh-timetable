@@ -157,6 +157,19 @@ function lastPayload() {
   responses.push({ status: 200, parseError: true });
   await assert.rejects(client.fetchPendingOnly(), /伺服器回應格式錯誤/);
 
+  responses.push({ status: 200, body: {
+    success: true,
+    ledger: [],
+    historyComplete: true
+  } });
+  const ledgerResult = await client.fetchMutualQuotaLedger({ allTeachers: true, limit: 'all' });
+  assert.equal(ledgerResult.historyComplete, true);
+  assert.deepEqual(lastPayload().data, {
+    name: '',
+    limit: 'all',
+    allTeachers: true
+  });
+
   console.log('api contract tests PASS');
 })().catch(function (error) {
   console.error(error);

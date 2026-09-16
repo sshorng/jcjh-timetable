@@ -91,7 +91,8 @@ window.ExportActivityCover = (function () {
   function isSubmittedStatus(st) {
     var s = String(st || '').toLowerCase();
     if (!s) return false;
-    if (s === 'cancelled' || s === 'rejected' || s === 'admin_rejected' || s === 'withdrawn') return false;
+    if (s === 'cancelled' || s === 'rejected' || s === 'admin_rejected' || s === 'withdrawn'
+        || s === '已取消' || s === '已拒絕' || s === '行政駁回' || s === '已撤回') return false;
     // 已送出：待對方／待行政／已核准 等
     return true;
   }
@@ -115,6 +116,166 @@ window.ExportActivityCover = (function () {
     // 舊資料：第8節可能只寫節次、經費空白或「計畫經費」
     if (p === 8 && (f === '' || f === '計畫經費' || f.indexOf('第8') >= 0)) return true;
     return false;
+  }
+
+  function requestPeriod(request) {
+    return parseInt(request && (request.requestPeriod != null
+      ? request.requestPeriod : (request.period != null ? request.period : request['異動節次'])), 10) || 0;
+  }
+
+  function identityValues(value) {
+    var values = typeof value === 'object' && value !== null
+      ? [value.email, value.loginEmail, value.teacherEmail, value.name, value.teacherName,
+        value['教師Email'], value['教師姓名'], value.targetTeacherEmail, value.targetTeacherName]
+      : [value];
+    return values.map(emailKey).filter(Boolean);
+  }
+
+  function requestTargetValues(request) {
+    return [
+      request && request.targetTeacherName,
+      request && request.targetTeacherEmail,
+      request && request.actualTeacherName,
+      request && request.actualTeacherEmail,
+      request && request['受邀人姓名'],
+      request && request['受邀人Email'],
+      request && request['實際授課教師姓名'],
+      request && request['實際授課教師Email']
+    ].map(emailKey).filter(Boolean);
+  }
+
+  function requestMatchesTeacher(request, teacher) {
+    if (!teacher) return true;
+    var target = requestTargetValues(request);
+    var teacherKeys = identityValues(teacher);
+    return target.some(function (value) { return teacherKeys.indexOf(value) >= 0; });
+  }
+
+  function requestMatchesMatrix(request, opts, dateSet) {
+    if (!request) return false;
+    var type = request.type || request['異動類型'];
+    if (type === 'exchange' || type === '對調' || type === '調課') return false;
+    if (!isSubmittedStatus(request.status || request['狀態'])) return false;
+    var period = requestPeriod(request);
+    if (!period) return false;
+    var fee = request.subFee || request['經費來源'] || '';
+    if (opts.onlyActivityFee !== false && !isActivityMutualFee(fee, period)) return false;
+    var activityHint = String(opts.activityName || opts.activity || '').trim();
+    if (opts.requireActivityHint && activityHint) {
+      var blob = String(request.note || request['備註'] || '') + ' '
+        + String(request.reason || request['請假事由'] || '') + ' '
+        + String(request.batchId || request['批次ID'] || '');
+      if (blob.indexOf(activityHint) < 0) return false;
+    }
+    var date = String(request.requestDate || request.date || request['異動日期'] || '').slice(0, 10);
+    if (!date || !dateSet[date]) return false;
+    return requestMatchesTeacher(request, opts.teacher || opts.teacherKey || null);
+  }
+
+  function demandForTeacher(opts, teacher) {
+    var rows = opts.teacherDemands || opts.demandByTeacher;
+    var keys = identityValues(teacher);
+    if (Array.isArray(rows)) {
+      var hit = rows.find(function (row) {
+        return row && identityValues(row).some(function (value) { return keys.indexOf(value) >= 0; });
+      });
+      if (hit) {
+        var slots = parseInt(hit.releasedSlots, 10);
+        if (!Number.isNaN(slots)) return Math.max(0, slots);
+        var released = parseFloat(hit.released);
+        if (!Number.isNaN(released)) return Math.max(0, Math.round(released));
+      }
+    } else if (rows && typeof rows === 'object') {
+      for (var i = 0; i < keys.length; i++) {
+        if (Object.prototype.hasOwnProperty.call(rows, keys[i])) {
+          var value = parseFloat(rows[keys[i]]);
+          if (!Number.isNaN(value)) return Math.max(0, Math.round(value));
+        }
+      }
+    }
+    return null;
+  }
+
+  function requestTargetName(request, nameOf) {
+    var name = String(request && (request.targetTeacherName || request.actualTeacherName
+      || request['受邀人姓名'] || request['實際授課教師姓名']) || '').trim();
+    if (name) return name;
+    var email = request && (request.targetTeacherEmail || request.actualTeacherEmail
+      || request['受邀人Email'] || request['實際授課教師Email']);
+    return typeof nameOf === 'function' ? String(nameOf(email) || email || '').trim() : String(email || '').trim();
+  }
+
+  /** 依實際受邀代課教師分組；每組會成為通知單的一頁。 */
+  function buildTeacherPages(opts) {
+    opts = opts || {};
+    var dates = listDatesInRange(opts.startDate, opts.endDate).filter(function (date) {
+      var d = parseDate(date);
+      if (!d) return false;
+      var wd = d.getDay();
+      return wd >= 1 && wd <= 5;
+    });
+    var dateSet = {};
+    dates.forEach(function (date) { dateSet[date] = true; });
+    var nameOf = typeof opts.getTeacherName === 'function' ? opts.getTeacherName : function (email) { return email || ''; };
+    var groups = [];
+    (opts.requests || []).forEach(function (request) {
+      if (!requestMatchesMatrix(request, opts, dateSet)) return;
+      var targetValues = requestTargetValues(request);
+      if (!targetValues.length) return;
+      var rosterTeacher = (opts.teachers || []).find(function (teacher) {
+        return teacher && targetValues.some(function (value) {
+          return identityValues(teacher).indexOf(value) >= 0;
+        });
+      });
+      var values = targetValues.slice();
+      if (rosterTeacher) {
+        identityValues(rosterTeacher).forEach(function (value) {
+          if (values.indexOf(value) < 0) values.push(value);
+        });
+      }
+      var group = groups.find(function (candidate) {
+        return values.some(function (value) { return candidate.keys.indexOf(value) >= 0; });
+      });
+      if (!group) {
+        group = {
+          key: values[0],
+          keys: [],
+          name: rosterTeacher
+            ? String(rosterTeacher.name || rosterTeacher.teacherName || requestTargetName(request, nameOf)).trim()
+            : requestTargetName(request, nameOf)
+        };
+        groups.push(group);
+      }
+      values.forEach(function (value) {
+        if (group.keys.indexOf(value) < 0) group.keys.push(value);
+      });
+      if (!group.name) group.name = requestTargetName(request, nameOf);
+    });
+
+    return groups.map(function (group) {
+      var rosterTeacher = (opts.teachers || []).find(function (teacher) {
+        return teacher && group.keys.some(function (value) {
+          return identityValues(teacher).indexOf(value) >= 0;
+        });
+      });
+      var teacher = rosterTeacher || {
+        email: group.key,
+        name: group.name || group.key,
+        teacherName: group.name || group.key
+      };
+      var pageOpts = Object.assign({}, opts, {
+        teacher: teacher,
+        teacherKey: group.key
+      });
+      var demand = demandForTeacher(opts, teacher);
+      if (demand !== null) pageOpts.teacherDemand = demand;
+      return {
+        key: group.key,
+        name: String(teacher.name || teacher.teacherName || group.name || group.key).trim(),
+        teacher: teacher,
+        matrix: buildMatrix(pageOpts)
+      };
+    });
   }
 
   /**
@@ -158,27 +319,17 @@ window.ExportActivityCover = (function () {
     var arrangedPublic = 0; // 活動公費（表內可有，不計 XX）
 
     (opts.requests || []).forEach(function (r) {
-      if (!r || r.type === 'exchange') return;
-      if (!isSubmittedStatus(r.status)) return;
-      var period = parseInt(r.requestPeriod != null ? r.requestPeriod : r.period, 10) || 0;
-      if (!period) return;
+      if (!requestMatchesMatrix(r, opts, dateSet)) return;
+      var period = requestPeriod(r);
       var fee = r.subFee || r['經費來源'] || '';
-      // 嚴格：只收活動互代經費（排除一般公費／自費代課）
-      if (opts.onlyActivityFee !== false && !isActivityMutualFee(fee, period)) return;
-      // 可選：備註含事件名（活動互代面板統一備註）
-      if (requireActivityHint) {
-        var blob = String(r.note || '') + ' ' + String(r.reason || '') + ' ' + String(r.batchId || '');
-        if (blob.indexOf(activityHint) < 0) return;
-      }
-      var rd = String(r.requestDate || r.date || '').slice(0, 10);
-      if (!rd || !dateSet[rd]) return;
+      var rd = String(r.requestDate || r.date || r['異動日期'] || '').slice(0, 10);
 
-      var leaveName = String(r.requesterName || '').trim()
-        || nameOf(r.requesterEmail || r.originalTeacherEmail);
-      var subName = String(r.targetTeacherName || '').trim()
-        || nameOf(r.targetTeacherEmail || r.actualTeacherEmail);
-      var className = String(r.className || '').trim();
-      var subject = String(r.subject || '').trim();
+      var leaveName = String(r.requesterName || r['申請人姓名'] || '').trim()
+        || nameOf(r.requesterEmail || r.originalTeacherEmail || r['申請人Email']);
+      var subName = String(r.targetTeacherName || r['受邀人姓名'] || '').trim()
+        || nameOf(r.targetTeacherEmail || r.actualTeacherEmail || r['受邀人Email']);
+      var className = String(r.className || r['班級'] || '').trim();
+      var subject = String(r.subject || r['科目'] || '').trim();
       if (!leaveName && !subName && !className) return;
 
       var lineObj = {
@@ -222,11 +373,30 @@ window.ExportActivityCover = (function () {
       return String(a.className || '').localeCompare(String(b.className || ''), 'zh-Hant', { numeric: true });
     });
 
-    // OO＝釋出堂數（與發放額度合計同）；XX＝扣額度已排；尚有＝OO−XX
-    var demand = parseInt(opts.demand, 10);
+    // OO＝釋出堂數；個人頁優先以帳本活動包的歷程重建 XX／尚有。
+    var demand = opts.teacherDemand != null ? parseInt(opts.teacherDemand, 10) : parseInt(opts.demand, 10);
     if (Number.isNaN(demand) || demand < 0) demand = 0;
     var arranged = arrangedQuota;
     var remaining = Math.max(0, demand - arranged);
+    var ledgerStats = null;
+    var teacherFilter = opts.teacher || opts.teacherKey || null;
+    if (teacherFilter && Array.isArray(opts.ledgerRows)
+        && window.DomainActivityCover
+        && typeof window.DomainActivityCover.buildLedgerActivityStats === 'function') {
+      ledgerStats = window.DomainActivityCover.buildLedgerActivityStats({
+        ledgerRows: opts.ledgerRows,
+        teacher: teacherFilter,
+        eventId: opts.eventId,
+        eventName: activityHint,
+        demand: demand,
+        fallbackArranged: arrangedQuota
+      });
+      if (ledgerStats.hasEvent) {
+        demand = ledgerStats.demand;
+        arranged = ledgerStats.arranged;
+        remaining = ledgerStats.remaining;
+      }
+    }
 
     return {
       dates: dates,
@@ -235,7 +405,8 @@ window.ExportActivityCover = (function () {
       demand: demand,
       arranged: arranged,
       arrangedPublic: arrangedPublic,
-      remaining: remaining
+      remaining: remaining,
+      ledgerStats: ledgerStats
     };
   }
 
@@ -419,6 +590,37 @@ window.ExportActivityCover = (function () {
     return documentXml.replace(rowRe, rowsXml);
   }
 
+  function renderPageXml(templateXml, matrix, map, titleLine) {
+    var xml = injectDataRows(templateXml, matrix);
+    var title = titleLine || map.TITLE_LINE || '';
+    xml = xml.split('{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單').join(xmlEsc(title));
+    xml = xml.split('{{GRADE}}年級課務').join(xmlEsc(map.STATS_GRADE || '　') + '年級課務');
+    xml = replacePlaceholders(xml, map);
+    return xml.replace(/\{\{[A-Z0-9_]+\}\}/g, '');
+  }
+
+  function extractBodyContent(documentXml) {
+    var match = String(documentXml || '').match(/(<w:body\b[^>]*>)([\s\S]*?)(<\/w:body>)/);
+    if (!match) return { content: String(documentXml || ''), section: '' };
+    var body = match[2];
+    var sections = body.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g) || [];
+    var section = sections.length ? sections[sections.length - 1] : '';
+    if (section) body = body.replace(section, '');
+    return { content: body, section: section };
+  }
+
+  /** 將各教師頁串回同一份 DOCX，頁間只插入分頁符。 */
+  function joinPageDocuments(templateXml, pageXmls) {
+    var outer = String(templateXml || '').match(/([\s\S]*?)(<w:body\b[^>]*>)([\s\S]*?)(<\/w:body>)([\s\S]*)/);
+    if (!outer || !pageXmls.length) return templateXml;
+    var parts = pageXmls.map(extractBodyContent);
+    var section = parts.find(function (part) { return !!part.section; });
+    var pageBreak = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+    var body = parts.map(function (part) { return part.content; }).join(pageBreak);
+    body += section ? section.section : extractBodyContent(templateXml).section;
+    return outer[1] + outer[2] + body + outer[4] + outer[5];
+  }
+
   async function exportWord(opts) {
     opts = opts || {};
     var JSZipLib = getJSZip();
@@ -440,19 +642,24 @@ window.ExportActivityCover = (function () {
       gradeForTitle = '';
     }
     var activity = activityRaw;
-    var matrix = buildMatrix(opts);
+    var teacherPages = buildTeacherPages(opts);
+    var hasTeacherPages = teacherPages.length > 0;
+    if (!hasTeacherPages) {
+      // 沒有已送出的代理課務時仍保留一張空白底稿，方便管理員核對模板。
+      teacherPages = [{ key: '', name: '', teacher: null, matrix: buildMatrix(opts) }];
+    }
+    var matrix = teacherPages[0].matrix;
     if (!matrix.dates.length) return { ok: false, error: '期間內沒有平日可匯出' };
-    if (!matrix.arranged) {
-      // 允許空表，但提示
-    }
 
-    var demand = matrix.demand;
-    var arranged = matrix.arranged;
-    var remaining = matrix.remaining;
-    if (opts.demand != null && opts.demand !== '') {
-      demand = parseInt(opts.demand, 10) || 0;
-      remaining = Math.max(0, demand - arranged);
-    }
+    var demand = teacherPages.reduce(function (sum, page) {
+      return sum + (parseFloat(page.matrix.demand) || 0);
+    }, 0);
+    var arranged = teacherPages.reduce(function (sum, page) {
+      return sum + (parseFloat(page.matrix.arranged) || 0);
+    }, 0);
+    var remaining = teacherPages.reduce(function (sum, page) {
+      return sum + (parseFloat(page.matrix.remaining) || 0);
+    }, 0);
 
     // 標題：{{GRADE}}年級{{ACTIVITY}} → 有年級前綴時 GRADE 留空、ACTIVITY 用全名
     // 內文／統計仍用 activity 全名；年級欄在「未執行的X年級」：事件已含年級時抽中文年級
@@ -461,36 +668,31 @@ window.ExportActivityCover = (function () {
       var gm = activityRaw.match(/([七八九])年級/);
       if (gm) gradeInStats = gm[1];
     }
-    var map = {
-      GRADE: gradeForTitle || gradeInStats || '　',
-      ACTIVITY: gradeForTitle ? activity : activityForTitle,
-      RANGE: formatRangeLabel(startDate, endDate) || '',
-      DEMAND: String(demand),
-      ARRANGED: String(arranged),
-      REMAINING: String(remaining),
-      EXPORT_DATE: formatExportDate(opts.exportDate),
-      NOTE_P8: formatPeriod8Note(matrix.period8Lines)
-    };
-    // 標題列特殊：若 GRADE 空，模板「{{GRADE}}年級{{ACTIVITY}}」會變「年級畢旅」→ 改成直接 ACTIVITY
-    // 改用 TITLE 整段替換更穩：先處理 document 標題佔位
-    map.TITLE_LINE = (gradeForTitle
-      ? (gradeForTitle + '年級' + activity)
-      : activityForTitle) + ' 教師代理遺留課務 輪值通知單';
-    map.STATS_GRADE = gradeInStats || '　';
-
     var tplBuf = await loadTemplateBuffer();
     var zip = await JSZipLib.loadAsync(tplBuf);
     var docFile = zip.file('word/document.xml');
     if (!docFile) return { ok: false, error: '模板缺少 word/document.xml' };
-    var xml = await docFile.async('string');
-    xml = injectDataRows(xml, matrix);
-    // 標題整行替換（避免年級重複）
-    xml = xml.split('{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單').join(xmlEsc(map.TITLE_LINE));
-    // 統計列年級用 STATS_GRADE
-    xml = xml.split('{{GRADE}}年級課務').join(xmlEsc(map.STATS_GRADE) + '年級課務');
-    xml = replacePlaceholders(xml, map);
-    // 清掉未替換的佔位
-    xml = xml.replace(/\{\{[A-Z0-9_]+\}\}/g, '');
+    var templateXml = await docFile.async('string');
+    var baseTitle = (gradeForTitle
+      ? (gradeForTitle + '年級' + activity)
+      : activityForTitle) + ' 教師代理遺留課務 輪值通知單';
+    var pageXmls = teacherPages.map(function (page) {
+      var pageMatrix = page.matrix;
+      var map = {
+        GRADE: gradeForTitle || gradeInStats || '　',
+        ACTIVITY: gradeForTitle ? activity : activityForTitle,
+        RANGE: formatRangeLabel(startDate, endDate) || '',
+        DEMAND: String(pageMatrix.demand),
+        ARRANGED: String(pageMatrix.arranged),
+        REMAINING: String(pageMatrix.remaining),
+        EXPORT_DATE: formatExportDate(opts.exportDate),
+        NOTE_P8: formatPeriod8Note(pageMatrix.period8Lines),
+        STATS_GRADE: gradeInStats || '　'
+      };
+      var title = baseTitle + (page.name ? '（輪值：' + page.name + '）' : '');
+      return renderPageXml(templateXml, pageMatrix, map, title);
+    });
+    var xml = joinPageDocuments(templateXml, pageXmls);
 
     zip.file('word/document.xml', xml);
     var outBuf = await zip.generateAsync({
@@ -526,11 +728,15 @@ window.ExportActivityCover = (function () {
       ok: true,
       fileName: fileName,
       dayCount: matrix.dates.length,
+      teacherCount: hasTeacherPages ? teacherPages.length : 0,
+      pageCount: hasTeacherPages ? teacherPages.length : 1,
       arranged: arranged,
       demand: demand,
       remaining: remaining,
-      period8Count: matrix.period8Lines.length,
-      warning: matrix.arranged === 0 ? '期間內沒有已送出的代理課務，已匯出空白表' : ''
+      period8Count: teacherPages.reduce(function (sum, page) {
+        return sum + (page.matrix.period8Lines || []).length;
+      }, 0),
+      warning: hasTeacherPages ? '' : '期間內沒有已送出的代理課務，已匯出空白表'
     };
   }
 
@@ -548,6 +754,8 @@ window.ExportActivityCover = (function () {
   return {
     exportWord: exportWord,
     buildMatrix: buildMatrix,
+    buildTeacherPages: buildTeacherPages,
+    joinPageDocuments: joinPageDocuments,
     metaFromEvent: metaFromEvent,
     gradesFromClasses: gradesFromClasses,
     formatRangeLabel: formatRangeLabel,

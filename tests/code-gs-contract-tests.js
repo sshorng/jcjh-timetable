@@ -10,6 +10,9 @@ const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
+assert.match(source, /function quotaLedgerPublicRow_\(row, order\)/, '帳本匯出列格式化 helper 必須存在');
+assert.match(source, /reqData\.allTeachers === true/, '全校帳本讀取必須有 allTeachers 分支');
+assert.match(source, /historyComplete: true/, '全校帳本回應必須標記完整歷程');
 const quotaMergeStart = source.indexOf('function mergeQuotaLedgerBalancesIntoTeacherRows_');
 const quotaMergeEnd = source.indexOf('function getSemesterTeachersCached_', quotaMergeStart);
 assert.ok(quotaMergeStart >= 0 && quotaMergeEnd > quotaMergeStart, '額度帳本餘額合併 helper 必須存在');

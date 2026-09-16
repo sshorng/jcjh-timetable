@@ -659,7 +659,8 @@ window.GasApi = (function () {
       const semesterId = options.semesterId || opts.getSemesterId();
       return await postJson('getMutualQuotaLedger', {
         name: options.name || options.teacherName || '',
-        limit: options.limit != null ? options.limit : 50
+        limit: options.limit != null ? options.limit : 50,
+        allTeachers: options.allTeachers === true
       }, { abortPrevious: true, semesterId: semesterId });
     }
 

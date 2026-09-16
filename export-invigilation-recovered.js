@@ -17,6 +17,8 @@ window.ExportInvigilation = (function () {
   var DAY_ZH = { 0: '日', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六' };
   var TEACHER_ROW_START = 9;
   var TEACHER_SLOTS_FALLBACK = 38;
+  var EXAM_SLOTS_PER_SIDE = 11; // 第一天 7 節＋第二天 4 節
+  var SPECIAL_EDUCATION_LABEL = '特教監考';
   var NOTE5_RE = /【[^】]*未執行的[^】]*共\s*[_\d]*\s*節，本次段考已安排\s*[_\d]*\s*節，尚有\s*[_\d]*\s*節，未執行節數將會累計於本學年度】/;
   var _templateBuf = null;
 
@@ -408,8 +410,11 @@ window.ExportInvigilation = (function () {
     };
   }
 
-  function countEmptySlotQuotaUsed(requests, email, startDate, endDate) {
-    var em = String(email || '').toLowerCase();
+  function countEmptySlotQuotaUsed(requests, email, startDate, endDate, teacher) {
+    var teacherKeys = [email, teacher && teacher.email, teacher && teacher.loginEmail,
+      teacher && teacher.name, teacher && teacher.teacherName]
+      .map(function (value) { return String(value || '').trim().toLowerCase(); })
+      .filter(Boolean);
     var a = String(startDate || '').slice(0, 10);
     var b = String(endDate || '').slice(0, 10);
     var n = 0;
@@ -417,17 +422,49 @@ window.ExportInvigilation = (function () {
       if (!r || String(r.status || '').toLowerCase() !== 'approved') return;
       var fee = String(r.subFee || '');
       if (fee !== '扣額度' && fee !== '互代不結') return;
-      var te = String(r.targetTeacherEmail || r.actualTeacherEmail || '').toLowerCase();
-      if (te !== em) return;
-      var reason = String(r.reason || '').trim();
-      var note = String(r.note || '');
+      var targetKeys = [r.targetTeacherEmail, r.actualTeacherEmail, r.targetTeacherName,
+        r['受邀人Email'], r['受邀人姓名']]
+        .map(function (value) { return String(value || '').trim().toLowerCase(); })
+        .filter(Boolean);
+      if (!targetKeys.some(function (key) { return teacherKeys.indexOf(key) >= 0; })) return;
+      var reason = String(r.reason || r['請假事由'] || '').trim();
+      var note = String(r.note || r['備註'] || '');
       if (!(reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0 || r.isEmptySlotAssign)) return;
-      var d = String(r.requestDate || r.date || '').slice(0, 10);
+      var d = String(r.requestDate || r.date || r['異動日期'] || '').slice(0, 10);
       if (a && d < a) return;
       if (b && d > b) return;
       n += 1;
     });
     return n;
+  }
+
+  function buildExamQuotaStats(opts) {
+    opts = opts || {};
+    var fallbackRemain = parseFloat(opts.teacher && opts.teacher.mutualQuota);
+    if (Number.isNaN(fallbackRemain)) fallbackRemain = 0;
+    var fallbackUsed = countEmptySlotQuotaUsed(
+      opts.requests, opts.email || (opts.teacher && opts.teacher.email), opts.startDate, opts.endDate, opts.teacher
+    );
+    var fallback = {
+      before: Math.max(0, fallbackRemain + fallbackUsed),
+      used: fallbackUsed,
+      remaining: Math.max(0, fallbackRemain),
+      hasHistory: false,
+      hasExamSpend: false
+    };
+    if (!Array.isArray(opts.ledgerRows)
+        || !window.DomainActivityCover
+        || typeof window.DomainActivityCover.buildLedgerExamStats !== 'function') {
+      return fallback;
+    }
+    var stats = window.DomainActivityCover.buildLedgerExamStats({
+      ledgerRows: opts.ledgerRows,
+      teacher: opts.teacher,
+      requests: opts.requests,
+      startDate: opts.startDate,
+      endDate: opts.endDate
+    });
+    return stats && stats.hasHistory ? stats : fallback;
   }
 
   function getExcelJS() {
@@ -458,23 +495,89 @@ window.ExportInvigilation = (function () {
   var MASTER_SHEET_NAME = '監考表';
 
   /**
-   * 分發表：B4:X6（七／八／九年級考科列）公式連動主表「監考表」
-   * 只改 value 為公式，不碰 border／fill
+   * 分發表：A1:X47 公式連動主表「監考表」
+   * 合併區只在左上角主儲存格寫公式；只改 value，不碰樣式
    */
-  function linkExamSubjectRows(ws, masterName) {
-    if (!ws) return;
+  function linkMasterRange(ws, masterName) {
+    if (!ws) return 0;
     var src = String(masterName || MASTER_SHEET_NAME).replace(/'/g, "''");
+    var linked = 0;
+
+    function isMergedFollower(cell) {
+      if (!cell || !cell.isMerged || !cell.master) return false;
+      return cell.master.address && cell.master.address !== cell.address;
+    }
+
     var r;
     var c;
-    for (r = 4; r <= 6; r++) {
-      for (c = 2; c <= 24; c++) {
+    for (r = 1; r <= 47; r++) {
+      for (c = 1; c <= 24; c++) {
         var cell = ws.getCell(r, c);
-        var addr = cell.address;
-        if (!addr) continue;
-        // ExcelJS：公式物件
-        cell.value = { formula: "'" + src + "'!" + addr };
+        if (!cell || isMergedFollower(cell)) continue;
+        var addr = cell.address || (columnName(c) + r);
+        var ref = "'" + src + "'!" + addr;
+        // 空白來源保持空白，避免 Excel 將跨表空白引用顯示成 0。
+        cell.value = { formula: 'IF(' + ref + '="","",' + ref + ')' };
+        linked += 1;
       }
     }
+    return linked;
+  }
+
+  function columnName(n) {
+    var out = '';
+    var value = n;
+    while (value > 0) {
+      var rem = (value - 1) % 26;
+      out = String.fromCharCode(65 + rem) + out;
+      value = Math.floor((value - 1) / 26);
+    }
+    return out;
+  }
+
+  function isSpecialEducationTeacher(teacher) {
+    if (!teacher) return false;
+    var jobTitle = String(
+      teacher.jobTitle || teacher.job || teacher['職務'] || teacher['職稱'] || ''
+    ).trim();
+    var subject = String(
+      teacher.subject || teacher['授課科目'] || teacher['任課科目'] || ''
+    ).trim();
+    return /特教/.test(jobTitle) || /特教/.test(subject);
+  }
+
+  function mergeWithoutStyle(ws, range) {
+    if (!ws || !range) return;
+    try {
+      if (typeof ws.mergeCellsWithoutStyle === 'function') {
+        ws.mergeCellsWithoutStyle(range);
+      } else {
+        ws.mergeCells(range);
+      }
+    } catch (eMerge) { /* already merged or unsupported */ }
+  }
+
+  function applySpecialEducationRows(ws, matrix, layout) {
+    if (!ws || !matrix || !layout) return 0;
+    var merged = 0;
+
+    function mergeSide(list, dataColStart) {
+      (list || []).forEach(function (teacher, index) {
+        if (!teacher || !teacher.specialEducation) return;
+        var row = layout.teacherRowStart + index;
+        if (row > layout.teacherRowEnd) return;
+        var start = columnName(dataColStart) + row;
+        var end = columnName(dataColStart + EXAM_SLOTS_PER_SIDE - 1) + row;
+        var anchor = ws.getCell(row, dataColStart);
+        if (anchor) anchor.value = SPECIAL_EDUCATION_LABEL;
+        mergeWithoutStyle(ws, start + ':' + end);
+        merged += 1;
+      });
+    }
+
+    mergeSide(matrix.left, 2);
+    mergeSide(matrix.right, 14);
+    return merged;
   }
 
   function buildTeacherMatrix(teachers, periodSpec, getCell, slotsPerSide, onProgress, allSchedules) {
@@ -534,7 +637,20 @@ window.ExportInvigilation = (function () {
       }
       var slots = [];
       var s;
-      for (s = 0; s < 11; s++) {
+      if (isSpecialEducationTeacher(t)) {
+        slots.push({ text: SPECIAL_EDUCATION_LABEL, changed: false });
+        for (s = 1; s < EXAM_SLOTS_PER_SIDE; s++) {
+          slots.push({ text: '', changed: false });
+        }
+        return {
+          name: t.name || t.email || '',
+          email: t.email,
+          specialEducation: true,
+          slots: slots
+        };
+      }
+
+      for (s = 0; s < EXAM_SLOTS_PER_SIDE; s++) {
         var sp = periodSpec[s];
         var day = dayOfWeekMon1(sp.date);
         var raw = getCached(t.email, sp.date, sp.period, day);
@@ -660,6 +776,34 @@ window.ExportInvigilation = (function () {
     });
   }
 
+  function normalizePrintArea(area) {
+    if (!area) return '';
+    if (Array.isArray(area)) area = area.join(',');
+    return String(area)
+      .split(',')
+      .map(function (part) {
+        return part.trim().replace(/^(?:'[^']+'|[^!]+)!/, '');
+      })
+      .filter(Boolean)
+      .join(',');
+  }
+
+  function copyPrintSettings(srcSheet, targetSheet) {
+    if (!srcSheet || !targetSheet) return;
+    var sourceSetup = srcSheet.pageSetup || {};
+    var setup = clonePlain(sourceSetup) || {};
+    var area = normalizePrintArea(sourceSetup.printArea || srcSheet.printArea);
+    if (area) setup.printArea = area;
+    // 每個工作表固定縮成單頁，其他紙張、方向、邊界沿用範例模板。
+    setup.fitToPage = true;
+    setup.fitToWidth = 1;
+    setup.fitToHeight = 1;
+    targetSheet.pageSetup = setup;
+    if (area) {
+      try { targetSheet.printArea = area; } catch (eArea) { /* pageSetup 已保留 */ }
+    }
+  }
+
   function copySheetValuesAndStyles(srcSheet, targetSheet, dimensionSource) {
     if (!srcSheet || !targetSheet) return;
 
@@ -667,7 +811,7 @@ window.ExportInvigilation = (function () {
     if (srcSheet.properties) targetSheet.properties = clonePlain(srcSheet.properties);
     if (srcSheet.views) targetSheet.views = clonePlain(srcSheet.views);
     if (srcSheet.headerFooter) targetSheet.headerFooter = clonePlain(srcSheet.headerFooter);
-    if (srcSheet.pageSetup) targetSheet.pageSetup = clonePlain(srcSheet.pageSetup);
+    copyPrintSettings(dimensionSource || srcSheet, targetSheet);
 
     srcSheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
       var targetRow = targetSheet.getRow(rowNumber);
@@ -781,8 +925,10 @@ window.ExportInvigilation = (function () {
     var masterSheet = outWb.worksheets[0];
     if (!masterSheet) return { ok: false, error: '底稿讀取失敗' };
     copySheetDimensions(master, masterSheet);
+    copyPrintSettings(master, masterSheet);
     masterSheet.name = MASTER_SHEET_NAME;
     var lastMarked = applyChangeFonts(masterSheet, matrix, layout);
+    applySpecialEducationRows(masterSheet, matrix, layout);
 
     var usedNames = {};
     usedNames[MASTER_SHEET_NAME] = 1;
@@ -796,11 +942,14 @@ window.ExportInvigilation = (function () {
       if (usedNames[sheetName]) sheetName = sheetName.slice(0, 26) + '_' + i;
       usedNames[sheetName] = 1;
 
-      var remain = parseFloat(rec.mutualQuota);
-      if (Number.isNaN(remain)) remain = 0;
-      var usedN = countEmptySlotQuotaUsed(
-        opts.requests, em, range.dates[0], range.dates[range.dates.length - 1]
-      );
+      var quotaStats = buildExamQuotaStats({
+        ledgerRows: opts.ledgerRows,
+        teacher: rec,
+        email: em,
+        requests: opts.requests,
+        startDate: range.dates[0],
+        endDate: range.dates[range.dates.length - 1]
+      });
 
       if (i === 0 || (i + 1) % 5 === 0 || i === total - 1) {
         progress('分發工作表 ' + (i + 1) + '／' + total + '…', i + 1, total);
@@ -812,13 +961,21 @@ window.ExportInvigilation = (function () {
       var tempSheet = tempWb.worksheets[0];
       if (!tempSheet) return { ok: false, error: '底稿讀取失敗' };
       tempSheet.name = sheetName;
-      personalizeValues(tempSheet, layout, name, remain + usedN, usedN, remain);
+      personalizeValues(
+        tempSheet,
+        layout,
+        name,
+        quotaStats.before,
+        quotaStats.used,
+        quotaStats.remaining
+      );
 
       try {
         var targetSheet = outWb.addWorksheet(sheetName);
         copySheetValuesAndStyles(tempSheet, targetSheet, master);
-        // 考科列 B4:X6 公式連動「監考表」
-        linkExamSubjectRows(targetSheet, MASTER_SHEET_NAME);
+        applySpecialEducationRows(targetSheet, matrix, layout);
+        // 分發頁 A1:X47 公式連動「監考表」；A48 保留個人額度備註。
+        linkMasterRange(targetSheet, MASTER_SHEET_NAME);
       } catch (eMove) {
         return {
           ok: false,
@@ -833,6 +990,8 @@ window.ExportInvigilation = (function () {
 
     progress('寫入單一 xlsx…', total, total);
     await yieldUi();
+    // 讓 Excel 開檔時重算分發頁的跨工作表公式。
+    if (outWb.calcProperties) outWb.calcProperties.fullCalcOnLoad = true;
     var fname = opts.filename
       || ('段考監考表_' + String(range.dates[0]).replace(/-/g, '') + '.xlsx');
     var outBuf = await outWb.xlsx.writeBuffer();
@@ -843,7 +1002,7 @@ window.ExportInvigilation = (function () {
       var tip = '教師 ' + matrix.total + ' 人，表內列出前 ' + matrix.shown + ' 人。';
       warn = warn ? (warn + '；' + tip) : tip;
     }
-    var masterTip = '第1張「監考表」可填 B4:X6 考科，其餘分發表已公式連動。';
+    var masterTip = '第1張「監考表」可填 B4:X6 考科；各分發表 A1:X47 已公式連動，A48 保留個人額度備註。';
     warn = warn ? (warn + '；' + masterTip) : masterTip;
 
     return {
@@ -866,6 +1025,13 @@ window.ExportInvigilation = (function () {
     buildPeriodSpec: buildPeriodSpec,
     cellTextFromSchedule: cellTextFromSchedule,
     countEmptySlotQuotaUsed: countEmptySlotQuotaUsed,
+    buildExamQuotaStats: buildExamQuotaStats,
+    buildTeacherMatrix: buildTeacherMatrix,
+    isSpecialEducationTeacher: isSpecialEducationTeacher,
+    applySpecialEducationRows: applySpecialEducationRows,
+    normalizePrintArea: normalizePrintArea,
+    copyPrintSettings: copyPrintSettings,
+    linkMasterRange: linkMasterRange,
     exportWorkbook: exportWorkbook,
     loadTemplateBuffer: loadTemplateBuffer
   };

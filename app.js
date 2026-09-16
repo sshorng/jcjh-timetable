@@ -7506,6 +7506,16 @@ createApp({
         throw new Error('JSZip 未載入');
       }
     };
+    const fetchQuotaLedgerHistoryForExport = async () => {
+      if (typeof fetchMutualQuotaLedger !== 'function') {
+        throw new Error('額度帳本歷程 API 未載入，請重新整理頁面');
+      }
+      const res = await fetchMutualQuotaLedger({ allTeachers: true, limit: 'all' });
+      if (!res || res.success === false || !Array.isArray(res.ledger) || res.historyComplete !== true) {
+        throw new Error('無法取得完整額度帳本歷程，為避免數字失真已停止匯出');
+      }
+      return res.ledger;
+    };
     const exportActivityCoverWord = async (evArg) => {
       if (!isAdmin.value) {
         showToast('僅管理員可匯出輪值通知單', 'warning');
@@ -7568,6 +7578,7 @@ createApp({
       // OO＝釋出堂數（與「＋發放額度」合計釋出同口徑：非帶隊、有外出班課之釋出加總）
       // XX＝1～7 扣額度已排（export 內算）；尚有＝OO−XX
       let demand = 0;
+      let teacherDemandRows = [];
       const dac = await ensureDAC();
       if (dac && dac.buildQuotaRecalcRows) {
         try {
@@ -7583,15 +7594,16 @@ createApp({
               });
             }
           } catch (eL) { /* ignore */ }
-          const rows = dac.buildQuotaRecalcRows({
+           const rows = dac.buildQuotaRecalcRows({
             mode: 'add',
             teachers: teachersList.value || [],
             awayClasses,
             startDate,
             endDate,
             allSchedules: allSchedules.value || [],
-            excludeEmails: leaders
-          });
+             excludeEmails: leaders
+           });
+           teacherDemandRows = rows || [];
           // 輪值單 OO＝釋出堂數（節），不以額度單位計算
           demand = (rows || []).reduce((sum, r) => {
             if (!r || r.skipped) return sum;
@@ -7601,7 +7613,15 @@ createApp({
             const earn = parseFloat(r.released) || 0;
             return sum + Math.round(earn);
           }, 0);
-        } catch (eRel) { /* ignore */ }
+         } catch (eRel) { /* ignore */ }
+      }
+
+      let ledgerRows;
+      try {
+        ledgerRows = await fetchQuotaLedgerHistoryForExport();
+      } catch (eLedger) {
+        showToast(eLedger && eLedger.message ? eLedger.message : '無法取得額度帳本歷程', 'error');
+        return;
       }
 
       const res = await window.ExportActivityCover.exportWord({
@@ -7611,6 +7631,10 @@ createApp({
         grade,
         requests: allReqs,
         demand,
+        teachers: teachersList.value || [],
+        teacherDemands: teacherDemandRows,
+        ledgerRows,
+        eventId: String(ev.id || '').trim(),
         getTeacherName: (em) => getTeacherNameByEmail(em),
         onlyActivityFee: true,
         requireActivityHint: true
@@ -7621,7 +7645,8 @@ createApp({
       }
       if (res.warning) showToast(res.warning, 'info');
       const p8 = res.period8Count ? `，第8節附註 ${res.period8Count} 筆` : '';
-      showToast(`已下載：${res.fileName}（釋出 ${res.demand}／扣額度安排 ${res.arranged}／尚有 ${res.remaining}${p8}）`, 'success');
+       const pageTip = res.pageCount != null ? `，${res.pageCount} 位代課教師各 1 頁` : '';
+       showToast(`已下載：${res.fileName}（釋出 ${res.demand}／扣額度安排 ${res.arranged}／尚有 ${res.remaining}${pageTip}${p8}）`, 'success');
     };
 
     // 段考監考表：與全校課表共用 schoolExportStart/End；標題在點匯出後再輸入
@@ -7708,14 +7733,21 @@ createApp({
         selectedSet[String(e || '').toLowerCase()] = 1;
       });
       let recipients = teachers.filter(t => selectedSet[String(t.email || '').toLowerCase()]);
-      if (!recipients.length) {
-        showToast('請在下方勾選要分發的教師（至少一位）', 'warning');
-        return;
-      }
-      loading.value = true;
-      loadingMessage.value = '產生監考表中…';
-      try {
-        // dayOfWeek：系統課表為 1=一…7=日；同時備援 Date.getDay()(0=日)
+         if (!recipients.length) {
+           showToast('請在下方勾選要分發的教師（至少一位）', 'warning');
+           return;
+         }
+         loading.value = true;
+         loadingMessage.value = '產生監考表中…';
+         try {
+           let ledgerRows;
+           try {
+             ledgerRows = await fetchQuotaLedgerHistoryForExport();
+           } catch (eLedger) {
+             showToast(eLedger && eLedger.message ? eLedger.message : '無法取得額度帳本歷程', 'error');
+             return;
+           }
+           // dayOfWeek：系統課表為 1=一…7=日；同時備援 Date.getDay()(0=日)
         const getCellFn = (email, dateStr, period, dayOfWeek) => {
           let cell = null;
           if (typeof getScheduleForDate === 'function') {
@@ -7772,8 +7804,9 @@ createApp({
           teachers: teachers,
           recipients: recipients,
           getCell: getCellFn,
-          requests: requestsList.value || [],
-          allSchedules: allSchedules.value || [],
+           requests: requestsList.value || [],
+           ledgerRows: ledgerRows,
+           allSchedules: allSchedules.value || [],
           onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
           }

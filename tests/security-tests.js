@@ -12,7 +12,7 @@ const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const gasApiSource = fs.readFileSync(path.join(root, 'gas-api.js'), 'utf8');
 const indexSource = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const devServerSource = fs.readFileSync(path.join(root, 'dev-server.js'), 'utf8');
-const invigilationSource = fs.readFileSync(path.join(root, 'export-invigilation.js'), 'utf8');
+const invigilationSource = fs.readFileSync(path.join(root, 'export-invigilation-recovered.js'), 'utf8');
 const printHelperSource = fs.readFileSync(path.join(root, 'print-helper.js'), 'utf8');
 const styleSource = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 const vercelConfig = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
@@ -22,6 +22,7 @@ assert.strictEqual(resolvePublicFile('/app.js?v=security1'), path.join(root, 'ap
 assert.strictEqual(resolvePublicFile('/code.gs'), null);
 assert.strictEqual(resolvePublicFile('/docs/A-%E7%B3%BB%E7%B5%B1%E4%BB%8B%E7%B4%B9.html'), null);
 assert.strictEqual(resolvePublicFile('/templates/invigilation-template.xlsx'), path.join(root, 'templates', 'invigilation-template.xlsx'));
+assert.strictEqual(resolvePublicFile('/export-invigilation-recovered.js?v=contract1'), path.join(root, 'export-invigilation-recovered.js'));
 assert.strictEqual(resolvePublicFile('/templates/test_out.xlsx'), null);
 assert.strictEqual(resolvePublicFile('/%2e%2e%2fcode.gs'), null);
 assert.strictEqual(resolvePublicFile('/.git/config'), null);

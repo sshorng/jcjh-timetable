@@ -224,6 +224,229 @@ window.DomainActivityCover = (function () {
     return n;
   }
 
+  function ledgerField(row, keys) {
+    if (!row) return '';
+    for (var i = 0; i < keys.length; i++) {
+      var value = row[keys[i]];
+      if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+    }
+    return '';
+  }
+
+  function ledgerNumber(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    var n = parseFloat(value);
+    return isNaN(n) ? null : Math.round(n * 1000) / 1000;
+  }
+
+  function ledgerIdentityValues(value) {
+    var values = typeof value === 'object' && value !== null
+      ? [value.email, value.loginEmail, value.teacherEmail, value.name, value.teacherName,
+        value['教師Email'], value['教師姓名']]
+      : [value];
+    return values.map(function (item) { return emailKey(item); }).filter(Boolean);
+  }
+
+  function ledgerTeacherMatches(row, teacher) {
+    var rowValues = ledgerIdentityValues({
+      email: ledgerField(row, ['teacherEmail', 'email', '教師Email']),
+      name: ledgerField(row, ['name', 'teacherName', '教師姓名'])
+    });
+    var teacherValues = ledgerIdentityValues(teacher);
+    return rowValues.some(function (value) { return teacherValues.indexOf(value) >= 0; });
+  }
+
+  function ledgerDate(row) {
+    var value = ledgerField(row, [
+      'startDate', '起日', 'requestDate', '異動日期', 'date', '日期', 'time', '時間'
+    ]);
+    return normalizeDate(value);
+  }
+
+  function ledgerTime(row) {
+    var value = ledgerField(row, ['time', '時間', 'createdAt', '建立時間']);
+    return String(value || ledgerDate(row) || '').replace('T', ' ').trim();
+  }
+
+  function ledgerType(row) {
+    return String(ledgerField(row, ['type', '類型']) || '').trim().toLowerCase();
+  }
+
+  function ledgerDelta(row) {
+    return ledgerNumber(ledgerField(row, ['delta', '異動'])) || 0;
+  }
+
+  function ledgerRequestId(row) {
+    return String(ledgerField(row, ['requestId', '申請單ID', 'id']) || '').trim();
+  }
+
+  function ledgerRequestMap(requests) {
+    var map = {};
+    (requests || []).forEach(function (request) {
+      var id = String(request && (request.id || request['申請單ID']) || '').trim();
+      if (id) map[id] = request;
+    });
+    return map;
+  }
+
+  function ledgerHistoryEntries(rows, teacher) {
+    var source = (rows || []).map(function (row, index) {
+      return { row: row, index: index };
+    }).filter(function (item) {
+      return item.row && (!teacher || ledgerTeacherMatches(item.row, teacher));
+    });
+    source.sort(function (a, b) {
+      var ta = ledgerTime(a.row);
+      var tb = ledgerTime(b.row);
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      // Bulk ledger responses retain the sheet order for same-second writes.
+      var oa = ledgerNumber(ledgerField(a.row, ['historyOrder', 'order']));
+      var ob = ledgerNumber(ledgerField(b.row, ['historyOrder', 'order']));
+      if (oa !== null && ob !== null && oa !== ob) return oa - ob;
+      return a.index - b.index;
+    });
+
+    var running = 0;
+    return source.map(function (item) {
+      var delta = ledgerDelta(item.row);
+      var afterRaw = ledgerNumber(ledgerField(item.row, ['balanceAfter', '餘額後']));
+      var before = afterRaw === null ? running : afterRaw - delta;
+      var after = afterRaw === null ? running + delta : afterRaw;
+      running = Math.round(after * 1000) / 1000;
+      return {
+        row: item.row,
+        index: item.index,
+        delta: delta,
+        before: Math.round(before * 1000) / 1000,
+        after: running,
+        type: ledgerType(item.row),
+        date: ledgerDate(item.row),
+        time: ledgerTime(item.row),
+        requestId: ledgerRequestId(item.row),
+        packageId: String(ledgerField(item.row, ['packageId', '包ID']) || '').trim(),
+        eventId: String(ledgerField(item.row, ['eventId', '事件ID']) || '').trim(),
+        eventName: String(ledgerField(item.row, ['eventName', '事件名稱']) || '').trim()
+      };
+    });
+  }
+
+  function ledgerEntryInRange(entry, opts) {
+    opts = opts || {};
+    var date = entry && entry.date;
+    if (!date) return false;
+    var dates = opts.rangeDates || opts.dates;
+    if (Array.isArray(dates) && dates.length) {
+      return dates.map(normalizeDate).indexOf(date) >= 0;
+    }
+    return isDateInRange(date, opts.startDate, opts.endDate);
+  }
+
+  function isEmptySlotRequest(request) {
+    if (!request) return false;
+    if (request.isEmptySlotAssign === true) return true;
+    var reason = String(request.reason || request['請假事由'] || '').trim();
+    var note = String(request.note || request['備註'] || '');
+    return reason === EMPTY_SLOT_REASON || note.indexOf('[空堂排班]') >= 0;
+  }
+
+  function isLedgerSpend(entry) {
+    return !!entry && entry.type === 'spend' && entry.delta < 0;
+  }
+
+  function isExamLedgerSpend(entry, opts, requestMap) {
+    if (!isLedgerSpend(entry) || !ledgerEntryInRange(entry, opts)) return false;
+    if (typeof opts.isExamSpend === 'function') {
+      try { return !!opts.isExamSpend(entry.row, entry); } catch (e) { /* ignore */ }
+    }
+    var request = requestMap[entry.requestId];
+    if (request) return isEmptySlotRequest(request);
+    return entry.eventName === '空堂任務'
+      || String(ledgerField(entry.row, ['note', '備註']) || '').indexOf('[空堂排班]') >= 0;
+  }
+
+  /**
+   * 由帳本歷程重建段考備註三欄。
+   * before：第一筆段考扣用前的餘額；used：段考扣用；remaining：最後一筆段考扣用後餘額。
+   */
+  function buildLedgerExamStats(opts) {
+    opts = opts || {};
+    var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
+    var requestMap = ledgerRequestMap(opts.requests);
+    var examEntries = entries.filter(function (entry) {
+      return isExamLedgerSpend(entry, opts, requestMap);
+    });
+    var latest = entries.length ? entries[entries.length - 1] : null;
+    var first = examEntries.length ? examEntries[0] : null;
+    var last = examEntries.length ? examEntries[examEntries.length - 1] : null;
+    var used = examEntries.reduce(function (sum, entry) {
+      return sum + Math.abs(entry.delta);
+    }, 0);
+    return {
+      hasHistory: entries.length > 0,
+      hasExamSpend: examEntries.length > 0,
+      before: Math.max(0, Math.round((first ? first.before : (latest ? latest.after : 0)) * 1000) / 1000),
+      used: Math.round(used * 1000) / 1000,
+      remaining: Math.max(0, Math.round((last ? last.after : (latest ? latest.after : 0)) * 1000) / 1000),
+      entries: examEntries
+    };
+  }
+
+  function ledgerEventMatches(entry, opts) {
+    opts = opts || {};
+    var eventId = String(opts.eventId || '').trim();
+    var eventName = String(opts.eventName || opts.activityName || '').trim();
+    if (eventId && entry.eventId && eventId === entry.eventId) return true;
+    if (eventName && entry.eventName && eventName === entry.eventName) return true;
+    return false;
+  }
+
+  /**
+   * 由活動額度包重建個人輪值單三欄。
+   * 同一包的 earn／spend／restore 會共同反映在剩餘額度，能跨越段考與畢旅正確累計。
+   */
+  function buildLedgerActivityStats(opts) {
+    opts = opts || {};
+    var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
+    var earnEntries = entries.filter(function (entry) {
+      return entry.type === 'earn' && entry.delta > 0 && ledgerEventMatches(entry, opts);
+    });
+    var packageIds = {};
+    earnEntries.forEach(function (entry) {
+      if (entry.packageId) packageIds[entry.packageId] = true;
+    });
+    var packageEntries = entries.filter(function (entry) {
+      return entry.packageId && packageIds[entry.packageId];
+    });
+    var eventEntries = packageEntries.length ? packageEntries : entries.filter(function (entry) {
+      return ledgerEventMatches(entry, opts);
+    });
+    var ledgerDemand = earnEntries.reduce(function (sum, entry) {
+      return sum + entry.delta;
+    }, 0);
+    var fallbackDemand = ledgerNumber(opts.demand);
+    if (fallbackDemand === null || fallbackDemand < 0) fallbackDemand = 0;
+    var demand = earnEntries.length ? ledgerDemand : fallbackDemand;
+    var packageBalance = eventEntries.reduce(function (sum, entry) {
+      return sum + entry.delta;
+    }, 0);
+    var fallbackArranged = ledgerNumber(opts.fallbackArranged);
+    if (fallbackArranged === null || fallbackArranged < 0) fallbackArranged = 0;
+    var arranged = earnEntries.length
+      ? Math.max(0, demand - Math.max(0, packageBalance))
+      : eventEntries.filter(isLedgerSpend).reduce(function (sum, entry) {
+        return sum + Math.abs(entry.delta);
+      }, fallbackArranged);
+    var remaining = Math.max(0, demand - arranged);
+    return {
+      hasHistory: entries.length > 0,
+      hasEvent: earnEntries.length > 0 || eventEntries.length > 0,
+      demand: Math.round(demand * 1000) / 1000,
+      arranged: Math.round(arranged * 1000) / 1000,
+      remaining: Math.round(remaining * 1000) / 1000,
+      entries: eventEntries
+    };
+  }
+
   /**
    * 暫定草稿中，某師已佔用的「扣額度」節數（尚未送出）
    * opts.pendingDrafts: [{ subEmail|subTeacherEmail, fee|subFee, dateStr?, key? }]
@@ -1043,6 +1266,8 @@ window.DomainActivityCover = (function () {
     isConflictCell: isConflictCell,
     countReleasedSlotsForTeacher: countReleasedSlotsForTeacher,
     countUsedMutualAsSub: countUsedMutualAsSub,
+    buildLedgerExamStats: buildLedgerExamStats,
+    buildLedgerActivityStats: buildLedgerActivityStats,
     countPendingDraftMutual: countPendingDraftMutual,
     getTeacherReleaseBalance: getTeacherReleaseBalance,
     buildQuotaRecalcRows: buildQuotaRecalcRows,
