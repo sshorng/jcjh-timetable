@@ -2927,9 +2927,9 @@ createApp({
 
     const copyLineMessageForRequest = (req) => {
       const isExchange = isExchangeLikeRequest(req);
-      // 紙本與待行政核准案件不應帶線上簽核網址；行政代申請仍保留線上行政流程。
-      const paperFlowRequest = !isProxySubmitRequest(req)
-        && (isPaperFlowRequest(req) || notificationsSuppressed.value || req.status === 'pending_admin');
+      // 待行政核准案件已進入紙本／行政處理階段，不應再帶線上簽核網址。
+      const paperFlowRequest = req.status === 'pending_admin'
+        || (!isProxySubmitRequest(req) && (isPaperFlowRequest(req) || notificationsSuppressed.value));
       const currentUrl = window.location.origin + window.location.pathname;
 
       // LINE 按鈕是單筆操作；批次中的其他節次需各自確認，避免誤把整批課程傳給對方。

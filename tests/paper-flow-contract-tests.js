@@ -977,7 +977,7 @@ function runApplicationFormContractTest() {
       assert.match(html, /ui-activity\.js\?v=20260915-[^"]+/);
           assert.match(html, /app\.js\?v=20260915-[^"]+/);
        assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
-        assert.match(appSource, /const paperFlowRequest = !isProxySubmitRequest\(req\)\s*&& \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value \|\| req\.status === 'pending_admin'\);/, '紙本與待行政核准傳訊不得帶線上簽核連結');
+         assert.match(appSource, /const paperFlowRequest = req\.status === 'pending_admin'\s*\|\|\s*\(!isProxySubmitRequest\(req\) && \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value\)\);/, '紙本與待行政核准傳訊不得帶線上簽核連結');
         assert.match(appSource, /const rows = \[req\];/, 'LINE 單筆操作不得展開整個批次');
         const lineRequestStart = appSource.indexOf('const copyLineMessageForRequest =');
         const lineRequestEnd = appSource.indexOf('const pendingRequestData =', lineRequestStart);
