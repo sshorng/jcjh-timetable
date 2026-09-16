@@ -1615,7 +1615,7 @@ window.DomainBilling = (function () {
       if (reason.indexOf('公假自理') >= 0 || reason.indexOf('事假') >= 0 || reason.indexOf('病假') >= 0 || reason.indexOf('補休') >= 0) {
         return false;
       }
-      if (reason.indexOf('公假') >= 0 || reason.indexOf('婚假') >= 0 || reason.indexOf('喪假') >= 0 || reason.indexOf('產前假') >= 0 || reason.indexOf('分娩假') >= 0 || reason.indexOf('身心調適假') >= 0) {
+      if (reason.indexOf('公假') >= 0 || reason.indexOf('婚假') >= 0 || reason.indexOf('喪假') >= 0 || reason.indexOf('產假') >= 0 || reason.indexOf('產前假') >= 0 || reason.indexOf('分娩假') >= 0 || reason.indexOf('身心調適假') >= 0) {
         return true;
       }
       return true;

@@ -886,8 +886,10 @@ function runCalendarFallbackContractTest() {
 
 function runApplicationFormContractTest() {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  assert.doesNotMatch(html, /data-tour="compare-fee"/);
-  assert.doesNotMatch(html, /代課鐘點費結算方式/);
+  assert.match(html, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
+  assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && !pendingRequestData\.courseAdjustmentOnly/, '經費選單應僅管理員可見');
+  assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
+  assert.match(html, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
   assert.match(html, /id="course-adjustment-only"/);
   assert.match(html, /@change="toggleCourseAdjustmentOnly"/);
   assert.match(html, /<th class="billing-sticky-name">姓名<\/th>\s*<th class="billing-th-job">職務<\/th>\s*<th class="billing-th-subject">科目<\/th>/, '月報應在科目前顯示職務');
@@ -906,10 +908,29 @@ function runApplicationFormContractTest() {
   assert.match(html, /@click="openSuccessPrintPreview"/);
   assert.match(html, /@click="addSuccessToCalendar"/);
   assert.match(html, /@click="closeSuccessGoRecords"/);
-     const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-     const activitySource = fs.readFileSync(path.join(root, 'ui-activity.js'), 'utf8');
-     const onboardingSource = fs.readFileSync(path.join(root, 'onboarding-tour.js'), 'utf8');
-     const mutualRecStart = appSource.indexOf('const isMutualRec =');
+      const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+      const activitySource = fs.readFileSync(path.join(root, 'ui-activity.js'), 'utf8');
+      const onboardingSource = fs.readFileSync(path.join(root, 'onboarding-tour.js'), 'utf8');
+      assert.match(appSource, /PUBLIC_FEE_REASONS = \['公假', '婚假', '喪假', '產假'/, '產假應列入公費預設假別');
+      assert.match(appSource, /pendingRequestData\.value\.subFee = defaultSubFeeForReason\(reason\)/, '假別變更應重新帶入預設經費');
+      const feeHelperStart = appSource.indexOf('const PUBLIC_FEE_REASONS =');
+      const feeHelperEnd = appSource.indexOf('const getHistoryEditDefaultSubFee', feeHelperStart);
+      assert.ok(feeHelperStart >= 0 && feeHelperEnd > feeHelperStart, '經費預設 helper 必須存在');
+      const feeHelpers = vm.runInNewContext(`(() => {
+        const PERIOD8_FEE = '第8節代課';
+        const ACTIVITY_PUBLIC_FEE = '活動公費';
+        const isPeriod8FeeLocked = { value: false };
+        const isMutualCover = { value: false };
+        ${appSource.slice(feeHelperStart, feeHelperEnd)}
+        return { defaultSubFeeForReason };
+      })()`);
+      ['公假', '婚假', '喪假', '產假', '產前假/分娩假', '身心調適假'].forEach(reason => {
+        assert.equal(feeHelpers.defaultSubFeeForReason(reason), '公費代課', `${reason}應預設公費代課`);
+      });
+      ['休假', '病假', '事假', '補休', '其他'].forEach(reason => {
+        assert.equal(feeHelpers.defaultSubFeeForReason(reason), '自費代課', `${reason}應預設自費代課`);
+      });
+      const mutualRecStart = appSource.indexOf('const isMutualRec =');
      const mutualRecEnd = appSource.indexOf('/** 事由是否屬「請假」類', mutualRecStart);
      assert.ok(mutualRecStart >= 0 && mutualRecEnd > mutualRecStart, '個人異動互代判斷函式必須存在');
      const isMutualRec = vm.runInNewContext(`(() => {
@@ -1260,6 +1281,12 @@ async function runSingleTest() {
   assert.equal(built.newRequest.paperFlow, true);
   assert.equal(built.newRequest['申請人Email'], 'owner@school.example');
   assert.equal(built.newRequest['受邀人Email'], 'invitee@school.example');
+
+  const quotaDeps = singleDeps();
+  quotaDeps.isAdmin.value = true;
+  quotaDeps.pendingRequestData.value.subFee = '扣額度';
+  const quotaBuilt = api.buildSubmitPayload(quotaDeps, 'req-quota-single', 'SUB2468');
+  assert.equal(quotaBuilt.newRequest['經費來源'], '扣額度', '手動選取扣額度應保留在送出 payload');
 
   const exchangeDeps = singleDeps();
   exchangeDeps.pendingRequestData.value = {

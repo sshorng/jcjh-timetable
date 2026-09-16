@@ -89,6 +89,7 @@ global.LockService = {
 };
 
 vm.runInThisContext(fs.readFileSync(path.join(root, 'code.gs'), 'utf8'), { filename: 'code.gs' });
+const realRestoreMutualQuotaForRequests = restoreMutualQuotaForRequests_;
 global.window = global;
 vm.runInThisContext(fs.readFileSync(path.join(root, 'field-map.js'), 'utf8'), { filename: 'field-map.js' });
 assert.strictEqual(
@@ -170,6 +171,76 @@ function resetMutationState() {
   persistedRows = [];
   queuedMailLabels = [];
 }
+
+const quotaSpendDependencies = {
+  backfill: backfillQuotaLedgerIndexKeys_,
+  ledgerRows: getQuotaLedgerRows_,
+  now: quotaNowStr_,
+  append: appendQuotaLedgerRowsFast_,
+  patch: patchTeacherMutualQuotaColumn_,
+  invalidate: invalidateQuotaCaches_,
+  restore: realRestoreMutualQuotaForRequests
+};
+let capturedQuotaLedgerRows = [];
+backfillQuotaLedgerIndexKeys_ = function () {};
+getQuotaLedgerRows_ = function () { return []; };
+quotaNowStr_ = function () { return '2026-09-16 00:00:00'; };
+appendQuotaLedgerRowsFast_ = function (rows) { capturedQuotaLedgerRows = rows.slice(); };
+patchTeacherMutualQuotaColumn_ = function () {};
+invalidateQuotaCaches_ = function () {};
+const zeroQuotaSpend = spendMutualQuotaForRequests_([{
+  '學期代號': semesterId,
+  '申請單ID': 'req-empty-quota-spend',
+  '申請人Email': TEACHER_EMAIL,
+  '受邀人Email': TEACHER_EMAIL,
+  '受邀人姓名': '教師',
+  '請假事由': '空堂排班',
+  '經費來源': '扣額度'
+}], ADMIN_EMAIL);
+assert.strictEqual(zeroQuotaSpend.wrote, 0, '空堂任務額度不足時不應寫入負額度扣款');
+assert.strictEqual(capturedQuotaLedgerRows.length, 0);
+assert.strictEqual(quotaSpendDependencies.restore([{
+  '學期代號': semesterId,
+  '申請單ID': 'req-empty-quota-spend',
+  '受邀人Email': TEACHER_EMAIL,
+  '受邀人姓名': '教師',
+  '請假事由': '空堂排班',
+  '經費來源': '扣額度',
+  '狀態': 'approved'
+}]), 0, '未實際扣款的空堂任務撤銷時不應誤加額度');
+assert.throws(
+  () => spendMutualQuotaForRequests_([{
+    '學期代號': semesterId,
+    '申請單ID': 'req-normal-quota-short',
+    '受邀人Email': TEACHER_EMAIL,
+    '受邀人姓名': '教師',
+    '請假事由': '事假',
+    '經費來源': '扣額度'
+  }], ADMIN_EMAIL),
+  /折抵額度不足/
+);
+teachers.find(t => t['教師Email'] === INVITEE_EMAIL)['折抵額度'] = 1;
+capturedQuotaLedgerRows = [];
+const successfulQuotaSpend = spendMutualQuotaForRequests_([{
+  '學期代號': semesterId,
+  '申請單ID': 'req-normal-quota-spend',
+  '申請人Email': OWNER_EMAIL,
+  '受邀人Email': INVITEE_EMAIL,
+  '受邀人姓名': '受邀人',
+  '請假事由': '事假',
+  '異動日期': '2026-09-16',
+  '經費來源': '扣額度'
+}], ADMIN_EMAIL);
+assert.strictEqual(successfulQuotaSpend.wrote, 1, '一般扣額度應寫入一筆扣款');
+assert.strictEqual(capturedQuotaLedgerRows[0]['教師Email'], INVITEE_EMAIL, '扣額度應扣受邀代課教師');
+assert.strictEqual(capturedQuotaLedgerRows[0]['異動'], -1);
+delete teachers.find(t => t['教師Email'] === INVITEE_EMAIL)['折抵額度'];
+backfillQuotaLedgerIndexKeys_ = quotaSpendDependencies.backfill;
+getQuotaLedgerRows_ = quotaSpendDependencies.ledgerRows;
+quotaNowStr_ = quotaSpendDependencies.now;
+appendQuotaLedgerRowsFast_ = quotaSpendDependencies.append;
+patchTeacherMutualQuotaColumn_ = quotaSpendDependencies.patch;
+invalidateQuotaCaches_ = quotaSpendDependencies.invalidate;
 
 function makeRequest(overrides = {}) {
   return Object.assign({
@@ -273,6 +344,66 @@ const teacherSelfRequest = invoke({
 });
 assert.strictEqual(teacherSelfRequest.success, true);
 assert.strictEqual(persistedRows[0]['狀態'], 'pending_teacher');
+
+resetMutationState();
+const teacherQuotaRequest = invoke({
+  email: TEACHER_EMAIL,
+  action: 'submitRequest',
+  data: {
+    request: makeRequest({
+      '申請單ID': 'req-quota-teacher-denied',
+      '申請人Email': TEACHER_EMAIL,
+      '申請人姓名': '教師',
+      '經費來源': '扣額度'
+    })
+  }
+});
+assert.strictEqual(teacherQuotaRequest.success, false, '非管理員不可送出扣額度');
+assert.match(teacherQuotaRequest.error, /僅限管理員發起/);
+assert.strictEqual(persistedRows.length, 0);
+
+resetMutationState();
+const adminEmptySlotRequest = invoke({
+  email: ADMIN_EMAIL,
+  action: 'submitRequest',
+  data: {
+    directApprove: true,
+    skipNotify: true,
+    request: makeRequest({
+      '申請單ID': 'req-empty-slot-admin',
+      '申請人Email': TEACHER_EMAIL,
+      '受邀人Email': TEACHER_EMAIL,
+      '申請人姓名': '教師',
+      '受邀人姓名': '教師',
+      '班級': '',
+      '科目': '段考巡堂',
+      '請假事由': '空堂排班',
+      '經費來源': '扣額度'
+    })
+  }
+});
+assert.strictEqual(adminEmptySlotRequest.success, true, '管理員應可建立同人空堂任務');
+assert.strictEqual(persistedRows[0]['狀態'], 'approved');
+assert.strictEqual(persistedRows[0]['申請人Email'], TEACHER_EMAIL);
+assert.strictEqual(persistedRows[0]['受邀人Email'], TEACHER_EMAIL);
+
+resetMutationState();
+const teacherSamePersonRequest = invoke({
+  email: TEACHER_EMAIL,
+  action: 'submitRequest',
+  data: {
+    request: makeRequest({
+      '申請單ID': 'req-same-person-rejected',
+      '申請人Email': TEACHER_EMAIL,
+      '受邀人Email': TEACHER_EMAIL,
+      '申請人姓名': '教師',
+      '受邀人姓名': '教師'
+    })
+  }
+});
+assert.strictEqual(teacherSamePersonRequest.success, false);
+assert.match(teacherSamePersonRequest.error, /申請人與受邀人不可為同一人/);
+assert.strictEqual(persistedRows.length, 0);
 
 onlineEnabled = false;
 resetMutationState();

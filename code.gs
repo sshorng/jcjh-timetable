@@ -291,6 +291,7 @@ function isCombinedReturnPublicReason_(reason) {
     || value.indexOf("公差") >= 0
     || value.indexOf("婚假") >= 0
     || value.indexOf("喪假") >= 0
+    || value.indexOf("產假") >= 0
     || value.indexOf("產前") >= 0
     || value.indexOf("分娩") >= 0
     || value.indexOf("身心調適") >= 0;
@@ -3772,8 +3773,9 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
         break;
       }
     }
-    // 須餘額 ≥ 1 才扣
+    // 一般扣額度須餘額 ≥ 1；空堂任務額度不足時仍可建立，改由人工安排他人還一節。
     if (bal + 1e-9 < 1) {
+      if (isEmptySlotAssignmentRequest_(req)) return;
       if (!shortMap[em]) {
         shortMap[em] = { email: em, name: subName, short: 0, spent: 0 };
         shortList.push(shortMap[em]);
@@ -3841,6 +3843,7 @@ function restoreMutualQuotaForRequests_(reqs) {
   try { backfillQuotaLedgerIndexKeys_(); } catch (eBfR) {}
   var addMap = {};
   var metaMap = {};
+  var emptyRestoreRows = [];
   var sid = "";
   list.forEach(function (r) {
     if (!r) return;
@@ -3850,17 +3853,40 @@ function restoreMutualQuotaForRequests_(reqs) {
     var em = String(r["受邀人Email"] || "").toLowerCase().trim();
     if (!em) return;
     if (!sid) sid = String(r["學期代號"] || "");
+    var requestId = String(r["申請單ID"] || r.id || "").trim();
+    if (isEmptySlotAssignmentRequest_(r)) {
+      emptyRestoreRows.push({ row: r, email: em, requestId: requestId });
+      return;
+    }
     addMap[em] = (addMap[em] || 0) + 1;
     if (!metaMap[em]) {
       metaMap[em] = {
         name: r["受邀人姓名"] || "",
-        requestId: r["申請單ID"] || ""
+        requestId: requestId
       };
     }
   });
+  if (!sid) sid = String((list[0] && list[0]["學期代號"]) || "");
+  if (emptyRestoreRows.length && sid) {
+    var spentRequestIds = {};
+    (getQuotaLedgerRows_(sid) || []).forEach(function (ledgerRow) {
+      if (String(ledgerRow["類型"] || "").toLowerCase() !== "spend") return;
+      var spentId = String(ledgerRow["申請單ID"] || "").trim();
+      if (spentId) spentRequestIds[spentId] = true;
+    });
+    emptyRestoreRows.forEach(function (item) {
+      if (!item.requestId || !spentRequestIds[item.requestId]) return;
+      addMap[item.email] = (addMap[item.email] || 0) + 1;
+      if (!metaMap[item.email]) {
+        metaMap[item.email] = {
+          name: item.row["受邀人姓名"] || "",
+          requestId: item.requestId
+        };
+      }
+    });
+  }
   var emails = Object.keys(addMap);
   if (!emails.length) return 0;
-  if (!sid) sid = String((list[0] && list[0]["學期代號"]) || "");
 
   var state = buildTeacherPackStateFromLedger_(sid);
   var teachersAll = getSemesterTeachersCached_(sid) || [];
@@ -5560,6 +5586,15 @@ function isPaperFlowValue_(value) {
 
 function isPaperFlowRow_(row) {
   return !!(row && isPaperFlowValue_(row["紙本流程"] !== undefined ? row["紙本流程"] : row.paperFlow));
+}
+
+/** 空堂任務允許原授課教師與實際授課教師相同；一般代課仍不得同人。 */
+function isEmptySlotAssignmentRequest_(row) {
+  if (!row) return false;
+  if (row.isEmptySlotAssign === true) return true;
+  var reason = String(row["請假事由"] || row.reason || "").trim();
+  var note = String(row["備註"] || row.note || "");
+  return reason === "空堂排班" || note.indexOf("[空堂排班]") >= 0;
 }
 
 function validateRequestRow_(row, semesterId) {
@@ -7496,6 +7531,7 @@ function doPost(e) {
          // 發起調代課申請（狀態一律由伺服器決定，忽略前端竄改）
          if (!reqData.request || typeof reqData.request !== "object") throw new Error("缺少申請單資料！");
          reqData.request = prepareNameKeyRequestRow_(reqData.request, semesterId, teachers);
+         var emptySlotOne = isEmptySlotAssignmentRequest_(reqData.request);
          var combinedReturnOne = isCombinedReturnRequest_(reqData.request);
          normalizeCourseAdjustmentRequest_(reqData.request);
          if (combinedReturnOne && !isAdmin) throw new Error("合班回原班僅限教學組建立！");
@@ -7503,7 +7539,7 @@ function doPost(e) {
         var targetEmailOne = normalizeEmail_(reqData.request["受邀人Email"], "受邀人 Email");
         if (!findSemesterTeacher_(semesterId, leaveEmailOne)) throw new Error("申請人不在目前學期教師名單！");
         if (!findSemesterTeacher_(semesterId, targetEmailOne)) throw new Error("受邀人不在目前學期教師名單！");
-        if (leaveEmailOne === targetEmailOne) throw new Error("申請人與受邀人不可為同一人！");
+        if (leaveEmailOne === targetEmailOne && !emptySlotOne) throw new Error("申請人與受邀人不可為同一人！");
         if (combinedReturnOne) {
           reqData.request["經費來源"] = combinedReturnExpectedFee_(reqData.request);
           reqData.request.specialFlow = SPECIAL_FLOW_COMBINED_RETURN_;
@@ -7554,6 +7590,9 @@ function doPost(e) {
       }
       // 扣額度／活動公費／第8節代課：僅管理員（活動互代）
        var feeOne = String(reqData.request["經費來源"] || "");
+       if (emptySlotOne && !isQuotaDeductFee_(feeOne)) {
+         throw new Error("空堂排班經費來源必須為扣額度！");
+       }
        if (combinedReturnOne) {
           validateCombinedReturnRequest_(reqData.request, semesterId);
        }

@@ -125,6 +125,29 @@ assert.equal(row.publicOvertimeUsed, 1);
 assert.equal(row.schoolPublicPayout, 0);
 assert.equal(row.actualOvertime, 0);
 
+const quotaRows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [
+    { email: 'QuotaOwner', name: 'QuotaOwner', baseHours: 0 },
+    { email: 'QuotaCover', name: 'QuotaCover', baseHours: 0 }
+  ],
+  allSchedules: [{
+    teacherEmail: 'QuotaOwner', dayOfWeek: 1, period: 1,
+    className: '701', attr: '一般', specialTags: '超鐘點'
+  }],
+  substitutionRecords: [{
+    date: '2026-07-13', period: 1, className: '701', type: 'substitution',
+    originalTeacherEmail: 'QuotaOwner', actualTeacherEmail: 'QuotaCover', subFee: '扣額度'
+  }],
+  reportMonth: '2026-07',
+  reportWeeksCount: 1
+});
+const quotaOwnerRow = quotaRows.find(r => r.email === 'QuotaOwner');
+const quotaCoverRow = quotaRows.find(r => r.email === 'QuotaCover');
+assert.equal(quotaOwnerRow.selfPaidDeduction, 0, '扣額度不應扣被代教師自費鐘點');
+assert.equal(quotaOwnerRow.publicOvertimeUsed, 0, '扣額度不應列為公費請假扣鐘');
+assert.equal(quotaCoverRow.pubSubCount, 0, '扣額度不應支付代課教師公費鐘點');
+assert.equal(quotaCoverRow.selfSubCount, 0, '扣額度不應支付代課教師自費鐘點');
+
 const rangedReport = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'RangeTeacher', name: 'RangeTeacher', baseHours: 0 }],
   allSchedules: [{ teacherEmail: 'RangeTeacher', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' }],

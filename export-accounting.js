@@ -773,6 +773,11 @@
     return isPublicOvertimeRecord(record) || fee === '\u6d3b\u52d5\u516c\u8cbb';
   }
 
+  function isDefaultExpensePlan(value) {
+    var plan = normalizeExpensePlan(value);
+    return !plan || plan === '預設' || plan === '國教';
+  }
+
   function isSubstitutionRecord(record) {
     var type = String(record && (record.type || record['\u7570\u52d5\u985e\u578b']) || '').trim().toLowerCase();
     return !type || type === 'substitution' || type === '\u4ee3\u8ab2';
@@ -1048,15 +1053,22 @@
       });
       if (isAdjunctTeacher(sourceTeacher || source)) return;
       if (!expensePlanSourcesForRow(source).length) return;
+      var weeks = Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1);
+      var scheduledOvertime = source.scheduledOvertime !== undefined
+        ? Number(source.scheduledOvertime) || 0
+        : (Number(source.weeklyOvertime) || 0) * weeks;
       chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex)
         .filter(function (record) { return !isCombinedReturnRecord(record); })
         .forEach(function (record) {
           var key = substitutionKey(record);
           var email = teacherEmail(source.email);
+          var plan = expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex);
           var item = {
             record: record,
             source: source,
-            plan: expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)
+            plan: plan,
+            routeToSubstituteSheet: scheduledOvertime > 0
+              && isDefaultExpensePlan(plan)
           };
           result.byKey[key] = item;
           if (!result.byOriginal[email]) result.byOriginal[email] = [];
@@ -1249,7 +1261,9 @@
         // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。
         if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0) rows.push(row);
         if (config.key === 'overtime' && chargedItems) {
-          chargedItems.forEach(function (item) {
+          chargedItems.filter(function (item) {
+            return !item.routeToSubstituteSheet;
+          }).forEach(function (item) {
             rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
           });
         }
@@ -1272,7 +1286,8 @@
     (opts.substitutionRecords || []).filter(function (r) {
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isPublicPayoutRecord(r) && r.actualTeacherEmail
-        && !(chargedMap && chargedMap.byKey[substitutionKey(r)]);
+        && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
+          || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).forEach(function (r) {
       var email = teacherEmail(r.actualTeacherEmail);
       if (!groups[email]) groups[email] = { email: email, records: [], hours: 0, rate: feeRate(r, FEE_DEFAULT) };
@@ -1369,7 +1384,8 @@
     return (opts.substitutionRecords || []).filter(function (r) {
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isSelfPaidRecord(r) && r.actualTeacherEmail
-        && !(chargedMap && chargedMap.byKey[substitutionKey(r)]);
+        && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
+          || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).sort(function (a, b) {
       return compareTeacherOrder(teacherOrder,
         { email: a.actualTeacherEmail, name: a.actualTeacherName },

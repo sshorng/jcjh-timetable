@@ -11428,15 +11428,15 @@ createApp({
     };
     bindFlagModal(showEmptySlotModal, () => { showEmptySlotModal.value = false; }, '空堂排班');
 
-    // 預設公費：公假／婚假／喪假／產前假/分娩假／身心調適假
-    const PUBLIC_FEE_REASONS = ['公假', '婚假', '喪假', '產前假/分娩假', '身心調適假'];
+    // 預設公費：公假／婚假／喪假／產假／產前假／分娩假／身心調適假
+    const PUBLIC_FEE_REASONS = ['公假', '婚假', '喪假', '產假', '產前假/分娩假', '身心調適假'];
     const isPublicFeeReason = (reason) => {
       const r = String(reason || '').trim();
       if (!r) return false;
       if (PUBLIC_FEE_REASONS.includes(r)) return true;
       // 相容舊資料：公差、分娩假
       if (r.includes('公假') || r.includes('公差') || r.includes('婚假') || r.includes('喪假')) return true;
-      if (r.includes('分娩') || r.includes('產前') || r.includes('身心調適')) return true;
+      if (r.includes('產假') || r.includes('分娩') || r.includes('產前') || r.includes('身心調適')) return true;
       return false;
     };
     const defaultSubFeeForReason = (reason) => {
