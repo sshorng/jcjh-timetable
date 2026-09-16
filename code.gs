@@ -2823,6 +2823,33 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
   return hit;
 }
 
+/** 讀取教師資料時，以額度帳本加總覆蓋教師名單／快取中的舊額度。 */
+function mergeQuotaLedgerBalancesIntoTeacherRows_(teacherRows, ledgerRows) {
+  var balanceByEmail = {};
+  var balanceByName = {};
+  (ledgerRows || []).forEach(function (row) {
+    if (!row) return;
+    var delta = parseFloat(row["異動"]);
+    if (isNaN(delta)) delta = 0;
+    var email = String(row["教師Email"] || row.email || "").toLowerCase().trim();
+    var name = nameKeyNorm_(row["教師姓名"] || row.name || row.teacherName);
+    if (email) balanceByEmail[email] = Math.round(((balanceByEmail[email] || 0) + delta) * 1000) / 1000;
+    if (name) balanceByName[name] = Math.round(((balanceByName[name] || 0) + delta) * 1000) / 1000;
+  });
+  return (teacherRows || []).map(function (teacher) {
+    if (!teacher) return teacher;
+    var email = String(teacher["教師Email"] || teacher.email || "").toLowerCase().trim();
+    var name = nameKeyNorm_(teacher["教師姓名"] || teacher.name || teacher.teacherName);
+    var hasEmailBalance = email && Object.prototype.hasOwnProperty.call(balanceByEmail, email);
+    var hasNameBalance = name && Object.prototype.hasOwnProperty.call(balanceByName, name);
+    if (!hasEmailBalance && !hasNameBalance) return teacher;
+    var balance = hasEmailBalance ? balanceByEmail[email] : balanceByName[name];
+    var out = Object.assign({}, teacher);
+    out["折抵額度"] = Math.max(0, Math.round(balance * 1000) / 1000);
+    return out;
+  });
+}
+
 /** 分層讀取：教師（中 TTL），快取存瘦身列；forceFresh 供登入前置檢查使用。 */
 function getSemesterTeachersCached_(semesterId, forceFresh) {
   var sid = String(semesterId || "").trim();
@@ -2831,13 +2858,16 @@ function getSemesterTeachersCached_(semesterId, forceFresh) {
   if (raw) {
     try {
       var cachedT = JSON.parse(raw);
-      if (Array.isArray(cachedT)) return slimTeacherRows_(cachedT, sid);
+      if (Array.isArray(cachedT)) {
+        return mergeQuotaLedgerBalancesIntoTeacherRows_(slimTeacherRows_(cachedT, sid), getQuotaLedgerRows_(sid));
+      }
     } catch (e) {}
   }
   var rows = getTableData("教師名單").filter(function (t) { return String(t["學期代號"] || "").trim() === sid; });
   var slim = slimTeacherRows_(rows, sid);
-  try { putCacheChunked(key, JSON.stringify(slim), CACHE_TTL_TEACHERS_); } catch (e2) {}
-  return slim;
+  var merged = mergeQuotaLedgerBalancesIntoTeacherRows_(slim, getQuotaLedgerRows_(sid));
+  try { putCacheChunked(key, JSON.stringify(merged), CACHE_TTL_TEACHERS_); } catch (e2) {}
+  return merged;
 }
 
 /** 分層讀取：申請單列（短 TTL；historyAll 另 key）— 快取一律 { allCount, rows } */
@@ -3263,13 +3293,16 @@ function batchEarnMutualQuota_(semesterId, earnList, meta) {
     var hadEarn = !!earnedKey[em];
     if (hadEarn && !forceAdd) {
       skipped++;
+      var existingBalance = Math.max(0, teacherBal[em] != null ? teacherBal[em] : (sheetQuota[em] || 0));
+      // 舊版姓名鍵 payload 可能只寫入帳本，重試時順便修復教師名單餘額。
+      finalBal[em] = existingBalance;
       results.push({
         email: em,
         packageId: packId,
         skipped: true,
         reason: "already_earned",
         remaining: released,
-        balance: Math.max(0, teacherBal[em] != null ? teacherBal[em] : (sheetQuota[em] || 0))
+        balance: existingBalance
       });
       return;
     }

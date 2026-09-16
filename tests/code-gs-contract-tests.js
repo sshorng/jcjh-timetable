@@ -10,6 +10,25 @@ const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
+const quotaMergeStart = source.indexOf('function mergeQuotaLedgerBalancesIntoTeacherRows_');
+const quotaMergeEnd = source.indexOf('function getSemesterTeachersCached_', quotaMergeStart);
+assert.ok(quotaMergeStart >= 0 && quotaMergeEnd > quotaMergeStart, '額度帳本餘額合併 helper 必須存在');
+const quotaMergeContext = {
+  String, parseFloat, isNaN, Math, Object,
+  nameKeyNorm_: value => String(value == null ? '' : value).trim().toLowerCase()
+};
+vm.createContext(quotaMergeContext);
+vm.runInContext(source.slice(quotaMergeStart, quotaMergeEnd), quotaMergeContext, { filename: 'code.gs.quota-merge' });
+const mergedQuotaRows = quotaMergeContext.mergeQuotaLedgerBalancesIntoTeacherRows_(
+  [{ '教師Email': 'teacher@school.example', '教師姓名': '王老師', '折抵額度': 0 }],
+  [
+    { '教師Email': 'teacher@school.example', '教師姓名': '王老師', '異動': 1 },
+    { '教師Email': 'teacher@school.example', '教師姓名': '王老師', '異動': -1 },
+    { '教師Email': 'teacher@school.example', '教師姓名': '王老師', '異動': 2 }
+  ]
+);
+assert.equal(mergedQuotaRows[0]['折抵額度'], 2, '教師資料應以額度帳本加總覆蓋舊的 0');
+assert.match(source, /finalBal\[em\] = existingBalance/, '重複發放應修復教師名單餘額');
 assert.match(source, /"空堂事件": \[[^\]]*"適用範圍"[^\]]*"停課節次"/, '空堂事件 schema 應包含範圍與節次欄位');
 assert.match(source, /function normalizeClassAwayScope_\(value\)/, '空堂事件範圍應由後端正規化');
 assert.match(source, /function normalizeClassAwayPeriod_\(value\)/, '空堂事件節次應由後端正規化');
