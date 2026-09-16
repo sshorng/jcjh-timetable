@@ -127,6 +127,47 @@ assert.ok(mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes
   && mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/29'), '合併列仍應保留各日期備註');
 assert.ok(mergedOvertimeRows.find(row => row.name === '洪筱仙').note.includes('9/11'), '跨原教師的代課備註仍應保留');
 
+const adjunctSubstitute = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-01',
+  reportEndDate: '2026-09-30',
+  reportWeeksCount: 5,
+  periods: {
+    overtime: { start: '2026-09-01', end: '2026-09-30' },
+    adjunct: { start: '2026-09-01', end: '2026-09-30' },
+    publicSub: { start: '2026-09-01', end: '2026-09-30' }
+  },
+  teachers: [
+    { email: 'adjunct-origin@x', name: '兼課原教師', jobTitle: '兼課教師', baseHours: 0 },
+    { email: 'adjunct-cover@x', name: '公付代課人', jobTitle: '教學組長', baseHours: 16 },
+    { email: 'adjunct-self-cover@x', name: '自付代課人', jobTitle: '教學組長', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'adjunct-origin@x', dayOfWeek: 5, period: 1, className: '901', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'adjunct-origin@x', dayOfWeek: 5, period: 2, className: '902', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    {
+      date: '2026-09-11', period: 1, className: '901', type: 'substitution',
+      originalTeacherEmail: 'adjunct-origin@x', actualTeacherEmail: 'adjunct-cover@x',
+      subFee: '公費代課', status: 'approved'
+    },
+    {
+      date: '2026-09-11', period: 2, className: '902', type: 'substitution',
+      originalTeacherEmail: 'adjunct-origin@x', actualTeacherEmail: 'adjunct-self-cover@x',
+      subFee: '自費代課', status: 'approved'
+    }
+  ]
+});
+assert.equal(adjunctSubstitute.sheets.publicSub.length, 1, '兼課教師被代的公費應轉列實際代課教師');
+assert.equal(adjunctSubstitute.sheets.publicSub[0].name, '公付代課人');
+assert.equal(adjunctSubstitute.sheets.publicSub[0].hours, 1);
+assert.equal(adjunctSubstitute.sheets.selfSub.length, 1, '兼課教師被代的自費應轉列實際代課教師');
+assert.equal(adjunctSubstitute.sheets.selfSub[0].actualName, '自付代課人');
+assert.equal(adjunctSubstitute.sheets.selfSub[0].count, 1);
+assert.equal(adjunctSubstitute.sheets.adjunct[0].deduction, 2, '兼課教師原課被代時仍應扣除公付與自付節數');
+assert.equal(adjunctSubstitute.sheets.overtime.length, 0, '兼課教師不應混入超鐘點代課明細');
+
 const crossMonthRange = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
   reportStartDate: '2026-07-31',

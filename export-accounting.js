@@ -1042,6 +1042,11 @@
     var result = { byKey: {}, byOriginal: {} };
     var records = opts.substitutionRecords || [];
     reportSourceRows(opts).forEach(function (source) {
+      // 兼課教師的扣款轉由公付代課表支付實際代課人，不走超鐘點明細。
+      var sourceTeacher = (opts.teachers || []).find(function (teacher) {
+        return sameTeacher(teacher, source);
+      });
+      if (isAdjunctTeacher(sourceTeacher || source)) return;
       if (!expensePlanSourcesForRow(source).length) return;
       chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex)
         .filter(function (record) { return !isCombinedReturnRecord(record); })
