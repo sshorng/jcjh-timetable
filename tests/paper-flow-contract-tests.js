@@ -1446,6 +1446,59 @@ async function runSingleTest() {
     assert.equal(deps.showSuccessModal.value, false);
 }
 
+async function runApprovalLedgerCacheBustTest() {
+  const api = load('ui-approval.js').UiApproval;
+  let apiCalls = 0;
+  let busts = 0;
+  const request = {
+    id: 'quota-approval-1',
+    requestId: 'quota-approval-1',
+    type: 'substitution',
+    status: 'pending_admin',
+    subFee: '扣額度'
+  };
+  const approval = api.create({
+    ref,
+    callGasApi: async action => {
+      assert.equal(action, 'adminApprove');
+      apiCalls += 1;
+      return { success: true };
+    },
+    callGasApiWithProgress: async () => ({ success: true }),
+    showToast: () => {},
+    showConfirm: async () => ({ ok: true, note: '' }),
+    loading: ref(false),
+    loadingMessage: ref(''),
+    getStatusText: () => '',
+    getTeacherNameByEmail: value => value,
+    isTriangleRequest: () => false,
+    restoreMutualQuotaForRows: () => {},
+    bustQuotaLedgerCache: () => { busts += 1; },
+    optimisticPatchRequestStatus: () => {},
+    optimisticPatchRequestStatuses: () => {},
+    optimisticPatchTriangleGroup: () => {},
+    softRefreshInBackground: () => {},
+    formatRequestSummary: () => '',
+    formatApproveBatchRiskSummary: () => '',
+    getApproveRiskFlags: () => [],
+    requestsList: ref([request]),
+    mySentRequests: ref([]),
+    myPendingRequests: ref([]),
+    adminPendingRequests: ref([]),
+    allPendingRequests: ref([]),
+    paginatedAdminPending: ref([]),
+    selectedRecordIds: ref([]),
+    activeTab: ref('pending'),
+    showDetailModal: ref(false),
+    detailRequest: ref(null),
+    detailSubRecord: ref(null)
+  });
+
+  await approval.adminApprove(request.id, { skipConfirm: true, skipSoftRefresh: true });
+  assert.equal(apiCalls, 1);
+  assert.equal(busts, 1, '核准成功後應清除額度帳本畫面快取');
+}
+
 async function runLineHandledSlotTest() {
   const api = load('ui-request.js').UiSubmitHelpers;
   const linePayloads = [];
@@ -1821,6 +1874,7 @@ Promise.resolve()
   .then(() => runCombinedHistoryEditContractTest())
   .then(runConsecutiveWarningTest)
   .then(runSingleTest)
+  .then(runApprovalLedgerCacheBustTest)
   .then(runLineHandledSlotTest)
   .then(runCourseAdjustmentTest)
   .then(runRechangeLabelTest)

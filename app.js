@@ -1901,8 +1901,15 @@ createApp({
       });
     };
     /**
-     * 送出後樂觀扣減畫面餘額（真正扣包／流水已在 GAS submit 時完成，勿再打 updateMutualQuotas）
+     * 送出後樂觀扣減畫面餘額（真正扣包／流水由 GAS 送出或核准時冪等完成）
      */
+    const bustQuotaLedgerViewCache = () => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.__quotaLedgerCacheBust === 'function') {
+          window.__quotaLedgerCacheBust();
+        }
+      } catch (e) { /* ignore */ }
+    };
     const deductMutualQuotaForRows = async (rows) => {
       if (!rows || !rows.length) return;
       const shouldDeduct = (fee) => {
@@ -1912,21 +1919,24 @@ createApp({
         return isQuotaDeductFee(fee);
       };
       const deductMap = {};
+      let hasQuotaMutation = false;
       rows.forEach(r => {
         const fee = r['經費來源'] || r.subFee || '';
         if (!shouldDeduct(fee)) return;
-         const teacherName = String(r['受邀人姓名'] || r.targetTeacherName || '').trim();
-         const key = teacherName.toLowerCase();
-         if (!key) return;
-         deductMap[key] = (deductMap[key] || 0) + 1;
+        hasQuotaMutation = true;
+        const teacherName = String(r['受邀人姓名'] || r.targetTeacherName || '').trim();
+        const key = teacherName.toLowerCase();
+        if (!key) return;
+        deductMap[key] = (deductMap[key] || 0) + 1;
       });
-       Object.keys(deductMap).forEach(key => {
-         const t = lookupTeacher(key);
-         const prev = t ? (parseFloat(t.mutualQuota) || 0) : 0;
-         // 每節扣 1；畫面樂觀更新（不足 1 時後端不會扣）
-         const next = Math.round(Math.max(0, prev - deductMap[key]) * 1000) / 1000;
-         patchLocalMutualQuota(t ? t.teacherName || t.name : key, next);
+      Object.keys(deductMap).forEach(key => {
+        const t = lookupTeacher(key);
+        const prev = t ? (parseFloat(t.mutualQuota) || 0) : 0;
+        // 每節扣 1；畫面樂觀更新（不足 1 時後端不會扣）
+        const next = Math.round(Math.max(0, prev - deductMap[key]) * 1000) / 1000;
+        patchLocalMutualQuota(t ? t.teacherName || t.name : key, next);
       });
+      if (hasQuotaMutation) bustQuotaLedgerViewCache();
     };
     /**
      * 申請作廢時樂觀還原折抵額度（後端已寫回試算表；此處只更新畫面）
@@ -1938,24 +1948,27 @@ createApp({
       if (!list.length) return;
       const terminal = { cancelled: 1, rejected: 1, admin_rejected: 1, withdrawn: 1 };
       const addMap = {};
+      let hasQuotaMutation = false;
       list.forEach(r => {
         if (!r) return;
         const st = String(r.status || r['狀態'] || '').toLowerCase();
         if (terminal[st]) return;
         const fee = r.subFee || r['經費來源'] || '';
         if (!isQuotaDeductFee(fee)) return;
-         const teacherName = String(r.targetTeacherName || r['受邀人姓名'] || r.actualTeacherName || '').trim();
-         const key = teacherName.toLowerCase();
-         if (!key) return;
-         addMap[key] = (addMap[key] || 0) + 1;
+        hasQuotaMutation = true;
+        const teacherName = String(r.targetTeacherName || r['受邀人姓名'] || r.actualTeacherName || '').trim();
+        const key = teacherName.toLowerCase();
+        if (!key) return;
+        addMap[key] = (addMap[key] || 0) + 1;
       });
-       Object.keys(addMap).forEach(key => {
-         const t = lookupTeacher(key);
-         if (!t) return;
-         const prev = parseFloat(t.mutualQuota) || 0;
-         const next = Math.round((prev + addMap[key]) * 1000) / 1000;
-         patchLocalMutualQuota(t.teacherName || t.name, next);
+      Object.keys(addMap).forEach(key => {
+        const t = lookupTeacher(key);
+        if (!t) return;
+        const prev = parseFloat(t.mutualQuota) || 0;
+        const next = Math.round((prev + addMap[key]) * 1000) / 1000;
+        patchLocalMutualQuota(t.teacherName || t.name, next);
       });
+      if (hasQuotaMutation) bustQuotaLedgerViewCache();
     };
     const selectedClass = ref('');
     const classReadonlyMode = ref(false);
@@ -10522,6 +10535,7 @@ createApp({
        getTeacherNameByEmail,
        isTriangleRequest,
        restoreMutualQuotaForRows,
+       bustQuotaLedgerCache: bustQuotaLedgerViewCache,
        optimisticPatchRequestStatus,
        optimisticPatchRequestStatuses,
        optimisticPatchTriangleGroup,

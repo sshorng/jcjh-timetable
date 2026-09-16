@@ -13,6 +13,13 @@ window.UiApproval = (function () {
     var loadingMessage = deps.loadingMessage;
     var getStatusText = deps.getStatusText;
     var getTeacherNameByEmail = deps.getTeacherNameByEmail || function (value) { return value || ''; };
+    var bustQuotaLedgerCache = deps.bustQuotaLedgerCache || function () {
+      try {
+        if (typeof window !== 'undefined' && typeof window.__quotaLedgerCacheBust === 'function') {
+          window.__quotaLedgerCacheBust();
+        }
+      } catch (e) { /* ignore */ }
+    };
     var isTriangleRequest = deps.isTriangleRequest || function (request) {
       return !!(request && (request.type === 'triangle' || request.type === '三角調' || request.triangleId));
     };
@@ -435,6 +442,7 @@ window.UiApproval = (function () {
          var isExchange = req.type === 'exchange';
          var finalNote = approveNote || req.note || '';
          await callGasApi('adminApprove', { requestId: id, note: finalNote });
+         bustQuotaLedgerCache();
          if (!silent) showToast('核准成功，異動已寫入課表！', 'success');
          if (isTriangle) optimisticPatchTriangleGroup(req, 'approved');
          else optimisticPatchRequestStatus(id, 'approved');
@@ -480,6 +488,7 @@ window.UiApproval = (function () {
       try {
          var isTriangle = isTriangleRequest(req);
          await callGasApi('adminReject', { requestId: id });
+         bustQuotaLedgerCache();
          showToast('已駁回此申請單。', 'info');
          restoreMutualQuotaForRows(req);
          if (isTriangle) optimisticPatchTriangleGroup(req, 'admin_rejected');
@@ -533,6 +542,7 @@ window.UiApproval = (function () {
           { requestIds: ids },
           '批次核准 ' + ids.length + ' 筆'
         );
+        bustQuotaLedgerCache();
         var doneIds = (res && res.ids) || ids;
         ok = (res && res.count) || doneIds.length;
         var doneReqById = Object.create(null);
@@ -611,6 +621,7 @@ window.UiApproval = (function () {
       var fail = 0;
       try {
         var res = await callGasApi('adminRejectBatch', { requestIds: ids });
+        bustQuotaLedgerCache();
         var doneIds = (res && res.ids) || ids;
         ok = (res && res.count) || doneIds.length;
         var doneReqById = Object.create(null);
@@ -652,6 +663,7 @@ window.UiApproval = (function () {
       try {
         var reqBefore = findRequestById(id);
         await callGasApi('cancelRequest', { requestId: id });
+        bustQuotaLedgerCache();
         showToast('已成功撤回！', 'success');
         if (reqBefore) restoreMutualQuotaForRows(reqBefore);
          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');
@@ -678,6 +690,7 @@ window.UiApproval = (function () {
         var reqId = (requestId && requestId !== 'N/A') ? requestId : String(subId).replace(/_[12]$/, '');
         var reqBefore = findRequestById(reqId);
         await callGasApi('deleteSubstitutionRecord', { id: subId, requestId: requestId });
+        bustQuotaLedgerCache();
         showToast('已成功撤銷，課表已恢復原狀！', 'success');
         if (reqBefore) restoreMutualQuotaForRows(reqBefore);
          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');

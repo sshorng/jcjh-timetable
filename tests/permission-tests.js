@@ -232,6 +232,7 @@ const successfulQuotaSpend = spendMutualQuotaForRequests_([{
   '經費來源': '扣額度'
 }], ADMIN_EMAIL);
 assert.strictEqual(successfulQuotaSpend.wrote, 1, '一般扣額度應寫入一筆扣款');
+assert.deepStrictEqual(successfulQuotaSpend.spentRequestIds, ['req-normal-quota-spend']);
 assert.strictEqual(capturedQuotaLedgerRows[0]['教師Email'], INVITEE_EMAIL, '扣額度應扣受邀代課教師');
 assert.ok(capturedQuotaLedgerRows.every(row => row['教師Email'] !== OWNER_EMAIL), '扣額度不得扣申請／被代教師');
 assert.strictEqual(capturedQuotaLedgerRows[0]['異動'], -1);
@@ -524,6 +525,8 @@ const paperApproval = invoke({
 assert.strictEqual(paperApproval.success, true);
 assert.strictEqual(requestRow['狀態'], 'approved');
 assert.strictEqual(requestRow['經費來源'], '公費代課');
+assert.strictEqual(persistedRows.length, 1, '核准時應經過額度冪等寫入流程');
+assert.strictEqual(persistedRows[0]['申請單ID'], requestRow['申請單ID']);
 assert.strictEqual(queuedMailLabels.includes('sendAdminApproveEmail'), true);
 
 const teacherProxy = invoke({

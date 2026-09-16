@@ -3686,7 +3686,7 @@ function buildTeacherPackStateFromLedger_(semesterId) {
  */
 function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   var list = Array.isArray(reqs) ? reqs : (reqs ? [reqs] : []);
-  if (!list.length) return { spentTeachers: 0, shortList: [] };
+  if (!list.length) return { spentTeachers: 0, shortList: [], wrote: 0, spentRequestIds: [] };
   try { backfillQuotaLedgerIndexKeys_(); } catch (eBfS) {}
 
   // 只留扣額度申請；維持傳入順序
@@ -3708,7 +3708,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
     if (requestId && alreadySpent[requestId]) return;
     spendReqs.push(r);
   });
-  if (!spendReqs.length) return { spentTeachers: 0, shortList: [] };
+  if (!spendReqs.length) return { spentTeachers: 0, shortList: [], wrote: 0, spentRequestIds: [] };
   if (!sid) sid = String((list[0] && list[0]["學期代號"]) || "");
 
   var state = buildTeacherPackStateFromLedger_(sid);
@@ -3750,6 +3750,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   var now = quotaNowStr_();
   var seq = 0;
   var touched = {};
+  var spentRequestIds = [];
 
   spendReqs.forEach(function (req) {
     var em = String(req["受邀人Email"] || "").toLowerCase().trim();
@@ -3813,6 +3814,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
       "操作者": operatorEmail || "",
       "備註": meta.note
     });
+    if (reqId && spentRequestIds.indexOf(reqId) < 0) spentRequestIds.push(reqId);
   });
 
   if (shortList.length) {
@@ -3831,7 +3833,12 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   }
   var emails = Object.keys(touched);
   invalidateQuotaCaches_(sid, emails);
-  return { spentTeachers: emails.length, shortList: shortList, wrote: ledgerRows.length };
+  return {
+    spentTeachers: emails.length,
+    shortList: shortList,
+    wrote: ledgerRows.length,
+    spentRequestIds: spentRequestIds
+  };
 }
 
 /**
@@ -6299,7 +6306,17 @@ function persistRequestRowsWithQuota_(rows, operatorEmail) {
     saveRows("申請單", list, "申請單ID");
   } catch (saveErr) {
     if (quotaResult && quotaResult.wrote) {
-      try { restoreMutualQuotaForRequests_(list); } catch (restoreErr) { logError_("restoreQuota_after_request_save_failure", restoreErr); }
+      var rollbackRows = list;
+      if (Array.isArray(quotaResult.spentRequestIds) && quotaResult.spentRequestIds.length) {
+        var spentIdMap = {};
+        quotaResult.spentRequestIds.forEach(function (requestId) { spentIdMap[String(requestId)] = true; });
+        rollbackRows = list.filter(function (row) {
+          return row && spentIdMap[String(row["申請單ID"] || row.id || "")];
+        });
+      }
+      if (rollbackRows.length) {
+        try { restoreMutualQuotaForRequests_(rollbackRows); } catch (restoreErr) { logError_("restoreQuota_after_request_save_failure", restoreErr); }
+      }
     }
     throw saveErr;
   }
@@ -7098,7 +7115,8 @@ function doPost(e) {
 
         targetReq["狀態"] = "approved";
        if (reqData.note) targetReq["備註"] = reqData.note;
-       saveRows("申請單", [targetReq], "申請單ID");
+         // 額度扣用以申請單 ID 冪等補寫：舊申請已在送出時扣過不重複，漏寫則在核准時補上。
+         persistRequestRowsWithQuota_([targetReq], userEmail);
         if (!isCombinedReturnRequest_(targetReq)) syncHomeroomRecordForRequest_(targetReq, userEmail);
        // 紙本流程已由紙本通知，不因之後切回線上模式而補寄系統信。
         if (!isPaperFlowRow_(targetReq)) {
@@ -7136,7 +7154,8 @@ function doPost(e) {
             r["特殊流程"] = SPECIAL_FLOW_COMBINED_RETURN_LABEL_;
           }
         });
-       saveRows("申請單", apToSave, "申請單ID");
+       // 批次核准同樣以申請單 ID 冪等補寫額度帳本，避免漏扣或重複扣款。
+       persistRequestRowsWithQuota_(apToSave, userEmail);
        apToSave.forEach(function (r) {
          if (!isCombinedReturnRequest_(r)) syncHomeroomRecordForRequest_(r, userEmail);
        });
