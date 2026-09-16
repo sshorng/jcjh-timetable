@@ -889,6 +889,7 @@ function runApplicationFormContractTest() {
   assert.match(html, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
   assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
   assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
+  assert.match(html, /扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。/, '畫面應說明扣款對象與被代者零扣除');
   assert.match(html, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
   assert.match(html, /id="course-adjustment-only"/);
   assert.match(html, /@change="toggleCourseAdjustmentOnly"/);

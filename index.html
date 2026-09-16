@@ -3167,6 +3167,9 @@
                           <option v-if="isAdmin || isMutualCover || pendingRequestData.subFee === '第8節代課'" value="第8節代課">第8節代課（計畫經費）</option>
                         </template>
                       </select>
+                      <span v-if="pendingRequestData.subFee === '扣額度'" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
+                        扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。
+                      </span>
                       <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
                         ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
                       </span>

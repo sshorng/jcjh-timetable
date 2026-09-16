@@ -233,6 +233,7 @@ const successfulQuotaSpend = spendMutualQuotaForRequests_([{
 }], ADMIN_EMAIL);
 assert.strictEqual(successfulQuotaSpend.wrote, 1, '一般扣額度應寫入一筆扣款');
 assert.strictEqual(capturedQuotaLedgerRows[0]['教師Email'], INVITEE_EMAIL, '扣額度應扣受邀代課教師');
+assert.ok(capturedQuotaLedgerRows.every(row => row['教師Email'] !== OWNER_EMAIL), '扣額度不得扣申請／被代教師');
 assert.strictEqual(capturedQuotaLedgerRows[0]['異動'], -1);
 delete teachers.find(t => t['教師Email'] === INVITEE_EMAIL)['折抵額度'];
 backfillQuotaLedgerIndexKeys_ = quotaSpendDependencies.backfill;
