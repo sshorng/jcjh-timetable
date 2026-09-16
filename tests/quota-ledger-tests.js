@@ -48,8 +48,8 @@ const ledgerRows = [
   },
   {
     name: '甲老師', time: '2026-10-10 09:00:00', delta: -1, balanceAfter: 2,
-    type: 'spend', packageId: 'pkg-trip-甲', eventId: 'evt_empty_slot', eventName: '空堂任務',
-    requestId: 'exam-1'
+    type: 'spend', packageId: 'pkg-trip-甲', eventId: 'evt_sub', eventName: '代課',
+    requestId: 'legacy-exam-row'
   },
   {
     name: '甲老師', time: '2026-10-20 09:00:00', delta: -1, balanceAfter: 1,
@@ -66,7 +66,8 @@ const ledgerRows = [
 const exam = domain.buildLedgerExamStats({
   ledgerRows,
   teacher: { name: '甲老師' },
-  requests: [{ id: 'exam-1', reason: '空堂排班' }],
+  requests: [],
+  rangeDates: ['2026-10-10'],
   startDate: '2026-10-10',
   endDate: '2026-10-10'
 });
@@ -87,7 +88,7 @@ const requests = [
   }
 ];
 const pages = exporter.buildTeacherPages({
-  startDate: '2026-10-05',
+  startDate: '2026-10-20',
   endDate: '2026-10-20',
   activityName: '九年級畢旅',
   eventId: 'trip-1',
@@ -107,13 +108,25 @@ assert.equal(pages.length, 2, '應依實際代課教師產生兩頁');
 assert.equal(pages[0].name, '甲老師');
 assert.equal(pages[1].name, '乙老師');
 assert.equal(pages[0].matrix.demand, 3);
-assert.equal(pages[0].matrix.arranged, 2, '甲老師應包含段考與畢旅兩次帳本扣用');
-assert.equal(pages[0].matrix.remaining, 1);
+assert.equal(pages[0].matrix.arranged, 1, '活動頁只應計選定日期內的活動包扣用');
+assert.equal(pages[0].matrix.remaining, 2);
 assert.equal(pages[1].matrix.demand, 1);
 assert.equal(pages[1].matrix.arranged, 0);
 assert.equal(pages[0].matrix.grid['2026-10-20'][1].length, 1);
 assert.equal(pages[0].matrix.grid['2026-10-20'][2].length, 0, '不同教師的申請不可串頁');
 assert.equal(pages[1].matrix.grid['2026-10-20'][2].length, 1);
+const activityDateStats = domain.buildLedgerActivityStats({
+  ledgerRows,
+  teacher: { name: '甲老師' },
+  eventId: 'trip-1',
+  rangeDates: ['2026-10-20'],
+  demand: 3
+});
+assert.deepEqual(
+  { demand: activityDateStats.demand, arranged: activityDateStats.arranged, remaining: activityDateStats.remaining },
+  { demand: 3, arranged: 1, remaining: 2 },
+  '活動額度只應計選定日期內的扣用，不能把段考日期扣用帶入'
+);
 
 const pageXml = '<w:document><w:body><w:p><w:r><w:t>page</w:t></w:r></w:p>'
   + '<w:sectPr><w:pgSz w:w="11906"/></w:sectPr></w:body></w:document>';
@@ -124,7 +137,8 @@ assert.equal((joinedXml.match(/<w:sectPr/g) || []).length, 1, '合併後只能�
 const invigExam = invigilation.buildExamQuotaStats({
   ledgerRows,
   teacher: { name: '甲老師', mutualQuota: 0 },
-  requests: [{ id: 'exam-1', reason: '空堂排班' }],
+  requests: [],
+  rangeDates: ['2026-10-10'],
   startDate: '2026-10-10',
   endDate: '2026-10-10'
 });

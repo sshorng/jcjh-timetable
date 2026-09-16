@@ -388,6 +388,7 @@ window.ExportActivityCover = (function () {
         teacher: teacherFilter,
         eventId: opts.eventId,
         eventName: activityHint,
+        rangeDates: dates,
         demand: demand,
         fallbackArranged: arrangedQuota
       });

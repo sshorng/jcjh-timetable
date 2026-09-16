@@ -461,6 +461,7 @@ window.ExportInvigilation = (function () {
       ledgerRows: opts.ledgerRows,
       teacher: opts.teacher,
       requests: opts.requests,
+      rangeDates: opts.rangeDates,
       startDate: opts.startDate,
       endDate: opts.endDate
     });
@@ -947,6 +948,7 @@ window.ExportInvigilation = (function () {
         teacher: rec,
         email: em,
         requests: opts.requests,
+        rangeDates: range.dates,
         startDate: range.dates[0],
         endDate: range.dates[range.dates.length - 1]
       });

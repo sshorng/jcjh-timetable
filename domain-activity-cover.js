@@ -269,7 +269,9 @@ window.DomainActivityCover = (function () {
   }
 
   function ledgerType(row) {
-    return String(ledgerField(row, ['type', '類型']) || '').trim().toLowerCase();
+    var type = String(ledgerField(row, ['type', '類型']) || '').trim().toLowerCase();
+    var aliases = { '發放': 'earn', '扣用': 'spend', '還原': 'restore', '手動調整': 'adjust' };
+    return aliases[type] || type;
   }
 
   function ledgerDelta(row) {
@@ -278,15 +280,6 @@ window.DomainActivityCover = (function () {
 
   function ledgerRequestId(row) {
     return String(ledgerField(row, ['requestId', '申請單ID', 'id']) || '').trim();
-  }
-
-  function ledgerRequestMap(requests) {
-    var map = {};
-    (requests || []).forEach(function (request) {
-      var id = String(request && (request.id || request['申請單ID']) || '').trim();
-      if (id) map[id] = request;
-    });
-    return map;
   }
 
   function ledgerHistoryEntries(rows, teacher) {
@@ -341,27 +334,13 @@ window.DomainActivityCover = (function () {
     return isDateInRange(date, opts.startDate, opts.endDate);
   }
 
-  function isEmptySlotRequest(request) {
-    if (!request) return false;
-    if (request.isEmptySlotAssign === true) return true;
-    var reason = String(request.reason || request['請假事由'] || '').trim();
-    var note = String(request.note || request['備註'] || '');
-    return reason === EMPTY_SLOT_REASON || note.indexOf('[空堂排班]') >= 0;
-  }
-
   function isLedgerSpend(entry) {
     return !!entry && entry.type === 'spend' && entry.delta < 0;
   }
 
-  function isExamLedgerSpend(entry, opts, requestMap) {
-    if (!isLedgerSpend(entry) || !ledgerEntryInRange(entry, opts)) return false;
-    if (typeof opts.isExamSpend === 'function') {
-      try { return !!opts.isExamSpend(entry.row, entry); } catch (e) { /* ignore */ }
-    }
-    var request = requestMap[entry.requestId];
-    if (request) return isEmptySlotRequest(request);
-    return entry.eventName === '空堂任務'
-      || String(ledgerField(entry.row, ['note', '備註']) || '').indexOf('[空堂排班]') >= 0;
+  function isExamLedgerSpend(entry, opts) {
+    // 段考欄位只看選定日期內的實際扣額度，不受事件名、備註或申請單格式影響。
+    return isLedgerSpend(entry) && ledgerEntryInRange(entry, opts);
   }
 
   /**
@@ -371,22 +350,25 @@ window.DomainActivityCover = (function () {
   function buildLedgerExamStats(opts) {
     opts = opts || {};
     var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
-    var requestMap = ledgerRequestMap(opts.requests);
-    var examEntries = entries.filter(function (entry) {
-      return isExamLedgerSpend(entry, opts, requestMap);
+    var selectedEntries = entries.filter(function (entry) {
+      return ledgerEntryInRange(entry, opts);
     });
+    var examEntries = selectedEntries.filter(function (entry) {
+      return isExamLedgerSpend(entry, opts);
+    });
+    var firstSelected = selectedEntries.length ? selectedEntries[0] : null;
+    var lastSelected = selectedEntries.length ? selectedEntries[selectedEntries.length - 1] : null;
     var latest = entries.length ? entries[entries.length - 1] : null;
     var first = examEntries.length ? examEntries[0] : null;
-    var last = examEntries.length ? examEntries[examEntries.length - 1] : null;
     var used = examEntries.reduce(function (sum, entry) {
       return sum + Math.abs(entry.delta);
     }, 0);
     return {
       hasHistory: entries.length > 0,
       hasExamSpend: examEntries.length > 0,
-      before: Math.max(0, Math.round((first ? first.before : (latest ? latest.after : 0)) * 1000) / 1000),
+      before: Math.max(0, Math.round((first ? first.before : (firstSelected ? firstSelected.before : (latest ? latest.after : 0))) * 1000) / 1000),
       used: Math.round(used * 1000) / 1000,
-      remaining: Math.max(0, Math.round((last ? last.after : (latest ? latest.after : 0)) * 1000) / 1000),
+      remaining: Math.max(0, Math.round((lastSelected ? lastSelected.after : (latest ? latest.after : 0)) * 1000) / 1000),
       entries: examEntries
     };
   }
@@ -426,16 +408,22 @@ window.DomainActivityCover = (function () {
     var fallbackDemand = ledgerNumber(opts.demand);
     if (fallbackDemand === null || fallbackDemand < 0) fallbackDemand = 0;
     var demand = earnEntries.length ? ledgerDemand : fallbackDemand;
-    var packageBalance = eventEntries.reduce(function (sum, entry) {
+    var selectedEventEntries = eventEntries.filter(function (entry) {
+      return ledgerEntryInRange(entry, opts);
+    });
+    var selectedSpend = selectedEventEntries.filter(isLedgerSpend).reduce(function (sum, entry) {
+      return sum + Math.abs(entry.delta);
+    }, 0);
+    var selectedRestore = selectedEventEntries.filter(function (entry) {
+      return entry.type === 'restore' && entry.delta > 0;
+    }).reduce(function (sum, entry) {
       return sum + entry.delta;
     }, 0);
     var fallbackArranged = ledgerNumber(opts.fallbackArranged);
     if (fallbackArranged === null || fallbackArranged < 0) fallbackArranged = 0;
     var arranged = earnEntries.length
-      ? Math.max(0, demand - Math.max(0, packageBalance))
-      : eventEntries.filter(isLedgerSpend).reduce(function (sum, entry) {
-        return sum + Math.abs(entry.delta);
-      }, fallbackArranged);
+      ? Math.max(0, selectedSpend - selectedRestore)
+      : Math.max(0, Math.max(selectedSpend, fallbackArranged) - selectedRestore);
     var remaining = Math.max(0, demand - arranged);
     return {
       hasHistory: entries.length > 0,
@@ -443,7 +431,7 @@ window.DomainActivityCover = (function () {
       demand: Math.round(demand * 1000) / 1000,
       arranged: Math.round(arranged * 1000) / 1000,
       remaining: Math.round(remaining * 1000) / 1000,
-      entries: eventEntries
+      entries: selectedEventEntries
     };
   }
 

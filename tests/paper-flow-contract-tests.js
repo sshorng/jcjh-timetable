@@ -1051,8 +1051,8 @@ function runApplicationFormContractTest() {
    assert.match(appSource, /mode: notificationsSuppressed\.value \? 'paper' : 'online'/, 'onboarding should follow the global paper mode');
    assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
     assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
-       assert.match(html, /ui-activity\.js\?v=20260916-[^"]+/);
-           assert.match(html, /app\.js\?v=20260916-[^"]+/);
+       assert.match(html, /ui-activity\.js\?v=20260917-[^"]+/);
+           assert.match(html, /app\.js\?v=20260917-[^"]+/);
       assert.match(activitySource, /email: r\.loginEmail \|\| r\.email/,
         '活動額度發放應傳送登入 Email，不得把姓名鍵 email 當作登入 Email');
        assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
