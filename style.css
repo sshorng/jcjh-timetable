@@ -1837,6 +1837,12 @@ body {
 .compare-form-exchange-date {
   grid-column: 1 / -1;
 }
+.compare-form-leave-time-with-fee {
+  grid-column: 1;
+}
+.compare-form-fee {
+  grid-column: 2;
+}
 
 /* 班級課表：多堂並陳 */
 .class-timetable .class-entry-block:hover {

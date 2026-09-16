@@ -3124,73 +3124,13 @@
                         <input type="text" class="form-input" v-model="pendingRequestData.note">
                       </div>
 
-                      <!-- 經費選單僅管理員可見；一般教師依假別自動帶入。 -->
-                      <div
-                        v-if="isAdmin && pendingRequestData.mode === 'substitution' && !pendingRequestData.courseAdjustmentOnly && pendingRequestData.specialFlow !== 'combined_return'"
-                        class="form-group"
-                        data-tour="compare-fee"
-                        style="grid-column:1 / -1;"
-                      >
-                        <label class="form-label text-success">代課鐘點費結算方式</label>
-                        <select
-                          class="form-select"
-                          v-model="pendingRequestData.subFee"
-                          :disabled="isPeriod8FeeLocked"
-                        >
-                          <option value="" disabled>請選擇...</option>
-                          <option v-if="isPeriod8FeeLocked" :value="PERIOD8_FEE">第8節代課（計畫經費）</option>
-                          <template v-if="!isPeriod8FeeLocked">
-                            <option v-if="!isMutualCover" value="自費代課">自費代課</option>
-                            <option v-if="!isMutualCover" value="公費代課">公費代課</option>
-                            <option value="扣額度">扣額度（不結鐘點＋扣折抵額度）</option>
-                            <option v-if="isMutualCover" value="活動公費">活動公費（可領代課費）</option>
-                            <option v-if="isAdmin || isMutualCover || pendingRequestData.subFee === '第8節代課'" value="第8節代課">第8節代課（計畫經費）</option>
-                          </template>
-                        </select>
-                        <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
-                          ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
-                        </span>
-                        <div
-                          v-if="quotaDeductPreview && quotaDeductPreview.length"
-                          style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:0.78rem;color:#5b21b6;line-height:1.55;"
-                        >
-                          <div style="font-weight:700;margin-bottom:4px;">折抵額度預覽（扣額度）</div>
-                          <div v-for="q in quotaDeductPreview" :key="q.email">
-                            {{ q.name }}：目前 <strong>{{ q.before }}</strong>
-                            → 扣 <strong>{{ q.deduct }}</strong>
-                            → 剩 <strong :style="{color: q.short ? '#b91c1c' : '#5b21b6'}">{{ q.short ? '不足' : q.after }}</strong>
-                            <span v-if="q.short" class="text-danger-deep">{{ isMutualCover ? '（將改活動公費）' : '（不可送出）' }}</span>
-                          </div>
-                          <div v-if="quotaDeductInsufficient" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;color:#b91c1c;">
-                            <template v-if="isMutualCover">
-                              額度不足：送出時會<strong>自動改為活動公費</strong>。
-                              <button
-                                type="button"
-                                class="btn btn-secondary"
-                                style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
-                                @click="switchQuotaDeductToSelfPay"
-                              >改為活動公費</button>
-                            </template>
-                            <template v-else>
-                              額度不足，不可用「扣額度」。請改自費排代，或另選有額度的老師。
-                              <button
-                                type="button"
-                                class="btn btn-secondary"
-                                style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
-                                @click="switchQuotaDeductToSelfPay"
-                              >改為自費代課</button>
-                            </template>
-                          </div>
-                        </div>
-                      </div>
-
                       <!-- 對調模式才顯示 B 欄日期。 -->
                        <div class="form-group compare-form-exchange-date" v-if="pendingRequestData.mode === 'exchange'">
                         <label class="form-label">對調目標日期 (B)</label>
                         <input type="text" class="form-input" style="background: #f1f5f9; font-weight: 600;" readonly :value="pendingRequestData.dateB">
                      </div>
-                    <div v-if="pendingRequestData.mode === 'substitution' && !pendingRequestData.courseAdjustmentOnly && pendingRequestData.specialFlow !== 'combined_return'" class="form-group compare-form-leave-time">
-                     <label class="form-label">請假時間（代課清冊）</label>
+                    <div v-if="pendingRequestData.mode === 'substitution' && !pendingRequestData.courseAdjustmentOnly && pendingRequestData.specialFlow !== 'combined_return'" class="form-group compare-form-leave-time" :class="{ 'compare-form-leave-time-with-fee': isAdmin }">
+                      <label class="form-label">請假時間（代課清冊）</label>
                      <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;">
                        <button type="button" class="btn btn-secondary pad-6-10-78"  @click="setLeaveTimePreset('全天')">全天（{{ getLeaveTimePresetRange(pendingRequestData.leaveTeacher, '全天') }}）</button>
                        <button type="button" class="btn btn-secondary pad-6-10-78"  @click="setLeaveTimePreset('上午')">上午（{{ getLeaveTimePresetRange(pendingRequestData.leaveTeacher, '上午') }}）</button>
@@ -3202,9 +3142,68 @@
                        <input type="time" class="form-input" style="width:125px;" v-model="pendingRequestData.leaveTimeEnd" @change="updatePendingLeaveTime">
                        <span class="text-xs-sec-78" >目前：{{ pendingRequestData.leaveTimeType || '未填' }}（{{ pendingRequestData.leaveTime || '未填' }}）</span>
                      </div>
-                     <small style="display:block;margin-top:5px;color:var(--text-muted);">行政人員預設全天 08:00~17:00；非行政預設全天 08:00~16:00，時間可自行修改。</small>
-                   </div>
-                 </div>
+                      <small style="display:block;margin-top:5px;color:var(--text-muted);">行政人員預設全天 08:00~17:00；非行政預設全天 08:00~16:00，時間可自行修改。</small>
+                    </div>
+
+                    <!-- 經費選單僅管理員可見；位於請假時間右欄。 -->
+                    <div
+                      v-if="isAdmin && pendingRequestData.mode === 'substitution' && pendingRequestData.specialFlow !== 'combined_return'"
+                      class="form-group compare-form-fee"
+                      data-tour="compare-fee"
+                    >
+                      <label class="form-label text-success">代課鐘點費結算方式</label>
+                      <select
+                        class="form-select"
+                        v-model="pendingRequestData.subFee"
+                        :disabled="isPeriod8FeeLocked"
+                      >
+                        <option value="" disabled>請選擇...</option>
+                        <option v-if="isPeriod8FeeLocked" :value="PERIOD8_FEE">第8節代課（計畫經費）</option>
+                        <template v-if="!isPeriod8FeeLocked">
+                          <option v-if="!isMutualCover" value="自費代課">自費代課</option>
+                          <option v-if="!isMutualCover" value="公費代課">公費代課</option>
+                          <option value="扣額度">扣額度（不結鐘點＋扣折抵額度）</option>
+                          <option v-if="isMutualCover" value="活動公費">活動公費（可領代課費）</option>
+                          <option v-if="isAdmin || isMutualCover || pendingRequestData.subFee === '第8節代課'" value="第8節代課">第8節代課（計畫經費）</option>
+                        </template>
+                      </select>
+                      <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
+                        ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
+                      </span>
+                      <div
+                        v-if="quotaDeductPreview && quotaDeductPreview.length"
+                        style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:0.78rem;color:#5b21b6;line-height:1.55;"
+                      >
+                        <div style="font-weight:700;margin-bottom:4px;">折抵額度預覽（扣額度）</div>
+                        <div v-for="q in quotaDeductPreview" :key="q.email">
+                          {{ q.name }}：目前 <strong>{{ q.before }}</strong>
+                          → 扣 <strong>{{ q.deduct }}</strong>
+                          → 剩 <strong :style="{color: q.short ? '#b91c1c' : '#5b21b6'}">{{ q.short ? '不足' : q.after }}</strong>
+                          <span v-if="q.short" class="text-danger-deep">{{ isMutualCover ? '（將改活動公費）' : '（不可送出）' }}</span>
+                        </div>
+                        <div v-if="quotaDeductInsufficient" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;color:#b91c1c;">
+                          <template v-if="isMutualCover">
+                            額度不足：送出時會<strong>自動改為活動公費</strong>。
+                            <button
+                              type="button"
+                              class="btn btn-secondary"
+                              style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
+                              @click="switchQuotaDeductToSelfPay"
+                            >改為活動公費</button>
+                          </template>
+                          <template v-else>
+                            額度不足，不可用「扣額度」。請改自費排代，或另選有額度的老師。
+                            <button
+                              type="button"
+                              class="btn btn-secondary"
+                              style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
+                              @click="switchQuotaDeductToSelfPay"
+                            >改為自費代課</button>
+                          </template>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
               <!-- 舊的管理員簽核模式已移至最上方顯眼處 -->
             </div>

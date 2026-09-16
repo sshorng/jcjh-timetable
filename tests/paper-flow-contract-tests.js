@@ -887,7 +887,7 @@ function runCalendarFallbackContractTest() {
 function runApplicationFormContractTest() {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
-  assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && !pendingRequestData\.courseAdjustmentOnly/, '經費選單應僅管理員可見');
+  assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
   assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
   assert.match(html, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
   assert.match(html, /id="course-adjustment-only"/);

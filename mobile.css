@@ -594,6 +594,9 @@
   .compare-form-exchange-date {
     grid-column: 1;
   }
+  .compare-form-fee {
+    grid-column: 1;
+  }
 
   /* 表單控件可撐滿；一般按鈕維持內容寬度 */
   .form-input, .form-select, .form-control {
