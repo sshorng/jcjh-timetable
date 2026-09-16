@@ -118,6 +118,61 @@ function loadSubmittedPaperRecordBuilder() {
   })()`, context);
 }
 
+function loadApproveRiskFlags() {
+  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  const start = source.indexOf('const getApproveRiskFlags =');
+  const end = source.indexOf('const formatRequestSummary =', start);
+  assert.ok(start >= 0 && end > start, 'approve risk flag helper must remain discoverable');
+  const roster = [
+    { loginEmail: 'leave@example.com', email: '被代教師', teacherName: '被代教師', name: '被代教師', mutualQuota: 0 },
+    { loginEmail: 'cover@example.com', email: '代課教師', teacherName: '代課教師', name: '代課教師', mutualQuota: 1 }
+  ];
+  const context = {
+    teachersList: ref(roster),
+    lookupTeacher: value => {
+      const key = String(value || '').trim().toLowerCase();
+      return roster.find(t => [t.loginEmail, t.email, t.teacherName, t.name]
+        .filter(Boolean).some(candidate => String(candidate).toLowerCase() === key)) || null;
+    },
+    isExchangeLikeRequest: () => false,
+    isQuotaDeductFee: fee => String(fee || '') === '扣額度' || String(fee || '') === '互代不結',
+    isLeaveClassRestricted: () => false,
+    isExchangeClassRestricted: () => false,
+    isRequestExchangeRechanged: () => false,
+    ACTIVITY_PUBLIC_FEE: '活動公費',
+    String,
+    Number,
+    Array,
+    Object,
+    parseInt,
+    parseFloat,
+    isNaN
+  };
+  vm.createContext(context);
+  const get = vm.runInContext(`(() => {
+    ${source.slice(start, end)}
+    return getApproveRiskFlags;
+  })()`, context);
+  return { get, roster };
+}
+
+function runQuotaRiskFlagTargetTest() {
+  const { get, roster } = loadApproveRiskFlags();
+  const request = {
+    type: 'substitution',
+    subFee: '扣額度',
+    requesterName: '被代教師',
+    targetTeacherName: '代課教師'
+  };
+  const flags = get(request);
+  assert.ok(flags.some(flag => flag.key === 'quota'), '扣額度申請應顯示扣額度標籤');
+  assert.equal(flags.some(flag => flag.key === 'quota0'), false, '被代教師額度不足不應影響代課教師判定');
+
+  roster[1].mutualQuota = 0;
+  const shortageFlags = get(request);
+  assert.equal(shortageFlags.some(flag => flag.key === 'quota0'), true, '代課教師額度不足才應顯示額度不足');
+}
+
 function loadApprovedExchangeConverter() {
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const start = source.indexOf('const convertRequestsToSubstitutions =');
@@ -996,8 +1051,8 @@ function runApplicationFormContractTest() {
    assert.match(appSource, /mode: notificationsSuppressed\.value \? 'paper' : 'online'/, 'onboarding should follow the global paper mode');
    assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
     assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
-      assert.match(html, /ui-activity\.js\?v=20260915-[^"]+/);
-          assert.match(html, /app\.js\?v=20260915-[^"]+/);
+       assert.match(html, /ui-activity\.js\?v=20260916-[^"]+/);
+           assert.match(html, /app\.js\?v=20260916-[^"]+/);
       assert.match(activitySource, /email: r\.loginEmail \|\| r\.email/,
         '活動額度發放應傳送登入 Email，不得把姓名鍵 email 當作登入 Email');
        assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
@@ -1759,9 +1814,10 @@ Promise.resolve()
   .then(() => runFieldMapTest())
   .then(() => runRequestListSortTest())
   .then(() => runCalendarFallbackContractTest())
-  .then(() => runExchangePaperRecordMappingTest())
-  .then(() => runApplicationFormContractTest())
-  .then(() => runHistoryEditTeacherValueTest())
+   .then(() => runExchangePaperRecordMappingTest())
+   .then(() => runApplicationFormContractTest())
+   .then(() => runQuotaRiskFlagTargetTest())
+   .then(() => runHistoryEditTeacherValueTest())
   .then(() => runCombinedHistoryEditContractTest())
   .then(runConsecutiveWarningTest)
   .then(runSingleTest)

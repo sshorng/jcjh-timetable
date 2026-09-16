@@ -10436,10 +10436,17 @@ createApp({
       if (period === 8) flags.push({ key: 'p8', label: '第8節', level: 'info' });
       if (!isEx && isQuotaDeductFee(req.subFee)) {
         flags.push({ key: 'quota', label: '扣額度', level: 'info' });
+        // soft refresh 合併列可能沒有 FieldMap 的非列舉 Email alias；姓名仍是代課者。
+        const quotaTeacherKey = req.targetTeacherName
+          || req['受邀人姓名']
+          || req.targetTeacherEmail
+          || req['受邀人Email'];
         const t = typeof lookupTeacher === 'function'
-          ? lookupTeacher(req.targetTeacherEmail)
+          ? lookupTeacher(quotaTeacherKey)
           : (teachersList.value || []).find(x =>
-              x.email && String(x.email).toLowerCase() === String(req.targetTeacherEmail || '').toLowerCase()
+              [x.email, x.loginEmail, x.teacherName, x.name].filter(Boolean).some(value =>
+                String(value).toLowerCase() === String(quotaTeacherKey || '').toLowerCase()
+              )
             );
         const q = t ? (parseFloat(t.mutualQuota) || 0) : 0;
         if (q <= 0) flags.push({ key: 'quota0', label: '額度不足', level: 'danger' });
