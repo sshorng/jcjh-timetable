@@ -970,11 +970,11 @@
         assert('空堂不可：有班', DAC.isEmptySlotAssignable({ className: '701', subject: '國文' }) === false);
         assert('空堂不可：已代義務', DAC.isEmptySlotAssignable({ isSubstitutionDuty: true }) === false);
         assert('額度0需還節', DAC.quotaZeroNeedsRepay(0) === true);
-        assert('額度0.5不足1需還節', DAC.quotaZeroNeedsRepay(0.5) === true);
+        assert('額度不足1需還節', DAC.quotaZeroNeedsRepay(0.99) === true);
         assert('額度1不需還節', DAC.quotaZeroNeedsRepay(1) === false);
-        assert('釋出1節＝0.5', DAC.slotsToEarnQuota(1) === 0.5);
-        assert('釋出3節＝1.5', DAC.slotsToEarnQuota(3) === 1.5);
-        assert('餘額0.5不可扣', DAC.canSpendQuota(0.5) === false);
+        assert('釋出1節＝1', DAC.slotsToEarnQuota(1) === 1);
+        assert('釋出3節＝3', DAC.slotsToEarnQuota(3) === 3);
+        assert('餘額不足1不可扣', DAC.canSpendQuota(0.99) === false);
         assert('餘額1可扣', DAC.canSpendQuota(1) === true);
         var ep = DAC.buildEmptySlotPayload({
           date: '2026-07-23', period: 3, dayOfWeek: 4,

@@ -3242,7 +3242,7 @@ function batchEarnMutualQuota_(semesterId, earnList, meta) {
 
   (earnList || []).forEach(function (item) {
     var em = String(item.email || "").toLowerCase().trim();
-    // 釋出額度可為 0.5 倍數（前端已 ×0.5）
+    // 釋出額度按一節一額度傳入（前端已完成換算）
     var released = parseFloat(item.released != null ? item.released : item.earn);
     if (isNaN(released) || released <= 0) return;
     released = Math.round(released * 1000) / 1000;

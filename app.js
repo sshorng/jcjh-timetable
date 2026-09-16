@@ -5349,7 +5349,7 @@ createApp({
         const name = (t && t.name) || getTeacherNameByEmail(em) || em;
         const before = t ? (parseFloat(t.mutualQuota) || 0) : 0;
         const deduct = counts[em];
-        // 須餘額 ≥ 本次扣節數（每節 1）；0.5 不夠扣 1
+        // 須餘額 ≥ 本次扣節數（每節 1）；不足 1 不夠扣 1
         const short = before + 1e-9 < deduct;
         const after = short ? before : Math.round((before - deduct) * 1000) / 1000;
         return { email: em, name, before, deduct, after: Math.max(0, after), short };
@@ -7579,14 +7579,14 @@ createApp({
             allSchedules: allSchedules.value || [],
             excludeEmails: leaders
           });
-          // 輪值單 OO＝釋出堂數（節），非額度 0.5 單位
+          // 輪值單 OO＝釋出堂數（節），不以額度單位計算
           demand = (rows || []).reduce((sum, r) => {
             if (!r || r.skipped) return sum;
             const slots = r.releasedSlots != null ? parseInt(r.releasedSlots, 10) : 0;
             if (slots > 0) return sum + slots;
-            // 後備：若僅有額度 released（0.5／節）→ 還原堂數
+            // 後備：若僅有額度 released（1／節）→ 還原堂數
             const earn = parseFloat(r.released) || 0;
-            return sum + Math.round(earn / 0.5);
+            return sum + Math.round(earn);
           }, 0);
         } catch (eRel) { /* ignore */ }
       }

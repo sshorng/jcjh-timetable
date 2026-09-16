@@ -700,7 +700,7 @@ window.UiMutualPanelState = (function () {
         : '';
       var ok = await showConfirm(
         '將寫入「額度帳本」並更新教師名單餘額（同活動不重複）\n'
-        + '規則：未上 1 節＝發 0.5；扣額度須滿 1 才扣 1\n'
+        + '規則：未上 1 節＝發 1；扣額度須滿 1 才扣 1\n'
         + '空堂事件：' + eventName + '\n'
         + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + '\n'
         + '外出班：' + mutualAwayClasses.value.length + ' 班\n'

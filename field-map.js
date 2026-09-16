@@ -92,7 +92,7 @@ window.FieldMap = (function () {
     return match[1] + '-' + String(match[2]).padStart(2, '0') + '-' + String(match[3]).padStart(2, '0');
   }
 
-  /** 折抵額度可為 0.5 倍數 */
+  /** 折抵額度使用數值格式；發放規則為一節一額度 */
   function asFloat(v, fallback) {
     if (v === undefined || v === null || v === '') return fallback;
     if (v === 0 || v === '0') return 0;
@@ -448,7 +448,7 @@ window.FieldMap = (function () {
       expensePlan: String(pick(t, ['鐘點支出計畫', '鐘點支出來源', '支出計畫', '計畫', 'expensePlan', 'plan']) || '').trim(),
       role: normalizeTeacherRole(pick(t, ['系統角色', 'role']), jobTitle),
       baseHours: asInt(pick(t, ['基本鐘點', 'baseHours']), 16),
-      // 折抵額度：釋出 1 節＝0.5；扣額度須滿 1 才扣 1
+      // 折抵額度：釋出 1 節＝1；扣額度須滿 1 才扣 1
       mutualQuota: asFloat(pick(t, ['折抵額度', 'mutualQuota']), 0)
     };
   }

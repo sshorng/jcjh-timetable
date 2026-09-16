@@ -1,7 +1,7 @@
 /**
  * 活動互代／外出班釋出空堂（純邏輯）
  * 規則：
- * - 釋出：未上到 1 節 → 發放額度 0.5
+ * - 釋出：未上到 1 節 → 發放額度 1
  * - 1–7 節額度 ≥ 1 → 扣額度（不結鐘點＋扣折抵額度 1）；不足 1 → 活動公費
  * - 第8節 → 第8節代課（計畫經費，不吃額度）
  * - 請假老師（活動公假）一律不扣鐘點
@@ -14,8 +14,8 @@ window.DomainActivityCover = (function () {
   var MUTUAL_COVER_FEE = QUOTA_DEDUCT_FEE;
   // 第8節：計畫經費，一律給代課老師；不吃折抵額度；月報另欄統計
   var PERIOD8_FEE = '第8節代課';
-  /** 釋出 1 節 → 發放額度 */
-  var EARN_PER_SLOT = 0.5;
+  /** 釋出 1 節 → 發放額度 1 */
+  var EARN_PER_SLOT = 1;
   /** 扣額度：滿 1 才可扣，每節扣 1 */
   var SPEND_PER_PERIOD = 1;
 
@@ -269,7 +269,7 @@ window.DomainActivityCover = (function () {
       }
     }
     var totalSlots = countReleasedSlotsForTeacher(teacherEmail, opts);
-    var total = slotsToEarnQuota(totalSlots); // 額度單位（節×0.5）
+    var total = slotsToEarnQuota(totalSlots); // 額度單位（節×1）
     var used = countUsedMutualAsSub(teacherEmail, opts); // 已扣節數（每節 1）
     var pendingDraft = countPendingDraftMutual(teacherEmail, opts);
     if (sheetQuota !== null) {
@@ -300,7 +300,7 @@ window.DomainActivityCover = (function () {
   /**
    * 依活動期間＋外出班，為每位教師計算建議寫回的折抵額度
    * mode: 'set' 覆寫為本次釋出額度；'add' 累加
-   * 釋出：1 節 → 0.5 額度（released）；releasedSlots＝堂數
+   * 釋出：1 節 → 1 額度（released）；releasedSlots＝堂數
    * excludeEmails / leaderEmails: 帶隊／請假外出 → 不寫入額度
    * @returns {Array<{email, name, released, releasedSlots, prevQuota, nextQuota, skipped, skipReason}>}
    */
@@ -331,7 +331,7 @@ window.DomainActivityCover = (function () {
       if (!t || !t.email) return;
       var em = emailKey(t.email);
       var releasedSlots = countReleasedSlotsForTeacher(t.email, opts);
-      var released = slotsToEarnQuota(releasedSlots); // 額度 0.5／節
+      var released = slotsToEarnQuota(releasedSlots); // 額度 1／節
       var prev = parseQuota(t.mutualQuota);
       var isLeader = !!exclude[em];
       var next = prev;
