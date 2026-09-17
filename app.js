@@ -7576,8 +7576,8 @@ createApp({
         return isActFee(r.subFee, p);
       });
 
-      // OO＝釋出堂數（與「＋發放額度」合計釋出同口徑：非帶隊、有外出班課之釋出加總）
-      // XX＝1～7 扣額度已排（export 內算）；尚有＝OO−XX
+       // OO＝事件第一天開始時的剩餘未執行堂數；XX＝1～7 扣額度已排（export 內算）。
+       // 個人頁會以額度帳本補回事件第一天以前已扣用的數量。
       let demand = 0;
       let teacherDemandRows = [];
       const dac = await ensureDAC();
@@ -7654,7 +7654,6 @@ createApp({
         eventId,
         activityRequestIds,
         activityClasses: awayClasses,
-        includeAllTeachers: true,
         getTeacherName: (em) => getTeacherNameByEmail(em),
         onlyActivityFee: true,
         requireActivityHint: true

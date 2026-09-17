@@ -107,9 +107,9 @@ const pages = exporter.buildTeacherPages({
 assert.equal(pages.length, 2, '應依實際代課教師產生兩頁');
 assert.equal(pages[0].name, '甲老師');
 assert.equal(pages[1].name, '乙老師');
-assert.equal(pages[0].matrix.demand, 3);
+assert.equal(pages[0].matrix.demand, 2, '活動頁共有應取事件第一天扣除此前使用後的餘額');
 assert.equal(pages[0].matrix.arranged, 1, '活動頁只應計選定日期內的活動包扣用');
-assert.equal(pages[0].matrix.remaining, 2);
+assert.equal(pages[0].matrix.remaining, 1);
 assert.equal(pages[1].matrix.demand, 1);
 assert.equal(pages[1].matrix.arranged, 0);
 assert.equal(pages[0].matrix.grid['2026-10-20'][1].length, 1);
@@ -133,7 +133,7 @@ const idMatchedPages = exporter.buildTeacherPages({
 assert.equal(idMatchedPages.length, 1, '事件 ID 對應的代課不可因備註沒有活動名稱而漏列');
 assert.equal(idMatchedPages[0].name, '丙老師');
 
-const allTeacherPages = exporter.buildTeacherPages({
+const activityPages = exporter.buildTeacherPages({
   startDate: '2026-10-20',
   endDate: '2026-10-20',
   activityName: '九年級畢旅',
@@ -150,13 +150,12 @@ const allTeacherPages = exporter.buildTeacherPages({
     { email: 'c@example.test', name: '丙老師', releasedSlots: 0 }
   ],
   ledgerRows,
-  includeAllTeachers: true,
   requireActivityHint: true
 });
 assert.equal(
-  allTeacherPages.map(page => page.name).join(','),
-  '甲老師,乙老師,丙老師',
-  '輪值通知單應包含全體教師，不應只產生有代課申請的教師頁'
+  activityPages.map(page => page.name).join(','),
+  '甲老師,乙老師',
+  '輪值通知單只應產生有異動課程的代課教師頁'
 );
 
 const outOfOrderLedgerRows = [
@@ -261,6 +260,27 @@ assert.deepEqual(
   { before: 3, used: 1, remaining: 2 },
   '額度發放時間早於段考時，即使活動起日較晚，段考共有與尚有仍須正確'
 );
+
+const examFirstDayRemaining = domain.buildLedgerExamStats({
+  ledgerRows: [
+    { name: '甲老師', time: '2026-10-01 09:00:00', delta: 4, balanceAfter: 4, type: 'earn', startDate: '2026-10-01' },
+    { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 3, type: 'spend', requestId: 'before-exam' },
+    { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 2, type: 'spend', requestId: 'on-exam' }
+  ],
+  teacher: { name: '甲老師' },
+  requests: [
+    { id: 'before-exam', requestDate: '2026-10-10', requestPeriod: 1, note: '空堂輪值' },
+    { id: 'on-exam', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' }
+  ],
+  rangeDates: ['2026-10-12', '2026-10-13'],
+  startDate: '2026-10-12',
+  endDate: '2026-10-13'
+});
+assert.deepEqual(
+  { before: examFirstDayRemaining.before, used: examFirstDayRemaining.used, remaining: examFirstDayRemaining.remaining },
+  { before: 3, used: 1, remaining: 2 },
+  '監考數字應以段考第一天開始前已扣用後的剩餘額度為共有'
+);
 const activityDateStats = domain.buildLedgerActivityStats({
   ledgerRows,
   teacher: { name: '甲老師' },
@@ -270,8 +290,33 @@ const activityDateStats = domain.buildLedgerActivityStats({
 });
 assert.deepEqual(
   { demand: activityDateStats.demand, arranged: activityDateStats.arranged, remaining: activityDateStats.remaining },
-  { demand: 3, arranged: 1, remaining: 2 },
-  '活動額度只應計選定日期內的扣用，不能把段考日期扣用帶入'
+  { demand: 2, arranged: 1, remaining: 1 },
+  '活動額度應以事件第一天剩餘額度為共有，再計算事件期間扣用'
+);
+
+const activityFirstDayRemaining = domain.buildLedgerActivityStats({
+  ledgerRows: [
+    { name: '甲老師', time: '2026-10-01 09:00:00', delta: 3, balanceAfter: 3,
+      type: 'earn', packageId: 'pkg-empty-first-day', eventId: 'empty-event', eventName: '空堂事件', startDate: '2026-10-14' },
+    { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-empty-first-day', eventId: 'evt_exam', eventName: '段考監考', requestId: 'before-empty' },
+    { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 1,
+      type: 'spend', packageId: 'pkg-empty-first-day', eventId: 'empty-event', eventName: '空堂事件', requestId: 'on-empty' }
+  ],
+  teacher: { name: '甲老師' },
+  eventId: 'empty-event',
+  eventName: '空堂事件',
+  requests: [
+    { id: 'before-empty', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' },
+    { id: 'on-empty', requestDate: '2026-10-14', requestPeriod: 1, note: '空堂事件' }
+  ],
+  rangeDates: ['2026-10-14'],
+  demand: 3
+});
+assert.deepEqual(
+  { demand: activityFirstDayRemaining.demand, arranged: activityFirstDayRemaining.arranged, remaining: activityFirstDayRemaining.remaining },
+  { demand: 2, arranged: 1, remaining: 1 },
+  '空堂事件第一天應先抓到此前已扣用的剩餘堂數'
 );
 
 const pageXml = '<w:document><w:body><w:p><w:r><w:t>page</w:t></w:r></w:p>'

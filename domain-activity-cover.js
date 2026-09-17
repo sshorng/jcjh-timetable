@@ -354,6 +354,15 @@ window.DomainActivityCover = (function () {
     ].map(function (value) { return String(value || ''); }).join(' ');
   }
 
+  function ledgerChronologyDate(entry, request) {
+    var requestDutyDate = requestDate(request);
+    var recordedDate = normalizeDate(entry && entry.time || '');
+    if (entry && (entry.type === 'spend' || entry.type === 'restore')) {
+      return requestDutyDate || entry.date || recordedDate;
+    }
+    return recordedDate || (entry && entry.date) || requestDutyDate;
+  }
+
   function isExamQuotaEntry(entry, request) {
     var text = [
       entry && entry.eventName,
@@ -386,12 +395,8 @@ window.DomainActivityCover = (function () {
     var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
     var timeline = entries.map(function (entry) {
       var request = requestById[entry.requestId] || null;
-      var requestDutyDate = requestDate(request);
       // 扣用／還原依實際勤務日排序；發放／調整依帳本建立時間，不能拿活動起日延後額度可用時間。
-      var recordedDate = normalizeDate(entry.time || '');
-      var date = entry.type === 'spend' || entry.type === 'restore'
-        ? (requestDutyDate || entry.date || recordedDate)
-        : (recordedDate || entry.date || requestDutyDate);
+      var date = ledgerChronologyDate(entry, request);
       var period = requestPeriod(request);
       if (!period) {
         period = parseInt(entry.row && (entry.row.period || entry.row['節次']
@@ -479,7 +484,8 @@ window.DomainActivityCover = (function () {
 
     if (balanceAtRangeStart === null) balanceAtRangeStart = balance;
     if (balanceAtRangeEnd === null) balanceAtRangeEnd = balance;
-    if (before === null) before = balanceAtRangeStart;
+    // 備註的「共有」固定取第一天開始前的剩餘額度，再往下扣本期安排。
+    before = balanceAtRangeStart;
 
     return {
       hasHistory: entries.length > 0,
@@ -514,7 +520,7 @@ window.DomainActivityCover = (function () {
 
   /**
    * 由帳本歷程重建段考備註三欄。
-   * before：第一筆段考扣用前的餘額；used：段考扣用；remaining：最後一筆段考扣用後餘額。
+   * before：段考第一天開始時的餘額；used：段考期間扣用；remaining：段考期間扣用後餘額。
    */
   function buildLedgerExamStats(opts) {
     opts = opts || {};
@@ -536,6 +542,7 @@ window.DomainActivityCover = (function () {
    */
   function buildLedgerActivityStats(opts) {
     opts = opts || {};
+    var requestById = requestMapById(opts.requests || []);
     var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
     var earnEntries = entries.filter(function (entry) {
       return entry.type === 'earn' && entry.delta > 0 && ledgerEventMatches(entry, opts);
@@ -550,30 +557,74 @@ window.DomainActivityCover = (function () {
     var eventEntries = packageEntries.length ? packageEntries : entries.filter(function (entry) {
       return ledgerEventMatches(entry, opts);
     });
-    var ledgerDemand = earnEntries.reduce(function (sum, entry) {
-      return sum + entry.delta;
-    }, 0);
-    var fallbackDemand = ledgerNumber(opts.demand);
-    if (fallbackDemand === null || fallbackDemand < 0) fallbackDemand = 0;
-    var demand = earnEntries.length ? ledgerDemand : fallbackDemand;
-    var selectedEventEntries = eventEntries.filter(function (entry) {
-      return ledgerEntryInRange(entry, opts);
+
+    var rangeDates = Array.isArray(opts.rangeDates)
+      ? opts.rangeDates.map(normalizeDate).filter(Boolean)
+      : [];
+    var rangeSet = {};
+    rangeDates.forEach(function (date) { rangeSet[date] = true; });
+    var hasExactDates = rangeDates.length > 0;
+    var sortedDates = rangeDates.slice().sort();
+    var rangeStart = hasExactDates ? sortedDates[0] : normalizeDate(opts.startDate);
+    var rangeEnd = hasExactDates ? sortedDates[sortedDates.length - 1] : normalizeDate(opts.endDate);
+    if (!rangeStart && rangeEnd) rangeStart = rangeEnd;
+    if (!rangeEnd && rangeStart) rangeEnd = rangeStart;
+
+    function entryDate(entry) {
+      return ledgerChronologyDate(entry, requestById[entry.requestId] || null);
+    }
+
+    function isSelectedDate(date) {
+      if (!date) return false;
+      if (hasExactDates) return !!rangeSet[date];
+      if (rangeStart && date < rangeStart) return false;
+      if (rangeEnd && date > rangeEnd) return false;
+      return true;
+    }
+
+    var timeline = eventEntries.map(function (entry) {
+      return { entry: entry, date: entryDate(entry) };
+    }).sort(function (a, b) {
+      if (a.date !== b.date) {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date < b.date ? -1 : 1;
+      }
+      if (a.entry.time !== b.entry.time) return a.entry.time < b.entry.time ? -1 : 1;
+      return (a.entry.index || 0) - (b.entry.index || 0);
     });
-    selectedEventEntries.sort(function (a, b) {
-      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
-      if (a.time !== b.time) return a.time < b.time ? -1 : 1;
-      return (a.index || 0) - (b.index || 0);
-    });
-    var selectedSpend = selectedEventEntries.filter(isLedgerSpend).reduce(function (sum, entry) {
-      return sum + Math.abs(entry.delta);
-    }, 0);
-    var selectedRestore = selectedEventEntries.filter(function (entry) {
-      return entry.type === 'restore' && entry.delta > 0;
+
+    // 事件第一天的起算額度，先扣掉此前已使用、再加回此前已還原。
+    var availableEarn = earnEntries.filter(function (entry) {
+      var date = entryDate(entry);
+      return !rangeStart || !date || date <= rangeStart;
     }).reduce(function (sum, entry) {
       return sum + entry.delta;
     }, 0);
+    var priorSpend = 0;
+    var priorRestore = 0;
+    var selectedEventEntries = [];
+    var selectedSpend = 0;
+    var selectedRestore = 0;
+    timeline.forEach(function (item) {
+      var entry = item.entry;
+      var date = item.date;
+      if (rangeStart && date && date < rangeStart) {
+        if (isLedgerSpend(entry)) priorSpend += Math.abs(entry.delta);
+        else if (entry.type === 'restore' && entry.delta > 0) priorRestore += entry.delta;
+      }
+      if (!isSelectedDate(date)) return;
+      selectedEventEntries.push(entry);
+      if (isLedgerSpend(entry)) selectedSpend += Math.abs(entry.delta);
+      else if (entry.type === 'restore' && entry.delta > 0) selectedRestore += entry.delta;
+    });
+
+    var ledgerDemand = Math.max(0, roundQuota(availableEarn - priorSpend + priorRestore));
+    var fallbackDemand = ledgerNumber(opts.demand);
+    if (fallbackDemand === null || fallbackDemand < 0) fallbackDemand = 0;
     var fallbackArranged = ledgerNumber(opts.fallbackArranged);
     if (fallbackArranged === null || fallbackArranged < 0) fallbackArranged = 0;
+    var demand = earnEntries.length ? ledgerDemand : fallbackDemand;
     var arranged = earnEntries.length
       ? Math.max(0, selectedSpend - selectedRestore)
       : Math.max(0, Math.max(selectedSpend, fallbackArranged) - selectedRestore);

@@ -305,38 +305,6 @@ window.ExportActivityCover = (function () {
       if (!group.name) group.name = requestTargetName(request, nameOf);
     });
 
-    if (opts.includeAllTeachers) {
-      (opts.teachers || []).forEach(function (rosterTeacher, rosterIndex) {
-        if (!rosterTeacher) return;
-        var rosterValues = identityValues(rosterTeacher);
-        if (!rosterValues.length) return;
-        var rosterGroup = groups.find(function (candidate) {
-          return rosterValues.some(function (value) { return candidate.keys.indexOf(value) >= 0; });
-        });
-        if (!rosterGroup) {
-          rosterGroup = {
-            key: rosterValues[0],
-            keys: [],
-            name: String(rosterTeacher.name || rosterTeacher.teacherName || rosterValues[0]).trim(),
-            rosterIndex: rosterIndex
-          };
-          groups.push(rosterGroup);
-        }
-        rosterGroup.rosterIndex = rosterIndex;
-        rosterValues.forEach(function (value) {
-          if (rosterGroup.keys.indexOf(value) < 0) rosterGroup.keys.push(value);
-        });
-        if (!rosterGroup.name) {
-          rosterGroup.name = String(rosterTeacher.name || rosterTeacher.teacherName || rosterValues[0]).trim();
-        }
-      });
-      groups.sort(function (a, b) {
-        var ai = a.rosterIndex == null ? Number.MAX_SAFE_INTEGER : a.rosterIndex;
-        var bi = b.rosterIndex == null ? Number.MAX_SAFE_INTEGER : b.rosterIndex;
-        return ai - bi;
-      });
-    }
-
     return groups.map(function (group) {
       var rosterTeacher = (opts.teachers || []).find(function (teacher) {
         return teacher && group.keys.some(function (value) {
@@ -366,7 +334,7 @@ window.ExportActivityCover = (function () {
   /**
    * 從已送出申請組矩陣
    * 統計口徑（與發放額度／輪值文案）：
-   * - demand(OO)＝釋出堂數（呼叫端傳入；與「合計釋出」同）
+   * - demand(OO)＝事件第一天開始時的剩餘未執行堂數
    * - arranged(XX)＝1～7 已排且「扣額度」節數
    * - remaining＝OO−XX
    * 表內仍列活動互代（扣額度／活動公費）；第 8 節僅附註、不入 OO／XX
@@ -458,7 +426,7 @@ window.ExportActivityCover = (function () {
       return String(a.className || '').localeCompare(String(b.className || ''), 'zh-Hant', { numeric: true });
     });
 
-    // OO＝釋出堂數；個人頁優先以帳本活動包的歷程重建 XX／尚有。
+    // OO＝事件第一天剩餘堂數；個人頁以帳本活動包歷程重建 XX／尚有。
     var demand = opts.teacherDemand != null ? parseInt(opts.teacherDemand, 10) : parseInt(opts.demand, 10);
     if (Number.isNaN(demand) || demand < 0) demand = 0;
     var arranged = arrangedQuota;
