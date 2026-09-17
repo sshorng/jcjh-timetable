@@ -13,6 +13,26 @@ new vm.Script(source, { filename: 'code.gs' });
 assert.match(source, /function quotaLedgerPublicRow_\(row, order\)/, '帳本匯出列格式化 helper 必須存在');
 assert.match(source, /reqData\.allTeachers === true/, '全校帳本讀取必須有 allTeachers 分支');
 assert.match(source, /historyComplete: true/, '全校帳本回應必須標記完整歷程');
+assert.match(source, /function sortQuotaSpendRequests_\(rows\)/, '額度扣用必須按勤務日期排序');
+assert.match(source, /spendReqs = sortQuotaSpendRequests_\(spendReqs\)/, '批次扣用必須套用勤務日期排序');
+assert.match(source, /eventId = "evt_exam"/, '段考扣用不可沿用畢旅額度包事件 ID');
+assert.match(source, /eventId = "evt_empty_slot"/, '空堂輪值扣用不可沿用畢旅額度包事件 ID');
+const quotaOrderStart = source.indexOf('function quotaDutyDate_');
+const quotaOrderEnd = source.indexOf('/**\n * 批次扣額度', quotaOrderStart);
+assert.ok(quotaOrderStart >= 0 && quotaOrderEnd > quotaOrderStart, '額度勤務排序 helper 區塊必須存在');
+const quotaOrderContext = { String, parseInt, Math, Number };
+vm.createContext(quotaOrderContext);
+vm.runInContext(source.slice(quotaOrderStart, quotaOrderEnd), quotaOrderContext, { filename: 'code.gs.quota-order' });
+const orderedQuotaRequests = quotaOrderContext.sortQuotaSpendRequests_([
+  { '申請單ID': 'trip', '異動日期': '2026/10/14', '異動節次': 1, '請假事由': '空堂排班' },
+  { '申請單ID': 'exam', '異動日期': '2026-10-12', '異動節次': 1, '備註': '段考監考' },
+  { '申請單ID': 'empty', '異動日期': '2026-10-12', '異動節次': 1, '備註': '空堂輪值' }
+]);
+assert.equal(
+  orderedQuotaRequests.map(row => row['申請單ID']).join(','),
+  'exam,empty,trip',
+  '後端扣額度順序應為段考、空堂輪值、畢旅'
+);
 const quotaMergeStart = source.indexOf('function mergeQuotaLedgerBalancesIntoTeacherRows_');
 const quotaMergeEnd = source.indexOf('function getSemesterTeachersCached_', quotaMergeStart);
 assert.ok(quotaMergeStart >= 0 && quotaMergeEnd > quotaMergeStart, '額度帳本餘額合併 helper 必須存在');

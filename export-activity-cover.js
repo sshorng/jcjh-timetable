@@ -151,6 +151,63 @@ window.ExportActivityCover = (function () {
     return target.some(function (value) { return teacherKeys.indexOf(value) >= 0; });
   }
 
+  function requestId(request) {
+    return String(request && (request.id || request.requestId || request['申請單ID']) || '').trim();
+  }
+
+  function classTokens(value) {
+    return String(value || '').split(/[,，、\/／|｜\s]+/)
+      .map(function (item) { return item.trim(); })
+      .filter(Boolean);
+  }
+
+  function hasActivityRequestId(request, ids) {
+    var id = requestId(request);
+    if (!id || !ids) return false;
+    if (Array.isArray(ids)) return ids.indexOf(id) >= 0;
+    return !!ids[id];
+  }
+
+  function requestMatchesActivityScope(request, opts) {
+    if (hasActivityRequestId(request, opts.activityRequestIds)) return true;
+
+    var activityHint = String(opts.activityName || opts.activity || '').trim();
+    if (activityHint) {
+      var blob = String(request.note || request['備註'] || '') + ' '
+        + String(request.reason || request['請假事由'] || '') + ' '
+        + String(request.batchId || request['批次ID'] || '') + ' '
+        + String(request.eventId || request['事件ID'] || '');
+      if (blob.indexOf(activityHint) >= 0) return true;
+    }
+
+    var eventClasses = opts.activityClasses || opts.awayClasses;
+    if (Array.isArray(eventClasses) && eventClasses.length) {
+      var eventSet = {};
+      eventClasses.forEach(function (value) {
+        classTokens(value).forEach(function (token) { eventSet[token] = true; });
+      });
+      if (classTokens(request.className || request['班級']).some(function (token) {
+        return !!eventSet[token];
+      })) return true;
+    }
+
+    return false;
+  }
+
+  function uniqueRequests(requests) {
+    var seen = {};
+    var out = [];
+    (requests || []).forEach(function (request) {
+      var id = requestId(request);
+      if (id) {
+        if (seen[id]) return;
+        seen[id] = true;
+      }
+      out.push(request);
+    });
+    return out;
+  }
+
   function requestMatchesMatrix(request, opts, dateSet) {
     if (!request) return false;
     var type = request.type || request['異動類型'];
@@ -161,12 +218,8 @@ window.ExportActivityCover = (function () {
     var fee = request.subFee || request['經費來源'] || '';
     if (opts.onlyActivityFee !== false && !isActivityMutualFee(fee, period)) return false;
     var activityHint = String(opts.activityName || opts.activity || '').trim();
-    if (opts.requireActivityHint && activityHint) {
-      var blob = String(request.note || request['備註'] || '') + ' '
-        + String(request.reason || request['請假事由'] || '') + ' '
-        + String(request.batchId || request['批次ID'] || '');
-      if (blob.indexOf(activityHint) < 0) return false;
-    }
+    if (opts.requireActivityHint && activityHint
+        && !requestMatchesActivityScope(request, opts)) return false;
     var date = String(request.requestDate || request.date || request['異動日期'] || '').slice(0, 10);
     if (!date || !dateSet[date]) return false;
     return requestMatchesTeacher(request, opts.teacher || opts.teacherKey || null);
@@ -218,7 +271,7 @@ window.ExportActivityCover = (function () {
     dates.forEach(function (date) { dateSet[date] = true; });
     var nameOf = typeof opts.getTeacherName === 'function' ? opts.getTeacherName : function (email) { return email || ''; };
     var groups = [];
-    (opts.requests || []).forEach(function (request) {
+    uniqueRequests(opts.requests).forEach(function (request) {
       if (!requestMatchesMatrix(request, opts, dateSet)) return;
       var targetValues = requestTargetValues(request);
       if (!targetValues.length) return;
@@ -251,6 +304,38 @@ window.ExportActivityCover = (function () {
       });
       if (!group.name) group.name = requestTargetName(request, nameOf);
     });
+
+    if (opts.includeAllTeachers) {
+      (opts.teachers || []).forEach(function (rosterTeacher, rosterIndex) {
+        if (!rosterTeacher) return;
+        var rosterValues = identityValues(rosterTeacher);
+        if (!rosterValues.length) return;
+        var rosterGroup = groups.find(function (candidate) {
+          return rosterValues.some(function (value) { return candidate.keys.indexOf(value) >= 0; });
+        });
+        if (!rosterGroup) {
+          rosterGroup = {
+            key: rosterValues[0],
+            keys: [],
+            name: String(rosterTeacher.name || rosterTeacher.teacherName || rosterValues[0]).trim(),
+            rosterIndex: rosterIndex
+          };
+          groups.push(rosterGroup);
+        }
+        rosterGroup.rosterIndex = rosterIndex;
+        rosterValues.forEach(function (value) {
+          if (rosterGroup.keys.indexOf(value) < 0) rosterGroup.keys.push(value);
+        });
+        if (!rosterGroup.name) {
+          rosterGroup.name = String(rosterTeacher.name || rosterTeacher.teacherName || rosterValues[0]).trim();
+        }
+      });
+      groups.sort(function (a, b) {
+        var ai = a.rosterIndex == null ? Number.MAX_SAFE_INTEGER : a.rosterIndex;
+        var bi = b.rosterIndex == null ? Number.MAX_SAFE_INTEGER : b.rosterIndex;
+        return ai - bi;
+      });
+    }
 
     return groups.map(function (group) {
       var rosterTeacher = (opts.teachers || []).find(function (teacher) {
@@ -318,7 +403,7 @@ window.ExportActivityCover = (function () {
     var arrangedQuota = 0; // XX：1～7 扣額度
     var arrangedPublic = 0; // 活動公費（表內可有，不計 XX）
 
-    (opts.requests || []).forEach(function (r) {
+    uniqueRequests(opts.requests).forEach(function (r) {
       if (!requestMatchesMatrix(r, opts, dateSet)) return;
       var period = requestPeriod(r);
       var fee = r.subFee || r['經費來源'] || '';

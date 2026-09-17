@@ -3020,11 +3020,18 @@ function buildQuotaSpendMeta_(req, pack) {
   var eventName = "";
   var note = "";
   var kind = "sub";
+  var dutyText = [reason, noteRaw, req["科目"] || req.subject || "", req["班級"] || req.className || ""].join(" ");
+  var isExamDuty = /段考|監考|考試|試務/.test(dutyText);
 
-  if (isEmptyAssign) {
+  if (isExamDuty) {
+    kind = "exam";
+    eventId = "evt_exam";
+    eventName = "段考監考";
+    note = when || eventName;
+  } else if (isEmptyAssign) {
     kind = "add";
+    eventId = "evt_empty_slot";
     eventName = "空堂任務";
-    if (!eventId) eventId = "evt_empty_slot";
     note = when || "空堂任務";
   } else if (activityName) {
     kind = "activity";
@@ -3706,6 +3713,56 @@ function buildTeacherPackStateFromLedger_(semesterId) {
   return byEmail;
 }
 
+function quotaDutyDate_(row) {
+  row = row || {};
+  var value = row["異動日期"] || row.requestDate || row.date || row["起日"] || row.startDate || "";
+  var s = String(value || "").trim().slice(0, 10).replace(/\//g, "-");
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return m
+    ? m[1] + "-" + String(m[2]).padStart(2, "0") + "-" + String(m[3]).padStart(2, "0")
+    : s;
+}
+
+function quotaDutyPeriod_(row) {
+  row = row || {};
+  return parseInt(row["異動節次"] != null ? row["異動節次"] : (row.requestPeriod || row.period), 10) || 999;
+}
+
+function quotaDutyPriority_(row) {
+  row = row || {};
+  var text = [
+    row["請假事由"] || row.reason || "",
+    row["備註"] || row.note || "",
+    row["事件名稱"] || row.eventName || "",
+    row["科目"] || row.subject || "",
+    row["班級"] || row.className || ""
+  ].join(" ");
+  if (/段考|監考|考試|試務/.test(text)) return 0;
+  if (/空堂|輪值|巡堂/.test(text)) return 1;
+  return 2;
+}
+
+function sortQuotaSpendRequests_(rows) {
+  return (rows || []).slice().sort(function (a, b) {
+    var da = quotaDutyDate_(a);
+    var db = quotaDutyDate_(b);
+    if (da !== db) {
+      if (!da) return 1;
+      if (!db) return -1;
+      return da < db ? -1 : 1;
+    }
+    var pa = quotaDutyPeriod_(a);
+    var pb = quotaDutyPeriod_(b);
+    if (pa !== pb) return pa - pb;
+    var ka = quotaDutyPriority_(a);
+    var kb = quotaDutyPriority_(b);
+    if (ka !== kb) return ka - kb;
+    var ia = String(a && (a["申請單ID"] || a.requestId || a.id) || "");
+    var ib = String(b && (b["申請單ID"] || b.requestId || b.id) || "");
+    return ia.localeCompare(ib);
+  });
+}
+
 /**
  * 批次扣額度：一次讀帳本、一次 append、一次改教師欄（送出申請熱路徑）
  * 逐筆申請寫 spend：事件名／備註依活動互代、代課、空堂任務區分
@@ -3715,7 +3772,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   if (!list.length) return { spentTeachers: 0, shortList: [], wrote: 0, spentRequestIds: [] };
   try { backfillQuotaLedgerIndexKeys_(); } catch (eBfS) {}
 
-  // 只留扣額度申請；維持傳入順序
+  // 只留扣額度申請；先按實際勤務日期，再按節次與同節優先序。
   var spendReqs = [];
   var sid = String((list[0] && list[0]["學期代號"]) || "");
   var alreadySpent = {};
@@ -3735,6 +3792,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
     spendReqs.push(r);
   });
   if (!spendReqs.length) return { spentTeachers: 0, shortList: [], wrote: 0, spentRequestIds: [] };
+  spendReqs = sortQuotaSpendRequests_(spendReqs);
   if (!sid) sid = String((list[0] && list[0]["學期代號"]) || "");
 
   var state = buildTeacherPackStateFromLedger_(sid);

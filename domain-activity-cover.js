@@ -55,8 +55,10 @@ window.DomainActivityCover = (function () {
   }
 
   function normalizeDate(d) {
-    var s = String(d || '').trim().slice(0, 10);
-    return s;
+    var s = String(d || '').trim().slice(0, 10).replace(/\//g, '-');
+    var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m) return s;
+    return m[1] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[3]).padStart(2, '0');
   }
 
   /** 日期是否落在活動期間（含起迄；缺一邊則只比有填的那端） */
@@ -318,9 +320,175 @@ window.DomainActivityCover = (function () {
         requestId: ledgerRequestId(item.row),
         packageId: String(ledgerField(item.row, ['packageId', '包ID']) || '').trim(),
         eventId: String(ledgerField(item.row, ['eventId', '事件ID']) || '').trim(),
-        eventName: String(ledgerField(item.row, ['eventName', '事件名稱']) || '').trim()
+        eventName: String(ledgerField(item.row, ['eventName', '事件名稱']) || '').trim(),
+        note: String(ledgerField(item.row, ['note', '備註']) || '').trim()
       };
     });
+  }
+
+  function requestMapById(requests) {
+    var map = {};
+    (requests || []).forEach(function (request) {
+      var id = String(request && (request.id || request.requestId || request['申請單ID']) || '').trim();
+      if (id) map[id] = request;
+    });
+    return map;
+  }
+
+  function requestDate(request) {
+    return normalizeDate(request && (request.requestDate || request.date || request['異動日期']));
+  }
+
+  function requestPeriod(request) {
+    return parseInt(request && (request.requestPeriod != null
+      ? request.requestPeriod
+      : (request.period != null ? request.period : request['異動節次'])), 10) || 0;
+  }
+
+  function requestText(request) {
+    if (!request) return '';
+    return [
+      request.eventName, request.eventId, request.reason, request['請假事由'],
+      request.note, request['備註'], request.subject, request['科目'],
+      request.className, request['班級']
+    ].map(function (value) { return String(value || ''); }).join(' ');
+  }
+
+  function isExamQuotaEntry(entry, request) {
+    var text = [
+      entry && entry.eventName,
+      entry && entry.note,
+      requestText(request)
+    ].map(function (value) { return String(value || ''); }).join(' ');
+    return /監考|段考|考試|試務/.test(text);
+  }
+
+  function isEmptyDutyQuotaEntry(entry, request) {
+    var text = [
+      entry && entry.eventName,
+      entry && entry.note,
+      requestText(request)
+    ].map(function (value) { return String(value || ''); }).join(' ');
+    return /空堂|輪值|巡堂/.test(text);
+  }
+
+  function roundQuota(value) {
+    return Math.round((parseFloat(value) || 0) * 1000) / 1000;
+  }
+
+  /**
+   * 以實際勤務日期重播帳本，避免行政輸入順序改變報表歸屬。
+   * earn 先於同日扣用；同日同節固定監考優先，再排空堂輪值與其他代課。
+   */
+  function buildChronologicalLedgerStats(opts) {
+    opts = opts || {};
+    var requestById = requestMapById(opts.requests || []);
+    var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
+    var timeline = entries.map(function (entry) {
+      var request = requestById[entry.requestId] || null;
+      var requestDutyDate = requestDate(request);
+      // spend／restore 的申請日期才是實際勤務日期；舊帳本的時間或起日只作備援。
+      var date = entry.type === 'spend' || entry.type === 'restore'
+        ? (requestDutyDate || entry.date)
+        : (entry.date || requestDutyDate);
+      var period = requestPeriod(request);
+      if (!period) {
+        period = parseInt(entry.row && (entry.row.period || entry.row['節次']
+          || entry.row.requestPeriod || entry.row['異動節次']), 10) || 0;
+      }
+      var phase = entry.type === 'earn' && entry.delta > 0 ? 0
+        : (entry.type === 'restore' && entry.delta > 0 ? 3 : 1);
+      var priority = 30;
+      if (entry.type === 'spend' && entry.delta < 0) {
+        if (opts.priorityKind === 'exam') {
+          priority = isEmptyDutyQuotaEntry(entry, request) && !isExamQuotaEntry(entry, request) ? 20 : 10;
+        } else if (isExamQuotaEntry(entry, request)) priority = 10;
+        else if (isEmptyDutyQuotaEntry(entry, request)) priority = 20;
+      }
+      return {
+        entry: entry,
+        request: request,
+        date: date,
+        period: period,
+        phase: phase,
+        priority: priority
+      };
+    });
+
+    timeline.sort(function (a, b) {
+      if (a.date !== b.date) {
+        if (!a.date) return 1;
+        if (!b.date) return -1;
+        return a.date < b.date ? -1 : 1;
+      }
+      if (a.phase !== b.phase) return a.phase - b.phase;
+      var ap = a.period || 999;
+      var bp = b.period || 999;
+      if (ap !== bp) return ap - bp;
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      if (a.entry.time !== b.entry.time) return a.entry.time < b.entry.time ? -1 : 1;
+      var ah = a.entry.index == null ? 0 : a.entry.index;
+      var bh = b.entry.index == null ? 0 : b.entry.index;
+      if (ah !== bh) return ah - bh;
+      return String(a.entry.requestId || '').localeCompare(String(b.entry.requestId || ''));
+    });
+
+    var rangeDates = Array.isArray(opts.rangeDates)
+      ? opts.rangeDates.map(normalizeDate).filter(Boolean)
+      : [];
+    var rangeSet = {};
+    rangeDates.forEach(function (date) { rangeSet[date] = true; });
+    var hasExactDates = rangeDates.length > 0;
+    var rangeStart = hasExactDates ? rangeDates.slice().sort()[0] : normalizeDate(opts.startDate);
+    var rangeEnd = hasExactDates ? rangeDates.slice().sort().slice(-1)[0] : normalizeDate(opts.endDate);
+    if (!rangeStart && rangeEnd) rangeStart = rangeEnd;
+    if (!rangeEnd && rangeStart) rangeEnd = rangeStart;
+
+    function isSelectedDate(date) {
+      if (!date) return false;
+      if (hasExactDates) return !!rangeSet[date];
+      if (rangeStart && date < rangeStart) return false;
+      if (rangeEnd && date > rangeEnd) return false;
+      return true;
+    }
+
+    var balance = 0;
+    var balanceAtRangeStart = null;
+    var balanceAtRangeEnd = null;
+    var before = null;
+    var used = 0;
+    var selectedSpends = [];
+
+    timeline.forEach(function (item) {
+      var date = item.date;
+      if (rangeEnd && date && date > rangeEnd) return;
+      if (rangeStart && date && date >= rangeStart && balanceAtRangeStart === null) {
+        balanceAtRangeStart = balance;
+      }
+      if (item.entry.type === 'spend' && item.entry.delta < 0 && isSelectedDate(date)) {
+        if (before === null) before = balance;
+        balance = roundQuota(balance + item.entry.delta);
+        used = roundQuota(used + Math.abs(item.entry.delta));
+        selectedSpends.push(item.entry);
+      } else {
+        balance = roundQuota(balance + item.entry.delta);
+      }
+      if (rangeEnd && date && date <= rangeEnd) balanceAtRangeEnd = balance;
+    });
+
+    if (balanceAtRangeStart === null) balanceAtRangeStart = balance;
+    if (balanceAtRangeEnd === null) balanceAtRangeEnd = balance;
+    if (before === null) before = balanceAtRangeStart;
+
+    return {
+      hasHistory: entries.length > 0,
+      hasExamSpend: selectedSpends.length > 0,
+      before: Math.max(0, roundQuota(before)),
+      used: roundQuota(used),
+      remaining: Math.max(0, roundQuota(balanceAtRangeEnd)),
+      entries: selectedSpends,
+      timeline: timeline
+    };
   }
 
   function ledgerEntryInRange(entry, opts) {
@@ -349,28 +517,7 @@ window.DomainActivityCover = (function () {
    */
   function buildLedgerExamStats(opts) {
     opts = opts || {};
-    var entries = ledgerHistoryEntries(opts.ledgerRows || opts.rows, opts.teacher);
-    var selectedEntries = entries.filter(function (entry) {
-      return ledgerEntryInRange(entry, opts);
-    });
-    var examEntries = selectedEntries.filter(function (entry) {
-      return isExamLedgerSpend(entry, opts);
-    });
-    var firstSelected = selectedEntries.length ? selectedEntries[0] : null;
-    var lastSelected = selectedEntries.length ? selectedEntries[selectedEntries.length - 1] : null;
-    var latest = entries.length ? entries[entries.length - 1] : null;
-    var first = examEntries.length ? examEntries[0] : null;
-    var used = examEntries.reduce(function (sum, entry) {
-      return sum + Math.abs(entry.delta);
-    }, 0);
-    return {
-      hasHistory: entries.length > 0,
-      hasExamSpend: examEntries.length > 0,
-      before: Math.max(0, Math.round((first ? first.before : (firstSelected ? firstSelected.before : (latest ? latest.after : 0))) * 1000) / 1000),
-      used: Math.round(used * 1000) / 1000,
-      remaining: Math.max(0, Math.round((lastSelected ? lastSelected.after : (latest ? latest.after : 0)) * 1000) / 1000),
-      entries: examEntries
-    };
+    return buildChronologicalLedgerStats(Object.assign({}, opts, { priorityKind: 'exam' }));
   }
 
   function ledgerEventMatches(entry, opts) {
@@ -410,6 +557,11 @@ window.DomainActivityCover = (function () {
     var demand = earnEntries.length ? ledgerDemand : fallbackDemand;
     var selectedEventEntries = eventEntries.filter(function (entry) {
       return ledgerEntryInRange(entry, opts);
+    });
+    selectedEventEntries.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      if (a.time !== b.time) return a.time < b.time ? -1 : 1;
+      return (a.index || 0) - (b.index || 0);
     });
     var selectedSpend = selectedEventEntries.filter(isLedgerSpend).reduce(function (sum, entry) {
       return sum + Math.abs(entry.delta);
@@ -1254,6 +1406,7 @@ window.DomainActivityCover = (function () {
     isConflictCell: isConflictCell,
     countReleasedSlotsForTeacher: countReleasedSlotsForTeacher,
     countUsedMutualAsSub: countUsedMutualAsSub,
+    buildChronologicalLedgerStats: buildChronologicalLedgerStats,
     buildLedgerExamStats: buildLedgerExamStats,
     buildLedgerActivityStats: buildLedgerActivityStats,
     countPendingDraftMutual: countPendingDraftMutual,

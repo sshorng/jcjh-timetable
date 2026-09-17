@@ -7544,6 +7544,7 @@ createApp({
       }
       if (!endDate) endDate = startDate;
       const activityName = String(ev.name || '').trim() || '活動';
+      const eventId = String(ev.id || '').trim();
       const eventPeriod = window.DomainClassAway && window.DomainClassAway.eventPeriod
         ? window.DomainClassAway.eventPeriod(ev)
         : 'all';
@@ -7624,6 +7625,22 @@ createApp({
         return;
       }
 
+      // 事件名稱可能只存在額度帳本，申請單備註未必保留；用申請單 ID
+      // 補回同一事件的所有代課，避免輪值單只剩一位教師。
+      const activityRequestIds = [];
+      (ledgerRows || []).forEach((row) => {
+        if (!row) return;
+        const rowEventId = String(row.eventId || row['事件ID'] || '').trim();
+        const rowEventName = String(row.eventName || row['事件名稱'] || '').trim();
+        const requestId = String(row.requestId || row['申請單ID'] || '').trim();
+        if (!requestId) return;
+        const isLegacyEventRow = !rowEventId || rowEventId === 'evt_sub' || rowEventId === 'evt_empty_slot';
+        if ((eventId && rowEventId === eventId)
+            || (isLegacyEventRow && activityName && rowEventName === activityName)) {
+          activityRequestIds.push(requestId);
+        }
+      });
+
       const res = await window.ExportActivityCover.exportWord({
         startDate,
         endDate,
@@ -7634,7 +7651,10 @@ createApp({
         teachers: teachersList.value || [],
         teacherDemands: teacherDemandRows,
         ledgerRows,
-        eventId: String(ev.id || '').trim(),
+        eventId,
+        activityRequestIds,
+        activityClasses: awayClasses,
+        includeAllTeachers: true,
         getTeacherName: (em) => getTeacherNameByEmail(em),
         onlyActivityFee: true,
         requireActivityHint: true

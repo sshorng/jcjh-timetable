@@ -2,7 +2,7 @@
  * 段考監考表匯出
  *
  * 流程：模板 load → 填文字成底稿 → writeBuffer 凍結
- * 每人：load(底稿) → 分發／額度 → 重套字型 → 鎖中線 → 併入 xlsx
+ * 每人：load(底稿) → 分發／額度 → 重套字型 → 併入 xlsx
  *
  * 鐵則：
  * - 只改 value；R3–R8 不寫
@@ -180,72 +180,6 @@ window.ExportInvigilation = (function () {
     }
   }
 
-  var THICK_EDGE = { style: 'thick', color: { argb: 'FF000000' } };
-  var THIN_EDGE = { style: 'thin', color: { argb: 'FF000000' } };
-
-  function edgeSide(side, fallback) {
-    if (side && side.style) {
-      return {
-        style: side.style,
-        color: side.color && side.color.argb
-          ? { argb: side.color.argb }
-          : { argb: 'FF000000' }
-      };
-    }
-    return fallback || undefined;
-  }
-
-  /**
-   * 關鍵：ExcelJS 模板多格共用同一 styleId。
-   * 若只寫 cell.font，會改到整欄灰底格。
-   * 寫入完整 style 時：font 用新物件；fill／border／alignment 原樣深拷貝。
-   * L 欄(col12) 空白格也必須強制 right=thick，否則中線斷在無字列。
-   * M 欄(col13) 強制 left=thick。
-   */
-  function setCellFontIsolated(cell, fontSpec, colNumber) {
-    if (!cell) return;
-    var border = clonePlain(cell.border) || {};
-    var col = colNumber != null ? colNumber : 0;
-    try {
-      if (!col && cell.col != null) col = cell.col;
-      if (!col && cell.address) {
-        var m = String(cell.address).match(/^([A-Z]+)/i);
-        if (m) {
-          // A=1 … L=12, M=13
-          var letters = m[1].toUpperCase();
-          var n = 0;
-          var i;
-          for (i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
-          col = n;
-        }
-      }
-    } catch (eCol) { /* ignore */ }
-
-    if (col === 12) {
-      border = {
-        top: edgeSide(border.top, THIN_EDGE),
-        bottom: edgeSide(border.bottom, THIN_EDGE),
-        left: edgeSide(border.left, THIN_EDGE),
-        right: { style: 'thick', color: { argb: 'FF000000' } }
-      };
-    } else if (col === 13) {
-      border = {
-        top: edgeSide(border.top, THIN_EDGE),
-        bottom: edgeSide(border.bottom, THIN_EDGE),
-        left: { style: 'thick', color: { argb: 'FF000000' } },
-        right: edgeSide(border.right, THIN_EDGE)
-      };
-    }
-
-    cell.style = {
-      font: fontSpec,
-      fill: clonePlain(cell.fill) || undefined,
-      border: border,
-      alignment: clonePlain(cell.alignment) || undefined,
-      numFmt: cell.numFmt || undefined
-    };
-  }
-
   function setCellFontPreservingStyle(cell, fontSpec) {
     if (!cell) return;
     var style = clonePlain(cell.style) || {};
@@ -253,76 +187,13 @@ window.ExportInvigilation = (function () {
     cell.style = style;
   }
 
-  /**
-   * 只還原中線（模板 L 右 thick）。
-   * 必須用完整 cell.style 寫入。
-   * Excel 常不畫「完全空白」儲存格的邊框：空白 L 格寫入零寬空白 \u200B 強制出線，
-   * 畫面／列印仍看不見字。
-   */
-  function restoreMiddleDivider(ws, rowStart, rowEnd) {
-    if (!ws) return;
-    var rS = rowStart || TEACHER_ROW_START;
-    var rE = rowEnd || (TEACHER_ROW_START + TEACHER_SLOTS_FALLBACK - 1);
-    var thin = THIN_EDGE;
-    var r;
-    var ZWSP = '\u200B';
-
-    function keepFont(cell) {
-      if (cell.font && cell.font.bold) {
-        return plainFont(true, !!cell.font.underline);
-      }
-      return {
-        name: (cell.font && cell.font.name) || '標楷體',
-        size: (cell.font && cell.font.size) || 15,
-        bold: !!(cell.font && cell.font.bold),
-        italic: !!(cell.font && cell.font.italic),
-        underline: (cell.font && cell.font.underline) ? cell.font.underline : false
-      };
-    }
-
-    function isBlankVal(v) {
-      if (v == null) return true;
-      if (typeof v === 'object' && v.formula) return false;
-      var s = String(v).replace(/\u200B/g, '').trim();
-      return s === '';
-    }
-
-    for (r = rS; r <= rE; r++) {
-      var c12 = ws.getCell(r, 12);
-      var c13 = ws.getCell(r, 13);
-      var b12 = clonePlain(c12.border) || {};
-      var b13 = clonePlain(c13.border) || {};
-
-      // 空白 L 格：寫入零寬字，否則 Excel 不畫 thick 右邊線
-      if (isBlankVal(c12.value)) {
-        c12.value = ZWSP;
-      }
-
-      c12.style = {
-        font: keepFont(c12),
-        fill: clonePlain(c12.fill) || undefined,
-        alignment: clonePlain(c12.alignment) || undefined,
-        numFmt: c12.numFmt || undefined,
-        border: {
-          top: edgeSide(b12.top, thin),
-          bottom: edgeSide(b12.bottom, thin),
-          left: edgeSide(b12.left, thin),
-          right: { style: 'thick', color: { argb: 'FF000000' } }
-        }
-      };
-      c13.style = {
-        font: keepFont(c13),
-        fill: clonePlain(c13.fill) || undefined,
-        alignment: clonePlain(c13.alignment) || undefined,
-        numFmt: c13.numFmt || undefined,
-        border: {
-          top: edgeSide(b13.top, thin),
-          bottom: edgeSide(b13.bottom, thin),
-          left: { style: 'thick', color: { argb: 'FF000000' } },
-          right: edgeSide(b13.right, thin)
-        }
-      };
-    }
+  function setCellFontSizePreservingStyle(cell, size) {
+    if (!cell) return;
+    var font = clonePlain(cell.font)
+      || clonePlain(cell.style && cell.style.font)
+      || {};
+    font.size = size;
+    setCellFontPreservingStyle(cell, font);
   }
 
   /**
@@ -751,6 +622,11 @@ window.ExportInvigilation = (function () {
     else if (/【[^】]*未執行[^】]*】/.test(noteText)) {
       noteText = noteText.replace(/【[^】]*未執行[^】]*】/, bracket);
     }
+    // 模板第 48 列沿用原列高；替換後文字稍長，僅縮小字型，框線與列高不動。
+    var noteFont = clonePlain(noteCell.font)
+      || clonePlain(noteCell.style && noteCell.style.font)
+      || {};
+    if (!noteFont.size || noteFont.size >= 18) setCellFontSizePreservingStyle(noteCell, 17);
     setVal(noteCell, noteText);
   }
 
@@ -1033,6 +909,8 @@ window.ExportInvigilation = (function () {
     applySpecialEducationRows: applySpecialEducationRows,
     normalizePrintArea: normalizePrintArea,
     copyPrintSettings: copyPrintSettings,
+    applyChangeFonts: applyChangeFonts,
+    personalizeValues: personalizeValues,
     linkMasterRange: linkMasterRange,
     exportWorkbook: exportWorkbook,
     loadTemplateBuffer: loadTemplateBuffer

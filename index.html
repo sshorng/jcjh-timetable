@@ -4647,14 +4647,14 @@
       var _activityCoverP = null;
       window.ensureExportActivityCover = function () {
         if (window.ExportActivityCover) return Promise.resolve();
-             if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260917-quota-ledger3');
+              if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260917-quota-ledger4');
         return _activityCoverP;
       };
       var _invigP = null;
       var _excelJsP = null;
       window.ensureExportInvigilation = function () {
         if (window.ExportInvigilation) return Promise.resolve();
-             if (!_invigP) _invigP = loadScript('export-invigilation-recovered.js?v=20260917-quota-ledger3');
+             if (!_invigP) _invigP = loadScript('export-invigilation-recovered.js?v=20260917-quota-ledger4');
         return _invigP;
       };
       window.ensureExcelJS = function () {
