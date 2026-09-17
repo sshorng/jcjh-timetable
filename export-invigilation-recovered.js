@@ -19,6 +19,7 @@ window.ExportInvigilation = (function () {
   var TEACHER_SLOTS_FALLBACK = 38;
   var EXAM_SLOTS_PER_SIDE = 11; // 第一天 7 節＋第二天 4 節
   var SPECIAL_EDUCATION_LABEL = '特教監考';
+  var BLANK_CELL_MARK = '\u200B';
   var NOTE5_RE = /【[^】]*未執行的[^】]*共\s*[_\d]*\s*節，本次段考已安排\s*[_\d]*\s*節，尚有\s*[_\d]*\s*節，未執行節數將會累計於本學年度】/;
   var _templateBuf = null;
 
@@ -452,12 +453,51 @@ window.ExportInvigilation = (function () {
     return merged;
   }
 
+  /**
+   * 部分試算表檢視器不繪製完全空白儲存格的模板格線。
+   * 只在教師資料區放入不可見字元，絕不建立或修改 border。
+   */
+  function ensureBlankGridCells(ws, layout) {
+    if (!ws || !layout) return 0;
+    var rowStart = layout.teacherRowStart;
+    var rowEnd = layout.teacherRowEnd;
+    var marked = 0;
+    var r;
+    var c;
+    for (r = rowStart; r <= rowEnd; r++) {
+      for (c = 1; c <= 24; c++) {
+        var cell = ws.getCell(r, c);
+        if (!cell) continue;
+        if (cell.isMerged && cell.master && cell.master.address !== cell.address) continue;
+        if (cell.value == null || cell.value === '') {
+          cell.value = BLANK_CELL_MARK;
+          marked += 1;
+        }
+      }
+    }
+    return marked;
+  }
+
+  function teacherIdentityKeys(teacher) {
+    return [
+      teacher && teacher.email,
+      teacher && teacher.loginEmail,
+      teacher && teacher.teacherEmail,
+      teacher && teacher.name,
+      teacher && teacher.teacherName
+    ].map(function (value) {
+      return String(value || '').trim().toLowerCase();
+    }).filter(Boolean);
+  }
+
+  function teachersMatch(a, b) {
+    var left = teacherIdentityKeys(a);
+    var right = teacherIdentityKeys(b);
+    return left.some(function (value) { return right.indexOf(value) >= 0; });
+  }
+
   function buildTeacherMatrix(teachers, periodSpec, getCell, slotsPerSide, onProgress, allSchedules) {
     var cap = slotsPerSide || TEACHER_SLOTS_FALLBACK;
-    var half = Math.min(Math.ceil(teachers.length / 2), cap);
-    var leftT = teachers.slice(0, half);
-    var rightT = teachers.slice(half, half + cap);
-    var truncated = teachers.length > cap * 2;
     var cache = Object.create(null);
     var baseList = allSchedules || [];
 
@@ -545,14 +585,26 @@ window.ExportInvigilation = (function () {
       return { name: t.name || t.email || '', email: t.email, slots: slots };
     }
 
-    var all = leftT.concat(rightT);
+    var all = (teachers || []).slice();
     var mapped = all.map(function (t, i) { return mapOne(t, i, all.length); });
+    var canDetermineCourse = typeof getCell === 'function' || baseList.length > 0;
+    var included = canDetermineCourse
+      ? mapped.filter(function (teacher) {
+        if (teacher.specialEducation) return true;
+        return (teacher.slots || []).some(function (slot) {
+          return slot && String(slot.text || '').trim() !== '';
+        });
+      })
+      : mapped;
+    var half = Math.min(Math.ceil(included.length / 2), cap);
+    var shown = included.slice(0, cap * 2);
     return {
-      left: mapped.slice(0, leftT.length),
-      right: mapped.slice(leftT.length),
-      truncated: truncated,
-      total: teachers.length,
-      shown: leftT.length + rightT.length,
+      left: shown.slice(0, half),
+      right: shown.slice(half),
+      includedTeachers: included,
+      truncated: included.length > cap * 2,
+      total: included.length,
+      shown: shown.length,
       patrolCount: patrolCount,
       changedCount: changedCount
     };
@@ -779,6 +831,12 @@ window.ExportInvigilation = (function () {
       function (c, t) { progress('讀取課表 ' + c + '／' + t + '…', c, t); },
       opts.allSchedules || []
     );
+    var includedTeachers = matrix.includedTeachers || [];
+    recipients = recipients.filter(function (recipient) {
+      return includedTeachers.some(function (teacher) { return teachersMatch(recipient, teacher); });
+    });
+    if (!recipients.length) return { ok: false, error: '選取的教師在考試期間沒有課務' };
+    total = recipients.length;
 
     progress('寫入全校文字…', 0, total);
     await yieldUi();
@@ -806,6 +864,7 @@ window.ExportInvigilation = (function () {
     // 第一張表也要套用字型與處理合併；setCellFontPreservingStyle 只替換字型，框線沿用模板。
     var lastMarked = applyChangeFonts(masterSheet, matrix, layout);
     applySpecialEducationRows(masterSheet, matrix, layout);
+    ensureBlankGridCells(masterSheet, layout);
 
     var usedNames = {};
     usedNames[MASTER_SHEET_NAME] = 1;
@@ -853,6 +912,7 @@ window.ExportInvigilation = (function () {
         var targetSheet = outWb.addWorksheet(sheetName);
         copySheetValuesAndStyles(tempSheet, targetSheet, master);
         applySpecialEducationRows(targetSheet, matrix, layout);
+        ensureBlankGridCells(targetSheet, layout);
         // 分發頁 A1:X47 公式連動「監考表」；A48 保留個人額度備註。
         linkMasterRange(targetSheet, MASTER_SHEET_NAME);
       } catch (eMove) {
@@ -888,7 +948,7 @@ window.ExportInvigilation = (function () {
       ok: true,
       fileName: fname,
       dayCount: range.dates.length,
-      teacherCount: teachers.length,
+      teacherCount: matrix.total,
       copyCount: total,
       sheetCount: total + 1,
       changedMarked: lastMarked,
@@ -908,6 +968,7 @@ window.ExportInvigilation = (function () {
     buildTeacherMatrix: buildTeacherMatrix,
     isSpecialEducationTeacher: isSpecialEducationTeacher,
     applySpecialEducationRows: applySpecialEducationRows,
+    ensureBlankGridCells: ensureBlankGridCells,
     normalizePrintArea: normalizePrintArea,
     copyPrintSettings: copyPrintSettings,
     applyChangeFonts: applyChangeFonts,

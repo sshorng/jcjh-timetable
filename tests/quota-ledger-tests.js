@@ -353,6 +353,25 @@ invigilation.personalizeValues({
 assert.equal(noteCell.style.font.size, 17, '第48列備註字型應稍微縮小');
 assert.equal(JSON.stringify(noteCell.style.border), noteBorderBefore, '第48列縮字不可改模板框線');
 
+const blankGridCells = new Map();
+const blankGridWorksheet = {
+  getCell: (row, col) => {
+    const address = String.fromCharCode(64 + col) + row;
+    if (!blankGridCells.has(address)) blankGridCells.set(address, { address, value: null });
+    return blankGridCells.get(address);
+  }
+};
+blankGridCells.set('C9', { address: 'C9', value: '既有內容' });
+blankGridCells.set('D9', { address: 'D9', value: null, isMerged: true, master: { address: 'C9' } });
+const markedBlankGridCells = invigilation.ensureBlankGridCells(
+  blankGridWorksheet,
+  { teacherRowStart: 9, teacherRowEnd: 9 }
+);
+assert.ok(markedBlankGridCells > 0, '教師資料區的空白格應寫入不可見空白字元');
+assert.equal(blankGridCells.get('A9').value, '\u200B');
+assert.equal(blankGridCells.get('C9').value, '既有內容');
+assert.equal(blankGridCells.get('D9').value, null, '合併追隨格不可寫入內容');
+
 console.log('quota ledger tests PASS');
 
 (async function () {

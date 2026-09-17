@@ -155,4 +155,21 @@ assert.deepEqual(specialMergeCalls, ['B9:L9', 'N9:X9']);
 assert.equal(specialWorksheet.cells.get('B9').value, '特教監考');
 assert.equal(specialWorksheet.cells.get('N9').value, '特教監考');
 
+const courseMatrix = buildTeacherMatrix(
+  [
+    { email: 'empty@example.com', name: '完全沒課老師' },
+    { email: 'course@example.com', name: '有課老師' }
+  ],
+  context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),
+  email => email === 'course@example.com' ? { className: '901', subject: '國文' } : null,
+  38,
+  null,
+  []
+);
+assert.deepEqual(
+  courseMatrix.left.concat(courseMatrix.right).map(teacher => teacher.name),
+  ['有課老師'],
+  '完全沒有課務的教師不應出現在監考表'
+);
+
 console.log('invigilation export contract tests PASS');
