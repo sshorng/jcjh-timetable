@@ -7654,6 +7654,7 @@ createApp({
         eventId,
         activityRequestIds,
         activityClasses: awayClasses,
+        showAllChanges: true,
         getTeacherName: (em) => getTeacherNameByEmail(em),
         onlyActivityFee: true,
         requireActivityHint: true

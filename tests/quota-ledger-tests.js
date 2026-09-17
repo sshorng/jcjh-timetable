@@ -116,6 +116,31 @@ assert.equal(pages[0].matrix.grid['2026-10-20'][1].length, 1);
 assert.equal(pages[0].matrix.grid['2026-10-20'][2].length, 0, '不同教師的申請不可串頁');
 assert.equal(pages[1].matrix.grid['2026-10-20'][2].length, 1);
 
+const allChangePages = exporter.buildTeacherPages({
+  startDate: '2026-10-20',
+  endDate: '2026-10-20',
+  activityName: '九年級畢旅',
+  eventId: 'trip-1',
+  requests,
+  teachers: [
+    { email: 'a@example.test', name: '甲老師' },
+    { email: 'b@example.test', name: '乙老師' }
+  ],
+  teacherDemands: [
+    { email: 'a@example.test', name: '甲老師', releasedSlots: 3 },
+    { email: 'b@example.test', name: '乙老師', releasedSlots: 1 }
+  ],
+  ledgerRows,
+  showAllChanges: true,
+  requireActivityHint: true
+});
+assert.equal(allChangePages[0].matrix.grid['2026-10-20'][1].length, 1);
+assert.equal(allChangePages[0].matrix.grid['2026-10-20'][2].length, 1, '甲老師頁也應列出乙老師的異動課程');
+assert.equal(allChangePages[1].matrix.grid['2026-10-20'][1].length, 1, '乙老師頁也應列出甲老師的異動課程');
+assert.equal(allChangePages[1].matrix.grid['2026-10-20'][2].length, 1);
+assert.equal(allChangePages[0].matrix.demand, 2, '列出全部異動不可改變個人額度統計');
+assert.equal(allChangePages[0].matrix.remaining, 1);
+
 const idMatchedPages = exporter.buildTeacherPages({
   startDate: '2026-10-20',
   endDate: '2026-10-20',

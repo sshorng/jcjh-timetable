@@ -222,6 +222,7 @@ window.ExportActivityCover = (function () {
         && !requestMatchesActivityScope(request, opts)) return false;
     var date = String(request.requestDate || request.date || request['異動日期'] || '').slice(0, 10);
     if (!date || !dateSet[date]) return false;
+    if (opts.showAllChanges || opts.includeAllChanges) return true;
     return requestMatchesTeacher(request, opts.teacher || opts.teacherKey || null);
   }
 
@@ -375,6 +376,7 @@ window.ExportActivityCover = (function () {
       if (!requestMatchesMatrix(r, opts, dateSet)) return;
       var period = requestPeriod(r);
       var fee = r.subFee || r['經費來源'] || '';
+      var belongsToPageTeacher = requestMatchesTeacher(r, opts.teacher || opts.teacherKey || null);
       var rd = String(r.requestDate || r.date || r['異動日期'] || '').slice(0, 10);
 
       var leaveName = String(r.requesterName || r['申請人姓名'] || '').trim()
@@ -407,8 +409,10 @@ window.ExportActivityCover = (function () {
       if (period < 1 || period > 7) return;
       if (!grid[rd]) grid[rd] = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
       grid[rd][period].push(lineObj);
-      if (isQuotaDeductFee(fee)) arrangedQuota++;
-      else if (String(fee || '').trim() === '活動公費') arrangedPublic++;
+      if (belongsToPageTeacher) {
+        if (isQuotaDeductFee(fee)) arrangedQuota++;
+        else if (String(fee || '').trim() === '活動公費') arrangedPublic++;
+      }
     });
 
     // 同格排序：班級 → 原任
