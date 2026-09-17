@@ -387,10 +387,11 @@ window.DomainActivityCover = (function () {
     var timeline = entries.map(function (entry) {
       var request = requestById[entry.requestId] || null;
       var requestDutyDate = requestDate(request);
-      // spend／restore 的申請日期才是實際勤務日期；舊帳本的時間或起日只作備援。
+      // 扣用／還原依實際勤務日排序；發放／調整依帳本建立時間，不能拿活動起日延後額度可用時間。
+      var recordedDate = normalizeDate(entry.time || '');
       var date = entry.type === 'spend' || entry.type === 'restore'
-        ? (requestDutyDate || entry.date)
-        : (entry.date || requestDutyDate);
+        ? (requestDutyDate || entry.date || recordedDate)
+        : (recordedDate || entry.date || requestDutyDate);
       var period = requestPeriod(request);
       if (!period) {
         period = parseInt(entry.row && (entry.row.period || entry.row['節次']

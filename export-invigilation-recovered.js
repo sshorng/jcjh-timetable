@@ -595,7 +595,6 @@ window.ExportInvigilation = (function () {
     }
     fillSide(matrix.left || [], 1, 2);
     fillSide(matrix.right || [], 13, 14);
-    applyChangeFonts(ws, matrix, layout);
 
   }
 
@@ -804,6 +803,7 @@ window.ExportInvigilation = (function () {
     copySheetDimensions(master, masterSheet);
     copyPrintSettings(master, masterSheet);
     masterSheet.name = MASTER_SHEET_NAME;
+    // 第一張表也要套用字型與處理合併；setCellFontPreservingStyle 只替換字型，框線沿用模板。
     var lastMarked = applyChangeFonts(masterSheet, matrix, layout);
     applySpecialEducationRows(masterSheet, matrix, layout);
 
@@ -839,6 +839,7 @@ window.ExportInvigilation = (function () {
       var tempSheet = tempWb.worksheets[0];
       if (!tempSheet) return { ok: false, error: '底稿讀取失敗' };
       tempSheet.name = sheetName;
+      applyChangeFonts(tempSheet, matrix, layout);
       personalizeValues(
         tempSheet,
         layout,

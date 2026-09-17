@@ -237,6 +237,30 @@ assert.equal(
   'exam-date,trip-date',
   '斜線日期也必須按實際勤務日期排序，段考應先於畢旅'
 );
+
+const earnedBeforeFutureActivity = domain.buildLedgerExamStats({
+  ledgerRows: [
+    { name: '甲老師', time: '2026-10-01 09:00:00', delta: 3, balanceAfter: 3, type: 'earn',
+      packageId: 'pkg-trip-future', eventId: 'trip-future', eventName: '畢旅', startDate: '2026-10-14' },
+    { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 2, type: 'spend',
+      packageId: 'pkg-trip-future', eventId: 'evt_exam', eventName: '段考監考', requestId: 'exam-before-trip' },
+    { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 1, type: 'spend',
+      packageId: 'pkg-trip-future', eventId: 'trip-future', eventName: '畢旅', requestId: 'trip-after-exam' }
+  ],
+  teacher: { name: '甲老師' },
+  requests: [
+    { id: 'exam-before-trip', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' },
+    { id: 'trip-after-exam', requestDate: '2026-10-14', requestPeriod: 1, note: '畢旅代課' }
+  ],
+  rangeDates: ['2026-10-12', '2026-10-13'],
+  startDate: '2026-10-12',
+  endDate: '2026-10-13'
+});
+assert.deepEqual(
+  { before: earnedBeforeFutureActivity.before, used: earnedBeforeFutureActivity.used, remaining: earnedBeforeFutureActivity.remaining },
+  { before: 3, used: 1, remaining: 2 },
+  '額度發放時間早於段考時，即使活動起日較晚，段考共有與尚有仍須正確'
+);
 const activityDateStats = domain.buildLedgerActivityStats({
   ledgerRows,
   teacher: { name: '甲老師' },

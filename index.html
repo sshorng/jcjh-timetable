@@ -939,7 +939,7 @@
                                      <span v-if="entry.restriction === 'restricted' || hasScheduleSpecialTag(entry, '綁課')" class="cell-badge tag-restricted">綁課</span>
                                       <span v-if="hasScheduleSpecialTag(entry, '預排')" class="cell-badge tag-preplanned">預排</span>
                                      <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
-                                     <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="cell-badge tag-warning">空堂事件</span>
+                                      <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="cell-badge tag-warning">{{ getClassAwayEventName(selectedClass, dateStr, period) || '空堂事件' }}</span>
                                   </div>
                                   <div class="cell-class-name">
                                     {{ getRealTeacherName(entry) }}
@@ -4625,7 +4625,7 @@
       /** 活動互代／額度／空堂任務邏輯（首屏不載） */
       window.ensureDomainActivityCover = function () {
         if (window.DomainActivityCover) return Promise.resolve();
-             if (!_domainActivityP) _domainActivityP = loadScript('domain-activity-cover.js?v=20260917-quota-ledger3');
+              if (!_domainActivityP) _domainActivityP = loadScript('domain-activity-cover.js?v=20260917-quota-ledger5');
         return _domainActivityP;
       };
       /** 後台匯入／教師／課表編輯（教師首屏不載） */
@@ -4647,14 +4647,14 @@
       var _activityCoverP = null;
       window.ensureExportActivityCover = function () {
         if (window.ExportActivityCover) return Promise.resolve();
-              if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260917-quota-ledger4');
+              if (!_activityCoverP) _activityCoverP = loadScript('export-activity-cover.js?v=20260917-quota-ledger5');
         return _activityCoverP;
       };
       var _invigP = null;
       var _excelJsP = null;
       window.ensureExportInvigilation = function () {
         if (window.ExportInvigilation) return Promise.resolve();
-             if (!_invigP) _invigP = loadScript('export-invigilation-recovered.js?v=20260917-quota-ledger4');
+              if (!_invigP) _invigP = loadScript('export-invigilation-recovered.js?v=20260917-quota-ledger5');
         return _invigP;
       };
       window.ensureExcelJS = function () {
