@@ -160,6 +160,11 @@ mergedOvertimeRows.forEach(row => {
   ], ['', '', '', '', ''], '超鐘點代課明細除合計時數外的黃底欄位應留白');
 });
 assert.equal(mergedOvertimeRows.length, 2, '相同代課人跨日期不應重複列出');
+assert.equal(
+  mergedOvertimeRows.find(row => row.name === '莊英勝').note,
+  '9/22、9/29代黃美蘭公費代課2節',
+  '相同原教師與假別的代課備註應跨日期合併並合計節數'
+);
 assert.ok(mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/22')
   && mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/29'), '合併列仍應保留各日期備註');
 assert.ok(mergedOvertimeRows.find(row => row.name === '洪筱仙').note.includes('9/11'), '跨原教師的代課備註仍應保留');
@@ -290,7 +295,7 @@ assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代�
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '7/6代Billing課表代課1節');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
 
 const publicLeaveTypes = build([
   {
@@ -328,7 +333,7 @@ const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
   }]
 });
 assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
-assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '1、9/18代Billing課表代課2節\n2、9/25代Billing課表代課1節');
+assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節（9/18、9/25）');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

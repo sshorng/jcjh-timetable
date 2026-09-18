@@ -425,10 +425,12 @@ window.DomainSchedule = (function () {
         } else {
           subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         }
-        return {
+        return Object.assign({}, baseIn || {}, {
           className: finalClassIn,
           subject: finalSubjIn,
           teacherEmail: teacherEmail,
+          dayOfWeek: dayOfWeek,
+          period: period,
           isSubstitutionDuty: true,
           subType: incomingEdge.type,
           isCombinedReturn: combinedReturnIn,
@@ -437,7 +439,7 @@ window.DomainSchedule = (function () {
           subText: subTextIn,
           subRecord: incomingEdge,
            isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr, period))
-        };
+        });
       }
 
       // 空堂排班：原＝實＝本人（扣額度任務，非請假調出）

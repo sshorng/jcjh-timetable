@@ -123,6 +123,36 @@ assert.equal(patrolAtB.dayOfWeek, 2);
 assert.equal(patrolAtB.period, 3);
 assert.equal(patrolAtB.row, null);
 
+const incomingOvertimeSchedules = [
+  { teacherEmail: 'incoming-owner@example.edu.tw', dayOfWeek: 2, period: 6,
+    className: '904', subject: '關思溝通成人', attr: '一般', specialTags: '超鐘點', isOvertime: true },
+  { teacherEmail: 'incoming-teacher@example.edu.tw', dayOfWeek: 2, period: 6,
+    className: '905', subject: '國文', attr: '一般' }
+];
+const incomingExchange = {
+  requestId: 'exchange-overtime', type: 'exchange', date: '2026-09-22', period: 6,
+  originalTeacherEmail: 'incoming-owner@example.edu.tw',
+  actualTeacherEmail: 'incoming-teacher@example.edu.tw',
+  className: '904', subject: '關思溝通成人', subFee: '無'
+};
+const incomingOtherSide = Object.assign({}, incomingExchange, {
+  id: 'exchange-overtime-2', date: '2026-09-16', period: 6,
+  originalTeacherEmail: 'incoming-teacher@example.edu.tw',
+  actualTeacherEmail: 'incoming-owner@example.edu.tw',
+  className: '905', subject: '國文'
+});
+const incomingCell = context.window.DomainSchedule.resolveApprovedSchedule({
+  teacherEmail: 'incoming-teacher@example.edu.tw', dateStr: '2026-09-22', dayOfWeek: 2, period: 6,
+  allSchedules: incomingOvertimeSchedules,
+  scheduleIndex: context.window.DomainSchedule.buildScheduleIndex(incomingOvertimeSchedules),
+  periodSubs: [incomingExchange],
+  allSubs: [incomingExchange, incomingOtherSide],
+  helpers: { getTeacherNameByEmail: value => value, getWeekDayText: value => String(value) }
+});
+assert.equal(incomingCell.isSubstitutionDuty, true, '調課後調入格仍應標記實際授課');
+assert.equal(incomingCell.isOvertime, true, '調課後調入格應保留原課超鐘點旗標');
+assert.equal(incomingCell.specialTags, '超鐘點', '調課後調入格應保留原課特殊標記');
+
 const pendingExchange = {
   type: 'exchange',
   requesterEmail: 'owner@example.edu.tw',

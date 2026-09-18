@@ -555,17 +555,22 @@
       var name = lookupTeacherName(opts, record.originalTeacherEmail, record.originalTeacherName || '');
       var label = reason(record) || subFee(record);
       var date = shortDate(record.date);
-      var key = date + '|' + teacherEmail(record.originalTeacherEmail) + '|' + name + '|' + label;
+      var key = teacherEmail(record.originalTeacherEmail) + '|' + name + '|' + label;
       if (!groups[key]) {
-        groups[key] = { date: date, name: name, label: label, count: 0 };
+        groups[key] = { dates: [], dateIndex: {}, name: name, label: label, count: 0 };
         order.push(key);
       }
       var group = groups[key];
+      if (date && !group.dateIndex[date]) {
+        group.dateIndex[date] = true;
+        group.dates.push(date);
+      }
       group.count += periodCount(record, false);
     });
     return order.map(function (key) {
       var group = groups[key];
-      return group.date + '代' + (group.name || '課務') + group.label + displayCount(group.count) + '節';
+      return group.dates.join('、') + '代' + (group.name || '課務') + group.label
+        + displayCount(group.count) + '節';
     }).filter(Boolean);
   }
 
@@ -1135,11 +1140,12 @@
       rate: rate,
       amount: count * rate,
       reduceNote: '',
-      note: detail
+      note: detail,
+      _noteRecords: [record]
     };
   }
 
-  function mergeOvertimeSubstitutionRows(rows) {
+  function mergeOvertimeSubstitutionRows(rows, opts) {
     var output = [];
     var groups = {};
     (rows || []).forEach(function (row) {
@@ -1157,7 +1163,7 @@
       var merged = groups[key];
       merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
       merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
-      merged.note = joinAccountingNotes([merged.note, row.note]);
+      merged._noteRecords = (merged._noteRecords || []).concat(row._noteRecords || []);
     });
     output.forEach(function (row, index) {
       if (!row) return;
@@ -1167,10 +1173,12 @@
         row.weeks = '';
         row.grossHours = '';
         row.deduction = '';
+        row.note = joinAccountingNotes(groupedCoverNoteParts(row._noteRecords || [], opts));
       }
       row.serial = index + 1;
       delete row._rowKind;
       delete row._teacherKey;
+      delete row._noteRecords;
     });
     return output;
   }
@@ -1315,7 +1323,7 @@
       });
     });
     return config.key === 'overtime' || config.key === 'adjunct'
-      ? mergeOvertimeSubstitutionRows(rows)
+      ? mergeOvertimeSubstitutionRows(rows, opts)
       : rows;
   }
 
@@ -1413,15 +1421,18 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
-        var countsByDate = {};
-        group.details.forEach(function (detail) {
-          var date = shortDate(detail.date);
-          if (date) countsByDate[date] = (countsByDate[date] || 0) + 1;
-        });
-        var noteParts = Object.keys(countsByDate).sort().map(function (date) {
-          return date + '代' + (group.name || group.email) + '課表代課'
-            + displayCount(countsByDate[date]) + '節';
-        });
+        var dates = group.details.map(function (detail) {
+          return {
+            key: String(detail.date || '').slice(0, 10),
+            label: shortDate(detail.date)
+          };
+        }).filter(function (item) {
+          return item.label;
+        }).sort(function (left, right) {
+          return left.key.localeCompare(right.key);
+        }).map(function (item, dateIndex, all) {
+          return dateIndex === 0 || item.key !== all[dateIndex - 1].key ? item.label : '';
+        }).filter(Boolean);
         return {
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1429,7 +1440,7 @@
           hours: group.hours,
           rate: FEE_DEFAULT,
           amount: group.hours * FEE_DEFAULT,
-          note: joinAccountingNotes(noteParts)
+          note: '代課' + displayCount(group.hours) + '節（' + dates.join('、') + '）'
         };
       });
       return { plan: source, rows: rows };
@@ -1686,37 +1697,19 @@
       var value = cleanAccountingText(cell.value);
       var alignment = Object.assign({}, cell.alignment || {});
       alignment.wrapText = true;
+      alignment.shrinkToFit = false;
       if (value.indexOf('\n') >= 0) alignment.vertical = 'top';
       cell.alignment = alignment;
       if (!value) return;
       var lines = value.split(/\r?\n/);
       var baseFontSize = Number(cell.font && cell.font.size);
       if (!Number.isFinite(baseFontSize) || baseFontSize <= 0) baseFontSize = 12;
-      var maxLineWidth = lines.reduce(function (max, line) {
-        return Math.max(max, textDisplayWidth(line));
-      }, 0);
-      var fontSize = baseFontSize;
       var baseVisualLines = lines.reduce(function (sum, line) {
         return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / charsPerLine));
       }, 0);
-      var widthFontSize = maxLineWidth > charsPerLine
-        ? baseFontSize * charsPerLine / maxLineWidth
-        : baseFontSize;
-      var densityFontSize = baseVisualLines > 2
-        ? baseFontSize * Math.sqrt(2 / baseVisualLines)
-        : baseFontSize;
-      var minimumFontSize = Math.min(8, baseFontSize);
-      fontSize = Math.max(minimumFontSize, Math.min(baseFontSize, widthFontSize, densityFontSize));
-      fontSize = Math.max(minimumFontSize, Math.round(fontSize * 2) / 2);
-      if (fontSize < baseFontSize) {
-        cell.font = Object.assign({}, cell.font || {}, { size: fontSize });
-      }
-      var effectiveCharsPerLine = charsPerLine * baseFontSize / fontSize;
-      var visualLines = lines.reduce(function (sum, line) {
-        return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / effectiveCharsPerLine));
-      }, 0);
-      var lineHeight = Math.max(12, fontSize * 1.35);
-      var targetHeight = Math.min(409.5, Math.max(22, visualLines * lineHeight + 4));
+      // 備註欄維持範本字級，內容較多時用換行與列高承載，避免短內容被連帶縮小。
+      var lineHeight = Math.max(12, baseFontSize * 1.35);
+      var targetHeight = Math.min(409.5, Math.max(22, baseVisualLines * lineHeight + 4));
       var targetRow = sheet.getRow(rowNumber);
       targetRow.height = Math.max(Number(targetRow.height) || 15, targetHeight);
     });

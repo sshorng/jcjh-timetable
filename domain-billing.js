@@ -833,6 +833,25 @@ window.DomainBilling = (function () {
     return { dayOfWeek: dayOfWeek, period: period };
   }
 
+  function actualOccurrencesForFixedSlot(slot, dates, schoolSwapIndex) {
+    var sourceDay = scheduleDay(slot);
+    var sourcePeriod = schedulePeriod(slot);
+    var periods = [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+    var seen = {};
+    var occurrences = [];
+    (dates || []).forEach(function (dateStr) {
+      periods.forEach(function (period) {
+        var resolved = resolveBillingSlot({ date: dateStr, period: period }, schoolSwapIndex);
+        if (resolved.dayOfWeek !== sourceDay || resolved.period !== sourcePeriod) return;
+        var key = dateStr + '|' + period;
+        if (seen[key]) return;
+        seen[key] = true;
+        occurrences.push({ date: dateStr, period: period });
+      });
+    });
+    return occurrences;
+  }
+
   /**
    * 請假那堂是否為需扣超鐘點的正式課程（對照原任＋星期＋節次＋班級）
    * 早自習0、1～7與午休45皆依原課表屬性判定
@@ -958,13 +977,17 @@ window.DomainBilling = (function () {
 
     var seen = {};
     var result = { scheduled: 0, paid: 0, deduction: 0, leaveDeduction: 0, awayDeduction: 0, paidDetails: [] };
+    var reportDates = [];
     weeklyGroups.forEach(function (dates) {
-      fixedSlots.forEach(function (slot) {
-        var day = scheduleDay(slot);
-        var period = schedulePeriod(slot);
-        var dateStr = (dates || []).find(function (date) { return dayOfWeekFromDate(date) === day; });
-        if (!dateStr) return;
-        if (dayOfWeekFromDate(dateStr) !== day) return;
+      (dates || []).forEach(function (dateStr) {
+        var date = normalizeDateKey(dateStr);
+        if (date && reportDates.indexOf(date) < 0) reportDates.push(date);
+      });
+    });
+    fixedSlots.forEach(function (slot) {
+      actualOccurrencesForFixedSlot(slot, reportDates, opts.schoolSwapIndex).forEach(function (occurrence) {
+        var dateStr = occurrence.date;
+        var period = occurrence.period;
         var key = normalizeDateKey(dateStr) + '|' + period;
         if (seen[key]) return;
         seen[key] = true;

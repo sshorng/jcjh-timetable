@@ -337,6 +337,28 @@ const swappedRow = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(swappedRow.publicOvertimeUsed, 1, 'school swap must resolve the original overtime slot');
 assert.equal(swappedRow.actualOvertime, 0);
 
+const swappedSmallRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'swapped-small@x', name: '調課小鐘點', baseHours: 0 }],
+  allSchedules: [{
+    teacherEmail: 'swapped-small@x', dayOfWeek: 3, period: 6,
+    className: '904', subject: '關思溝通成人', attr: '代課'
+  }],
+  schoolSwaps: [{
+    dateA: '2026-09-16', periodA: 6,
+    dateB: '2026-09-22', periodB: 6, enabled: true
+  }],
+  substitutionRecords: [],
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-14',
+  reportEndDate: '2026-09-25',
+  reportWeeksCount: 2
+})[0];
+assert.equal(swappedSmallRow.substituteScheduledCount, 2, '調課後小鐘點仍應保留區間內固定節數');
+assert.equal(swappedSmallRow.substitutePaidCount, 2, '調課後小鐘點應計入實際授課費');
+assert.deepEqual(swappedSmallRow.substituteAttributeDetails.map(detail => detail.date), [
+  '2026-09-22', '2026-09-23'
+], '小鐘點明細日期應改用調課後實際日期');
+
 const configuredPlan = JSON.stringify([
   { day: 1, period: 1, className: '701', source: '計畫A' },
   { day: 1, period: 2, className: '702', source: '計畫B' }
