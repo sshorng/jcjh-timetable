@@ -544,35 +544,37 @@
     }, 0);
   }
 
-  function groupedCoverNoteParts(records, opts, includeReason) {
+  function groupedCoverNoteParts(records, opts) {
     var groups = {};
     var order = [];
     (records || []).slice().sort(function (a, b) {
       return String(a.date || '').localeCompare(String(b.date || ''))
-        || String(a.originalTeacherEmail || '').localeCompare(String(b.originalTeacherEmail || ''));
+        || String(a.originalTeacherEmail || '').localeCompare(String(b.originalTeacherEmail || ''))
+        || Number(a.period || 0) - Number(b.period || 0);
     }).forEach(function (record) {
       var name = lookupTeacherName(opts, record.originalTeacherEmail, record.originalTeacherName || '');
-      var key = teacherEmail(record.originalTeacherEmail) + '|' + name;
+      var label = reason(record) || subFee(record);
+      var date = shortDate(record.date);
+      var key = date + '|' + teacherEmail(record.originalTeacherEmail) + '|' + name + '|' + label;
       if (!groups[key]) {
-        groups[key] = { name: name, dates: [], count: 0, reasons: [] };
+        groups[key] = { date: date, name: name, label: label, count: 0 };
         order.push(key);
       }
       var group = groups[key];
-      var date = shortDate(record.date);
-      if (date && group.dates.indexOf(date) < 0) group.dates.push(date);
-      var leaveReason = reason(record);
-      if (includeReason && leaveReason && group.reasons.indexOf(leaveReason) < 0) group.reasons.push(leaveReason);
       group.count += periodCount(record, false);
     });
     return order.map(function (key) {
       var group = groups[key];
-      var dates = group.dates.join('、');
-      var name = group.name ? '代' + group.name : '代課';
-      var reasonNote = includeReason && group.reasons.length
-        ? '（假別：' + group.reasons.join('、') + '）'
-        : '';
-      return dates + name + displayCount(group.count) + '節' + reasonNote;
+      return group.date + '代' + (group.name || '課務') + group.label + displayCount(group.count) + '節';
     }).filter(Boolean);
+  }
+
+  function substitutionNoteText(record, opts, fallbackName) {
+    var name = lookupTeacherName(opts, record && record.originalTeacherEmail,
+      (record && record.originalTeacherName) || fallbackName || '');
+    var label = reason(record) || subFee(record);
+    return shortDate(record && record.date) + '代' + (name || '課務') + label
+      + displayCount(periodCount(record, false)) + '節';
   }
 
   function deductionReasonLabel(record, fallback) {
@@ -624,7 +626,7 @@
     if (!raw || raw === '無') return [];
     return raw.split(/\s*,\s*|\s*，\s*/).map(function (part) {
       var match = part.match(/^(.+?)\((\d{1,2})-(\d{1,2})\)$/);
-      return match ? Number(match[2]) + '/' + Number(match[3]) + '代' + match[1] + '1節' : part;
+      return match ? Number(match[2]) + '/' + Number(match[3]) + '代' + match[1] + '自費1節' : part;
     }).filter(Boolean);
   }
 
@@ -1116,10 +1118,7 @@
     var count = periodCount(record, false);
     var rate = feeRate(record, FEE_DEFAULT);
     var originalName = teacherName(sourceTeacher, source.name || source.email);
-    var feeLabel = isSelfPaidRecord(record) ? '\u81ea\u4ed8' : '\u8d85\u9418';
-    var detail = shortDate(record.date) + '\u4ee3' + feeLabel + originalName + displayCount(count) + '\u7bc0';
-    var className = String(record.className || record['\u73ed\u7d1a'] || '').trim();
-    if (className) detail += '\uff08' + className + '\uff09';
+    var detail = substitutionNoteText(record, opts, originalName);
     return {
       expensePlan: planLabel(item.plan || source.expensePlan),
       serial: serial,
@@ -1305,8 +1304,8 @@
         // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
         var hasCombinedReturn = chargedCombinedRecords.length > 0;
         if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0 || hasCombinedReturn) rows.push(row);
-        var substitutionItems = config.key === 'overtime' && sourceItems
-          ? sourceItems.filter(function (item) { return !item.routeToSubstituteSheet; })
+        var substitutionItems = config.key === 'overtime' && chargedItems
+          ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
           : config.key === 'adjunct' && sourceItems
             ? sourceItems.filter(function (item) { return item.routeToAdjunctSheet; })
             : [];
@@ -1337,6 +1336,7 @@
         && dateInPeriod(r.date, period) && isPublicPayoutRecord(r) && r.actualTeacherEmail
         && Boolean(adjustmentOnly) === isAdjustment
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
+          || chargedMap.byKey[substitutionKey(r)].charged === false
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).forEach(function (r) {
       var email = teacherEmail(r.actualTeacherEmail);
@@ -1353,7 +1353,7 @@
       var firstRecord = group.records[0] || {};
       var t = teacherFromMap(teacherMap, email, group.name || firstRecord.actualTeacherName);
       var name = teacherName(t, group.name || firstRecord.actualTeacherName || email);
-      var notes = groupedCoverNoteParts(group.records, opts, true);
+      var notes = groupedCoverNoteParts(group.records, opts);
       return {
         serial: idx + 1,
         title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1413,12 +1413,14 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
-        var dates = group.details.slice().sort(function (left, right) {
-          return String(left.date || '').localeCompare(String(right.date || ''));
-        }).map(function (detail) {
-          return shortDate(detail.date);
-        }).filter(function (date, dateIndex, allDates) {
-          return date && allDates.indexOf(date) === dateIndex;
+        var countsByDate = {};
+        group.details.forEach(function (detail) {
+          var date = shortDate(detail.date);
+          if (date) countsByDate[date] = (countsByDate[date] || 0) + 1;
+        });
+        var noteParts = Object.keys(countsByDate).sort().map(function (date) {
+          return date + '代' + (group.name || group.email) + '課表代課'
+            + displayCount(countsByDate[date]) + '節';
         });
         return {
           serial: index + 1,
@@ -1427,8 +1429,7 @@
           hours: group.hours,
           rate: FEE_DEFAULT,
           amount: group.hours * FEE_DEFAULT,
-          note: '代課' + displayCount(group.hours) + '節'
-            + (dates.length ? '\uff08' + dates.join('\u3001') + '\uff09' : '')
+          note: joinAccountingNotes(noteParts)
         };
       });
       return { plan: source, rows: rows };
@@ -1452,6 +1453,10 @@
         || Number(a.period || 0) - Number(b.period || 0);
     }).map(function (r) {
       var t = teacherFromMap(teacherMap, r.actualTeacherEmail, r.actualTeacherName);
+      var originalName = r.originalTeacherName || teacherName(
+        teacherFromMap(teacherMap, r.originalTeacherEmail, r.originalTeacherName),
+        r.originalTeacherEmail
+      );
       return {
         actualName: teacherName(t, r.actualTeacherName || r.actualTeacherEmail),
         date: rocDate(r.date),
@@ -1461,8 +1466,9 @@
         count: periodCount(r, false),
         rate: feeRate(r, FEE_DEFAULT),
         amount: periodCount(r, false) * feeRate(r, FEE_DEFAULT),
-        originalName: r.originalTeacherName || teacherName(teacherFromMap(teacherMap, r.originalTeacherEmail, r.originalTeacherName), r.originalTeacherEmail),
+        originalName: originalName,
         reason: reason(r) || subFee(r),
+        substitutionNote: substitutionNoteText(r, opts, originalName),
         note: r.note || ''
       };
     });
@@ -1740,6 +1746,7 @@
   }
 
   function lineNoteText(row) {
+    if (row && row.substitutionNote) return joinAccountingNotes([row.substitutionNote, row.note]);
     return [row && row.originalName, row && (row.reason || row.note)]
       .map(function (value) { return String(value == null ? '' : value).trim(); })
       .filter(Boolean)

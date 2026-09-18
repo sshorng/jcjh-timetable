@@ -290,7 +290,7 @@ assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代�
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '7/6代Billing課表代課1節');
 
 const publicLeaveTypes = build([
   {
@@ -307,9 +307,9 @@ const publicLeaveTypes = build([
 ]);
 assert.equal(publicLeaveTypes.sheets.publicSub.length, 1, '一般公付代課應留在公付代課工作表');
 assert.equal(publicLeaveTypes.sheets.publicSubAdjustment.length, 1, '身心調適假應獨立列入專用公付代課工作表');
-assert.ok(publicLeaveTypes.sheets.publicSub[0].note.includes('假別：公假'), '公付代課備註應標示假別');
+assert.equal(publicLeaveTypes.sheets.publicSub[0].note, '7/13代Billing公假1節', '公付代課備註應使用月日、原教師、假別與節數格式');
 assert.equal(publicLeaveTypes.sheets.publicSub[0].note.includes('身心調適假'), false, '一般公付代課表不應混入身心調適假');
-assert.ok(publicLeaveTypes.sheets.publicSubAdjustment[0].note.includes('假別：身心調適假'), '身心調適假備註應標示假別');
+assert.equal(publicLeaveTypes.sheets.publicSubAdjustment[0].note, '7/14代Billing身心調適假1節', '身心調適假備註應使用一致格式');
 
 const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-09',
@@ -328,7 +328,7 @@ const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
   }]
 });
 assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
-assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節（9/18、9/25）');
+assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '1、9/18代Billing課表代課2節\n2、9/25代Billing課表代課1節');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -425,12 +425,12 @@ assert.equal(mixed.sheets.overtime[0].note.includes('\u8b8a\u52d5'), false, '超
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
-  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '公假', status: 'approved'
 }], 1, mixedSchedules);
 assert.equal(publicRegular.sheets.overtime[0].deduction, 0);
-assert.equal(publicRegular.sheets.overtime[1].name, 'cover@x');
-assert.equal(publicRegular.sheets.overtime[1].actualHours, 1);
-assert.equal(publicRegular.sheets.publicSub.length, 0);
+assert.equal(publicRegular.sheets.overtime.length, 1, '未沖超鐘點的公費正式課代課不應混入超鐘點明細');
+assert.equal(publicRegular.sheets.publicSub.length, 1, '未沖超鐘點的公費正式課代課應列入公付代課表');
+assert.equal(publicRegular.sheets.publicSub[0].note, '7/13代Billing公假1節');
 
 const combinedReturn = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
@@ -490,7 +490,7 @@ const configuredInput = {
   substitutionRecords: [
     {
       id: 'configured-a', date: '2026-07-13', period: 1, className: '701',
-      originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
+      originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '公假', status: 'approved'
     },
     {
       id: 'configured-b', date: '2026-07-13', period: 2, className: '702',
@@ -506,7 +506,7 @@ assert.ok(configuredA && configuredB, 'slot sources must create one overtime gro
 assert.deepEqual(configuredA.rows[0], {
   expensePlan: '計畫A', serial: 1, title: '教師', name: 'Cover', weeklyOvertime: '',
   schedule: '', weeks: '', grossHours: '', deduction: '', actualHours: 1,
-  rate: 455, amount: 455, reduceNote: '', note: '7/13代超鐘Billing1節（701）'
+  rate: 455, amount: 455, reduceNote: '', note: '7/13代Billing公假1節'
 });
 assert.equal(configuredB.rows[0].expensePlan, '計畫B');
 assert.equal(configuredB.rows[0].grossHours, '');
