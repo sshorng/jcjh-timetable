@@ -1630,10 +1630,34 @@
       if (value.indexOf('\n') >= 0) alignment.vertical = 'top';
       cell.alignment = alignment;
       if (!value) return;
-      var visualLines = value.split(/\r?\n/).reduce(function (sum, line) {
+      var lines = value.split(/\r?\n/);
+      var baseFontSize = Number(cell.font && cell.font.size);
+      if (!Number.isFinite(baseFontSize) || baseFontSize <= 0) baseFontSize = 12;
+      var maxLineWidth = lines.reduce(function (max, line) {
+        return Math.max(max, textDisplayWidth(line));
+      }, 0);
+      var fontSize = baseFontSize;
+      var baseVisualLines = lines.reduce(function (sum, line) {
         return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / charsPerLine));
       }, 0);
-      var targetHeight = Math.min(120, Math.max(22, visualLines * 20 + 4));
+      var widthFontSize = maxLineWidth > charsPerLine
+        ? baseFontSize * charsPerLine / maxLineWidth
+        : baseFontSize;
+      var densityFontSize = baseVisualLines > 2
+        ? baseFontSize * Math.sqrt(2 / baseVisualLines)
+        : baseFontSize;
+      var minimumFontSize = Math.min(8, baseFontSize);
+      fontSize = Math.max(minimumFontSize, Math.min(baseFontSize, widthFontSize, densityFontSize));
+      fontSize = Math.max(minimumFontSize, Math.round(fontSize * 2) / 2);
+      if (fontSize < baseFontSize) {
+        cell.font = Object.assign({}, cell.font || {}, { size: fontSize });
+      }
+      var effectiveCharsPerLine = charsPerLine * baseFontSize / fontSize;
+      var visualLines = lines.reduce(function (sum, line) {
+        return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / effectiveCharsPerLine));
+      }, 0);
+      var lineHeight = Math.max(12, fontSize * 1.35);
+      var targetHeight = Math.min(409.5, Math.max(22, visualLines * lineHeight + 4));
       var targetRow = sheet.getRow(rowNumber);
       targetRow.height = Math.max(Number(targetRow.height) || 15, targetHeight);
     });
