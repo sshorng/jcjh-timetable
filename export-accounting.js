@@ -1087,7 +1087,7 @@
       weeks: '',
       grossHours: '',
       deduction: '',
-      actualHours: '',
+      actualHours: count,
       rate: rate,
       amount: count * rate,
       reduceNote: '',
@@ -1112,6 +1112,7 @@
       }
       var merged = groups[key];
       merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
+      merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
       merged.note = joinAccountingNotes([merged.note, row.note]);
     });
     output.forEach(function (row, index) {
@@ -1122,7 +1123,6 @@
         row.weeks = '';
         row.grossHours = '';
         row.deduction = '';
-        row.actualHours = '';
       }
       row.serial = index + 1;
       delete row._rowKind;

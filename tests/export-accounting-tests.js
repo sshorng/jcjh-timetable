@@ -134,11 +134,12 @@ assert.deepEqual(mergedOvertimeRows.map(row => [row.name, row.grossHours, row.am
   ['莊英勝', '', 910],
   ['洪筱仙', '', 1365]
 ], '同一實際代課教師的超鐘點明細應合併且清空黃底欄位');
+assert.deepEqual(mergedOvertimeRows.map(row => row.actualHours), [2, 3], '代課明細應保留合計時數');
 mergedOvertimeRows.forEach(row => {
   assert.deepEqual([
     row.weeklyOvertime, row.schedule, row.weeks,
-    row.grossHours, row.deduction, row.actualHours
-  ], ['', '', '', '', '', ''], '超鐘點代課明細黃底欄位應全部留白');
+    row.grossHours, row.deduction
+  ], ['', '', '', '', ''], '超鐘點代課明細除合計時數外的黃底欄位應留白');
 });
 assert.equal(mergedOvertimeRows.length, 2, '相同代課人跨日期不應重複列出');
 assert.ok(mergedOvertimeRows.find(row => row.name === '莊英勝').note.includes('9/22')
@@ -187,17 +188,17 @@ assert.deepEqual([
   adjunctSubstitute.sheets.adjunct[1].schedule,
   adjunctSubstitute.sheets.adjunct[1].weeks,
   adjunctSubstitute.sheets.adjunct[1].grossHours,
-  adjunctSubstitute.sheets.adjunct[1].deduction,
-  adjunctSubstitute.sheets.adjunct[1].actualHours
-], ['', '', '', '', '', ''], '兼課代課明細黃底欄位應全部留白');
+  adjunctSubstitute.sheets.adjunct[1].deduction
+], ['', '', '', '', ''], '兼課代課明細除合計時數外的黃底欄位應留白');
+assert.equal(adjunctSubstitute.sheets.adjunct[1].actualHours, 1, '兼課代課明細應保留合計時數');
 assert.deepEqual([
   adjunctSubstitute.sheets.adjunct[2].weeklyOvertime,
   adjunctSubstitute.sheets.adjunct[2].schedule,
   adjunctSubstitute.sheets.adjunct[2].weeks,
   adjunctSubstitute.sheets.adjunct[2].grossHours,
-  adjunctSubstitute.sheets.adjunct[2].deduction,
-  adjunctSubstitute.sheets.adjunct[2].actualHours
-], ['', '', '', '', '', ''], '兼課自付代課明細黃底欄位應全部留白');
+  adjunctSubstitute.sheets.adjunct[2].deduction
+], ['', '', '', '', ''], '兼課自付代課明細除合計時數外的黃底欄位應留白');
+assert.equal(adjunctSubstitute.sheets.adjunct[2].actualHours, 1, '兼課自付代課明細應保留合計時數');
 assert.equal(adjunctSubstitute.sheets.adjunct[0].deduction, 2, '兼課教師原課被代時仍應扣除公付與自付節數');
 assert.equal(adjunctSubstitute.sheets.overtime.length, 0, '兼課教師不應混入超鐘點代課明細');
 
@@ -462,12 +463,13 @@ const configuredB = configured.overtimePlans.find(group => group.plan === '計�
 assert.ok(configuredA && configuredB, 'slot sources must create one overtime group per plan');
 assert.deepEqual(configuredA.rows[0], {
   expensePlan: '計畫A', serial: 1, title: '教師', name: 'Cover', weeklyOvertime: '',
-  schedule: '', weeks: '', grossHours: '', deduction: '', actualHours: '',
+  schedule: '', weeks: '', grossHours: '', deduction: '', actualHours: 1,
   rate: 455, amount: 455, reduceNote: '', note: '7/13代超鐘Billing1節（701）'
 });
 assert.equal(configuredB.rows[0].expensePlan, '計畫B');
 assert.equal(configuredB.rows[0].grossHours, '');
 assert.equal(configuredB.rows[0].deduction, '');
+assert.equal(configuredB.rows[0].actualHours, 1);
 assert.ok(configuredA.rows.some(row => row.name === 'Cover' && row.expensePlan === '計畫A'));
 assert.ok(configuredB.rows.some(row => row.name === 'Cover' && row.expensePlan === '計畫B'));
 assert.equal(configured.blocking.length, 0);
