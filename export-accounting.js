@@ -342,7 +342,7 @@
       suffix = plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊';
     }
     if (config.key === 'substituteAttribute') {
-      suffix = planLabel(expensePlan) + '代課鐘點費印領清冊';
+      suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
     }
     if (config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
@@ -558,29 +558,40 @@
     return value;
   }
 
-  function leaveNoteParts(records, publicUsed) {
+  function leaveNoteParts(records, publicUsed, combinedRecords) {
     var groups = {};
     var order = [];
-    (records || []).filter(function (record) {
-      return isSelfPaidRecord(record) || isPublicOvertimeRecord(record);
-    }).slice().sort(function (a, b) {
-      return String(a.date || '').localeCompare(String(b.date || ''))
-        || deductionReasonLabel(a, '').localeCompare(deductionReasonLabel(b, ''));
-    }).forEach(function (record) {
+    var addRecord = function (record, combined) {
+      if (!record || (!isSelfPaidRecord(record) && !isPublicOvertimeRecord(record))) return;
       var fallback = isSelfPaidRecord(record) ? '\u81ea\u4ed8' : '\u516c\u5047';
       var label = deductionReasonLabel(record, fallback);
       var date = shortDate(record.date);
       var key = label + '|' + date;
       if (!groups[key]) {
-        groups[key] = { label: label, date: date, count: 0 };
+        groups[key] = { label: label, date: date, count: 0, combinedCount: 0 };
         order.push(key);
       }
       var group = groups[key];
-      group.count += periodCount(record, false);
+      if (combined) group.combinedCount += periodCount(record, false);
+      else group.count += periodCount(record, false);
+    };
+    (records || []).filter(function (record) {
+      return !isCombinedReturnRecord(record);
+    }).forEach(function (record) { addRecord(record, false); });
+    (combinedRecords || []).forEach(function (record) { addRecord(record, true); });
+    order.sort(function (left, right) {
+      return groups[left].date.localeCompare(groups[right].date)
+        || groups[left].label.localeCompare(groups[right].label);
     });
     return order.map(function (key) {
       var group = groups[key];
-      return group.date + group.label + '\u6263' + displayCount(group.count) + '\u7bc0';
+      var count = group.count + group.combinedCount;
+      var combinedNote = group.combinedCount
+        ? (group.count
+          ? '\uff08\u5176\u4e2d' + displayCount(group.combinedCount) + '\u7bc0\u5408\u73ed\u4e0d\u7d66\u4ee3\u8ab2\u8cbb\uff09'
+          : '\uff08\u5408\u73ed\u4e0d\u7d66\u4ee3\u8ab2\u8cbb\uff09')
+        : '';
+      return group.date + group.label + '\u6263' + displayCount(count) + '\u7bc0' + combinedNote;
     }).filter(Boolean);
   }
   function legacySelfSubNoteParts(value) {
@@ -595,6 +606,7 @@
   function summaryNote(opts, source, period, leaveRecords, publicUsed, schoolSwapIndex) {
     var actualRecords = (opts.substitutionRecords || []).filter(function (record) {
       return isUsableSubstitution(record)
+        && !isCombinedReturnRecord(record)
         && dateInPeriod(record.date, period)
          && sameTeacher(record.actualTeacherEmail, source)
         && isWeeklyPeriod(record.period);
@@ -602,7 +614,11 @@
     var notes = groupedCoverNoteParts(actualRecords, opts);
     if (!actualRecords.length) notes = notes.concat(legacySelfSubNoteParts(source && source.selfSubDetail));
      var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex);
-    notes = notes.concat(leaveNoteParts(chargedRecords, publicUsed));
+    notes = notes.concat(leaveNoteParts(
+      chargedRecords,
+      publicUsed,
+      (leaveRecords || []).filter(isCombinedReturnRecord)
+    ));
     if (source && source.note) notes.push(source.note);
     return joinAccountingNotes(notes);
   }
@@ -877,14 +893,12 @@
       });
   }
 
-  function overtimeClassNote(opts, source, weeks, period, allocation) {
-    var weekly = allocation
-      ? (allocation.weeklyHours !== undefined
-        ? (Number(allocation.weeklyHours) || 0)
-        : (Number(source && source.weeklyOvertime) || 0))
-      : (Number(source && source.weeklyOvertime) || 0);
-    var weekCount = Number(weeks) || 0;
-    return weekly && weekCount ? '\u8b8a\u52d5' : '';
+  function overtimeChangeNote(scheduledHours, grossHours, deduction, actualHours) {
+    var scheduled = Number(scheduledHours) || 0;
+    var gross = Number(grossHours) || 0;
+    var deducted = Number(deduction) || 0;
+    var actual = Number(actualHours) || 0;
+    return scheduled !== gross || deducted !== 0 || actual !== gross ? '\u8b8a\u52d5' : '';
   }
   function fallbackReportRow(teacher, allSchedules, period) {
     var email = teacherEmail(teacher && teacher.email);
@@ -1217,8 +1231,12 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
-        var overtimeNotes = [overtimeClassNote(opts, sourceRow, weeks, period, allocation)]
-          .concat(leaveNoteParts(chargedRecordsForSource, publicUsed));
+        var overtimeNotes = [overtimeChangeNote(scheduledOvertime, grossHours, deduction, actualHours)]
+          .concat(leaveNoteParts(
+            chargedRecordsForSource,
+            publicUsed,
+            leave.filter(isCombinedReturnRecord)
+          ));
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
           : summaryNote(opts, sourceRow, period, leave, publicUsed, schoolSwapIndex);
@@ -1238,8 +1256,9 @@
           reduceNote: reduce ? ('空堂扣減 ' + reduce + ' 節') : '',
           note: notes
         };
-        // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。
-        if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0) rows.push(row);
+        // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
+        var hasCombinedReturn = leave.some(isCombinedReturnRecord);
+        if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0 || hasCombinedReturn) rows.push(row);
         var substitutionItems = config.key === 'overtime' && chargedItems
           ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
           : config.key === 'adjunct' && chargedItems
@@ -1346,6 +1365,13 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
+        var dates = group.details.slice().sort(function (left, right) {
+          return String(left.date || '').localeCompare(String(right.date || ''));
+        }).map(function (detail) {
+          return shortDate(detail.date);
+        }).filter(function (date, dateIndex, allDates) {
+          return date && allDates.indexOf(date) === dateIndex;
+        });
         return {
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1354,6 +1380,7 @@
           rate: FEE_DEFAULT,
           amount: group.hours * FEE_DEFAULT,
           note: '代課' + displayCount(group.hours) + '節'
+            + (dates.length ? '\uff08' + dates.join('\u3001') + '\uff09' : '')
         };
       });
       return { plan: source, rows: rows };
@@ -1915,6 +1942,7 @@
     loadPeriodSettings: loadPeriodSettings,
     savePeriodSettings: savePeriodSettings,
     dateRangeFileLabel: dateRangeFileLabel,
+    titleFor: titleFor,
     buildExportData: buildExportData,
     exportWorkbook: exportWorkbook
   };

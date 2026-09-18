@@ -23,6 +23,16 @@ assert.equal(
   '0731-0803',
   '跨月會計 Excel 檔名應保留完整日期區間'
 );
+assert.equal(
+  window.ExportAccounting.titleFor(
+    { key: 'substituteAttribute', titleSuffix: '' },
+    '2026-08',
+    { start: '2026-08-31', end: '2026-10-02' },
+    '國教'
+  ),
+  '臺北市立建成國中115年8月(8/31-10/2)代課鐘點費（國教）印領清冊',
+  '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
@@ -242,7 +252,26 @@ assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代�
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
+
+const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  periods: { publicSub: { start: '2026-09-01', end: '2026-09-30' } },
+  teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 16 }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'bill@x',
+    name: 'Billing',
+    substituteAttributeDetails: [
+      { date: '2026-09-25', source: '計畫A' },
+      { date: '2026-09-18', source: '計畫A' },
+      { date: '2026-09-18', source: '計畫A' }
+    ]
+  }]
+});
+assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
+assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節（9/18、9/25）');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -265,7 +294,7 @@ assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => 
 assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [1, 1]);
 
 const fallbackClassNote = build([], 2, schedules);
-assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '變動', '超鐘點備註應只顯示變動');
+assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '', '沒有實際異動時超鐘點備註應留白');
 
 const multiDateLeave = build([
   {
@@ -332,6 +361,7 @@ const mixed = build([
 ], 1, mixedSchedules);
 assert.equal(mixed.sheets.overtime[0].deduction, 3);
 assert.equal(mixed.sheets.overtime[0].actualHours, -1);
+assert.ok(mixed.sheets.overtime[0].note.includes('變動'), '有實際扣除或時數變化時超鐘點備註應顯示變動');
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
@@ -344,10 +374,13 @@ const combinedReturn = build([{
   date: '2026-07-13', period: 1, className: '701', type: 'substitution',
    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課',
   specialFlow: 'combined_return', status: 'approved'
-}], 1, [{
+}], 0, [{
    teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點'
 }]);
-assert.equal(combinedReturn.sheets.overtime.length, 0, '沒有超鐘點時併班回原紀錄也不建立超鐘點列');
+assert.equal(combinedReturn.sheets.overtime.length, 1, '合班回原紀錄仍應保留超鐘點摘要列');
+assert.equal(combinedReturn.sheets.overtime[0].deduction, 1, '合班回原紀錄仍應扣原教師超鐘點');
+assert.equal(combinedReturn.sheets.overtime[0].actualHours, 0, '合班回原紀錄不應產生原教師實得鐘點');
+assert.ok(combinedReturn.sheets.overtime[0].note.includes('7/13公假扣1節（合班不給代課費）'), '合班回原紀錄應在備註標明不給代課費');
 assert.equal(combinedReturn.sheets.publicSub.length, 0);
 
 const swappedPublic = build([{
