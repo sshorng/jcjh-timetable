@@ -33,6 +33,24 @@ assert.equal(
   '臺北市立建成國中115年8月(8/31-10/2)代課鐘點費（國教）印領清冊',
   '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
 );
+[
+  ['國教', '補助調整教師授課鐘點費(國教)印領清冊'],
+  ['雙語', '雙語實驗課程學校教師減課鐘點費印領清冊'],
+  ['特教', '補助調整教師授課鐘點費(特教)印領清冊'],
+  ['資優', '補助調整教師授課鐘點費(特教)印領清冊'],
+  ['閱推', '國中閱讀推動教師鐘點費印領清冊']
+].forEach(([plan, suffix]) => {
+  assert.equal(
+    window.ExportAccounting.titleFor(
+      { key: 'overtime', titleSuffix: '' },
+      '2026-08',
+      { start: '2026-08-31', end: '2026-10-02' },
+      plan
+    ),
+    '臺北市立建成國中115年8月(8/31-10/2)' + suffix,
+    plan + '超鐘點工作表應使用正式標題'
+  );
+});
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },

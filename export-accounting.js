@@ -333,13 +333,24 @@
     return outputExpensePlan(value);
   }
 
+  function overtimeTitleSuffix(expensePlan) {
+    var plan = planLabel(expensePlan);
+    var formalTitles = {
+      '國教': '補助調整教師授課鐘點費(國教)印領清冊',
+      '雙語': '雙語實驗課程學校教師減課鐘點費印領清冊',
+      '特教': '補助調整教師授課鐘點費(特教)印領清冊',
+      '資優': '補助調整教師授課鐘點費(特教)印領清冊',
+      '閱推': '國中閱讀推動教師鐘點費印領清冊'
+    };
+    return formalTitles[plan] || (plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊');
+  }
+
   function titleFor(config, reportMonth, period, expensePlan) {
     var parts = reportParts(reportMonth);
     var range = rangeLabel(period);
     var suffix = config.titleSuffix;
     if (config.key === 'overtime') {
-      var plan = outputExpensePlan(expensePlan);
-      suffix = plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊';
+      suffix = overtimeTitleSuffix(expensePlan);
     }
     if (config.key === 'substituteAttribute') {
       suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
