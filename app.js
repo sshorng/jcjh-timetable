@@ -518,7 +518,7 @@ createApp({
     const TAB_LS_KEY = 'jcjh_active_tab';
     const ADMIN_SUBTAB_LS_KEY = 'jcjh_admin_sub_tab';
     const VALID_TABS = ['timetable', 'pending', 'records', 'class', 'admin'];
-     const VALID_ADMIN_SUBTABS = ['billing', 'teachers', 'import', 'classAway', 'schoolSwap', 'settings', 'schoolExport'];
+     const VALID_ADMIN_SUBTABS = ['billing', 'teachers', 'classAway', 'schoolSwap', 'settings', 'schoolExport'];
     const readHashTab = () => {
       try {
         const h = String(window.location.hash || '').replace(/^#/, '').split('?')[0].trim().toLowerCase();

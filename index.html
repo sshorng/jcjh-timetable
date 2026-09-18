@@ -1641,13 +1641,6 @@
             >
               👤 教師管理
             </button>
-            <button 
-              class="btn btn-pill" 
-              :class="adminSubTab === 'import' ? 'btn-primary' : 'btn-secondary'"
-              @click="adminSubTab = 'import'"
-            >
-              📥 課表匯入
-            </button>
              <button
                class="btn btn-pill"
                :class="adminSubTab === 'classAway' ? 'btn-primary' : 'btn-secondary'"
@@ -1988,90 +1981,7 @@
           </div>
           </div>
 
-          <!-- 子分頁 3：期初課表 Excel（長表格式 A／S1 全學期覆寫） -->
-          <div v-if="adminSubTab === 'import'">
-            <div class="card">
-              <div class="card-title" style="flex-wrap:wrap;gap:8px;">
-                 <span>匯入期初全校課表（Excel 長表）</span>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-left:auto;">
-                  <button type="button" class="btn btn-secondary btn-sm-pad" @click="migrateNameKeySchema">
-                    執行姓名鍵遷移
-                  </button>
-                  <button type="button" class="btn btn-secondary btn-sm-pad" @click="downloadScheduleTemplate">
-                    下載空白範本
-                  </button>
-                  <button type="button" class="btn btn-secondary btn-sm-pad" @click="downloadCurrentSchedules">
-                    下載目前課表
-                  </button>
-                </div>
-              </div>
-
-              <div style="margin-bottom:16px;font-size:0.88rem;color:var(--text-secondary);line-height:1.55;">
-                <p class="mb-8-block"><strong>策略 S1：</strong>匯入時<strong>只清除目前選取學期</strong>的課表（其他學期保留），再一次寫入。</p>
-                 <p class="mb-8-block"><strong>格式：</strong>一列一節；以<strong>教師姓名</strong>對應已匯入的教師名單；同節多班可多列。</p>
-                    <p class="m-0">一般課必填：教師姓名、星期、節次、班級、科目。<strong>巡堂</strong>可省略班級／科目（科目或屬性寫「巡堂」即可）。節次可填<strong>早自習／0</strong>、1～8，或<strong>午休／45</strong>（12:35～13:15）。併班可填<strong>701、702</strong> 或 701/702。選填：課堂屬性、調課限制、特殊標記、啟用起日、啟用迄日。課堂屬性選<strong>代課</strong>代表小鐘點，實際授課列入公付代課；小鐘點未授課或遇空堂事件會扣除該節。超鐘點以最後完整結算週的固定每週節數乘結算週數，被代課依經費規則扣減，空堂事件未授課一律扣減。啟用日期請填 YYYY-MM-DD；兩欄皆空白代表整個學期有效。姓名重複或名單沒有時，請先修正教師名單。</p>
-              </div>
-
-              <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#f8fafc;padding:14px;border-radius:12px;border:1px solid var(--border-color);margin-bottom:16px;">
-                <input type="file" @change="handleFileChange" accept=".xlsx,.xls,.csv">
-                <span v-if="excelData.length" style="font-size:0.85rem;color:var(--text-secondary);">已讀 {{ excelData.length }} 列</span>
-              </div>
-
-              <div v-if="excelData.length > 0" class="mb-16">
-                <h4 style="font-size:0.95rem;margin:0 0 12px;">步驟 2：欄位對應</h4>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-                  <div class="form-group m-0" v-for="(val, key) in mappingFields" :key="key">
-                    <label class="form-label">{{ getMappingLabel(key) }}</label>
-                    <select class="form-select" v-model="mappingFields[key]">
-                      <option value="">--請選擇--</option>
-                      <option v-for="h in excelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
-                  <button type="button" class="btn btn-secondary" @click="runImportPreview">預覽（不寫入）</button>
-                  <button type="button" class="btn btn-primary" :disabled="!importPreview || !importPreview.ok" @click="importSchedules">
-                    確認匯入（S1 全清後寫入）
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="importPreview" class="success-hint-box">
-                <div class="fw-700-mb-6">預覽結果</div>
-                 <div>有效 <strong>{{ importPreview.ok }}</strong> 節　·　略過 {{ importPreview.skipped }} 列　·　教師 {{ importPreview.teachersTotal }} 人</div>
-                 <div v-if="importPreview.resolvedByName">靠姓名對應教師：{{ importPreview.resolvedByName }} 列</div>
-                <div v-if="importPreview.multiSlots">同節多班列：{{ importPreview.multiSlots }} 筆（支援）</div>
-                <div v-if="importPreview.sampleRows && importPreview.sampleRows.length" class="mt-8-ok">
-                  範例：{{ importPreview.sampleRows.join('；') }}
-                </div>
-                <div v-if="importPreview.skipList && importPreview.skipList.length" class="mt-10-warn">
-                  <div class="fw-600-mb-6">略過清單（共 {{ importPreview.skipList.length }} 列）</div>
-                  <div style="max-height:240px;overflow-y:auto;border:1px solid #fde68a;border-radius:8px;background:#fffbeb;padding:8px 10px;">
-                    <table class="table-amber-sm">
-                      <thead>
-                        <tr class="th-amber-left">
-                          <th style="padding:4px 6px;white-space:nowrap;">列</th>
-                          <th class="p-4-6">缺什麼</th>
-                          <th class="p-4-6">原因</th>
-                          <th class="p-4-6">內容</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(s, si) in importPreview.skipList" :key="si" class="td-amber-top">
-                           <td class="p-5-6-nowrap">{{ s.line || '無' }}</td>
-                           <td style="padding:5px 6px;font-weight:600;color:#b45309;">{{ s.missing || '無' }}</td>
-                          <td class="p-5-6">{{ s.reason }}</td>
-                           <td class="p-5-6-amber">{{ s.snippet || '無' }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-                    <!-- 子分頁：空堂事件 -->
+                     <!-- 子分頁：空堂事件 -->
           <div v-if="adminSubTab === 'classAway'">
                         <div class="card">
               <div class="card-title">
