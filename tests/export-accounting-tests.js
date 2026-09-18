@@ -161,12 +161,14 @@ const adjunctSubstitute = window.ExportAccounting.buildExportData({
     }
   ]
 });
-assert.equal(adjunctSubstitute.sheets.publicSub.length, 1, '兼課教師被代的公費應轉列實際代課教師');
-assert.equal(adjunctSubstitute.sheets.publicSub[0].name, '公付代課人');
-assert.equal(adjunctSubstitute.sheets.publicSub[0].hours, 1);
-assert.equal(adjunctSubstitute.sheets.selfSub.length, 1, '兼課教師被代的自費應轉列實際代課教師');
-assert.equal(adjunctSubstitute.sheets.selfSub[0].actualName, '自付代課人');
-assert.equal(adjunctSubstitute.sheets.selfSub[0].count, 1);
+assert.equal(adjunctSubstitute.sheets.publicSub.length, 0, '兼課教師代課不應移到公付代課表');
+assert.equal(adjunctSubstitute.sheets.selfSub.length, 0, '兼課教師代課不應移到自付代課表');
+assert.deepEqual(adjunctSubstitute.sheets.adjunct.map(row => row.name), [
+  '兼課原教師', '公付代課人', '自付代課人'
+], '兼課代課明細應接在兼課教師下方並列出實際代課教師');
+assert.equal(adjunctSubstitute.sheets.adjunct[1].weeks, '', '兼課代課明細不應顯示應發周數');
+assert.equal(adjunctSubstitute.sheets.adjunct[1].actualHours, 1);
+assert.equal(adjunctSubstitute.sheets.adjunct[2].actualHours, 1);
 assert.equal(adjunctSubstitute.sheets.adjunct[0].deduction, 2, '兼課教師原課被代時仍應扣除公付與自付節數');
 assert.equal(adjunctSubstitute.sheets.overtime.length, 0, '兼課教師不應混入超鐘點代課明細');
 
@@ -263,7 +265,7 @@ assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => 
 assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [1, 1]);
 
 const fallbackClassNote = build([], 2, schedules);
-assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '1*1(701、702、703班)', 'legacy/default overtime rows must include class names in notes');
+assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '變動', '超鐘點備註應只顯示變動');
 
 const multiDateLeave = build([
   {

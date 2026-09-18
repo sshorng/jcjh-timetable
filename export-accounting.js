@@ -884,36 +884,7 @@
         : (Number(source && source.weeklyOvertime) || 0))
       : (Number(source && source.weeklyOvertime) || 0);
     var weekCount = Number(weeks) || 0;
-    if (!weekly || !weekCount) return '';
-
-    var seen = {};
-    var classes = [];
-    var addClasses = function (value) {
-      accountingClassParts(value).forEach(function (className) {
-        if (seen[className]) return;
-        seen[className] = true;
-        classes.push(className);
-      });
-    };
-    if (allocation && Array.isArray(allocation.classNames)) {
-      allocation.classNames.forEach(addClasses);
-    }
-    if (!classes.length) {
-      (opts.allSchedules || []).filter(function (schedule) {
-         return sameTeacher(schedule, source)
-          && isWeeklyPeriod(schedule.period)
-          && isOvertimeSchedule(schedule)
-          && scheduleActiveInPeriod(schedule, period);
-      }).forEach(function (schedule) {
-        addClasses(schedule.className || schedule['班級']);
-      });
-    }
-
-    classes.sort(function (a, b) {
-      return a.localeCompare(b, 'zh-Hant', { numeric: true });
-    });
-    if (!classes.length) return allocation ? displayCount(weekly) + '*' + weekCount : '';
-    return displayCount(weekly) + '*' + weekCount + '(' + classes.join('、') + '班)';
+    return weekly && weekCount ? '\u8b8a\u52d5' : '';
   }
   function fallbackReportRow(teacher, allSchedules, period) {
     var email = teacherEmail(teacher && teacher.email);
@@ -1047,17 +1018,24 @@
     var result = { byKey: {}, byOriginal: {} };
     var records = opts.substitutionRecords || [];
     reportSourceRows(opts).forEach(function (source) {
-      // 兼課教師的扣款轉由公付代課表支付實際代課人，不走超鐘點明細。
       var sourceTeacher = (opts.teachers || []).find(function (teacher) {
         return sameTeacher(teacher, source);
       });
-      if (isAdjunctTeacher(sourceTeacher || source)) return;
+      var adjunct = isAdjunctTeacher(sourceTeacher || source);
       if (!expensePlanSourcesForRow(source).length) return;
       var weeks = Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1);
       var scheduledOvertime = source.scheduledOvertime !== undefined
         ? Number(source.scheduledOvertime) || 0
         : (Number(source.weeklyOvertime) || 0) * weeks;
-      chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex)
+      var sourceRecords = adjunct
+        ? records.filter(function (record) {
+          return isUsableSubstitution(record)
+            && dateInPeriod(record.date, period)
+            && sameTeacher(record.originalTeacherEmail, source)
+            && teacherEmail(record.actualTeacherEmail);
+        })
+        : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex);
+      sourceRecords
         .filter(function (record) { return !isCombinedReturnRecord(record); })
         .forEach(function (record) {
           var key = substitutionKey(record);
@@ -1067,7 +1045,9 @@
             record: record,
             source: source,
             plan: plan,
+            routeToAdjunctSheet: adjunct,
             routeToSubstituteSheet: scheduledOvertime > 0
+              && !adjunct
               && isDefaultExpensePlan(plan)
           };
           result.byKey[key] = item;
@@ -1260,16 +1240,19 @@
         };
         // 超鐘點實得為零時不列教師摘要；若有實際代課明細，仍保留代課人明細列。
         if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0) rows.push(row);
-        if (config.key === 'overtime' && chargedItems) {
-          chargedItems.filter(function (item) {
-            return !item.routeToSubstituteSheet;
-          }).forEach(function (item) {
-            rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
-          });
-        }
+        var substitutionItems = config.key === 'overtime' && chargedItems
+          ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
+          : config.key === 'adjunct' && chargedItems
+            ? chargedItems.filter(function (item) { return item.routeToAdjunctSheet; })
+            : [];
+        substitutionItems.forEach(function (item) {
+          rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
+        });
       });
     });
-    return config.key === 'overtime' ? mergeOvertimeSubstitutionRows(rows) : rows;
+    return config.key === 'overtime' || config.key === 'adjunct'
+      ? mergeOvertimeSubstitutionRows(rows)
+      : rows;
   }
 
   function courseText(record) {
@@ -1509,9 +1492,10 @@
 
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
       var period = getPeriod(periods, config.key, opts.reportMonth);
-       if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', null, schoolSwapIndex);
-      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, chargedMap);
-      if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, chargedMap);
+      var periodChargedMap = buildChargedRecordMap(opts, period, schoolSwapIndex);
+      if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
+      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap);
+      if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap);
       if (config.key === 'mentor') data.sheets[config.key] = mentorRows(opts, period);
       summaryFor(config.key, config.label, data.sheets[config.key]);
     });
@@ -1698,7 +1682,14 @@
     return totalRow;
   }
 
+  function hidePublicAuxiliaryColumns(sheet) {
+    for (var column = 10; column <= 15; column += 1) {
+      sheet.getColumn(column).hidden = true;
+    }
+  }
+
   function writePublicSheet(sheet, config, rows) {
+    hidePublicAuxiliaryColumns(sheet);
     var totalRow = prepareRows(sheet, config, rows.length);
     writeRows(sheet, config.dataStart, rows.map(function (row) {
       return [row.serial, row.title, row.name, row.hours, row.rate, row.amount, null, null, row.note, null, null, null, null, null, null];
