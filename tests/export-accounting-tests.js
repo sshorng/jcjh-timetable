@@ -369,9 +369,35 @@ const multiDateLeave = build([
   }
 ], 2, schedules);
 const multiDateNote = multiDateLeave.overtimePlans[0].rows[0].note;
-assert.ok(multiDateNote.includes('7/1事假扣1節'), 'leave deduction note must include the first date separately');
-assert.ok(multiDateNote.includes('7/8事假扣1節'), 'leave deduction note must include the second date separately');
-assert.equal(multiDateNote.includes('7/1、7/8事假'), false, 'leave deduction note must not combine multiple dates');
+assert.equal(multiDateNote, '7/1事假扣1節、7/8事假扣1節', '相同假別應合併日期並保留各日節數');
+
+const chronologicalLeave = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-01',
+  reportEndDate: '2026-10-02',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-09-01', end: '2026-10-02' } },
+  teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 0, expensePlan: '計畫A' }],
+  allSchedules: [
+    { teacherEmail: 'bill@x', dayOfWeek: 2, period: 1, className: '703', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 2, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 3, period: 1, className: '703', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 3, period: 2, className: '704', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 4, period: 1, className: '705', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 5, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'bill@x', dayOfWeek: 5, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    { date: '2026-10-02', period: 1, periodCount: 2, className: '701', type: 'substitution', originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '公假', status: 'approved' },
+    { date: '2026-09-11', period: 2, periodCount: 2, className: '702', type: 'substitution', originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '公假', status: 'approved' },
+    { date: '2026-09-22', period: 1, periodCount: 3, className: '703', type: 'substitution', originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '休假', status: 'approved' }
+  ]
+});
+assert.equal(
+  chronologicalLeave.overtimePlans[0].rows[0].note,
+  '1、9/11公假扣2節、10/2公假扣2節\n2、9/22休假扣3節',
+  '備註應先依日期排序，再依假別分組合併'
+);
 
 const publicSpecial = build([
   {

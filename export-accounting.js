@@ -600,30 +600,46 @@
       var fallback = isSelfPaidRecord(record) ? '\u81ea\u4ed8' : '\u516c\u5047';
       var label = deductionReasonLabel(record, fallback);
       var date = shortDate(record.date);
-      var key = label + '|' + date;
+      var rawDate = String(record.date || '').slice(0, 10).replace(/\//g, '-');
+      var key = label;
       if (!groups[key]) {
-        groups[key] = { label: label, date: date, count: 0, combinedCount: 0 };
+        groups[key] = { label: label, dates: [], dateIndex: {} };
         order.push(key);
       }
       var group = groups[key];
-      if (combined) group.combinedCount += periodCount(record, false);
-      else group.count += periodCount(record, false);
+      var dateKey = rawDate || date;
+      if (!group.dateIndex[dateKey]) {
+        group.dateIndex[dateKey] = { date: date, rawDate: rawDate, count: 0, combinedCount: 0 };
+        group.dates.push(group.dateIndex[dateKey]);
+      }
+      var dateGroup = group.dateIndex[dateKey];
+      if (combined) dateGroup.combinedCount += periodCount(record, false);
+      else dateGroup.count += periodCount(record, false);
     };
     (records || []).filter(function (record) {
       return !isCombinedReturnRecord(record);
     }).forEach(function (record) { addRecord(record, false); });
     (combinedRecords || []).forEach(function (record) { addRecord(record, true); });
+    order.forEach(function (key) {
+      groups[key].dates.sort(function (left, right) {
+        return String(left.rawDate || left.date || '').localeCompare(String(right.rawDate || right.date || ''));
+      });
+    });
     order.sort(function (left, right) {
-      return groups[left].date.localeCompare(groups[right].date)
+      var leftDate = groups[left].dates[0] || {};
+      var rightDate = groups[right].dates[0] || {};
+      return String(leftDate.rawDate || leftDate.date || '').localeCompare(String(rightDate.rawDate || rightDate.date || ''))
         || groups[left].label.localeCompare(groups[right].label);
     });
     return order.map(function (key) {
       var group = groups[key];
-      var count = group.count + group.combinedCount;
-      var combinedNote = group.combinedCount
-        ? '\uff08\u5408\u73ed' + displayCount(group.combinedCount) + '\u7bc0\u4e0d\u6392\uff09'
-        : '';
-      return group.date + group.label + '\u6263' + displayCount(count) + '\u7bc0' + combinedNote;
+      return group.dates.map(function (dateGroup) {
+        var count = dateGroup.count + dateGroup.combinedCount;
+        var combinedNote = dateGroup.combinedCount
+          ? '\uff08\u5408\u73ed' + displayCount(dateGroup.combinedCount) + '\u7bc0\u4e0d\u6392\uff09'
+          : '';
+        return dateGroup.date + group.label + '\u6263' + displayCount(count) + '\u7bc0' + combinedNote;
+      }).filter(Boolean).join('\u3001');
     }).filter(Boolean);
   }
   function legacySelfSubNoteParts(value) {
@@ -1688,8 +1704,14 @@
     if (!noteColumn) return;
     var column = sheet.getColumn(noteColumn);
     var columnWidth = Number(column && column.width);
+    // 自付代課／代導的備註欄會合併 I:J，列高估算要把兩欄寬度一起算入。
+    if (config.key === 'selfSub' || config.key === 'mentor') {
+      var mergedColumn = sheet.getColumn(noteColumn + 1);
+      var mergedWidth = Number(mergedColumn && mergedColumn.width);
+      if (Number.isFinite(mergedWidth) && mergedWidth > 0) columnWidth += mergedWidth;
+    }
     var charsPerLine = Number.isFinite(columnWidth) && columnWidth > 0
-      ? Math.max(8, Math.floor(columnWidth * 0.9))
+      ? Math.max(8, Math.floor(columnWidth * 0.85))
       : 18;
     (rows || []).forEach(function (row, index) {
       var rowNumber = startRow + index;
@@ -1698,7 +1720,7 @@
       var alignment = Object.assign({}, cell.alignment || {});
       alignment.wrapText = true;
       alignment.shrinkToFit = false;
-      if (value.indexOf('\n') >= 0) alignment.vertical = 'top';
+      if (value) alignment.vertical = 'top';
       cell.alignment = alignment;
       if (!value) return;
       var lines = value.split(/\r?\n/);
@@ -1708,8 +1730,8 @@
         return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / charsPerLine));
       }, 0);
       // 備註欄維持範本字級，內容較多時用換行與列高承載，避免短內容被連帶縮小。
-      var lineHeight = Math.max(12, baseFontSize * 1.35);
-      var targetHeight = Math.min(409.5, Math.max(22, baseVisualLines * lineHeight + 4));
+      var lineHeight = Math.max(18, baseFontSize * 1.5);
+      var targetHeight = Math.min(409.5, Math.max(28, baseVisualLines * lineHeight + 8));
       var targetRow = sheet.getRow(rowNumber);
       targetRow.height = Math.max(Number(targetRow.height) || 15, targetHeight);
     });

@@ -125,9 +125,9 @@ assert.equal(patrolAtB.row, null);
 
 const incomingOvertimeSchedules = [
   { teacherEmail: 'incoming-owner@example.edu.tw', dayOfWeek: 2, period: 6,
-    className: '904', subject: '關思溝通成人', attr: '一般', specialTags: '超鐘點', isOvertime: true },
-  { teacherEmail: 'incoming-teacher@example.edu.tw', dayOfWeek: 2, period: 6,
-    className: '905', subject: '國文', attr: '一般' }
+    className: '905', subject: '國文', attr: '一般' },
+  { teacherEmail: 'incoming-teacher@example.edu.tw', dayOfWeek: 3, period: 6,
+    className: '904', subject: '關思溝通成人', attr: '一般', specialTags: '超鐘點' }
 ];
 const incomingExchange = {
   requestId: 'exchange-overtime', type: 'exchange', date: '2026-09-22', period: 6,
@@ -152,6 +152,35 @@ const incomingCell = context.window.DomainSchedule.resolveApprovedSchedule({
 assert.equal(incomingCell.isSubstitutionDuty, true, '調課後調入格仍應標記實際授課');
 assert.equal(incomingCell.isOvertime, true, '調課後調入格應保留原課超鐘點旗標');
 assert.equal(incomingCell.specialTags, '超鐘點', '調課後調入格應保留原課特殊標記');
+
+const incomingSubstituteSchedules = [
+  { teacherEmail: 'small-owner@example.edu.tw', dayOfWeek: 2, period: 5,
+    className: '906', subject: '國文', attr: '一般' },
+  { teacherEmail: 'small-teacher@example.edu.tw', dayOfWeek: 3, period: 5,
+    className: '907', subject: '生活科技', attr: '代課' }
+];
+const incomingSubstitute = {
+  requestId: 'exchange-substitute', type: 'exchange', date: '2026-09-22', period: 5,
+  originalTeacherEmail: 'small-owner@example.edu.tw',
+  actualTeacherEmail: 'small-teacher@example.edu.tw',
+  className: '907', subject: '生活科技', subFee: '無'
+};
+const incomingSubstituteOtherSide = Object.assign({}, incomingSubstitute, {
+  id: 'exchange-substitute-2', date: '2026-09-16',
+  originalTeacherEmail: 'small-teacher@example.edu.tw',
+  actualTeacherEmail: 'small-owner@example.edu.tw',
+  className: '906', subject: '國文'
+});
+const incomingSubstituteCell = context.window.DomainSchedule.resolveApprovedSchedule({
+  teacherEmail: 'small-teacher@example.edu.tw', dateStr: '2026-09-22', dayOfWeek: 2, period: 5,
+  allSchedules: incomingSubstituteSchedules,
+  scheduleIndex: context.window.DomainSchedule.buildScheduleIndex(incomingSubstituteSchedules),
+  periodSubs: [incomingSubstitute],
+  allSubs: [incomingSubstitute, incomingSubstituteOtherSide],
+  helpers: { getTeacherNameByEmail: value => value, getWeekDayText: value => String(value) }
+});
+assert.equal(incomingSubstituteCell.attr, '代課', '調課後調入格應保留原課代課屬性');
+assert.equal(incomingSubstituteCell.isSubstitute, true, '調課後調入格應保留小鐘點旗標');
 
 const pendingExchange = {
   type: 'exchange',

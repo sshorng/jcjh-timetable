@@ -98,6 +98,12 @@ window.DomainSchedule = (function () {
     return match[1] + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
   }
 
+  function dayOfWeekFromDate(value) {
+    var date = new Date(String(value || '').replace(/-/g, '/'));
+    if (isNaN(date.getTime())) return 0;
+    return date.getDay() === 0 ? 7 : date.getDay();
+  }
+
   function scheduleDateField(row, names) {
     var source = row || {};
     for (var i = 0; i < names.length; i++) {
@@ -386,6 +392,30 @@ window.DomainSchedule = (function () {
         // 對調後網頁課表以教師／班級／科目整組換時段為準。
         // 代課：edge 存被代的那堂。
         var isExIn = incomingEdge.type === 'exchange' || incomingEdge.type === 'triangle';
+        var pairedIn = null;
+        var attributeBase = baseIn;
+        if (isExIn) {
+          pairedIn = incomingEdge.type === 'triangle'
+            ? null
+            : allSubs.find(function (x) {
+              return x.requestId === incomingEdge.requestId
+                && (x.date !== incomingEdge.date || String(x.period) !== String(incomingEdge.period) || x.id !== incomingEdge.id);
+            });
+          var sourceDate = incomingEdge.type === 'triangle'
+            ? incomingEdge.triangleSourceDate
+            : (pairedIn && pairedIn.date);
+          var sourcePeriod = incomingEdge.type === 'triangle'
+            ? incomingEdge.triangleSourcePeriod
+            : (pairedIn && pairedIn.period);
+          var sourceDay = sourceDate ? dayOfWeekFromDate(sourceDate) : 0;
+          var sourceEmail = String(incomingEdge.actualTeacherEmail || teacherEmail).toLowerCase();
+          if (sourceDay && sourcePeriod != null) {
+            var sourceCands = getCandidates(index, sourceEmail, sourceDay, sourcePeriod, allSchedules, sourceDate);
+            attributeBase = sourceCands.find(function (s) {
+              return String(s.teacherEmail || '').toLowerCase() === sourceEmail;
+            }) || sourceCands[0] || attributeBase;
+          }
+        }
         var finalClassIn = String(incomingEdge.className || (baseIn && baseIn.className) || '').trim();
         var finalSubjIn = String(incomingEdge.subject || (baseIn && baseIn.subject) || '').trim();
         // 對調 edge 缺班科：回到原位置所有者在目前日期／節次的基礎課。
@@ -413,10 +443,7 @@ window.DomainSchedule = (function () {
             subTextIn = '△ 三角調自 ' + triangleSource + ' '
               + h.getTeacherNameByEmail(incomingEdge.actualTeacherEmail);
           } else {
-            var otherIn = allSubs.find(function (x) {
-              return x.requestId === incomingEdge.requestId
-                && (x.date !== incomingEdge.date || String(x.period) !== String(incomingEdge.period) || x.id !== incomingEdge.id);
-            });
+            var otherIn = pairedIn;
             var src = otherIn ? formatShortDateAndPeriod(otherIn.date, otherIn.period, h.getWeekDayText) : '他處';
             subTextIn = '⇄ 調自 ' + src + ' ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
           }
@@ -425,12 +452,20 @@ window.DomainSchedule = (function () {
         } else {
           subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         }
-        return Object.assign({}, baseIn || {}, {
+        var sourceCourse = attributeBase || baseIn || {};
+        var sourceAttr = String(sourceCourse.attr || sourceCourse['課堂屬性'] || '').trim();
+        var sourceIsOvertime = sourceCourse.isOvertime === true
+          || sourceAttr.indexOf('超鐘點') >= 0
+          || hasScheduleTag(sourceCourse, '超鐘點');
+        var sourceIsSubstitute = sourceCourse.isSubstitute === true || sourceAttr === '代課';
+        return Object.assign({}, sourceCourse, {
           className: finalClassIn,
           subject: finalSubjIn,
           teacherEmail: teacherEmail,
           dayOfWeek: dayOfWeek,
           period: period,
+          isOvertime: sourceIsOvertime,
+          isSubstitute: sourceIsSubstitute,
           isSubstitutionDuty: true,
           subType: incomingEdge.type,
           isCombinedReturn: combinedReturnIn,
