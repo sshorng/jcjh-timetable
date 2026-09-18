@@ -10,6 +10,11 @@ const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
+assert.match(source, /clearStaleCacheChunksBeforePut_\(cache, key, 1\)/, '單值快取改寫時應清理舊分片');
+assert.match(source, /clearStaleCacheChunksBeforePut_\(cache, key, numChunks\)/, '分片快取改寫時應清理舊分片');
+assert.match(source, /jcjh_hist_" \+ CACHE_SCHEMA_VERSION_ \+ "_" \+ sid \+ "_" \+ ym \+ "_a/, '歷史月份失效 key 必須包含 schema 版本');
+assert.match(source, /bumpCacheGeneration_\("quotaLedgerView", sid\)/, '額度歷程失效必須遞增 generation');
+assert.match(source, /var ledCacheGeneration = getCacheGeneration_\("quotaLedgerView", semesterId\)/, '額度歷程快取 key 必須使用 generation');
 assert.match(source, /function quotaLedgerPublicRow_\(row, order\)/, '帳本匯出列格式化 helper 必須存在');
 assert.match(source, /reqData\.allTeachers === true/, '全校帳本讀取必須有 allTeachers 分支');
 assert.match(source, /historyComplete: true/, '全校帳本回應必須標記完整歷程');

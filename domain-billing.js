@@ -1048,18 +1048,29 @@ window.DomainBilling = (function () {
       : listWeekdaysInMonth(reportMonth);
 
     var DCA = window.DomainClassAway;
-     function isAway(className, dateStr, period) {
-       if (!DCA || !DCA.isClassAwayOnDate) return false;
-       return !!DCA.isClassAwayOnDate(className, dateStr, classAwayEvents, semesterEndDate, period);
+    function isAway(className, dateStr, period) {
+      if (!DCA || !DCA.isClassAwayOnDate) return false;
+      return !!DCA.isClassAwayOnDate(className, dateStr, classAwayEvents, semesterEndDate, period);
     }
+
+    // 第 8 節結算會反覆依教師與星期查課表，先建立索引避免每格掃完整課表。
+    var period8SchedulesByTeacherDay = {};
+    var teachersWithP8 = {};
+    allSchedules.forEach(function (s) {
+      if (parseInt(s.period, 10) !== 8 || !s.teacherEmail) return;
+      var em = emailKey(s.teacherEmail);
+      var day = parseInt(s.dayOfWeek, 10);
+      var key = em + '|' + day;
+      if (!period8SchedulesByTeacherDay[key]) period8SchedulesByTeacherDay[key] = [];
+      period8SchedulesByTeacherDay[key].push(s);
+      teachersWithP8[em] = s.teacherEmail;
+    });
 
     function pickBaseSched(email, dayOfWeek, dateStr) {
       var em = emailKey(email);
-      var cands = allSchedules.filter(function (s) {
-        return emailKey(s.teacherEmail) === em &&
-          parseInt(s.dayOfWeek, 10) === parseInt(dayOfWeek, 10) &&
-          parseInt(s.period, 10) === 8 &&
-          isScheduleActiveOnDate(s, dateStr);
+      var candidates = period8SchedulesByTeacherDay[em + '|' + parseInt(dayOfWeek, 10)] || [];
+      var cands = candidates.filter(function (s) {
+        return isScheduleActiveOnDate(s, dateStr);
       });
       if (!cands.length) return null;
       var base = cands.find(function (s) {
@@ -1103,14 +1114,6 @@ window.DomainBilling = (function () {
       var key = rDate + '|' + cls;
       // 後寫覆蓋前寫；通常一班一節一筆
       subByDateClass[key] = r;
-    });
-
-    // 掃每位有第8課表的教師 × 當月平日
-    var teachersWithP8 = {};
-    allSchedules.forEach(function (s) {
-      if (parseInt(s.period, 10) !== 8) return;
-      if (!s.teacherEmail) return;
-      teachersWithP8[emailKey(s.teacherEmail)] = s.teacherEmail;
     });
 
     weekdays.forEach(function (dateStr) {
@@ -1297,6 +1300,11 @@ window.DomainBilling = (function () {
       isSingleWeek: isSingleWeek
     });
 
+    // 所有教師共用同一組結算日期，避免在教師迴圈內重建。
+    var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
+      ? reportWeekGroupsForRange(startDay, endDay)
+      : reportWeekGroups(reportMonth, reportWeeksCount);
+
     return teachers.map(function (t) {
       var email = t.email || t.teacherName || t.name || t.loginEmail || '';
       var em = emailKey(email);
@@ -1306,9 +1314,6 @@ window.DomainBilling = (function () {
         : (parseInt(t.baseHours, 10) || 16);
 
       // 每週超鐘點固定採最後一個完整結算週；本期總節數再乘結算週數。
-      var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
-        ? reportWeekGroupsForRange(startDay, endDay)
-        : reportWeekGroups(reportMonth, reportWeeksCount);
       var weeklyPeriodCounts = weeklyGroups.map(function (dates) {
         return weeklyPeriodsForDates(teacherIdentity, allSchedules, dates);
       });

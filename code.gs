@@ -1637,12 +1637,14 @@ function putCacheChunked(key, value, expirationSeconds) {
   const cache = CacheService.getScriptCache();
   const chunkSize = 90 * 1024; // 90KB limit
   if (value.length <= chunkSize) {
+    clearStaleCacheChunksBeforePut_(cache, key, 1);
     var single = {};
     single[key] = value;
     single[key + "_chunks"] = "1";
     putCacheEntries_(cache, single, expirationSeconds);
   } else {
     const numChunks = Math.ceil(value.length / chunkSize);
+    clearStaleCacheChunksBeforePut_(cache, key, numChunks);
     var chunks = {};
     chunks[key + "_chunks"] = numChunks.toString();
     for (let i = 0; i < numChunks; i++) {
@@ -1650,6 +1652,19 @@ function putCacheChunked(key, value, expirationSeconds) {
     }
     putCacheEntries_(cache, chunks, expirationSeconds);
   }
+}
+
+/** 改寫分片快取前清除不再使用的舊分片，避免長期累積 CacheService 項目。 */
+function clearStaleCacheChunksBeforePut_(cache, key, nextChunks) {
+  var previousChunks = 0;
+  try { previousChunks = parseInt(cache.get(key + "_chunks") || "0", 10) || 0; } catch (e) {}
+  var removeKeys = [];
+  if (previousChunks > 1 && previousChunks !== nextChunks) {
+    for (var i = 0; i < previousChunks; i++) removeKeys.push(key + "_part_" + i);
+  }
+  // 多分片模式不會讀取單值 key，清除舊版單值或殘留值。
+  if (nextChunks > 1) removeKeys.push(key);
+  if (removeKeys.length) removeCacheEntries_(cache, removeKeys);
 }
 
 function getCacheChunked(key) {
@@ -2139,6 +2154,8 @@ function invalidateRequestCaches_(semesterId) {
     for (var mi = 0; mi < 18; mi++) {
       var dt = new Date(now.getFullYear(), now.getMonth() - mi, 1);
       var ym = dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0");
+      cacheKeys.push("jcjh_hist_" + CACHE_SCHEMA_VERSION_ + "_" + sid + "_" + ym + "_a");
+      // 清除舊版未含 schema 的 key，避免升版後留下無法正常失效的舊分片。
       cacheKeys.push("jcjh_hist_" + sid + "_" + ym + "_a");
     }
   } catch (ignH) {}
@@ -3217,6 +3234,8 @@ function invalidateQuotaCaches_(semesterId, emails) {
   removeCacheChunked("jcjh_meta_" + sid);
   bustQuotaLedgerMem_();
   bustQuotaLedgerScriptCache_(sid);
+  // 以 generation 讓任意 limit 的教師歷程快取立即失效，不依賴固定 limit 清單。
+  bumpCacheGeneration_("quotaLedgerView", sid);
   try {
     var cache = CacheService.getScriptCache();
     cache.remove("jcjh_qled_" + sid);
@@ -5384,7 +5403,9 @@ function handleReadAction_(postData) {
     var limitL = parseInt(reqData.limit != null ? reqData.limit : 50, 10) || 50;
     if (limitL > 120) limitL = 120;
     // Per-teacher cache key is name-based; Email is only used for auth lookup.
-    var ledCacheKey = "jcjh_qled_" + semesterId + "_" + nameKeyNorm_(targetName) + "_" + limitL;
+    var ledCacheGeneration = getCacheGeneration_("quotaLedgerView", semesterId);
+    var ledCacheKey = "jcjh_qled_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_"
+      + ledCacheGeneration + "_" + nameKeyNorm_(targetName) + "_" + limitL;
     try {
       var ledCached = CacheService.getScriptCache().get(ledCacheKey);
       if (ledCached) {
