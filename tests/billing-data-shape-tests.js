@@ -359,6 +359,40 @@ assert.deepEqual(swappedSmallRow.substituteAttributeDetails.map(detail => detail
   '2026-09-22', '2026-09-23'
 ], '小鐘點明細日期應改用調課後實際日期');
 
+const exchangedSmallRows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [
+    { email: 'exchange-small@x', name: '交換小鐘點', baseHours: 0 },
+    { email: 'exchange-target@x', name: '交換對方', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'exchange-small@x', dayOfWeek: 2, period: 2, className: '705', subject: '生活科技', attr: '代課' },
+    { teacherEmail: 'exchange-target@x', dayOfWeek: 2, period: 5, className: '704', subject: '國文', attr: '一般' }
+  ],
+  substitutionRecords: [
+    {
+      id: 'exchange-small_1', requestId: 'exchange-small', date: '2026-09-22', period: 5,
+      type: 'exchange', originalTeacherEmail: 'exchange-target@x', actualTeacherEmail: 'exchange-small@x',
+      className: '705', subject: '生活科技', subFee: '無',
+      courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
+    },
+    {
+      id: 'exchange-small_2', requestId: 'exchange-small', date: '2026-09-22', period: 2,
+      type: 'exchange', originalTeacherEmail: 'exchange-small@x', actualTeacherEmail: 'exchange-target@x',
+      className: '704', subject: '國文', subFee: '無',
+      courseAttr: '一般', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: false
+    }
+  ],
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-21',
+  reportEndDate: '2026-09-25',
+  reportWeeksCount: 1
+});
+const exchangedSmallRow = exchangedSmallRows.find(row => row.email === 'exchange-small@x');
+assert.equal(exchangedSmallRow.substituteScheduledCount, 1, '調課後小鐘點仍應保留固定節數');
+assert.equal(exchangedSmallRow.substitutePaidCount, 1, '調課後小鐘點應保留鐘點費');
+assert.deepEqual(exchangedSmallRow.substituteAttributeDetails.map(detail => detail.date), ['2026-09-22']);
+assert.equal(exchangedSmallRow.substituteAttributeDetails[0].period, 5, '小鐘點明細應使用調課後節次');
+
 const configuredPlan = JSON.stringify([
   { day: 1, period: 1, className: '701', source: '計畫A' },
   { day: 1, period: 2, className: '702', source: '計畫B' }

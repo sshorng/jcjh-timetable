@@ -435,6 +435,28 @@ window.DomainBilling = (function () {
     return type === '' || type === 'substitution' || type === '代課';
   }
 
+  function hasCourseAttributeMetadata(record) {
+    if (!record) return false;
+    return ['courseAttr', 'courseSpecialTags', 'courseIsOvertime', 'courseIsSubstitute'].some(function (key) {
+      return Object.prototype.hasOwnProperty.call(record, key);
+    });
+  }
+
+  function isRecordSubstituteCourse(record) {
+    if (!hasCourseAttributeMetadata(record)) return false;
+    var attr = String(record.courseAttr || '').trim();
+    return record.courseIsSubstitute === true || attr === '代課';
+  }
+
+  function isRecordOvertimeCourse(record) {
+    if (!hasCourseAttributeMetadata(record)) return false;
+    if (isRecordSubstituteCourse(record)) return false;
+    var attr = String(record.courseAttr || '').trim();
+    var tags = String(record.courseSpecialTags || '')
+      .split(/[、,，;；/／|｜\s]+/).map(function (value) { return String(value || '').trim(); });
+    return record.courseIsOvertime === true || attr.indexOf('超鐘點') >= 0 || tags.indexOf('超鐘點') >= 0;
+  }
+
   function recordFee(record) {
     return String(record && (record.subFee || record['經費來源']) || '').trim();
   }
@@ -852,12 +874,111 @@ window.DomainBilling = (function () {
     return occurrences;
   }
 
+  function isExchangeLikeRecord(record) {
+    var type = recordType(record);
+    return type === 'exchange' || type === '對調' || type === 'triangle' || type === '三角調';
+  }
+
+  function sameExchangeRequest(left, right) {
+    if (!left || !right) return false;
+    if (left.requestId && right.requestId) return String(left.requestId) === String(right.requestId);
+    var leftId = String(left.id || '').replace(/_[12]$/, '');
+    var rightId = String(right.id || '').replace(/_[12]$/, '');
+    return !!leftId && leftId === rightId;
+  }
+
+  /** 將固定小鐘點課格追到核准調課後的實際日期／節次。 */
+  function actualSmallCourseOccurrence(slot, occurrence, records) {
+    var sourceDate = normalizeDateKey(occurrence && occurrence.date);
+    var sourcePeriod = parseInt(occurrence && occurrence.period, 10);
+    var sourceTeachers = scheduleTeacherKeys(slot);
+    if (!sourceDate || !Number.isFinite(sourcePeriod) || !sourceTeachers.length) return occurrence;
+
+    for (var i = 0; i < (records || []).length; i++) {
+      var edge = records[i];
+      if (!isExchangeLikeRecord(edge) || !hasCommonKey(originalTeacherKeys(edge), sourceTeachers)) continue;
+      if (recordDate(edge) !== sourceDate || recordPeriod(edge) !== sourcePeriod) continue;
+
+      if (recordType(edge) === 'triangle' || recordType(edge) === '三角調') {
+        var triangleSourceDate = normalizeDateKey(edge.triangleSourceDate || edge['三角來源日期']);
+        var triangleSourcePeriod = parseInt(edge.triangleSourcePeriod || edge['三角來源節次'], 10);
+        if (hasCommonKey(actualTeacherKeys(edge), sourceTeachers)
+            && triangleSourceDate === sourceDate && triangleSourcePeriod === sourcePeriod) {
+          return { date: recordDate(edge), period: recordPeriod(edge) };
+        }
+        continue;
+      }
+
+      var peer = (records || []).find(function (candidate) {
+        return candidate !== edge
+          && isExchangeLikeRecord(candidate)
+          && sameExchangeRequest(edge, candidate)
+          && hasCommonKey(actualTeacherKeys(candidate), sourceTeachers)
+          && (recordDate(candidate) !== sourceDate || recordPeriod(candidate) !== sourcePeriod);
+      });
+      if (peer) return { date: recordDate(peer), period: recordPeriod(peer) };
+    }
+    return occurrence;
+  }
+
+  function isSmallCourseCoverageRecord(record, schedules, schoolSwapIndex) {
+    if (!record || !isSubstitutionRecord(record)) return false;
+    if (hasCourseAttributeMetadata(record)) return isRecordSubstituteCourse(record);
+    return isSubstituteScheduleRecord(record, schedules, schoolSwapIndex);
+  }
+
+  function recordMatchesSmallCourseOccurrence(record, slot, occurrence) {
+    if (!record || !slot || !occurrence || !isSubstitutionRecord(record)) return false;
+    if (recordDate(record) !== normalizeDateKey(occurrence.date)
+        || recordPeriod(record) !== parseInt(occurrence.period, 10)) return false;
+    if (!hasCommonKey(originalTeacherKeys(record), scheduleTeacherKeys(slot))) return false;
+    var recordClass = record.className || record['班級'];
+    var slotClass = slot.className || slot['班級'];
+    return expenseClassNamesOverlap(recordClass, slotClass);
+  }
+
+  function isSmallCourseCoverPayable(record) {
+    if (!record || isCourseAdjustmentOnlyRecord(record)) return false;
+    var fee = recordFee(record);
+    return fee !== '扣額度' && fee !== '互代不結' && fee !== '第8節代課';
+  }
+
+  function smallCourseSourceSchedule(record, schedules, schoolSwapIndex) {
+    var originalKeys = originalTeacherKeys(record);
+    var className = record && (record.className || record['班級']);
+    var slot = resolveBillingSlot(record, schoolSwapIndex);
+    var candidates = (schedules || []).filter(function (schedule) {
+      return hasCommonKey(originalKeys, scheduleTeacherKeys(schedule))
+        && isSubstituteScheduleSlot(schedule)
+        && expenseClassNamesOverlap(schedule.className || schedule['班級'], className)
+        && isScheduleActiveOnDate(schedule, recordDate(record));
+    });
+    return candidates.find(function (schedule) {
+      return scheduleDay(schedule) === slot.dayOfWeek && schedulePeriod(schedule) === slot.period;
+    }) || candidates[0] || null;
+  }
+
+  function smallCourseDetailSource(record, schedules, teachers, schoolSwapIndex) {
+    var originalKeys = originalTeacherKeys(record);
+    var owner = (teachers || []).find(function (teacher) {
+      return hasCommonKey(originalKeys, teacherKeys(teacher));
+    }) || {};
+    var sourceSchedule = smallCourseSourceSchedule(record, schedules, schoolSwapIndex);
+    return normalizeExpenseSource(
+      sourceForOvertimeSchedule(owner, sourceSchedule || {
+        dayOfWeek: record && record.courseSourceDayOfWeek,
+        period: record && record.courseSourcePeriod
+      }) || DEFAULT_EXPENSE_SOURCE
+    );
+  }
+
   /**
    * 請假那堂是否為需扣超鐘點的正式課程（對照原任＋星期＋節次＋班級）
    * 早自習0、1～7與午休45皆依原課表屬性判定
    */
   function isConcurrentLeaveSlot(rec, allSchedules, schoolSwapIndex) {
     if (!rec) return false;
+    if (hasCourseAttributeMetadata(rec)) return isRecordOvertimeCourse(rec);
     var originalKeys = originalTeacherKeys(rec);
     if (!originalKeys.length) return false;
     var slot = resolveBillingSlot(rec, schoolSwapIndex);
@@ -946,6 +1067,7 @@ window.DomainBilling = (function () {
   function isSubstituteScheduleRecord(record, schedules, schoolSwapIndex) {
     var originalKeys = originalTeacherKeys(record);
     if (!originalKeys.length || !isSubstitutionRecord(record)) return false;
+    if (hasCourseAttributeMetadata(record)) return isRecordSubstituteCourse(record);
     return (schedules || []).some(function (schedule) {
       return hasCommonKey(originalKeys, scheduleTeacherKeys(schedule))
         && isSubstituteScheduleSlot(schedule)
@@ -986,8 +1108,9 @@ window.DomainBilling = (function () {
     });
     fixedSlots.forEach(function (slot) {
       actualOccurrencesForFixedSlot(slot, reportDates, opts.schoolSwapIndex).forEach(function (occurrence) {
-        var dateStr = occurrence.date;
-        var period = occurrence.period;
+        var actualOccurrence = actualSmallCourseOccurrence(slot, occurrence, monthlyRecords);
+        var dateStr = actualOccurrence.date;
+        var period = actualOccurrence.period;
         var key = normalizeDateKey(dateStr) + '|' + period;
         if (seen[key]) return;
         seen[key] = true;
@@ -997,7 +1120,7 @@ window.DomainBilling = (function () {
           && DCA.isClassAwayOnDate(slot.className || slot['班級'], dateStr, events, semesterEndDate, period);
         var leave = monthlyRecords.some(function (record) {
           return !isCombinedReturnRecord(record)
-            && recordMatchesFixedScheduleSlot(record, slot, dateStr, opts.schoolSwapIndex);
+            && recordMatchesSmallCourseOccurrence(record, slot, actualOccurrence);
         });
         if (away || leave) {
           result.deduction += 1;
@@ -1013,6 +1136,29 @@ window.DomainBilling = (function () {
           subject: String(slot.subject || slot['科目'] || '').trim(),
           source: normalizeExpenseSource(sourceForOvertimeSchedule(opts.teacher, slot) || DEFAULT_EXPENSE_SOURCE)
         });
+      });
+    });
+
+    // 小鐘點課被請假代課時，實際授課人仍列在小鐘點表，不轉入一般公付／自付代課表。
+    var coverSeen = {};
+    monthlyRecords.forEach(function (record) {
+      if (isCombinedReturnRecord(record)
+          || !isSmallCourseCoverageRecord(record, schedules, opts.schoolSwapIndex)
+          || !isSmallCourseCoverPayable(record)
+          || !hasCommonKey(actualTeacherKeys(record), teacherIdentity)
+          || hasCommonKey(originalTeacherKeys(record), teacherIdentity)) return;
+      var dateStr = recordDate(record);
+      var period = recordPeriod(record);
+      var key = dateStr + '|' + period + '|' + String(record.className || record['班級'] || '').trim();
+      if (coverSeen[key]) return;
+      coverSeen[key] = true;
+      result.paid += 1;
+      result.paidDetails.push({
+        date: dateStr,
+        period: period,
+        className: String(record.className || record['班級'] || '').trim(),
+        subject: String(record.subject || record['科目'] || '').trim(),
+        source: smallCourseDetailSource(record, schedules, opts.teachers, opts.schoolSwapIndex)
       });
     });
     return result;
@@ -1367,6 +1513,7 @@ window.DomainBilling = (function () {
       });
       var substitutePayout = buildSubstituteAttributePayout({
         teacher: t,
+        teachers: teachers,
         allSchedules: allSchedules,
         reportMonth: reportMonth,
         reportStartDate: startDay,
@@ -1388,17 +1535,19 @@ window.DomainBilling = (function () {
         if (isCombinedReturnRecord(r)) return false;
         if (!hasCommonKey(actualTeacherKeys(r), teacherIdentity)
             || !isSubstitutionRecord(r) || !isWeeklyHoursPeriod(recordPeriod(r))) return false;
+        if (isSmallCourseCoverageRecord(r, allSchedules, schoolSwapIndex)) return false;
         if (window.DomainActivityCover && window.DomainActivityCover.isPublicSubPayout) {
           return window.DomainActivityCover.isPublicSubPayout(r.subFee);
         }
         return r.subFee === '公費代課' || r.subFee === '學校移撥' || r.subFee === '活動公費';
       });
-      var pubSubCount = pubSubRecords.length + substitutePayout.paid;
+      var pubSubCount = pubSubRecords.length;
       var selfPaidSubRecords = monthlyRecords.filter(function (r) {
         return !isCombinedReturnRecord(r)
           && hasCommonKey(actualTeacherKeys(r), teacherIdentity)
           && isSubstitutionRecord(r)
           && isWeeklyHoursPeriod(recordPeriod(r))
+          && !isSmallCourseCoverageRecord(r, allSchedules, schoolSwapIndex)
           && isSelfPaidFee(r);
       });
       var selfSubCount = selfPaidSubRecords.length;

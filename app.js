@@ -696,6 +696,19 @@ createApp({
         s && String(s.date) === dateKey && parseInt(s.period, 10) === p
       );
 
+      const courseMetadataFromRecord = (record) => {
+        if (!record) return null;
+        const hasMetadata = ['courseAttr', 'courseSpecialTags', 'courseIsOvertime', 'courseIsSubstitute']
+          .some(key => Object.prototype.hasOwnProperty.call(record, key));
+        if (!hasMetadata) return null;
+        return {
+          attr: record.courseAttr == null ? '' : String(record.courseAttr),
+          specialTags: record.courseSpecialTags == null ? '' : String(record.courseSpecialTags),
+          isOvertime: record.courseIsOvertime === true,
+          isSubstitute: record.courseIsSubstitute === true
+        };
+      };
+
       // 1) 直接：此人是 actual（調入／代課中）
       const asActual = slotSubs.filter(s =>
         s.actualTeacherEmail && String(s.actualTeacherEmail).toLowerCase() === em
@@ -750,13 +763,13 @@ createApp({
           }
         }
         if (cls || subj) {
-          return {
+          return Object.assign({
             className: cls,
             subject: subj,
             fromSub: true,
             isSubstitutionDuty: true,
             dutyType: hit.type || ''
-          };
+          }, courseMetadataFromRecord(hit) || {});
         }
       }
 
@@ -830,6 +843,31 @@ createApp({
     };
 
     const convertRequestsToSubstitutions = (requests) => {
+      const courseMetadataFromCell = (cell) => {
+        if (!cell) return null;
+        const hasAttributeField = ['attr', '課堂屬性', 'specialTags', '特殊標記', 'isOvertime', 'isSubstitute']
+          .some(key => Object.prototype.hasOwnProperty.call(cell, key));
+        if (!hasAttributeField) return null;
+        const attr = String(cell.attr || cell['課堂屬性'] || '').trim();
+        const rawTags = cell.specialTags || cell['特殊標記'] || '';
+        const specialTags = window.FieldMap && typeof window.FieldMap.normalizeSpecialTags === 'function'
+          ? window.FieldMap.normalizeSpecialTags(rawTags)
+          : String(rawTags).split(/[,，、;；\/／|｜\n]+/).map(value => String(value || '').trim())
+            .filter(Boolean).filter((value, index, list) => list.indexOf(value) === index).join('、');
+        const tags = specialTags.split('、').filter(Boolean);
+        return {
+          courseAttr: attr,
+          courseSpecialTags: specialTags,
+          courseIsOvertime: cell.isOvertime === true
+            || attr.indexOf('超鐘點') >= 0
+            || tags.includes('超鐘點'),
+          courseIsSubstitute: cell.isSubstitute === true || attr === '代課'
+        };
+      };
+      const withCourseMetadata = (record, cell) => {
+        const metadata = courseMetadataFromCell(cell);
+        return metadata ? Object.assign(record, metadata) : record;
+      };
       const subs = [];
       // date|period → edges（邊組邊查，避免 resolve 每次 O(n) filter）
       const slotIndex = Object.create(null);
@@ -869,7 +907,13 @@ createApp({
       approved.forEach(req => {
         if (req.type === 'triangle' || req.type === '三角調') {
           // 三角調每條 leg 只建立「目標原課時段」的一組 edge；三條 leg 合併後才是完整循環。
-          pushSub({
+          const triangleSourceCell = resolveAt(
+            req.requesterEmail,
+            req.requestDate,
+            req.requestPeriod,
+            req.requestPeriodDay
+          );
+          pushSub(withCourseMetadata({
             // 直接沿用申請單 ID，列印回寫「是否已印」時可對應到後端原列。
             id: req.id,
             date: req.targetDate,
@@ -897,7 +941,7 @@ createApp({
             leaveTimeType: '',
             leaveTime: '',
             note: req.note
-          });
+          }, triangleSourceCell));
         } else if (req.type === 'substitution' || req.type === '代課') {
           // 請假節可能本身已是調入課：班科以有效課為準，缺才用申請單
           let leaveDay = req.requestPeriodDay;
@@ -922,7 +966,7 @@ createApp({
           const leaveSubj = emptyAssign
             ? (req.subject || '')
             : ((leaveCell && leaveCell.subject) || req.subject || '');
-           pushSub({
+           pushSub(withCourseMetadata({
              id: req.id,
              date: req.requestDate,
              period: req.requestPeriod,
@@ -942,10 +986,10 @@ createApp({
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',
               courseAdjustmentOnly: isCourseAdjustmentOnlyRequest(req),
-            note: req.note,
-            specialFlow: req.specialFlow || '',
-            isEmptySlotAssign: emptyAssign
-          });
+             note: req.note,
+             specialFlow: req.specialFlow || '',
+             isEmptySlotAssign: emptyAssign
+           }, leaveCell));
         } else if (req.type === 'exchange' || req.type === '對調') {
           // 請假節若已是「代課／調入義務」（空堂代生物），再調出必須寫生物，不可回退基礎數學
           // 否則科目＝自己的基礎／專長
@@ -1002,8 +1046,8 @@ createApp({
               || '');
 
           // _1：目標日由申請人上自己的原課程。
-          pushSub({
-            id: req.id + '_1',
+           pushSub(withCourseMetadata({
+             id: req.id + '_1',
             date: req.targetDate,
             period: req.targetPeriod,
             serial: req.serial || req['單號'] || '',
@@ -1020,13 +1064,13 @@ createApp({
             printed: req.printed,
             subFee: '無',
             reason: req.reason,
-            leaveTimeType: req.leaveTimeType || '',
-            leaveTime: req.leaveTime || '',
-            note: req.note
-          });
+             leaveTimeType: req.leaveTimeType || '',
+             leaveTime: req.leaveTime || '',
+             note: req.note
+           }, leaveEff));
 
           // _2：原異動日由受邀人上自己的原課程。
-          pushSub({
+          pushSub(withCourseMetadata({
             id: req.id + '_2',
             date: req.requestDate,
             period: req.requestPeriod,
@@ -1047,7 +1091,7 @@ createApp({
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',
             note: req.note
-          });
+          }, targetEff));
         }
       });
       return subs;

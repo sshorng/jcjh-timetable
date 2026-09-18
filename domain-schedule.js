@@ -181,6 +181,21 @@ window.DomainSchedule = (function () {
     }).indexOf(tag) >= 0;
   }
 
+  function sourceCourseFromRecord(record, fallback) {
+    if (!record) return fallback || {};
+    var keys = ['courseAttr', 'courseSpecialTags', 'courseIsOvertime', 'courseIsSubstitute'];
+    var hasMetadata = keys.some(function (key) {
+      return Object.prototype.hasOwnProperty.call(record, key);
+    });
+    if (!hasMetadata) return fallback || {};
+    var source = Object.assign({}, fallback || {});
+    if (Object.prototype.hasOwnProperty.call(record, 'courseAttr')) source.attr = record.courseAttr;
+    if (Object.prototype.hasOwnProperty.call(record, 'courseSpecialTags')) source.specialTags = record.courseSpecialTags;
+    if (Object.prototype.hasOwnProperty.call(record, 'courseIsOvertime')) source.isOvertime = record.courseIsOvertime === true;
+    if (Object.prototype.hasOwnProperty.call(record, 'courseIsSubstitute')) source.isSubstitute = record.courseIsSubstitute === true;
+    return source;
+  }
+
   /**
    * 排課系統教師課表的正式排課節數：不含巡堂、預排與第 8 節，且同一教師同一時段只算一節。
    * 有啟用日期時，只計入指定週內至少一天有效的課表版本。
@@ -452,7 +467,7 @@ window.DomainSchedule = (function () {
         } else {
           subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         }
-        var sourceCourse = attributeBase || baseIn || {};
+        var sourceCourse = sourceCourseFromRecord(incomingEdge, attributeBase || baseIn || {});
         var sourceAttr = String(sourceCourse.attr || sourceCourse['課堂屬性'] || '').trim();
         var sourceIsOvertime = sourceCourse.isOvertime === true
           || sourceAttr.indexOf('超鐘點') >= 0

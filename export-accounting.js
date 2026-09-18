@@ -859,6 +859,49 @@
     return n === 0 || n === 45 || (n >= 1 && n <= 7);
   }
 
+  function hasCourseAttributeMetadata(record) {
+    if (!record) return false;
+    return ['courseAttr', 'courseSpecialTags', 'courseIsOvertime', 'courseIsSubstitute'].some(function (key) {
+      return Object.prototype.hasOwnProperty.call(record, key);
+    });
+  }
+
+  function isRecordSubstituteCourse(record) {
+    if (!hasCourseAttributeMetadata(record)) return false;
+    return record.courseIsSubstitute === true || String(record.courseAttr || '').trim() === '代課';
+  }
+
+  function isRecordOvertimeCourse(record) {
+    if (!hasCourseAttributeMetadata(record) || isRecordSubstituteCourse(record)) return false;
+    var attr = String(record.courseAttr || '').trim();
+    var tags = String(record.courseSpecialTags || '')
+      .split(/[、,，;；/／|｜\s]+/).map(function (value) { return String(value || '').trim(); });
+    return record.courseIsOvertime === true || attr.indexOf('超鐘點') >= 0 || tags.indexOf('超鐘點') >= 0;
+  }
+
+  function isSubstituteSchedule(schedule) {
+    if (!schedule) return false;
+    if (schedule.isSubstitute === true) return true;
+    return String(schedule.attr || schedule['\u8ab2\u5802\u5c6c\u6027'] || '').trim() === '\u4ee3\u8ab2';
+  }
+
+  function isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex) {
+    if (!record) return false;
+    if (hasCourseAttributeMetadata(record)) return isRecordSubstituteCourse(record);
+    var date = dateObj(record.date);
+    var period = Number(record.period);
+    if (!date || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
+    var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
+    return (schedules || []).some(function (schedule) {
+      return sameTeacher(schedule, record.originalTeacherEmail)
+        && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
+        && Number(schedule.period) === sourceSlot.period
+        && isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
+        && sameScheduleClass(record, schedule)
+        && isSubstituteSchedule(schedule);
+    });
+  }
+
   function isUsableSubstitution(record) {
     if (!record || !record.date || !isApprovedActive(record) || !isSubstitutionRecord(record)) return false;
     var fee = subFee(record);
@@ -991,10 +1034,13 @@
       return Object.assign({}, source, { expensePlan: plan });
     });
   }
-  function leaveRecordsFor(email, records, period) {
-    return (records || []).filter(function (r) {
-       return isUsableSubstitution(r) && dateInPeriod(r.date, period) && sameTeacher(r.originalTeacherEmail, email);
-    });
+  function leaveRecordsFor(email, records, period, schedules, schoolSwapIndex) {
+     return (records || []).filter(function (r) {
+       return isUsableSubstitution(r)
+         && dateInPeriod(r.date, period)
+         && sameTeacher(r.originalTeacherEmail, email)
+         && !isSubstituteAttributePayoutRecord(r, schedules, schoolSwapIndex);
+     });
   }
 
   function expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex) {
@@ -1036,6 +1082,7 @@
     var d = dateObj(record && record.date);
     var period = Number(record && record.period);
     if (!d || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
+    if (hasCourseAttributeMetadata(record)) return isRecordOvertimeCourse(record);
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
     return (schedules || []).some(function (schedule) {
        return sameTeacher(schedule, record.originalTeacherEmail)
@@ -1052,7 +1099,8 @@
       return isUsableSubstitution(record)
         && dateInPeriod(record.date, period)
          && sameTeacher(record.originalTeacherEmail, email)
-        && teacherEmail(record.actualTeacherEmail);
+         && teacherEmail(record.actualTeacherEmail)
+         && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
     // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
     var selfRecords = eligible.filter(isSelfPaidRecord);
@@ -1095,7 +1143,8 @@
           return isUsableSubstitution(record)
             && dateInPeriod(record.date, period)
             && sameTeacher(record.originalTeacherEmail, source)
-            && teacherEmail(record.actualTeacherEmail);
+            && teacherEmail(record.actualTeacherEmail)
+            && !isSubstituteAttributePayoutRecord(record, opts.allSchedules || [], schoolSwapIndex);
         })
         : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex);
       var chargedKeys = {};
@@ -1106,7 +1155,8 @@
         return isUsableSubstitution(record)
           && dateInPeriod(record.date, period)
           && sameTeacher(record.originalTeacherEmail, source)
-          && teacherEmail(record.actualTeacherEmail);
+          && teacherEmail(record.actualTeacherEmail)
+          && !isSubstituteAttributePayoutRecord(record, opts.allSchedules || [], schoolSwapIndex);
       });
       var sourceRecords = allSourceRecords.filter(function (record) {
         var key = substitutionKey(record);
@@ -1244,7 +1294,7 @@
         var adjunct = isAdjunctTeacher(t);
         if (config.key === 'adjunct' ? !adjunct : adjunct) return;
         var title = teacherTitle(t) || (adjunct ? '兼課教師' : '教師');
-        var leave = leaveRecordsFor(source, records, period);
+        var leave = leaveRecordsFor(source, records, period, opts.allSchedules || [], schoolSwapIndex);
         var sourceItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
         var chargedItems = null;
         if (sourceItems) {
@@ -1353,7 +1403,7 @@
     return cls + subj;
   }
 
-  function publicRows(opts, period, chargedMap, adjustmentOnly) {
+  function publicRows(opts, period, chargedMap, adjustmentOnly, schoolSwapIndex) {
     var teacherMap = {};
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
@@ -1362,6 +1412,7 @@
       var isAdjustment = isMindBodyAdjustmentLeave(r);
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isPublicPayoutRecord(r) && r.actualTeacherEmail
+        && !isSubstituteAttributePayoutRecord(r, opts.allSchedules || [], schoolSwapIndex)
         && Boolean(adjustmentOnly) === isAdjustment
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
           || chargedMap.byKey[substitutionKey(r)].charged === false
@@ -1467,13 +1518,14 @@
     });
   }
 
-  function selfRows(opts, period, chargedMap) {
+  function selfRows(opts, period, chargedMap, schoolSwapIndex) {
     var teacherMap = {};
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     return (opts.substitutionRecords || []).filter(function (r) {
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isSelfPaidRecord(r) && r.actualTeacherEmail
+        && !isSubstituteAttributePayoutRecord(r, opts.allSchedules || [], schoolSwapIndex)
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).sort(function (a, b) {
@@ -1607,9 +1659,9 @@
       var period = getPeriod(periods, periodKey, opts.reportMonth);
       var periodChargedMap = buildChargedRecordMap(opts, period, schoolSwapIndex);
       if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
-      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false);
-      if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true);
-      if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap);
+      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false, schoolSwapIndex);
+      if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true, schoolSwapIndex);
+      if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap, schoolSwapIndex);
       if (config.key === 'mentor') data.sheets[config.key] = mentorRows(opts, period);
       summaryFor(config.key, config.label, data.sheets[config.key]);
     });

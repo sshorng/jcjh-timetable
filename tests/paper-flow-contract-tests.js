@@ -173,13 +173,14 @@ function runQuotaRiskFlagTargetTest() {
   assert.equal(shortageFlags.some(flag => flag.key === 'quota0'), true, '代課教師額度不足才應顯示額度不足');
 }
 
-function loadApprovedExchangeConverter() {
+function loadApprovedExchangeConverter(resolveCell) {
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const start = source.indexOf('const convertRequestsToSubstitutions =');
   const end = source.indexOf('const requestsList =', start);
   assert.ok(start >= 0 && end > start, 'approved exchange converter must remain discoverable');
   const context = {
-    resolveCellFromBaseAndSubs: () => null,
+    window: {},
+    resolveCellFromBaseAndSubs: resolveCell || (() => null),
     findBaseScheduleSlot: () => null,
     getTeacherSubjectByEmail: () => '',
     isCourseAdjustmentOnlyRequest: isCourseAdjustmentOnlyForTest,
@@ -327,6 +328,41 @@ function runApprovedCombinedReturnMappingTest() {
   assert.equal(records[0].actualTeacherEmail, '受邀人');
 }
 
+function runApprovedExchangeAttributeMappingTest() {
+  const convert = loadApprovedExchangeConverter((email, date, period) => {
+    if (email === 'owner@example.com' && date === '2026-09-01' && period === 6) {
+      return { className: '703', subject: '數學', attr: '代課', isSubstitute: true };
+    }
+    if (email === 'invitee@example.com' && date === '2026-09-03' && period === 2) {
+      return { className: '704', subject: '國文', attr: '一般', specialTags: '超鐘點', isOvertime: true };
+    }
+    return null;
+  });
+  const records = convert([{
+    id: 'approved-attribute-1',
+    status: 'approved',
+    type: 'exchange',
+    requesterEmail: 'owner@example.com',
+    requesterName: '申請人',
+    targetTeacherEmail: 'invitee@example.com',
+    targetTeacherName: '受邀人',
+    requestDate: '2026-09-01',
+    requestPeriod: 6,
+    className: '703',
+    subject: '數學',
+    targetDate: '2026-09-03',
+    targetPeriod: 2,
+    targetClassName: '704',
+    targetSubject: '國文'
+  }]);
+  const targetDateRecord = records.find(record => record.id.endsWith('_1'));
+  const sourceDateRecord = records.find(record => record.id.endsWith('_2'));
+  assert.equal(targetDateRecord.courseAttr, '代課', '調入 edge 應攜帶來源課堂屬性');
+  assert.equal(targetDateRecord.courseIsSubstitute, true, '調入 edge 應攜帶代課旗標');
+  assert.equal(sourceDateRecord.courseSpecialTags, '超鐘點', '另一側 edge 應攜帶來源特殊標記');
+  assert.equal(sourceDateRecord.courseIsOvertime, true, '另一側 edge 應攜帶超鐘點旗標');
+}
+
 function runApprovedBatchRecordMappingTest() {
   const convert = loadApprovedExchangeConverter();
   const records = convert([
@@ -450,6 +486,7 @@ function runNoSyntheticStudySubjectTest() {
 
 runSubmittedExchangePaperRecordMappingTest();
 runApprovedExchangeRecordMappingTest();
+runApprovedExchangeAttributeMappingTest();
 runApprovedCombinedReturnMappingTest();
 runApprovedBatchRecordMappingTest();
 runPublicClassExchangeMappingTest();

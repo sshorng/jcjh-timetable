@@ -182,6 +182,41 @@ const incomingSubstituteCell = context.window.DomainSchedule.resolveApprovedSche
 assert.equal(incomingSubstituteCell.attr, '代課', '調課後調入格應保留原課代課屬性');
 assert.equal(incomingSubstituteCell.isSubstitute, true, '調課後調入格應保留小鐘點旗標');
 
+const chainedAttributeSchedules = [
+  { teacherEmail: 'chain-owner@example.edu.tw', dayOfWeek: 2, period: 4,
+    className: '801', subject: '自然', attr: '一般' },
+  { teacherEmail: 'chain-middle@example.edu.tw', dayOfWeek: 2, period: 4,
+    className: '802', subject: '數學', attr: '一般' }
+];
+const chainedAttributeEdge = {
+  requestId: 'exchange-chained-attribute', type: 'exchange', date: '2026-09-22', period: 4,
+  originalTeacherEmail: 'chain-owner@example.edu.tw',
+  actualTeacherEmail: 'chain-middle@example.edu.tw',
+  className: '802', subject: '數學', subFee: '無',
+  courseAttr: '代課', courseSpecialTags: '超鐘點',
+  courseIsOvertime: true, courseIsSubstitute: true
+};
+const chainedAttributeOtherSide = Object.assign({}, chainedAttributeEdge, {
+  id: 'exchange-chained-attribute-2', date: '2026-09-16',
+  originalTeacherEmail: 'chain-middle@example.edu.tw',
+  actualTeacherEmail: 'chain-owner@example.edu.tw',
+  className: '801', subject: '自然',
+  courseAttr: '一般', courseSpecialTags: '',
+  courseIsOvertime: false, courseIsSubstitute: false
+});
+const chainedAttributeCell = context.window.DomainSchedule.resolveApprovedSchedule({
+  teacherEmail: 'chain-middle@example.edu.tw', dateStr: '2026-09-22', dayOfWeek: 2, period: 4,
+  allSchedules: chainedAttributeSchedules,
+  scheduleIndex: context.window.DomainSchedule.buildScheduleIndex(chainedAttributeSchedules),
+  periodSubs: [chainedAttributeEdge],
+  allSubs: [chainedAttributeEdge, chainedAttributeOtherSide],
+  helpers: { getTeacherNameByEmail: value => value, getWeekDayText: value => String(value) }
+});
+assert.equal(chainedAttributeCell.attr, '代課', '多段調課應沿用來源課程的代課屬性');
+assert.equal(chainedAttributeCell.specialTags, '超鐘點', '多段調課應沿用來源課程的特殊標記');
+assert.equal(chainedAttributeCell.isOvertime, true, '多段調課應沿用來源課程的超鐘點旗標');
+assert.equal(chainedAttributeCell.isSubstitute, true, '多段調課應沿用來源課程的小鐘點旗標');
+
 const pendingExchange = {
   type: 'exchange',
   requesterEmail: 'owner@example.edu.tw',

@@ -294,12 +294,115 @@ const substituteAttribute = build([{
 }]);
 assert.equal(substituteAttribute.sheets.overtime.length, 0, '代課屬性請假且無超鐘點時不列入超鐘點工作表');
 assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'Billing'), undefined, '課表代課不應混入一般公付代課工作表');
-assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x').hours, 1, '實際代課教師仍應列入公付代課');
+assert.equal(substituteAttribute.sheets.publicSub.find(row => row.name === 'cover@x'), undefined, '小鐘點代課不應列入一般公付代課工作表');
 assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代課應建立獨立工作表資料');
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
+
+const substituteAttributeCoverage = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  periods: { publicSub: period },
+  teachers: [
+    { email: 'bill@x', name: 'Billing', baseHours: 0 },
+    { email: 'cover@x', name: 'Cover', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' }
+  ],
+  substitutionRecords: [{
+    date: '2026-07-06', period: 1, className: '701', type: 'substitution',
+    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
+    subFee: '公費代課', status: 'approved'
+  }]
+});
+assert.equal(substituteAttributeCoverage.sheets.overtime.length, 0, '小鐘點被代課不應列入超鐘點工作表');
+assert.equal(substituteAttributeCoverage.sheets.publicSub.length, 0, '小鐘點被代課不應列入一般公付代課工作表');
+assert.equal(substituteAttributeCoverage.sheets.selfSub.length, 0, '小鐘點被代課不應列入自付代課工作表');
+const substituteCoverageRow = substituteAttributeCoverage.substituteAttributePlans[0].rows
+  .find(row => row.name === 'Cover');
+assert.ok(substituteCoverageRow, '小鐘點被代課應由實際授課人列入小鐘點表');
+assert.equal(substituteCoverageRow.note, '代課1節（7/6）');
+
+const substituteAttributeNotOvertimeSummary = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 1 }],
+  allSchedules: [
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' },
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' }
+  ],
+  monthlyReportRows: [{
+    email: 'bill@x', name: 'Billing', expensePlan: '國教',
+    weeklyOvertime: 1, scheduledOvertime: 1, reduceDeduction: 0
+  }],
+  substitutionRecords: [{
+    date: '2026-07-06', period: 1, className: '701', type: 'substitution',
+    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
+    subFee: '自費代課', status: 'approved',
+    courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
+  }]
+});
+assert.equal(substituteAttributeNotOvertimeSummary.sheets.overtime.length, 1, '小鐘點紀錄不應讓超鐘點摘要列被扣到消失');
+assert.equal(substituteAttributeNotOvertimeSummary.sheets.overtime[0].deduction, 0, '小鐘點紀錄不應扣超鐘點節數');
+assert.equal(substituteAttributeNotOvertimeSummary.sheets.overtime[0].note, '', '小鐘點紀錄不應出現在超鐘點摘要備註');
+
+const selfPaidSubstituteAttributeCoverage = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  periods: { publicSub: period },
+  teachers: [
+    { email: 'bill@x', name: 'Billing', baseHours: 0 },
+    { email: 'cover@x', name: 'Cover', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' }
+  ],
+  substitutionRecords: [{
+    date: '2026-07-06', period: 1, className: '701', type: 'substitution',
+    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
+    subFee: '自費代課', status: 'approved'
+  }]
+});
+assert.equal(selfPaidSubstituteAttributeCoverage.sheets.overtime.length, 0, '自費小鐘點被代課不應列入超鐘點工作表');
+assert.equal(selfPaidSubstituteAttributeCoverage.sheets.publicSub.length, 0, '自費小鐘點被代課不應列入公付代課工作表');
+assert.equal(selfPaidSubstituteAttributeCoverage.sheets.selfSub.length, 0, '自費小鐘點被代課不應列入自付代課工作表');
+assert.ok(selfPaidSubstituteAttributeCoverage.substituteAttributePlans[0].rows.some(row => row.name === 'Cover'), '自費小鐘點被代課仍應列入小鐘點表');
+
+const exchangedSubstituteAttribute = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-21',
+  reportEndDate: '2026-09-25',
+  reportWeeksCount: 1,
+  periods: { publicSub: { start: '2026-09-21', end: '2026-09-25' } },
+  teachers: [
+    { email: 'exchange-small@x', name: '交換小鐘點', baseHours: 0 },
+    { email: 'exchange-target@x', name: '交換對方', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'exchange-small@x', dayOfWeek: 2, period: 2, className: '705', subject: '生活科技', attr: '代課' },
+    { teacherEmail: 'exchange-target@x', dayOfWeek: 2, period: 5, className: '704', subject: '國文', attr: '一般' }
+  ],
+  substitutionRecords: [
+    {
+      id: 'exchange-small_1', requestId: 'exchange-small', date: '2026-09-22', period: 5,
+      type: 'exchange', originalTeacherEmail: 'exchange-target@x', actualTeacherEmail: 'exchange-small@x',
+      className: '705', subject: '生活科技', subFee: '無',
+      courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
+    },
+    {
+      id: 'exchange-small_2', requestId: 'exchange-small', date: '2026-09-22', period: 2,
+      type: 'exchange', originalTeacherEmail: 'exchange-small@x', actualTeacherEmail: 'exchange-target@x',
+      className: '704', subject: '國文', subFee: '無',
+      courseAttr: '一般', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: false
+    }
+  ]
+});
+assert.equal(exchangedSubstituteAttribute.sheets.overtime.length, 0, '調課後小鐘點不應列入超鐘點工作表');
+assert.equal(exchangedSubstituteAttribute.sheets.publicSub.length, 0, '調課後小鐘點不應列入一般公付代課工作表');
+assert.equal(exchangedSubstituteAttribute.substituteAttributePlans[0].rows[0].name, '交換小鐘點');
+assert.equal(exchangedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（9/22）', '調課後小鐘點應以實際授課日期列入小鐘點表');
 
 const publicLeaveTypes = build([
   {
@@ -311,8 +414,8 @@ const publicLeaveTypes = build([
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '身心調適假', status: 'approved'
   }
 ], 0, [
-  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' },
-  { teacherEmail: 'bill@x', dayOfWeek: 2, period: 2, className: '702', attr: '代課' }
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般' },
+  { teacherEmail: 'bill@x', dayOfWeek: 2, period: 2, className: '702', attr: '一般' }
 ]);
 assert.equal(publicLeaveTypes.sheets.publicSub.length, 1, '一般公付代課應留在公付代課工作表');
 assert.equal(publicLeaveTypes.sheets.publicSubAdjustment.length, 1, '身心調適假應獨立列入專用公付代課工作表');
