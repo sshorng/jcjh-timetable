@@ -587,9 +587,7 @@
       var group = groups[key];
       var count = group.count + group.combinedCount;
       var combinedNote = group.combinedCount
-        ? (group.count
-          ? '\uff08\u5176\u4e2d' + displayCount(group.combinedCount) + '\u7bc0\u5408\u73ed\u4e0d\u7d66\u4ee3\u8ab2\u8cbb\uff09'
-          : '\uff08\u5408\u73ed\u4e0d\u7d66\u4ee3\u8ab2\u8cbb\uff09')
+        ? '\uff08\u5408\u73ed' + displayCount(group.combinedCount) + '\u7bc0\u4e0d\u6392\uff09'
         : '';
       return group.date + group.label + '\u6263' + displayCount(count) + '\u7bc0' + combinedNote;
     }).filter(Boolean);

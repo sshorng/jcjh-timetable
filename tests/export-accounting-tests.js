@@ -400,7 +400,7 @@ const combinedReturn = build([{
 assert.equal(combinedReturn.sheets.overtime.length, 1, '合班回原紀錄仍應保留超鐘點摘要列');
 assert.equal(combinedReturn.sheets.overtime[0].deduction, 1, '合班回原紀錄仍應扣原教師超鐘點');
 assert.equal(combinedReturn.sheets.overtime[0].actualHours, 0, '合班回原紀錄不應產生原教師實得鐘點');
-assert.ok(combinedReturn.sheets.overtime[0].note.includes('7/13公假扣1節（合班不給代課費）'), '合班回原紀錄應在備註標明不給代課費');
+assert.ok(combinedReturn.sheets.overtime[0].note.includes('7/13公假扣1節（合班1節不排）'), '合班回原紀錄應在備註標明不排節數');
 assert.equal(combinedReturn.sheets.publicSub.length, 0);
 
 const combinedRegular = build([{
