@@ -1032,7 +1032,7 @@
       var scheduledOvertime = source.scheduledOvertime !== undefined
         ? Number(source.scheduledOvertime) || 0
         : (Number(source.weeklyOvertime) || 0) * weeks;
-      var sourceRecords = adjunct
+      var chargedSourceRecords = adjunct
         ? records.filter(function (record) {
           return isUsableSubstitution(record)
             && dateInPeriod(record.date, period)
@@ -1040,6 +1040,23 @@
             && teacherEmail(record.actualTeacherEmail);
         })
         : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex);
+      var chargedKeys = {};
+      chargedSourceRecords.forEach(function (record) {
+        chargedKeys[substitutionKey(record)] = true;
+      });
+      var allSourceRecords = records.filter(function (record) {
+        return isUsableSubstitution(record)
+          && dateInPeriod(record.date, period)
+          && sameTeacher(record.originalTeacherEmail, source)
+          && teacherEmail(record.actualTeacherEmail);
+      });
+      var sourceRecords = allSourceRecords.filter(function (record) {
+        var key = substitutionKey(record);
+        if (chargedKeys[key] || adjunct) return true;
+        if (scheduledOvertime <= 0) return false;
+        var plan = expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex);
+        return isDefaultExpensePlan(plan);
+      });
       sourceRecords
         .filter(function (record) { return !isCombinedReturnRecord(record); })
         .forEach(function (record) {
@@ -1050,10 +1067,9 @@
             record: record,
             source: source,
             plan: plan,
+            charged: adjunct || !!chargedKeys[key],
             routeToAdjunctSheet: adjunct,
-            routeToSubstituteSheet: scheduledOvertime > 0
-              && !adjunct
-              && isDefaultExpensePlan(plan)
+            routeToSubstituteSheet: false
           };
           result.byKey[key] = item;
           if (!result.byOriginal[email]) result.byOriginal[email] = [];
@@ -1171,11 +1187,13 @@
         if (config.key === 'adjunct' ? !adjunct : adjunct) return;
         var title = teacherTitle(t) || (adjunct ? '兼課教師' : '教師');
         var leave = leaveRecordsFor(source, records, period);
-        var chargedItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
-        if (chargedItems) {
-          chargedItems = config.key === 'overtime' && expectedPlan
-            ? chargedItems.filter(function (item) { return normalizeExpensePlan(item.plan) === expectedPlan; })
-            : chargedItems.slice();
+        var sourceItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
+        var chargedItems = null;
+        if (sourceItems) {
+          sourceItems = config.key === 'overtime' && expectedPlan
+            ? sourceItems.filter(function (item) { return normalizeExpensePlan(item.plan) === expectedPlan; })
+            : sourceItems.slice();
+          chargedItems = sourceItems.filter(function (item) { return item.charged !== false; });
         }
         var chargedRecordsForSource = chargedItems
           ? chargedItems.map(function (item) { return item.record; })
@@ -1256,10 +1274,10 @@
         // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
         var hasCombinedReturn = chargedCombinedRecords.length > 0;
         if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0 || hasCombinedReturn) rows.push(row);
-        var substitutionItems = config.key === 'overtime' && chargedItems
-          ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
-          : config.key === 'adjunct' && chargedItems
-            ? chargedItems.filter(function (item) { return item.routeToAdjunctSheet; })
+        var substitutionItems = config.key === 'overtime' && sourceItems
+          ? sourceItems.filter(function (item) { return !item.routeToSubstituteSheet; })
+          : config.key === 'adjunct' && sourceItems
+            ? sourceItems.filter(function (item) { return item.routeToAdjunctSheet; })
             : [];
         substitutionItems.forEach(function (item) {
           rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
