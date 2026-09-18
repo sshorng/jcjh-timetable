@@ -613,11 +613,11 @@
     });
     var notes = groupedCoverNoteParts(actualRecords, opts);
     if (!actualRecords.length) notes = notes.concat(legacySelfSubNoteParts(source && source.selfSubDetail));
-     var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex);
+    var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex);
     notes = notes.concat(leaveNoteParts(
       chargedRecords,
       publicUsed,
-      (leaveRecords || []).filter(isCombinedReturnRecord)
+      chargedRecords.filter(isCombinedReturnRecord)
     ));
     if (source && source.note) notes.push(source.note);
     return joinAccountingNotes(notes);
@@ -893,13 +893,6 @@
       });
   }
 
-  function overtimeChangeNote(scheduledHours, grossHours, deduction, actualHours) {
-    var scheduled = Number(scheduledHours) || 0;
-    var gross = Number(grossHours) || 0;
-    var deducted = Number(deduction) || 0;
-    var actual = Number(actualHours) || 0;
-    return scheduled !== gross || deducted !== 0 || actual !== gross ? '\u8b8a\u52d5' : '';
-  }
   function fallbackReportRow(teacher, allSchedules, period) {
     var email = teacherEmail(teacher && teacher.email);
     var schedules = (allSchedules || []).filter(function (s) {
@@ -1071,13 +1064,6 @@
     });
     return result;
   }
-  function substitutionSlotLabel(record) {
-    var d = dateObj(record && record.date);
-    var day = d ? dayNameForWeekday(d.getDay()) : '';
-    var label = String(record && record.period || '');
-    return day + label + '(\u4ee3)';
-  }
-
   function buildOvertimeSubstitutionRow(opts, source, teacherMap, item, serial) {
     var record = item.record;
     var actualTeacher = teacherFromMap(teacherMap, record.actualTeacherEmail, record.actualTeacherName);
@@ -1096,12 +1082,12 @@
       _teacherKey: teacherEmail(record.actualTeacherEmail),
       title: teacherTitle(actualTeacher) || '\u6559\u5e2b',
       name: teacherName(actualTeacher, record.actualTeacherName || record.actualTeacherEmail),
-      weeklyOvertime: count,
-      schedule: substitutionSlotLabel(record),
+      weeklyOvertime: '',
+      schedule: '',
       weeks: '',
-      grossHours: count,
-      deduction: 0,
-      actualHours: count,
+      grossHours: '',
+      deduction: '',
+      actualHours: '',
       rate: rate,
       amount: count * rate,
       reduceNote: '',
@@ -1125,16 +1111,19 @@
         return;
       }
       var merged = groups[key];
-      merged.weeklyOvertime = (Number(merged.weeklyOvertime) || 0) + (Number(row.weeklyOvertime) || 0);
-      merged.grossHours = (Number(merged.grossHours) || 0) + (Number(row.grossHours) || 0);
-      merged.deduction = (Number(merged.deduction) || 0) + (Number(row.deduction) || 0);
-      merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
       merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
-      merged.schedule = uniqueNotes([merged.schedule, row.schedule]).join('、');
       merged.note = joinAccountingNotes([merged.note, row.note]);
     });
     output.forEach(function (row, index) {
       if (!row) return;
+      if (row._rowKind === 'overtimeSubstitution') {
+        row.weeklyOvertime = '';
+        row.schedule = '';
+        row.weeks = '';
+        row.grossHours = '';
+        row.deduction = '';
+        row.actualHours = '';
+      }
       row.serial = index + 1;
       delete row._rowKind;
       delete row._teacherKey;
@@ -1193,6 +1182,17 @@
         var chargedRecordsForSource = chargedItems
           ? chargedItems.map(function (item) { return item.record; })
           : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex);
+        var chargedCombinedRecords = chargedSubstitutionRecords(
+          records,
+          opts.allSchedules || [],
+          source,
+          period,
+          schoolSwapIndex
+        ).filter(function (record) {
+          if (!isCombinedReturnRecord(record)) return false;
+          if (config.key !== 'overtime' || !expectedPlan) return true;
+          return normalizeExpensePlan(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
+        });
         var selfCount = allocation
           ? chargedRecordsForSource.filter(isSelfPaidRecord).length
           : leave.filter(isSelfPaidRecord).length;
@@ -1231,12 +1231,11 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
-        var overtimeNotes = [overtimeChangeNote(scheduledOvertime, grossHours, deduction, actualHours)]
-          .concat(leaveNoteParts(
-            chargedRecordsForSource,
-            publicUsed,
-            leave.filter(isCombinedReturnRecord)
-          ));
+        var overtimeNotes = leaveNoteParts(
+          chargedRecordsForSource,
+          publicUsed,
+          chargedCombinedRecords
+        );
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
           : summaryNote(opts, sourceRow, period, leave, publicUsed, schoolSwapIndex);
@@ -1257,7 +1256,7 @@
           note: notes
         };
         // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
-        var hasCombinedReturn = leave.some(isCombinedReturnRecord);
+        var hasCombinedReturn = chargedCombinedRecords.length > 0;
         if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0 || hasCombinedReturn) rows.push(row);
         var substitutionItems = config.key === 'overtime' && chargedItems
           ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
