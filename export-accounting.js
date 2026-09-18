@@ -2,7 +2,7 @@
  * 會計核銷版 Excel 匯出
  *
  * 這個模組只負責兩件事：
- * 1. 依現有前端資料產生五類核銷資料與匯出前摘要。
+ * 1. 依現有前端資料產生六類核銷資料與匯出前摘要。
  * 2. 載入去識別化的會計範本，保留版面後寫入資料。
  *
  * 扣勞健保／實際金額刻意保持空白，避免在系統尚無扣款來源時誤算。
@@ -55,8 +55,19 @@
       index: 2,
       key: 'publicSub',
       label: '公付代課',
-      suffix: '公假代課',
-      titleSuffix: '公假代課鐘點費印領清冊',
+      suffix: '公付代課',
+      titleSuffix: '公付代課鐘點費印領清冊',
+      dataStart: 3,
+      templateTotalRow: 14,
+      columns: 15,
+      kind: 'public'
+    },
+    publicSubAdjustment: {
+      index: 5,
+      key: 'publicSubAdjustment',
+      label: '公付代課-身心調適假',
+      suffix: '公付代課-身心調適假',
+      titleSuffix: '公付代課-身心調適假鐘點費印領清冊',
       dataStart: 3,
       templateTotalRow: 14,
       columns: 15,
@@ -533,7 +544,7 @@
     }, 0);
   }
 
-  function groupedCoverNoteParts(records, opts) {
+  function groupedCoverNoteParts(records, opts, includeReason) {
     var groups = {};
     var order = [];
     (records || []).slice().sort(function (a, b) {
@@ -543,19 +554,24 @@
       var name = lookupTeacherName(opts, record.originalTeacherEmail, record.originalTeacherName || '');
       var key = teacherEmail(record.originalTeacherEmail) + '|' + name;
       if (!groups[key]) {
-        groups[key] = { name: name, dates: [], count: 0 };
+        groups[key] = { name: name, dates: [], count: 0, reasons: [] };
         order.push(key);
       }
       var group = groups[key];
       var date = shortDate(record.date);
       if (date && group.dates.indexOf(date) < 0) group.dates.push(date);
+      var leaveReason = reason(record);
+      if (includeReason && leaveReason && group.reasons.indexOf(leaveReason) < 0) group.reasons.push(leaveReason);
       group.count += periodCount(record, false);
     });
     return order.map(function (key) {
       var group = groups[key];
       var dates = group.dates.join('、');
       var name = group.name ? '代' + group.name : '代課';
-      return dates + name + displayCount(group.count) + '節';
+      var reasonNote = includeReason && group.reasons.length
+        ? '（假別：' + group.reasons.join('、') + '）'
+        : '';
+      return dates + name + displayCount(group.count) + '節' + reasonNote;
     }).filter(Boolean);
   }
 
@@ -796,6 +812,10 @@
   function isPublicPayoutRecord(record) {
     var fee = subFee(record);
     return isPublicOvertimeRecord(record) || fee === '\u6d3b\u52d5\u516c\u8cbb';
+  }
+
+  function isMindBodyAdjustmentLeave(record) {
+    return reason(record) === '身心調適假';
   }
 
   function isDefaultExpensePlan(value) {
@@ -1306,14 +1326,16 @@
     return cls + subj;
   }
 
-  function publicRows(opts, period, chargedMap) {
+  function publicRows(opts, period, chargedMap, adjustmentOnly) {
     var teacherMap = {};
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     var groups = {};
     (opts.substitutionRecords || []).filter(function (r) {
+      var isAdjustment = isMindBodyAdjustmentLeave(r);
       return isUsableSubstitution(r) && !isCombinedReturnRecord(r)
         && dateInPeriod(r.date, period) && isPublicPayoutRecord(r) && r.actualTeacherEmail
+        && Boolean(adjustmentOnly) === isAdjustment
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).forEach(function (r) {
@@ -1331,7 +1353,7 @@
       var firstRecord = group.records[0] || {};
       var t = teacherFromMap(teacherMap, email, group.name || firstRecord.actualTeacherName);
       var name = teacherName(t, group.name || firstRecord.actualTeacherName || email);
-      var notes = groupedCoverNoteParts(group.records, opts);
+      var notes = groupedCoverNoteParts(group.records, opts, true);
       return {
         serial: idx + 1,
         title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1543,11 +1565,13 @@
       summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
     });
 
-    [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
-      var period = getPeriod(periods, config.key, opts.reportMonth);
+    [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
+      var periodKey = config.key === 'publicSubAdjustment' ? 'publicSub' : config.key;
+      var period = getPeriod(periods, periodKey, opts.reportMonth);
       var periodChargedMap = buildChargedRecordMap(opts, period, schoolSwapIndex);
       if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
-      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap);
+      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false);
+      if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true);
       if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap);
       if (config.key === 'mentor') data.sheets[config.key] = mentorRows(opts, period);
       summaryFor(config.key, config.label, data.sheets[config.key]);
@@ -1566,7 +1590,7 @@
     }).forEach(function (r) {
       data.warnings.push('代課紀錄 ' + (r.date || '') + ' 缺少實際代課教師，未列入會計表。');
     });
-    if (!data.summary.some(function (x) { return x.count > 0; })) data.warnings.push('目前五類範圍內沒有可匯出的資料。');
+    if (!data.summary.some(function (x) { return x.count > 0; })) data.warnings.push('目前會計匯出範圍內沒有可匯出的資料。');
     return data;
   }
   function firstTitleCell(sheet, columns) {
@@ -1631,7 +1655,7 @@
     if (!config) return 0;
     if (config.key === 'overtime') return 15;
     if (config.key === 'adjunct') return 14;
-    if (config.key === 'publicSub' || config.key === 'substituteAttribute') return 9;
+    if (config.key === 'publicSub' || config.key === 'publicSubAdjustment' || config.key === 'substituteAttribute') return 9;
     if (config.key === 'selfSub' || config.key === 'mentor') return 9;
     return 0;
   }
@@ -1855,6 +1879,7 @@
     if (!overtimeTemplate) throw new Error('範本缺少工作表：' + overtimeConfig.label);
     var publicSubTemplate = workbook.worksheets[SHEET_CONFIG.publicSub.index];
     if (!publicSubTemplate) throw new Error('範本缺少工作表：' + SHEET_CONFIG.publicSub.label);
+    var baseSheetRefs = [];
     var planSheets = [];
     (data.overtimePlans || []).forEach(function (group, index) {
       planSheets.push({
@@ -1870,10 +1895,12 @@
         sheet: cloneWorksheet(publicSubTemplate, workbook, '__substitute_attribute_' + index, substituteAttributeConfig.columns)
       };
     });
-    [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
+    [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
       var sheet = workbook.worksheets[config.index];
       if (!sheet) throw new Error('範本缺少工作表：' + config.label);
-      var period = getPeriod(data.periods, config.key, opts.reportMonth);
+      baseSheetRefs.push(sheet);
+      var periodKey = config.key === 'publicSubAdjustment' ? 'publicSub' : config.key;
+      var period = getPeriod(data.periods, periodKey, opts.reportMonth);
       var plan = null;
       var titleCell = firstTitleCell(sheet, config.columns);
       titleCell.value = titleFor(config, opts.reportMonth, period, plan);
@@ -1927,7 +1954,7 @@
     if (!planSheets.length && typeof workbook.removeWorksheet === 'function') {
       workbook.removeWorksheet(overtimeTemplate.id);
     }
-    var baseSheets = workbook.worksheets.filter(function (sheet) {
+    var baseSheets = baseSheetRefs.filter(function (sheet) {
       return planSheets.every(function (entry) { return entry.sheet !== sheet; })
         && substituteAttributeSheets.every(function (entry) { return entry.sheet !== sheet; });
     });
@@ -1961,8 +1988,8 @@
     } catch (e) {
       throw new Error('會計範本讀取失敗，請重新整理後再試：' + (e && e.message ? e.message : e));
     }
-    if (!workbook || !Array.isArray(workbook.worksheets) || workbook.worksheets.length < 5) {
-      throw new Error('會計範本缺少五個工作表，請確認 templates/accounting-template.xlsx。');
+    if (!workbook || !Array.isArray(workbook.worksheets) || workbook.worksheets.length < 6) {
+      throw new Error('會計範本缺少六個工作表，請確認 templates/accounting-template.xlsx。');
     }
     if (!data || !data.sheets) {
       throw new Error('會計匯出資料建立失敗，請重新整理資料後再試。');

@@ -39,7 +39,8 @@ await fs.writeFile(outputPath, Buffer.from(result.buffer));
 
 const check = new ExcelJS.Workbook();
 await check.xlsx.load(result.buffer);
-const mentor = check.worksheets[4];
+const mentor = check.worksheets.find(sheet => sheet.name.includes("代導鐘點"));
+if (!mentor) throw new Error("代導鐘點工作表不存在");
 const noteValues = [mentor.getCell("J3").value, mentor.getCell("J4").value];
 const noteHeights = [mentor.getRow(3).height, mentor.getRow(4).height];
 console.log(JSON.stringify({

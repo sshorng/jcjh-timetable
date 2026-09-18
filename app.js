@@ -7268,7 +7268,7 @@ createApp({
         XLSX.writeFile(wb, `全校大鐘點早自習1-7午休與第8節費_${rangeLabel}.xlsx`);
     };
 
-    // 匯出會計版五類 Excel（套用上方日期區間；扣勞健保／實際金額留白）
+    // 匯出會計版六類 Excel（套用上方日期區間；扣勞健保／實際金額留白）
     const exportSubFeeToExcel = async () => {
       if (accountingExportLoading.value) return;
       accountingExportLoading.value = true;
@@ -7318,7 +7318,7 @@ createApp({
         const message = '將套用上方結算日期區間下載單一 Excel：\n\n結算區間：' + start + '～' + end
           + '\n自動計算：' + weeks + ' 週\n\n' + summaryLines.join('\n')
           + blockingLines + warningLines + '\n\n扣勞健保與實際金額欄位會留白。';
-        const confirmed = await showConfirm(message, '匯出會計版五類 Excel');
+        const confirmed = await showConfirm(message, '匯出會計版六類 Excel');
         if (!confirmed) return;
         if (preview.blocking && preview.blocking.length) {
           showToast('請先補齊超鐘點經費來源，才能匯出會計 Excel。', 'warning');

@@ -292,6 +292,25 @@ assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Bill
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
 
+const publicLeaveTypes = build([
+  {
+    date: '2026-07-13', period: 1, className: '701', type: 'substitution',
+    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '公假', status: 'approved'
+  },
+  {
+    date: '2026-07-14', period: 2, className: '702', type: 'substitution',
+    originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', reason: '身心調適假', status: 'approved'
+  }
+], 0, [
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '代課' },
+  { teacherEmail: 'bill@x', dayOfWeek: 2, period: 2, className: '702', attr: '代課' }
+]);
+assert.equal(publicLeaveTypes.sheets.publicSub.length, 1, '一般公付代課應留在公付代課工作表');
+assert.equal(publicLeaveTypes.sheets.publicSubAdjustment.length, 1, '身心調適假應獨立列入專用公付代課工作表');
+assert.ok(publicLeaveTypes.sheets.publicSub[0].note.includes('假別：公假'), '公付代課備註應標示假別');
+assert.equal(publicLeaveTypes.sheets.publicSub[0].note.includes('身心調適假'), false, '一般公付代課表不應混入身心調適假');
+assert.ok(publicLeaveTypes.sheets.publicSubAdjustment[0].note.includes('假別：身心調適假'), '身心調適假備註應標示假別');
+
 const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-09',
   periods: { publicSub: { start: '2026-09-01', end: '2026-09-30' } },
