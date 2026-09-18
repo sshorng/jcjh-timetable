@@ -1492,18 +1492,34 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
-        var dates = group.details.map(function (detail) {
-          return {
-            key: String(detail.date || '').slice(0, 10),
-            label: shortDate(detail.date)
-          };
-        }).filter(function (item) {
-          return item.label;
-        }).sort(function (left, right) {
-          return left.key.localeCompare(right.key);
-        }).map(function (item, dateIndex, all) {
-          return dateIndex === 0 || item.key !== all[dateIndex - 1].key ? item.label : '';
-        }).filter(Boolean);
+        var noteGroups = {};
+        group.details.forEach(function (detail) {
+          var target = String(detail.substituteForName || '').trim();
+          var key = target || '__default__';
+          if (!noteGroups[key]) noteGroups[key] = [];
+          noteGroups[key].push(detail);
+        });
+        var noteParts = Object.keys(noteGroups).sort(function (left, right) {
+          if (left === '__default__') return 1;
+          if (right === '__default__') return -1;
+          return left.localeCompare(right, 'zh-Hant', { numeric: true });
+        }).map(function (key) {
+          var noteDetails = noteGroups[key];
+          var noteDates = noteDetails.map(function (detail) {
+            return {
+              key: String(detail.date || '').slice(0, 10),
+              label: shortDate(detail.date)
+            };
+          }).filter(function (item) {
+            return item.label;
+          }).sort(function (left, right) {
+            return left.key.localeCompare(right.key);
+          }).map(function (item, dateIndex, all) {
+            return dateIndex === 0 || item.key !== all[dateIndex - 1].key ? item.label : '';
+          }).filter(Boolean);
+          var prefix = key === '__default__' ? '代課' : '代' + key;
+          return prefix + displayCount(noteDetails.length) + '節（' + noteDates.join('、') + '）';
+        });
         return {
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
@@ -1511,7 +1527,7 @@
           hours: group.hours,
           rate: FEE_DEFAULT,
           amount: group.hours * FEE_DEFAULT,
-          note: '代課' + displayCount(group.hours) + '節（' + dates.join('、') + '）'
+          note: noteParts.join('；')
         };
       });
       return { plan: source, rows: rows };

@@ -323,7 +323,7 @@ assert.equal(substituteAttributeCoverage.sheets.selfSub.length, 0, '小鐘點被
 const substituteCoverageRow = substituteAttributeCoverage.substituteAttributePlans[0].rows
   .find(row => row.name === 'Cover');
 assert.ok(substituteCoverageRow, '小鐘點被代課應由實際授課人列入小鐘點表');
-assert.equal(substituteCoverageRow.note, '代課1節（7/6）');
+assert.equal(substituteCoverageRow.note, '代Billing1節（7/6）', '小鐘點備註應標出被代的原任教師');
 
 const substituteAttributeNotOvertimeSummary = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

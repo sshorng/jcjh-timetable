@@ -972,6 +972,14 @@ window.DomainBilling = (function () {
     );
   }
 
+  function teacherDisplayName(value, teachers) {
+    var keys = teacherKeys(value);
+    var teacher = (teachers || []).find(function (candidate) {
+      return hasCommonKey(keys, teacherKeys(candidate));
+    });
+    return String(teacher && (teacher.name || teacher.teacherName || teacher['教師姓名']) || value || '').trim();
+  }
+
   /**
    * 請假那堂是否為需扣超鐘點的正式課程（對照原任＋星期＋節次＋班級）
    * 早自習0、1～7與午休45皆依原課表屬性判定
@@ -1153,13 +1161,19 @@ window.DomainBilling = (function () {
       if (coverSeen[key]) return;
       coverSeen[key] = true;
       result.paid += 1;
-      result.paidDetails.push({
+      var substituteForName = teacherDisplayName(
+        record.originalTeacherName || record.originalTeacherEmail,
+        opts.teachers
+      );
+      var detail = {
         date: dateStr,
         period: period,
         className: String(record.className || record['班級'] || '').trim(),
         subject: String(record.subject || record['科目'] || '').trim(),
         source: smallCourseDetailSource(record, schedules, opts.teachers, opts.schoolSwapIndex)
-      });
+      };
+      if (substituteForName) detail.substituteForName = substituteForName;
+      result.paidDetails.push(detail);
     });
     return result;
   }
