@@ -101,6 +101,116 @@ window.FieldMap = (function () {
     return Math.round(n * 1000) / 1000;
   }
 
+  const FIXED_OVERTIME_PERIOD_ORDER = [0, 1, 2, 3, 4, 45, 5, 6, 7];
+  const FIXED_OVERTIME_DAY_TEXT = ['', '一', '二', '三', '四', '五'];
+
+  function fixedOvertimeDayNumber(raw) {
+    const value = String(raw == null ? '' : raw).trim()
+      .replace(/^星期|^週/, '').replace(/日$/, '');
+    const map = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5 };
+    if (map[value]) return map[value];
+    const n = parseInt(value, 10);
+    return n >= 1 && n <= 5 ? n : 0;
+  }
+
+  function fixedOvertimePeriodNumber(raw) {
+    const value = String(raw == null ? '' : raw).trim()
+      .replace(/^第\s*/, '').replace(/節$/, '');
+    if (value === '早自習') return 0;
+    if (value === '午休') return 45;
+    const n = parseInt(value, 10);
+    return n === 0 || n === 45 || (n >= 1 && n <= 7) ? n : NaN;
+  }
+
+  function fixedOvertimeSlotFromValue(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const day = fixedOvertimeDayNumber(value.dayOfWeek != null ? value.dayOfWeek
+        : (value.day != null ? value.day : value['星期']));
+      const period = fixedOvertimePeriodNumber(value.period != null ? value.period : value['節次']);
+      if (day && Number.isFinite(period)) return { dayOfWeek: day, period: period };
+      return null;
+    }
+    let text = String(value == null ? '' : value).trim();
+    if (!text) return null;
+    text = text.replace(/^固定超鐘點[:：]/, '').trim();
+    let match = text.match(/^(?:星期|週)?([一二三四五1-5])\s*(?:第\s*)?(早自習|午休|45|[0-7])\s*節?$/);
+    if (!match) match = text.match(/^([1-5])\s*[|:/-]\s*(早自習|午休|45|[0-7])\s*節?$/);
+    if (!match) return null;
+    const day = fixedOvertimeDayNumber(match[1]);
+    const period = fixedOvertimePeriodNumber(match[2]);
+    return day && Number.isFinite(period) ? { dayOfWeek: day, period: period } : null;
+  }
+
+  function fixedOvertimeSlotKey(slot) {
+    return String(slot.dayOfWeek) + '|' + String(slot.period);
+  }
+
+  function fixedOvertimeSlotLabel(slot) {
+    const day = FIXED_OVERTIME_DAY_TEXT[Number(slot.dayOfWeek)] || '';
+    const period = Number(slot.period);
+    const periodText = period === 0 ? '早自習' : (period === 45 ? '午休' : String(period));
+    return day + periodText;
+  }
+
+  /** 解析教師學期固定超鐘點節次，標準顯示格式為「一2、三5」。 */
+  function parseFixedOvertimeSlots(raw) {
+    let values = raw;
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (!text) values = [];
+      else {
+        try {
+          const parsed = JSON.parse(text);
+          values = Array.isArray(parsed) ? parsed : text;
+        } catch (e) {
+          values = text.split(/[、,，;；\n]+/);
+        }
+      }
+    }
+    if (!Array.isArray(values)) values = [values];
+    const seen = {};
+    return values.map(fixedOvertimeSlotFromValue).filter(function (slot) {
+      if (!slot) return false;
+      const key = fixedOvertimeSlotKey(slot);
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).sort(function (left, right) {
+      return Number(left.dayOfWeek) - Number(right.dayOfWeek)
+        || FIXED_OVERTIME_PERIOD_ORDER.indexOf(Number(left.period))
+          - FIXED_OVERTIME_PERIOD_ORDER.indexOf(Number(right.period));
+    });
+  }
+
+  function serializeFixedOvertimeSlots(raw) {
+    return parseFixedOvertimeSlots(raw).map(fixedOvertimeSlotLabel).join('、');
+  }
+
+  function fixedOvertimeSetting(row) {
+    const rawHours = pick(row, ['超鐘點節數', 'fixedOvertimeHours', 'overtimeHours']);
+    const rawSlots = pick(row, ['超鐘點節次', 'fixedOvertimeSlots', 'fixedOvertimeSlotsText', 'overtimeSlots']);
+    const slots = parseFixedOvertimeSlots(rawSlots);
+    const hasHours = rawHours !== undefined && rawHours !== null && String(rawHours).trim() !== '';
+    const hasSlots = rawSlots !== undefined && rawSlots !== null
+      && (Array.isArray(rawSlots) ? rawSlots.length > 0 : String(rawSlots).trim() !== '');
+    const configured = row && row.fixedOvertimeConfigured !== undefined
+      ? row.fixedOvertimeConfigured === true
+      : (hasHours || hasSlots);
+    const hours = hasHours ? asInt(rawHours, -1) : slots.length;
+    const valid = configured && hours >= 0 && hours <= 40 && slots.length === hours;
+    return {
+      configured: configured,
+      valid: valid,
+      hours: hours >= 0 ? hours : 0,
+      slots: slots,
+      slotKeys: slots.map(fixedOvertimeSlotKey),
+      slotsText: slots.map(fixedOvertimeSlotLabel).join('、'),
+      error: !configured ? '' : (hours < 0 || hours > 40
+        ? '超鐘點節數須介於 0 至 40 節'
+        : (slots.length !== hours ? '超鐘點節數須與固定節次數量一致' : ''))
+    };
+  }
+
   function mapSemester(s) {
     return {
       id: pick(s, ['學期代號', 'id']),
@@ -437,6 +547,7 @@ window.FieldMap = (function () {
     const loginEmail = String(pick(t, ['教師Email', 'loginEmail', 'email']) || '').trim().toLowerCase();
     const name = pick(t, ['教師姓名', 'teacherName', 'name']) || '';
     const jobTitle = String(pick(t, ['職務', '職稱', 'jobTitle']) || '');
+    const fixedOvertime = fixedOvertimeSetting(t);
     return {
       loginEmail: loginEmail,
       // Email is retained only as the roster login field; domain keys use teacherName.
@@ -449,7 +560,13 @@ window.FieldMap = (function () {
       role: normalizeTeacherRole(pick(t, ['系統角色', 'role']), jobTitle),
       baseHours: asInt(pick(t, ['基本鐘點', 'baseHours']), 16),
       // 折抵額度：釋出 1 節＝1；扣額度須滿 1 才扣 1
-      mutualQuota: asFloat(pick(t, ['折抵額度', 'mutualQuota']), 0)
+      mutualQuota: asFloat(pick(t, ['折抵額度', 'mutualQuota']), 0),
+      fixedOvertimeHours: fixedOvertime.hours,
+      fixedOvertimeSlots: fixedOvertime.slotKeys,
+      fixedOvertimeSlotsText: fixedOvertime.slotsText,
+      fixedOvertimeConfigured: fixedOvertime.configured,
+      fixedOvertimeValid: fixedOvertime.valid,
+      fixedOvertimeConfigError: fixedOvertime.error
     };
   }
 
@@ -662,6 +779,7 @@ window.FieldMap = (function () {
       : String(rawExpensePlan == null ? '' : rawExpensePlan).trim();
     const quota = t.mutualQuota !== undefined ? t.mutualQuota
       : (t["折抵額度"] !== undefined ? t["折抵額度"] : 0);
+    const fixedOvertime = fixedOvertimeSetting(t);
     return {
       "學期代號": semesterId || t.semesterId || '',
       "教師Email": t.loginEmail || t["教師Email"] || t.email,
@@ -684,7 +802,9 @@ window.FieldMap = (function () {
         }
         return 16;
       })(),
-      "折抵額度": parseInt(quota, 10) || 0
+      "折抵額度": parseInt(quota, 10) || 0,
+      "超鐘點節數": fixedOvertime.configured ? fixedOvertime.hours : '',
+      "超鐘點節次": fixedOvertime.configured ? fixedOvertime.slotsText : ''
     };
   }
 
@@ -847,6 +967,9 @@ window.FieldMap = (function () {
        mapClassAwayEvent,
        mapSchoolSwap,
     mapTeacher,
+     parseFixedOvertimeSlots,
+     serializeFixedOvertimeSlots,
+     fixedOvertimeSetting,
     normalizeSpecialTags,
     hasScheduleSpecialTag,
     isOvertimeSchedule,

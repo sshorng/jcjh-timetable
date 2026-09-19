@@ -125,6 +125,58 @@ function normalizeTeacherRole_(teacher) {
   return normalizeRole_(rawRole || "teacher");
 }
 
+/** 學期固定超鐘點欄位：儲存為可讀的「一2、三5」並在後端再次驗證。 */
+function normalizeFixedOvertimeFields_(row) {
+  row = row || {};
+  var hasHoursField = Object.prototype.hasOwnProperty.call(row, "超鐘點節數")
+    || Object.prototype.hasOwnProperty.call(row, "fixedOvertimeHours");
+  var hasSlotsField = Object.prototype.hasOwnProperty.call(row, "超鐘點節次")
+    || Object.prototype.hasOwnProperty.call(row, "fixedOvertimeSlotsText")
+    || Object.prototype.hasOwnProperty.call(row, "fixedOvertimeSlots");
+  if (!hasHoursField && !hasSlotsField) return row;
+  var hoursRaw = row["超鐘點節數"] != null ? row["超鐘點節數"] : row.fixedOvertimeHours;
+  var slotsRaw = row["超鐘點節次"] != null ? row["超鐘點節次"] : (row.fixedOvertimeSlotsText || row.fixedOvertimeSlots);
+  var hoursText = String(hoursRaw == null ? "" : hoursRaw).trim();
+  var slotsText = String(slotsRaw == null ? "" : slotsRaw).trim();
+  if (!hoursText && !slotsText) {
+    row["超鐘點節數"] = "";
+    row["超鐘點節次"] = "";
+    return row;
+  }
+  var hours = hoursText === "" ? null : Number(hoursText);
+  if (hours !== null && (!isFinite(hours) || Math.floor(hours) !== hours || hours < 0 || hours > 40)) {
+    throw new Error("超鐘點節數須為 0 至 40 的整數");
+  }
+  var tokens = slotsText.split(/[、,，;；\n]+/).map(function (value) { return String(value || "").trim(); }).filter(Boolean);
+  var dayText = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5 };
+  var periodOrder = [0, 1, 2, 3, 4, 45, 5, 6, 7];
+  var seen = {};
+  var normalized = [];
+  tokens.forEach(function (token) {
+    var match = token.match(/^(?:星期|週)?([一二三四五1-5])\s*(?:第\s*)?(早自習|午休|45|[0-7])\s*節?$/);
+    if (!match) throw new Error("固定超鐘點節次格式錯誤：「" + token + "」");
+    var day = dayText[match[1]] || parseInt(match[1], 10);
+    var periodText = match[2];
+    var period = periodText === "早自習" ? 0 : (periodText === "午休" ? 45 : parseInt(periodText, 10));
+    var key = day + "|" + period;
+    if (seen[key]) return;
+    seen[key] = true;
+    normalized.push({ day: day, period: period });
+  });
+  normalized.sort(function (left, right) {
+    return left.day - right.day || periodOrder.indexOf(left.period) - periodOrder.indexOf(right.period);
+  });
+  if (hours === null) hours = normalized.length;
+  if (normalized.length !== hours) throw new Error("超鐘點節數須與固定節次數量一致");
+  row["超鐘點節數"] = hours;
+  row["超鐘點節次"] = normalized.map(function (slot) {
+    var day = ["", "一", "二", "三", "四", "五"][slot.day];
+    var period = slot.period === 0 ? "早自習" : (slot.period === 45 ? "午休" : String(slot.period));
+    return day + period;
+  }).join("、");
+  return row;
+}
+
 function resolveTeacherRole_(userEmail, teachers) {
   var email = String(userEmail || "").trim().toLowerCase();
   var supers = getSuperAdminEmails_();
@@ -890,7 +942,7 @@ function getHeadersForSheet(sheetName) {
   const defaults = {
     "學期設定": ["學期代號", "學期名稱", "開始日期", "結束日期", "結算日期", "是否預設"],
     // Teacher roster keeps login Email; the four domain sheets use names as relation keys.
-    "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度"],
+    "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度", "超鐘點節數", "超鐘點節次"],
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
     "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
     "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註"],
@@ -2221,7 +2273,11 @@ function slimTeacherRows_(rows, fallbackSemesterId) {
       "鐘點支出計畫": t["鐘點支出計畫"] || t["鐘點支出來源"] || t["支出計畫"] || t["計畫"] || t.expensePlan || t.plan || "",
       "系統角色": normalizeTeacherRole_(t),
       "基本鐘點": t["基本鐘點"] != null && t["基本鐘點"] !== "" ? t["基本鐘點"] : (t.baseHours != null ? t.baseHours : 16),
-      "折抵額度": t["折抵額度"] != null && t["折抵額度"] !== "" ? t["折抵額度"] : (t.mutualQuota != null ? t.mutualQuota : 0)
+      "折抵額度": t["折抵額度"] != null && t["折抵額度"] !== "" ? t["折抵額度"] : (t.mutualQuota != null ? t.mutualQuota : 0),
+      "超鐘點節數": t["超鐘點節數"] != null && t["超鐘點節數"] !== ""
+        ? t["超鐘點節數"] : (t.fixedOvertimeHours != null ? t.fixedOvertimeHours : ""),
+      "超鐘點節次": t["超鐘點節次"] != null && t["超鐘點節次"] !== ""
+        ? t["超鐘點節次"] : (t.fixedOvertimeSlotsText || t.fixedOvertimeSlots || "")
     };
   });
 }
@@ -6548,6 +6604,7 @@ function doPost(e) {
       delete reqData.teachersToCopy;
       saveRows("學期設定", [reqData], "學期代號");
       if (teachersToCopy && teachersToCopy.length > 0) {
+      teachersToCopy.forEach(normalizeFixedOvertimeFields_);
       saveRows("教師名單", teachersToCopy, "教師Email");
       }
       // 廣播清除所有學期快取（含公開課表）
@@ -6687,6 +6744,7 @@ function doPost(e) {
           || reqData["職務"] != null || reqData.jobTitle != null) {
         reqData["系統角色"] = normalizeTeacherRole_(reqData);
       }
+      normalizeFixedOvertimeFields_(reqData);
       saveRows("教師名單", [reqData], "教師Email");
       invalidateScheduleCaches_(semesterId);
       
@@ -6709,6 +6767,7 @@ function doPost(e) {
         if (t["系統角色"] != null || t.role != null || t["職務"] != null || t.jobTitle != null) {
           t["系統角色"] = normalizeTeacherRole_(t);
         }
+        normalizeFixedOvertimeFields_(t);
         return t;
       });
       var importNamesByEmail = {};

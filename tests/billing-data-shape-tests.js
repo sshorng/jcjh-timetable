@@ -36,6 +36,18 @@ assert.equal(substituteSchedule.isSubstitute, true);
 assert.equal(window.DomainBilling.isWeeklyHoursSlot(substituteSchedule), false);
 assert.equal(window.DomainBilling.isSubstituteScheduleSlot(substituteSchedule), true);
 
+const fixedTeacher = window.FieldMap.mapTeacher({
+  '教師Email': 'fixed@school.example',
+  '教師姓名': '固定教師',
+  '超鐘點節數': 2,
+  '超鐘點節次': '三5、 一2、三5'
+});
+assert.equal(fixedTeacher.fixedOvertimeHours, 2);
+assert.equal(fixedTeacher.fixedOvertimeSlotsText, '一2、三5');
+assert.equal(fixedTeacher.fixedOvertimeConfigured, true);
+assert.equal(fixedTeacher.fixedOvertimeValid, true);
+assert.equal(window.FieldMap.serializeFixedOvertimeSlots([{ dayOfWeek: 1, period: 0 }, { dayOfWeek: 5, period: 45 }]), '一早自習、五午休');
+
 const request = window.FieldMap.mapRequest({
   '狀態': '已核准',
   '申請人姓名': 'Billing',
@@ -213,7 +225,38 @@ assert.deepEqual([
   awayFixedRow.expensePlanAllocations[0].grossHours,
   awayFixedRow.expensePlanAllocations[0].deduction,
   awayFixedRow.expensePlanAllocations[0].actualHours
-], [2, 28, 28, 0, 28], '任何空堂事件未授課都應扣固定超鐘點');
+], [0, 30, 30, 0, 30], '超鐘點不因任何空堂事件未授課而扣減');
+
+const fixedSnapshotRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{
+    email: 'snapshot@x', name: '快照教師', baseHours: 16,
+    fixedOvertimeHours: 2, fixedOvertimeSlots: '一1、三2'
+  }],
+  allSchedules: [
+    { teacherEmail: 'snapshot@x', dayOfWeek: 1, period: 1, className: 'F01', attr: '一般' },
+    { teacherEmail: 'snapshot@x', dayOfWeek: 3, period: 2, className: 'F02', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'snapshot@x', dayOfWeek: 5, period: 7, className: 'N01', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    { date: '2026-07-06', period: 1, className: 'F01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-public@x', subFee: '公費代課' },
+    { date: '2026-07-08', period: 2, className: 'F02', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-self@x', subFee: '自費代課' },
+    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-public-2@x', subFee: '公費代課' },
+    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-self-2@x', subFee: '自費代課' }
+  ],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-06',
+  reportEndDate: '2026-07-17',
+  reportWeeksCount: 2
+})[0];
+assert.deepEqual([
+  fixedSnapshotRow.weeklyOvertime,
+  fixedSnapshotRow.scheduledOvertime,
+  fixedSnapshotRow.publicOvertimeUsed,
+  fixedSnapshotRow.selfPaidDeduction,
+  fixedSnapshotRow.actualOvertime,
+  fixedSnapshotRow.expensePlanAllocations[0].rawHours,
+  fixedSnapshotRow.expensePlanAllocations[0].deduction
+], [2, 4, 1, 1, 2, 4, 2], '學期固定節數應優先於臨時課表，且只扣固定節次代課');
 
 const substitutedFixedRow = window.DomainBilling.buildMonthlyReportRows(Object.assign({}, fixedInput, {
   substitutionRecords: [{

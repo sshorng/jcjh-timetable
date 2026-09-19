@@ -665,7 +665,7 @@
     });
     var notes = groupedCoverNoteParts(actualRecords, opts);
     if (!actualRecords.length) notes = notes.concat(legacySelfSubNoteParts(source && source.selfSubDetail));
-    var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex);
+    var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex, source);
     notes = notes.concat(leaveNoteParts(
       chargedRecords,
       publicUsed,
@@ -859,6 +859,20 @@
     return n === 0 || n === 45 || (n >= 1 && n <= 7);
   }
 
+  function fixedOvertimeSetting(teacher) {
+    if (root.FieldMap && typeof root.FieldMap.fixedOvertimeSetting === 'function') {
+      return root.FieldMap.fixedOvertimeSetting(teacher || {});
+    }
+    return { configured: false, valid: false, hours: 0, slots: [], slotKeys: [], slotsText: '' };
+  }
+
+  function isFixedOvertimeRecord(record, teacher, schoolSwapIndex) {
+    var setting = fixedOvertimeSetting(teacher);
+    if (!setting.configured || !setting.valid) return false;
+    var slot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
+    return setting.slotKeys.indexOf(String(slot.dayOfWeek) + '|' + String(slot.period)) >= 0;
+  }
+
   function hasCourseAttributeMetadata(record) {
     if (!record) return false;
     return ['courseAttr', 'courseSpecialTags', 'courseIsOvertime', 'courseIsSubstitute'].some(function (key) {
@@ -962,10 +976,17 @@
 
   function scheduleText(email, allSchedules, onlyOvertime, period) {
     var seen = {};
+    var fixedSetting = onlyOvertime && email && typeof email === 'object'
+      ? fixedOvertimeSetting(email) : { configured: false, valid: false, slotKeys: [] };
     var list = (allSchedules || []).filter(function (s) {
       if (!sameTeacher(s, email)) return false;
       if (!isWeeklyPeriod(s.period)) return false;
-      if (onlyOvertime && !isOvertimeSchedule(s)) return false;
+      if (onlyOvertime) {
+        var scheduleKey = String(Number(s.dayOfWeek)) + '|' + String(Number(s.period));
+        if (fixedSetting.configured && fixedSetting.valid) {
+          if (fixedSetting.slotKeys.indexOf(scheduleKey) < 0) return false;
+        } else if (!isOvertimeSchedule(s)) return false;
+      }
       if (!scheduleActiveInPeriod(s, period)) return false;
       return true;
     }).map(function (s) {
@@ -1078,10 +1099,14 @@
     return !cn || !scn || cn === scn || cn.indexOf(scn) >= 0 || scn.indexOf(cn) >= 0;
   }
 
-  function isOvertimeSubstitution(record, schedules, schoolSwapIndex) {
+  function isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher) {
     var d = dateObj(record && record.date);
     var period = Number(record && record.period);
     if (!d || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
+    var fixedSetting = fixedOvertimeSetting(teacher);
+    if (fixedSetting.configured && fixedSetting.valid) {
+      return isFixedOvertimeRecord(record, teacher, schoolSwapIndex);
+    }
     if (hasCourseAttributeMetadata(record)) return isRecordOvertimeCourse(record);
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
     return (schedules || []).some(function (schedule) {
@@ -1094,7 +1119,7 @@
     });
   }
 
-  function chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex) {
+  function chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex, teacher) {
     var eligible = (records || []).filter(function (record) {
       return isUsableSubstitution(record)
         && dateInPeriod(record.date, period)
@@ -1103,11 +1128,16 @@
          && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
     // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
-    var selfRecords = eligible.filter(isSelfPaidRecord);
-    var publicRecords = eligible.filter(function (record) {
-      return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex);
+    var fixedSetting = fixedOvertimeSetting(teacher);
+    var selfRecords = eligible.filter(function (record) {
+      return isSelfPaidRecord(record)
+        && (!fixedSetting.configured || !fixedSetting.valid
+          || isFixedOvertimeRecord(record, teacher, schoolSwapIndex));
     });
-    // 自費全部扣；公費原堂為超鐘點也逐筆扣，不以每週超時數量封頂。
+    var publicRecords = eligible.filter(function (record) {
+      return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
+    });
+    // 固定設定時，自費與公費都只扣固定節次；舊資料未設定時保留原本自費全扣口徑。
     var selected = selfRecords.concat(publicRecords.slice().sort(function (a, b) {
       return String(a.date || '').localeCompare(String(b.date || ''))
         || Number(a.period || 0) - Number(b.period || 0)
@@ -1121,8 +1151,8 @@
       return true;
     });
   }
-  function publicOvertimeUsed(email, records, schedules, period, schoolSwapIndex) {
-    return chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex)
+  function publicOvertimeUsed(email, records, schedules, period, schoolSwapIndex, teacher) {
+    return chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex, teacher)
       .filter(isPublicOvertimeRecord).length;
   }
   function buildChargedRecordMap(opts, period, schoolSwapIndex) {
@@ -1146,7 +1176,7 @@
             && teacherEmail(record.actualTeacherEmail)
             && !isSubstituteAttributePayoutRecord(record, opts.allSchedules || [], schoolSwapIndex);
         })
-        : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex);
+        : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex, source);
       var chargedKeys = {};
       chargedSourceRecords.forEach(function (record) {
         chargedKeys[substitutionKey(record)] = true;
@@ -1303,29 +1333,38 @@
             : sourceItems.slice();
           chargedItems = sourceItems.filter(function (item) { return item.charged !== false; });
         }
-        var chargedRecordsForSource = chargedItems
-          ? chargedItems.map(function (item) { return item.record; })
-          : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex);
-        var chargedCombinedRecords = chargedSubstitutionRecords(
+         var chargedRecordsForSource = chargedItems
+           ? chargedItems.map(function (item) { return item.record; })
+           : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex, source);
+         var chargedCombinedRecords = chargedSubstitutionRecords(
           records,
           opts.allSchedules || [],
-          source,
-          period,
-          schoolSwapIndex
+           source,
+           period,
+           schoolSwapIndex,
+           source
         ).filter(function (record) {
           if (!isCombinedReturnRecord(record)) return false;
           if (config.key !== 'overtime' || !expectedPlan) return true;
           return normalizeExpensePlan(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
-        var selfCount = allocation
-          ? chargedRecordsForSource.filter(isSelfPaidRecord).length
-          : leave.filter(isSelfPaidRecord).length;
+         var sourceFixedSetting = fixedOvertimeSetting(sourceRow);
+         var selfCount = allocation
+           ? chargedRecordsForSource.filter(isSelfPaidRecord).length
+           : leave.filter(function (record) {
+             return isSelfPaidRecord(record)
+               && (!sourceFixedSetting.configured || !sourceFixedSetting.valid
+                 || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex));
+           }).length;
         var publicUsed = allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
-          : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex);
-        var reduce = allocation
+           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
+        // 超鐘點／兼課鐘點不因放假或空堂減少；小鐘點的實際未授課扣減
+        // 會在 substituteAttributePlans 依逐日明細處理。
+        var noAwayDeduction = config.key === 'overtime' || config.key === 'adjunct';
+        var reduce = noAwayDeduction ? 0 : (allocation
           ? Math.max(0, Number(allocation.reduceHours) || 0)
-          : (Number(sourceRow.reduceDeduction) || 0);
+          : (Number(sourceRow.reduceDeduction) || 0));
         if (!opts.reportStartDate && !opts.reportEndDate
             && (period.start.slice(0, 7) !== String(opts.reportMonth || '')
               || period.end.slice(0, 7) !== String(opts.reportMonth || ''))) {
@@ -1337,13 +1376,15 @@
             ? Number(sourceRow.scheduledOvertime) || 0
             : (Number(sourceRow.weeklyOvertime) || 0) * weeks);
         if ((config.key === 'overtime' || config.key === 'adjunct') && scheduledOvertime <= 0) return;
-        var grossHours = allocation && allocation.grossHours !== undefined
-          ? Number(allocation.grossHours) || 0
-          : Math.max(0, scheduledOvertime - reduce);
+        var grossHours = noAwayDeduction && allocation && allocation.rawHours !== undefined
+          ? Number(allocation.rawHours) || 0
+          : allocation && allocation.grossHours !== undefined
+            ? Number(allocation.grossHours) || 0
+            : Math.max(0, scheduledOvertime - reduce);
         var deduction = allocation && allocation.deduction !== undefined
           ? Number(allocation.deduction) || 0
           : selfCount + publicUsed;
-        var actualHours = allocation && allocation.actualHours !== undefined
+        var actualHours = allocation && allocation.actualHours !== undefined && !noAwayDeduction
           ? Number(allocation.actualHours) || 0
           : grossHours - deduction;
         var weeklyOvertime = allocation
@@ -1656,6 +1697,10 @@
       (source.expensePlanWarnings || []).forEach(function (warning) {
         addUniqueMessage(data.warnings, warning);
       });
+      if (source.fixedOvertimeConfigError) {
+        addUniqueMessage(data.warnings, '教師「' + teacherName(source, source.email)
+          + '」的固定超鐘點設定有誤：' + source.fixedOvertimeConfigError + '，本次暫以課表推算。');
+      }
     });
     planKeys.sort(function (a, b) {
       if (a === '預設') return -1;

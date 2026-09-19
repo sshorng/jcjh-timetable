@@ -55,7 +55,9 @@ window.UiAdmin = (function () {
     var showImportTeachersModal = useRef('showImportTeachersModal', false);
     var teacherExcelData = useRef('teacherExcelData', []);
     var teacherExcelHeaders = useRef('teacherExcelHeaders', []);
-    var teacherMappingFields = useRef('teacherMappingFields', { name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '' });
+    var teacherMappingFields = useRef('teacherMappingFields', {
+      name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '', fixedOvertimeHours: '', fixedOvertimeSlots: ''
+    });
     var teacherImportPreview = useRef('teacherImportPreview', null);
 
     var showScheduleEditModal = useRef('showScheduleEditModal', false);
@@ -67,7 +69,10 @@ window.UiAdmin = (function () {
 
     var showTeacherModal = useRef('showTeacherModal', false);
     var teacherModalMode = useRef('teacherModalMode', 'add');
-    var teacherForm = useRef('teacherForm', { email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0 });
+    var teacherForm = useRef('teacherForm', {
+      email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
+      fixedOvertimeHours: '', fixedOvertimeSlots: ''
+    });
     var showOvertimePlanModal = useRef('showOvertimePlanModal', false);
     var overtimePlanTeacher = useRef('overtimePlanTeacher', null);
     var overtimePlanRows = useRef('overtimePlanRows', []);
@@ -897,6 +902,59 @@ window.UiAdmin = (function () {
       return keys;
     }
 
+    function fixedOvertimeSetting(value) {
+      if (window.FieldMap && typeof window.FieldMap.fixedOvertimeSetting === 'function') {
+        return window.FieldMap.fixedOvertimeSetting(value || {});
+      }
+      return { configured: false, valid: false, hours: 0, slotsText: '', error: '' };
+    }
+
+    function currentFixedOvertimeSlots(teacher) {
+      var teacherKeys = teacherIdentityKeys(teacher);
+      var seen = {};
+      var slots = [];
+      (allSchedules.value || []).forEach(function (schedule) {
+        if (!teacherKeys.some(function (key) { return teacherIdentityKeys(schedule).indexOf(key) >= 0; })) return;
+        var period = parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10);
+        var day = parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
+        if (!(day >= 1 && day <= 5) || !(period === 0 || period === 45 || (period >= 1 && period <= 7))) return;
+        if (isSubstituteScheduleEntry(schedule) || schedule.isPreplanned || String(schedule.attr || '').trim() === '預排') return;
+        if (!isOvertimeScheduleEntry(schedule)) return;
+        var key = day + '|' + period;
+        if (seen[key]) return;
+        seen[key] = true;
+        slots.push({ dayOfWeek: day, period: period });
+      });
+      return window.FieldMap && typeof window.FieldMap.serializeFixedOvertimeSlots === 'function'
+        ? window.FieldMap.serializeFixedOvertimeSlots(slots) : '';
+    }
+
+    async function fillFixedOvertimeFromCurrentSchedule() {
+      var current = teacherForm.value || {};
+      var existing = fixedOvertimeSetting(current);
+      if (existing.configured && !await showConfirm('將以目前課表標記為「超鐘點」的固定節次覆蓋現有設定，確定嗎？')) return;
+      var slotsText = currentFixedOvertimeSlots(current);
+      var parsed = fixedOvertimeSetting({
+        fixedOvertimeHours: slotsText ? undefined : 0,
+        fixedOvertimeSlots: slotsText
+      });
+      teacherForm.value = Object.assign({}, current, {
+        fixedOvertimeHours: parsed.hours,
+        fixedOvertimeSlots: parsed.slotsText
+      });
+      showToast(slotsText ? '已從目前課表帶入 ' + parsed.hours + ' 節固定超鐘點' : '目前課表沒有標記超鐘點，已帶入 0 節', 'success');
+    }
+
+    function normalizeFixedOvertimeForm() {
+      var current = teacherForm.value || {};
+      var setting = fixedOvertimeSetting({
+        fixedOvertimeHours: current.fixedOvertimeHours,
+        fixedOvertimeSlots: current.fixedOvertimeSlots
+      });
+      if (!setting.configured) return { configured: false, hours: '', slotsText: '' };
+      return setting;
+    }
+
     function isOvertimeScheduleEntry(schedule) {
       if (isSubstituteScheduleEntry(schedule)) return false;
       if (schedule && schedule.isOvertime === true) return true;
@@ -1288,7 +1346,9 @@ window.UiAdmin = (function () {
           '折抵額度': (function () {
             var n = parseFloat(teacher.mutualQuota);
             return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
-          })()
+          })(),
+          '超鐘點節數': teacher.fixedOvertimeConfigured ? teacher.fixedOvertimeHours : '',
+          '超鐘點節次': teacher.fixedOvertimeConfigured ? (teacher.fixedOvertimeSlotsText || teacher.fixedOvertimeSlots || '') : ''
         };
         await callGasApi('saveTeacher', reqPayload);
          var i = teachersList.value.findIndex(function (t) { return t.email === email || t.loginEmail === email; });
@@ -1310,7 +1370,10 @@ window.UiAdmin = (function () {
     function openAddTeacherModal() {
       teacherModalMode.value = 'add';
       overtimePlanTeacher.value = null;
-      teacherForm.value = { email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0 };
+      teacherForm.value = {
+        email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
+        fixedOvertimeHours: '', fixedOvertimeSlots: ''
+      };
       showTeacherModal.value = true;
     }
 
@@ -1323,9 +1386,11 @@ window.UiAdmin = (function () {
         subject: t.subject,
         jobTitle: t.jobTitle || '',
         expensePlan: t.expensePlan || '',
-        role: t.role,
-        baseHours: t.baseHours,
-        mutualQuota: (function () {
+         role: t.role,
+         baseHours: t.baseHours,
+         fixedOvertimeHours: t.fixedOvertimeConfigured ? t.fixedOvertimeHours : '',
+         fixedOvertimeSlots: t.fixedOvertimeSlotsText || '',
+         mutualQuota: (function () {
           var n = parseFloat(t.mutualQuota);
           return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
         })()
@@ -1337,6 +1402,12 @@ window.UiAdmin = (function () {
       loading.value = true;
       var email = teacherForm.value.email.trim();
       var nextName = teacherForm.value.name.trim();
+      var fixedSetting = normalizeFixedOvertimeForm();
+      if (fixedSetting.configured && !fixedSetting.valid) {
+        showToast(fixedSetting.error || '固定超鐘點設定不完整', 'warning');
+        loading.value = false;
+        return;
+      }
       var existingTeacher = (teachersList.value || []).find(function (teacher) {
         return String(teacher.loginEmail || '').toLowerCase() === email.toLowerCase();
       });
@@ -1359,7 +1430,15 @@ window.UiAdmin = (function () {
         '系統角色': teacherForm.value.role,
         '基本鐘點': (teacherForm.value.baseHours === 0 || teacherForm.value.baseHours === '0')
           ? 0
-          : (parseInt(teacherForm.value.baseHours, 10) || 16),
+         : (parseInt(teacherForm.value.baseHours, 10) || 16),
+        '超鐘點節數': (function () {
+          var setting = normalizeFixedOvertimeForm();
+          return setting.configured ? setting.hours : '';
+        })(),
+        '超鐘點節次': (function () {
+          var setting = normalizeFixedOvertimeForm();
+          return setting.configured ? setting.slotsText : '';
+        })(),
         '折抵額度': (function () {
           var n = parseFloat(teacherForm.value.mutualQuota);
           return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
@@ -1368,7 +1447,7 @@ window.UiAdmin = (function () {
       try {
         await callGasApi('saveTeacher', reqPayload);
         showTeacherModal.value = false;
-        var mapped = window.FieldMap.mapTeacher(reqPayload);
+         var mapped = window.FieldMap.mapTeacher(reqPayload);
         var list = teachersList.value.slice();
          var i = list.findIndex(function (x) {
            return String(x.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase()
@@ -1423,7 +1502,9 @@ window.UiAdmin = (function () {
           teacherExcelHeaders.value = Object.keys(sheetData[0]);
           teacherExcelData.value = sheetData;
           teacherImportPreview.value = null;
-          teacherMappingFields.value = { name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '' };
+          teacherMappingFields.value = {
+            name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '', fixedOvertimeHours: '', fixedOvertimeSlots: ''
+          };
           teacherExcelHeaders.value.forEach(function (h) {
             var low = h.toLowerCase();
             if (!teacherMappingFields.value.name &&
@@ -1444,13 +1525,21 @@ window.UiAdmin = (function () {
               teacherMappingFields.value.jobTitle = h;
             }
             if (!teacherMappingFields.value.baseHours &&
-                (h.indexOf('基本') >= 0 || h.indexOf('基鐘') >= 0 || h.indexOf('鐘點') >= 0 ||
+                h.indexOf('超鐘點') < 0 && (h.indexOf('基本') >= 0 || h.indexOf('基鐘') >= 0 || h.indexOf('鐘點') >= 0 ||
                 h.indexOf('節數') >= 0 || low.indexOf('hour') >= 0 || low.indexOf('base') >= 0)) {
               teacherMappingFields.value.baseHours = h;
             }
             if (!teacherMappingFields.value.role &&
                 (h.indexOf('角色') >= 0 || h.indexOf('身分') >= 0 || h.indexOf('權限') >= 0 || low.indexOf('role') >= 0)) {
               teacherMappingFields.value.role = h;
+            }
+            if (!teacherMappingFields.value.fixedOvertimeHours &&
+                (h.indexOf('超鐘點節數') >= 0 || low.indexOf('fixedovertimehours') >= 0 || low.indexOf('overtimehours') >= 0)) {
+              teacherMappingFields.value.fixedOvertimeHours = h;
+            }
+            if (!teacherMappingFields.value.fixedOvertimeSlots &&
+                (h.indexOf('超鐘點節次') >= 0 || low.indexOf('fixedovertimeslots') >= 0 || low.indexOf('overtimeslots') >= 0)) {
+              teacherMappingFields.value.fixedOvertimeSlots = h;
             }
           });
           showToast('已載入 ' + sheetData.length + ' 列，請確認欄位後按「預覽」', 'info');
@@ -1529,6 +1618,25 @@ window.UiAdmin = (function () {
         } else if (rawRole.indexOf('行政') >= 0 || rawRole.toLowerCase() === 'staff') {
           role = 'staff';
         }
+        var fixedHoursRaw = teacherMappingFields.value.fixedOvertimeHours
+          ? row[teacherMappingFields.value.fixedOvertimeHours] : '';
+        var fixedSlotsRaw = teacherMappingFields.value.fixedOvertimeSlots
+          ? row[teacherMappingFields.value.fixedOvertimeSlots] : '';
+        var fixedHasValue = String(fixedHoursRaw == null ? '' : fixedHoursRaw).trim() !== ''
+          || String(fixedSlotsRaw == null ? '' : fixedSlotsRaw).trim() !== '';
+        var fixedSetting = fixedHasValue ? fixedOvertimeSetting({
+          fixedOvertimeHours: fixedHoursRaw,
+          fixedOvertimeSlots: fixedSlotsRaw
+        }) : { configured: false };
+        if (fixedSetting.configured && !fixedSetting.valid) {
+          skipped.push({
+            line: lineNo,
+            reason: fixedSetting.error || '固定超鐘點設定不合理',
+            snippet: snippet,
+            missing: '請確認超鐘點節數與固定節次數量一致'
+          });
+          continue;
+        }
          var exists = (teachersList.value || []).some(function (t) {
            return (t.loginEmail || '').toLowerCase() === email;
         });
@@ -1538,9 +1646,11 @@ window.UiAdmin = (function () {
           '教師姓名': name,
           '授課科目': subject,
           '職務': jobTitle,
-          '基本鐘點': baseHours,
-          '系統角色': role,
-          _isUpdate: exists
+           '基本鐘點': baseHours,
+           '系統角色': role,
+           '超鐘點節數': fixedSetting.configured ? fixedSetting.hours : '',
+           '超鐘點節次': fixedSetting.configured ? fixedSetting.slotsText : '',
+           _isUpdate: exists
         });
       }
       return { list: list, skipped: skipped };
@@ -1613,10 +1723,12 @@ window.UiAdmin = (function () {
             '教師Email': r['教師Email'],
             '教師姓名': r['教師姓名'],
             '授課科目': r['授課科目'],
-            '職務': r['職務'] || '',
-            '基本鐘點': r['基本鐘點'],
-            '系統角色': r['系統角色']
-          };
+             '職務': r['職務'] || '',
+             '基本鐘點': r['基本鐘點'],
+             '系統角色': r['系統角色'],
+             '超鐘點節數': r['超鐘點節數'],
+             '超鐘點節次': r['超鐘點節次']
+           };
         });
         // 人數多時分批，避免 GAS 逾時
         var TCHUNK = 80;
@@ -2004,8 +2116,9 @@ window.UiAdmin = (function () {
        getSchedule: getSchedule,
       saveScheduleCell: saveScheduleCell,
       clearScheduleCell: clearScheduleCell,
-      updateTeacherBaseHours: updateTeacherBaseHours,
-      showOvertimePlanModal: showOvertimePlanModal,
+       updateTeacherBaseHours: updateTeacherBaseHours,
+       fillFixedOvertimeFromCurrentSchedule: fillFixedOvertimeFromCurrentSchedule,
+       showOvertimePlanModal: showOvertimePlanModal,
       overtimePlanTeacher: overtimePlanTeacher,
       overtimePlanRows: overtimePlanRows,
       overtimePlanPeriodEnd: overtimePlanPeriodEnd,

@@ -60,6 +60,22 @@ assert.match(source, /finalBal\[em\] = existingBalance/, '重複發放應修復�
 assert.match(source, /"空堂事件": \[[^\]]*"適用範圍"[^\]]*"停課節次"/, '空堂事件 schema 應包含範圍與節次欄位');
 assert.match(source, /function normalizeClassAwayScope_\(value\)/, '空堂事件範圍應由後端正規化');
 assert.match(source, /function normalizeClassAwayPeriod_\(value\)/, '空堂事件節次應由後端正規化');
+assert.match(source, /function normalizeFixedOvertimeFields_\(row\)/, '教師固定超鐘點欄位應由後端正規化');
+const fixedOvertimeStart = source.indexOf('function normalizeFixedOvertimeFields_');
+const fixedOvertimeEnd = source.indexOf('function resolveTeacherRole_', fixedOvertimeStart);
+assert.ok(fixedOvertimeStart >= 0 && fixedOvertimeEnd > fixedOvertimeStart, '固定超鐘點正規化 helper 必須存在');
+const fixedOvertimeContext = { String, Number, Math, Object, Array, parseInt, isFinite };
+vm.createContext(fixedOvertimeContext);
+vm.runInContext(source.slice(fixedOvertimeStart, fixedOvertimeEnd), fixedOvertimeContext, { filename: 'code.gs.fixed-overtime' });
+const normalizedFixedOvertime = fixedOvertimeContext.normalizeFixedOvertimeFields_({
+  '超鐘點節數': 2,
+  '超鐘點節次': '三5、一2、三5'
+});
+assert.equal(normalizedFixedOvertime['超鐘點節次'], '一2、三5', '後端應排序並去除重複固定節次');
+assert.throws(() => fixedOvertimeContext.normalizeFixedOvertimeFields_({
+  '超鐘點節數': 1,
+  '超鐘點節次': '一2、三5'
+}), /數量一致/);
 const awayNormStart = source.indexOf('function normalizeClassAwayScope_');
 const awayNormEnd = source.indexOf('/** 經費是否為', awayNormStart);
 const awayNormContext = { String, parseInt };

@@ -93,6 +93,22 @@ const noAdjunctHours = build([], 16, [{
 }], [], { jobTitle: '兼課教師' });
 assert.equal(noAdjunctHours.sheets.adjunct.length, 0, '沒有可計鐘點的兼課教師不應列入兼課鐘點表');
 
+const fixedSnapshotExport = build([{
+  date: '2026-07-06', period: 2, className: '702', type: 'substitution',
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '公費代課', status: 'approved'
+}], 0, [
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般' },
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' }
+], [], { fixedOvertimeHours: 1, fixedOvertimeSlots: '一1' });
+assert.equal(fixedSnapshotExport.sheets.overtime.length, 1, '固定超鐘點仍應產生超鐘點列');
+assert.deepEqual([
+  fixedSnapshotExport.sheets.overtime[0].weeklyOvertime,
+  fixedSnapshotExport.sheets.overtime[0].schedule,
+  fixedSnapshotExport.sheets.overtime[0].deduction,
+  fixedSnapshotExport.sheets.overtime[0].actualHours
+], [1, '一1', 0, 1], '會計匯出只應將固定節次視為超鐘點扣除來源');
+assert.equal(fixedSnapshotExport.sheets.publicSub.length, 1, '非固定節次公費代課應留在公付代課表');
+
 const teacherOrderPeriod = { start: '2026-07-01', end: '2026-07-31' };
 const teacherOrder = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -737,7 +753,34 @@ assert.deepEqual([
   fixedExportPlan.rows[0].grossHours,
   fixedExportPlan.rows[0].deduction,
   fixedExportPlan.rows[0].actualHours
-], [6, 5, 28, 1, 27], '會計表應以固定週超鐘點乘週數後再扣被代與空堂');
+], [6, 5, 30, 1, 29], '會計表應以固定週超鐘點乘週數，只扣須扣代課');
 assert.ok(Number.isInteger(fixedExportPlan.rows[0].weeklyOvertime), '會計表每週超鐘點必須是整數');
+
+const legacyAwayExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 5,
+  periods: { overtime: period },
+  teachers: [{ email: 'legacy-away@x', name: '舊資料教師', baseHours: 16, expensePlan: '國教' }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'legacy-away@x',
+    name: '舊資料教師',
+    expensePlan: '國教',
+    weeklyOvertime: 3,
+    scheduledOvertime: 15,
+    reduceDeduction: 5,
+    expensePlanAllocations: [{
+      source: '國教', rawHours: 15, weeklyHours: 3,
+      reduceHours: 5, grossHours: 10, deduction: 2, actualHours: 8
+    }]
+  }]
+});
+const legacyAwayRow = legacyAwayExport.overtimePlans[0].rows[0];
+assert.deepEqual([
+  legacyAwayRow.grossHours,
+  legacyAwayRow.deduction,
+  legacyAwayRow.actualHours
+], [15, 2, 13], '會計匯出不應沿用舊月報的放假扣減');
 
 console.log('export accounting tests PASS');

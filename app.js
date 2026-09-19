@@ -8823,7 +8823,7 @@ createApp({
       return t ? (t.subject || t['授課科目'] || t['任課科目'] || '') : '';
     };
 
-    // 與排課系統教師課表一致：基本鐘點取教師設定，超鐘點取本週正式排課差額。
+    // 基本鐘點取教師設定；固定超鐘點已設定時優先顯示學期快照。
     const teacherTimetableHours = computed(() => {
       const map = Object.create(null);
       (teachersList.value || []).forEach(teacher => {
@@ -8831,11 +8831,18 @@ createApp({
           ? 0
           : (parseInt(teacher.baseHours, 10) || 16);
         const scheduledHours = window.DomainSchedule && typeof window.DomainSchedule.countTeacherFormalScheduleHours === 'function'
-          ? window.DomainSchedule.countTeacherFormalScheduleHours(teacher, allSchedules.value, currentWeekDates.value)
-          : 0;
+           ? window.DomainSchedule.countTeacherFormalScheduleHours(teacher, allSchedules.value, currentWeekDates.value)
+           : 0;
+        const fixedSetting = window.FieldMap && typeof window.FieldMap.fixedOvertimeSetting === 'function'
+          ? window.FieldMap.fixedOvertimeSetting(teacher)
+          : { configured: false, valid: false, hours: 0, slotsText: '' };
         const summary = {
           basicHours,
-          overtimeHours: Math.max(0, scheduledHours - basicHours)
+          overtimeHours: fixedSetting.configured && fixedSetting.valid
+            ? fixedSetting.hours : Math.max(0, scheduledHours - basicHours),
+          fixedOvertimeConfigured: fixedSetting.configured,
+          fixedOvertimeValid: fixedSetting.valid,
+          fixedOvertimeSlots: fixedSetting.slotsText
         };
         [teacher.email, teacher.loginEmail, teacher.teacherEmail, teacher.teacherName, teacher.name]
           .filter(Boolean)
@@ -9858,11 +9865,13 @@ createApp({
           const teachersToCopy = teachersList.value.map(t => ({
             "學期代號": form.id.trim(),
              "教師Email": t.loginEmail || t.email,
-            "教師姓名": t.name,
-            "授課科目": t.subject,
-            "系統角色": t.role,
-            "基本鐘點": t.baseHours
-          }));
+             "教師姓名": t.name,
+             "授課科目": t.subject,
+             "系統角色": t.role,
+             "基本鐘點": t.baseHours,
+             "超鐘點節數": t.fixedOvertimeConfigured ? t.fixedOvertimeHours : '',
+             "超鐘點節次": t.fixedOvertimeConfigured ? (t.fixedOvertimeSlotsText || t.fixedOvertimeSlots || '') : ''
+           }));
           data.teachersToCopy = teachersToCopy;
         }
 
@@ -11126,7 +11135,9 @@ createApp({
     const showImportTeachersModal = ref(false);
     const teacherExcelData = ref([]);
     const teacherExcelHeaders = ref([]);
-    const teacherMappingFields = ref({ name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '' });
+    const teacherMappingFields = ref({
+      name: '', email: '', subject: '', jobTitle: '', baseHours: '', role: '', fixedOvertimeHours: '', fixedOvertimeSlots: ''
+    });
     const teacherImportPreview = ref(null);
     const showScheduleEditModal = ref(false);
     const scheduleForm = ref({
@@ -11136,7 +11147,10 @@ createApp({
     });
     const showTeacherModal = ref(false);
     const teacherModalMode = ref('add');
-    const teacherForm = ref({ email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0 });
+    const teacherForm = ref({
+      email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
+      fixedOvertimeHours: '', fixedOvertimeSlots: ''
+    });
     const showOvertimePlanModal = ref(false);
     const overtimePlanTeacher = ref(null);
     const overtimePlanRows = ref([]);
@@ -11245,9 +11259,10 @@ createApp({
       if (_uiAdminApi && typeof _uiAdminApi.getSchedule === 'function') return _uiAdminApi.getSchedule(...a);
       return null;
     };
-    const saveScheduleCell = (...a) => needUiAdmin('saveScheduleCell', ...a);
-    const clearScheduleCell = (...a) => needUiAdmin('clearScheduleCell', ...a);
-    const updateTeacherBaseHours = (...a) => needUiAdmin('updateTeacherBaseHours', ...a);
+     const saveScheduleCell = (...a) => needUiAdmin('saveScheduleCell', ...a);
+     const clearScheduleCell = (...a) => needUiAdmin('clearScheduleCell', ...a);
+     const updateTeacherBaseHours = (...a) => needUiAdmin('updateTeacherBaseHours', ...a);
+     const fillFixedOvertimeFromCurrentSchedule = (...a) => needUiAdmin('fillFixedOvertimeFromCurrentSchedule', ...a);
     const openAddTeacherModal = (...a) => needUiAdmin('openAddTeacherModal', ...a);
     const openEditTeacherModal = (...a) => needUiAdmin('openEditTeacherModal', ...a);
     const saveTeacher = (...a) => needUiAdmin('saveTeacher', ...a);
@@ -12071,7 +12086,7 @@ createApp({
        isAdminBatchGroupSelected, toggleAdminBatchGroupSelection,
         batchAdminApprove, batchAdminReject, openBatchPendingPrintPreview, lastBatchPrintIds, showBatchPrintPrompt, printLastBatchNotices, dismissBatchPrintPrompt,
        closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, closeSuccessCopyLine,
-        openScheduleEditModal, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, pickScheduleAttr, normalizeScheduleFormFlags, getScheduleAttrLabel, getOvertimeExpenseSourceOptions, openOvertimePlanModal, saveOvertimePlan,
+        openScheduleEditModal, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, pickScheduleAttr, normalizeScheduleFormFlags, getScheduleAttrLabel, getOvertimeExpenseSourceOptions, openOvertimePlanModal, saveOvertimePlan,
       openAddTeacherModal, openEditTeacherModal, saveTeacher, deleteTeacher,
         handleFileChange, getMappingLabel, importSchedules, migrateNameKeySchema, toggleSelectAllRecords, isHistoryRecordSelected, isHistoryBatchGroupSelected, toggleHistoryBatchGroupSelection, loadTeacherClassesForExchange,
       printSelectedForms, sendSelectedBatchNotices, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel,

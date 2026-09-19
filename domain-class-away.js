@@ -2,7 +2,7 @@
   * 空堂事件（畢旅 keep／畢業 reduce）
  * - 迄日空白 → 學期結束日
  * - 課表：事件期間內該班視為空堂
- * - 月報：固定超鐘點以結算週為基準；未授課的空堂事件皆列入扣減
+  * - 小鐘點／逐日鐘點可依實際空堂判定；超鐘點會計月報不因空堂扣減
  */
 window.DomainClassAway = (function () {
   var RULE_KEEP = 'keep';
@@ -397,8 +397,9 @@ window.DomainClassAway = (function () {
   }
 
   /**
-   * 月報扣減：reduce 事件在起日後的週 × 該師對應班節數
-   * @returns {number} reduceDeduction 節數（從本月超時總額扣除）
+   * 獨立計算 reduce 事件在起日後的週 × 該師對應班節數。
+   * 超鐘點會計月報不呼叫此工具，改以固定每週超鐘點 × 結算週數計算。
+   * @returns {number} reduceDeduction 節數
    */
   function computeReduceDeduction(opts) {
     opts = opts || {};

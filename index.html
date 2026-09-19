@@ -1841,11 +1841,11 @@
                        <th class="billing-th-subject">科目</th>
                         <th title="每週早自習＋1～7＋午休；基本／一般／抽離（超鐘點另以標記判定；不含巡堂／第8）">排課</th>
                       <th title="教師基本授課鐘點">基鐘</th>
-                      <th title="排課 − 基鐘（每週）">超時/週</th>
-                      <th title="最後完整結算週的固定超鐘點；空堂事件未授課時扣減，keep／reduce皆適用">空堂扣減</th>
+                       <th title="已設定固定超鐘點時採學期設定；未設定才使用排課 − 基鐘">超鐘點/週</th>
+                      <th title="超鐘點固定為每週超鐘點 × 結算週數；放假／空堂不扣">空堂扣減</th>
                        <th title="自己請假且自費代課；早自習、1～7、午休皆扣">自費扣</th>
                         <th title="自己請假且公費代課；正式課程原堂為超鐘點才扣，代課屬性另列代課另扣，含早自習、1～7、午休">公費扣</th>
-                       <th title="課程屬性為代課，且假別不是標準自費／公費，或不調降空堂事件未授課的另扣">代課另扣</th>
+                       <th title="小鐘點課程請假或放假未授課的另扣">代課另扣</th>
                       <th title="本月實得超時節數" class="billing-th-result">實得超時</th>
                       <th title="實得超時 × 455" class="billing-th-result">超鐘點費</th>
                        <th title="代他人且經費為公費／活動公費，或課堂屬性代課的實際授課節次">公代節</th>
@@ -1926,7 +1926,7 @@
                     <th>職務</th>
                     <th>超鐘點計畫</th>
                      <th>基本鐘點（基鐘）</th>
-                      <th title="最後完整結算週的正式排課節數扣除基本鐘點">每週超鐘點</th>
+                       <th title="學期固定設定；尚未設定時顯示目前課表推算值">固定超鐘點</th>
                     <th title="可用餘額；點數字可看額度帳本歷程">折抵額度</th>
                     <th>系統角色</th>
                      <th style="width: 220px;">操作</th>
@@ -1950,9 +1950,12 @@
                         @dblclick.stop
                        > 節
                      </td>
-                     <td style="white-space:nowrap;text-align:center;">
-                       <strong>{{ getTeacherTimetableHours(t).overtimeHours }}</strong> 節／週
-                     </td>
+                      <td style="white-space:nowrap;text-align:center;">
+                        <strong v-if="t.fixedOvertimeConfigured">{{ t.fixedOvertimeHours }}</strong>
+                        <strong v-else style="color:var(--text-muted);">待設定</strong> 節／週
+                        <small v-if="t.fixedOvertimeConfigured && t.fixedOvertimeSlotsText" style="display:block;color:var(--text-muted);max-width:150px;white-space:normal;">{{ t.fixedOvertimeSlotsText }}</small>
+                        <small v-else style="display:block;color:var(--text-muted);">目前課表推算 {{ getTeacherTimetableHours(t).overtimeHours }} 節</small>
+                      </td>
                     <td @click.stop @dblclick.stop>
                       <button
                         type="button"
@@ -1989,8 +1992,8 @@
                 <button class="btn btn-primary btn-sm-pad" @click="openAddClassAwayModal">＋ 新增事件</button>
               </div>
               <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;margin:0 0 12px 0;">
-                 期間內符合範圍與節次的班級：課表<strong>淡化顯示</strong>，媒合／衝堂／匯出<strong>視同空堂</strong>。
-                 超鐘點以最後完整結算週的固定每週節數計算；事件期間該超鐘課格未授課，<strong>不論不調降或調降都扣除</strong>。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
+                 期間內符合範圍與節次的班級：課表<strong>淡化顯示</strong>，媒合／衝堂視同空堂；小鐘點匯出依實際未授課扣減。
+                 超鐘點以教師名單的學期固定每週節數 × 結算週數計算；尚未設定者暫以課表推算。放假／空堂<strong>不扣超鐘點</strong>，只有固定節次的代課才扣除。小鐘點依實際未授課日扣減。迄日空白＝學期結束。可進互代者可在活動互代面板選事件帶入。
                  段考可設定<strong>全校／第8節</strong>，不需修改教師課表或建立代課申請。各事件可匯出<strong>活動輪值通知單</strong>（只匯已送出；第1～7節入表、第8節附註）。
               </p>
               <div class="table-responsive">
@@ -3481,13 +3484,27 @@
                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
                     </select>
                   </div>
-                  <div class="form-group mb-0">
-                     <label class="form-label text-xs">系統角色（選填）</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.role">
-                      <option value="">--預設一般教師--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
+                   <div class="form-group mb-0">
+                      <label class="form-label text-xs">系統角色（選填）</label>
+                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.role">
+                       <option value="">--預設一般教師--</option>
+                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
+                     </select>
+                   </div>
+                   <div class="form-group mb-0">
+                     <label class="form-label text-xs">固定超鐘點節數（選填）</label>
+                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.fixedOvertimeHours">
+                       <option value="">--未設定--</option>
+                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
+                     </select>
+                   </div>
+                   <div class="form-group mb-0">
+                     <label class="form-label text-xs">固定超鐘點節次（選填）</label>
+                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.fixedOvertimeSlots">
+                       <option value="">--未設定--</option>
+                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
+                     </select>
+                   </div>
                 </div>
 
                 <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px;">
@@ -3591,11 +3608,21 @@
                 <option value="admin">教學組</option>
               </select>
             </div>
-            <div class="form-group">
-             <label class="form-label">基本授課鐘點（基鐘）</label>
-              <input type="number" class="form-input" placeholder="導師為12節、專任為16節" v-model.number="teacherForm.baseHours">
-            </div>
-            <div class="form-group">
+             <div class="form-group">
+              <label class="form-label">基本授課鐘點（基鐘）</label>
+               <input type="number" class="form-input" placeholder="導師為12節、專任為16節" v-model.number="teacherForm.baseHours">
+             </div>
+             <div class="form-group" style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">
+               <label class="form-label">本學期固定超鐘點設定</label>
+               <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+                 <input type="number" class="form-input" min="0" max="40" step="1" placeholder="節數" style="max-width:110px;" v-model.number="teacherForm.fixedOvertimeHours">
+                 <span style="font-size:0.82rem;">節／週</span>
+                 <button type="button" class="btn btn-secondary" style="padding:5px 8px;font-size:0.75rem;" @click="fillFixedOvertimeFromCurrentSchedule">從目前課表帶入</button>
+               </div>
+               <input type="text" class="form-input" placeholder="例如：一2、三5、五午休" v-model="teacherForm.fixedOvertimeSlots">
+               <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">節數必須與節次數量一致。儲存後固定於本學期，不會因放假、最後完整週或臨時調課改變；留白代表尚未設定。</span>
+             </div>
+             <div class="form-group">
               <label class="form-label">折抵額度（可用餘額）</label>
               <input type="number" class="form-input" min="0" step="1" placeholder="0" v-model.number="teacherForm.mutualQuota">
               <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">可用餘額以整數節數計。釋出 1 節＝1；扣額度須滿 1 才扣 1。建議用活動面板「＋發放額度」；手動改會寫入帳本調整列。</span>
