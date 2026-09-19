@@ -272,12 +272,13 @@ window.DomainBilling = (function () {
    * 依課表口徑整理週鐘點課格：同一教師同一星期／節次只算一堂。
    * 同節多列通常是併班；合併班級文字後仍保留來源判定所需的資訊。
    */
-  function weeklyScheduleSlotsForDates(teacherIdentity, schedules, dates, onlyOvertime) {
+  function weeklyScheduleSlotsForDates(teacherIdentity, schedules, dates, onlyOvertime, excludeSubstitute) {
     var weekDates = Array.isArray(dates) ? dates : [];
     var slots = {};
     (schedules || []).forEach(function (schedule) {
       if (!hasCommonKey(teacherIdentity, scheduleTeacherKeys(schedule))
           || !isFormalWeeklyScheduleSlot(schedule)
+          || (excludeSubstitute && isSubstituteScheduleSlot(schedule))
           || (onlyOvertime && !isOvertimeScheduleSlot(schedule))) return;
       var day = scheduleDay(schedule);
       var period = schedulePeriod(schedule);
@@ -297,7 +298,7 @@ window.DomainBilling = (function () {
   }
 
   function weeklyPeriodsForDates(teacherIdentity, schedules, dates) {
-    return weeklyScheduleSlotsForDates(teacherIdentity, schedules, dates, false).length;
+    return weeklyScheduleSlotsForDates(teacherIdentity, schedules, dates, false, true).length;
   }
 
   function substituteScheduleSlotsForDates(teacherIdentity, schedules, dates) {
@@ -381,6 +382,41 @@ window.DomainBilling = (function () {
       return window.FieldMap.fixedOvertimeSetting(teacher || {});
     }
     return { configured: false, valid: false, hours: 0, slots: [], slotKeys: [], slotsText: '', error: '' };
+  }
+
+  // 固定超鐘點不應引用代課課格；舊批次若曾把代課節次寫入，計算時排除。
+  function fixedOvertimeSettingForSchedules(teacher, schedules) {
+    var setting = fixedOvertimeSetting(teacher);
+    if (!setting.configured || !setting.valid || !Array.isArray(schedules)) return setting;
+    var identity = teacherKeys(teacher);
+    var slotKinds = {};
+    (schedules || []).forEach(function (schedule) {
+      if (!hasCommonKey(identity, scheduleTeacherKeys(schedule))) return;
+      var day = scheduleDay(schedule);
+      var period = schedulePeriod(schedule);
+      if (!Number.isFinite(day) || !Number.isFinite(period)) return;
+      var key = fixedOvertimeSlotKey(day, period);
+      if (!slotKinds[key]) slotKinds[key] = { hasSubstitute: false, hasOther: false };
+      if (isSubstituteScheduleSlot(schedule)) slotKinds[key].hasSubstitute = true;
+      else slotKinds[key].hasOther = true;
+    });
+    var slots = (setting.slots || []).filter(function (slot) {
+      var kind = slotKinds[fixedOvertimeSlotKey(slot.dayOfWeek, slot.period)];
+      return !kind || !kind.hasSubstitute || kind.hasOther;
+    });
+    if (slots.length === setting.slots.length) return setting;
+    return Object.assign({}, setting, {
+      hours: slots.length,
+      slots: slots,
+      slotKeys: slots.map(fixedOvertimeSlotKey),
+      slotsText: slots.map(function (slot) {
+        var period = Number(slot.period);
+        var day = ['', '一', '二', '三', '四', '五'][Number(slot.dayOfWeek)] || '';
+        return day + (period === 0 ? '早自習' : (period === 45 ? '午休' : String(period)));
+      }).join('、'),
+      valid: true,
+      error: ''
+    });
   }
 
   function fixedOvertimeSlotKey(day, period) {
@@ -621,7 +657,7 @@ window.DomainBilling = (function () {
       return hasCommonKey(originalKeys, teacherKeys(item));
     });
     if (!teacher) return '';
-    var fixedSetting = fixedOvertimeSetting(teacher);
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, schedules);
     var slot = resolveBillingSlot(record, schoolSwapIndex);
     var date = recordDate(record);
     var className = String(record.className || record['班級'] || '').trim();
@@ -667,7 +703,7 @@ window.DomainBilling = (function () {
     var bucketMap = {};
     var warnings = [];
     var teacherIdentity = teacherKeys(teacher);
-    var fixedSetting = fixedOvertimeSetting(teacher);
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, allSchedules);
     var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
     var dynamicWeeklyOvertime = fixedWeekIndex >= 0
       ? Math.max(0, (Number(weeklyPeriodCounts[fixedWeekIndex]) || 0) - baseHours)
@@ -1037,7 +1073,7 @@ window.DomainBilling = (function () {
    */
   function isConcurrentLeaveSlot(rec, allSchedules, schoolSwapIndex, teacher) {
     if (!rec) return false;
-    var fixedSetting = fixedOvertimeSetting(teacher);
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, allSchedules);
     var slot = resolveBillingSlot(rec, schoolSwapIndex);
     if (fixedSetting.configured && fixedSetting.valid) {
       return fixedSetting.slotKeys.indexOf(fixedOvertimeSlotKey(slot.dayOfWeek, slot.period)) >= 0;
@@ -1475,7 +1511,7 @@ window.DomainBilling = (function () {
       var email = t.email || t.teacherName || t.name || t.loginEmail || '';
       var em = emailKey(email);
       var teacherIdentity = teacherKeys(t);
-      var fixedSetting = fixedOvertimeSetting(t);
+      var fixedSetting = fixedOvertimeSettingForSchedules(t, allSchedules);
       var baseHours = (t.baseHours === 0 || t.baseHours === '0')
         ? 0
         : (parseInt(t.baseHours, 10) || 16);
@@ -1487,7 +1523,7 @@ window.DomainBilling = (function () {
       var fixedWeekIndex = lastCompleteWeekIndex(weeklyGroups);
       var weeklyPeriods = fixedWeekIndex >= 0
         ? (Number(weeklyPeriodCounts[fixedWeekIndex]) || 0)
-        : weeklyScheduleSlotsForDates(teacherIdentity, allSchedules, [], false).length;
+        : weeklyPeriodsForDates(teacherIdentity, allSchedules, []);
       var dynamicWeeklyOvertime = Math.max(0, weeklyPeriods - baseHours);
       var weeklyOvertime = fixedSetting.configured && fixedSetting.valid
         ? fixedSetting.hours : dynamicWeeklyOvertime;
@@ -1940,6 +1976,7 @@ window.DomainBilling = (function () {
     isWeeklyHoursSlot: isWeeklyHoursSlot,
     isWeeklyHoursPeriod: isWeeklyHoursPeriod,
     isSubstituteScheduleSlot: isSubstituteScheduleSlot,
+    fixedOvertimeSettingForSchedules: fixedOvertimeSettingForSchedules,
     overtimeExpenseSourceForRecord: overtimeExpenseSourceForRecord,
     buildOvertimeExpenseBuckets: buildOvertimeExpenseBuckets,
     applyOvertimeExpenseDeductions: applyOvertimeExpenseDeductions,

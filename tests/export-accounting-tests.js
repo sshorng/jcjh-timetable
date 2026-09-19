@@ -99,6 +99,20 @@ const noOvertimeWithLeave = build([{
 }], 3, schedules);
 assert.equal(noOvertimeWithLeave.sheets.overtime.length, 0, '沒有超鐘點時即使有代課紀錄也不應建立超鐘點列');
 assert.equal(noOvertimeWithLeave.sheets.publicSub.length, 0, '沒有超鐘點的代課不應被重複列入公付代課表');
+const substituteIsSeparate = build([], 0, [
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+  { teacherEmail: 'bill@x', dayOfWeek: 3, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
+  { teacherEmail: 'bill@x', dayOfWeek: 5, period: 3, className: '703', attr: '代課' }
+]);
+assert.equal(substituteIsSeparate.sheets.overtime[0].weeklyOvertime, 2, '小鐘點代課不應增加超鐘點每週節數');
+assert.equal(substituteIsSeparate.sheets.overtime[0].schedule, '一1、三2', '超鐘點工作表只應列超鐘點節次');
+const repairedFixedSetting = build([], 0, [
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+  { teacherEmail: 'bill@x', dayOfWeek: 3, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
+  { teacherEmail: 'bill@x', dayOfWeek: 5, period: 3, className: '703', attr: '代課' }
+], [], { fixedOvertimeHours: 3, fixedOvertimeSlots: '一1、三2、五3' });
+assert.equal(repairedFixedSetting.sheets.overtime[0].weeklyOvertime, 2, '既有錯誤固定設定也應排除代課節次');
+assert.equal(repairedFixedSetting.sheets.overtime[0].schedule, '一1、三2', '既有錯誤固定設定的超鐘點節次應排除代課');
 const noAdjunctHours = build([], 16, [{
   teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般'
 }], [], { jobTitle: '兼課教師' });

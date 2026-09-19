@@ -296,12 +296,13 @@ const fixedSmallRow = window.DomainBilling.buildMonthlyReportRows({
   reportWeeksCount: 5
 })[0];
 assert.deepEqual([
+  fixedSmallRow.weeklyOvertime,
   fixedSmallRow.substituteScheduledCount,
   fixedSmallRow.substitutePaidCount,
   fixedSmallRow.substituteDeduction,
   fixedSmallRow.substituteLeaveAdditionalDeduction,
   fixedSmallRow.substituteKeepAwayDeduction
-], [15, 13, 2, 1, 1], '小鐘點應固定週節數乘週數再扣被代與空堂');
+], [0, 15, 13, 2, 1, 1], '小鐘點應固定週節數乘週數再扣被代與空堂，且不併入超鐘點');
 
 const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],
@@ -323,6 +324,7 @@ assert.equal(substituteLeaveRow.substituteLeaveAdditionalDeduction, 1);
 assert.equal(substituteLeaveRow.substituteScheduledCount, 1, '小鐘點應依結算週數計算');
 assert.equal(substituteLeaveRow.substitutePaidCount, 0, '代課屬性未授課不應列入公付代課');
 assert.equal(substituteLeaveRow.pubSubCount, 0, '代課屬性未授課不應列入公付代課');
+assert.equal(substituteLeaveRow.weeklyOvertime, 0, '只有代課屬性的教師不應產生超鐘點');
 assert.equal(substituteLeaveRow.actualOvertime, 0);
 
 const substituteAwayRow = window.DomainBilling.buildMonthlyReportRows({

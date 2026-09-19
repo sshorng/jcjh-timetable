@@ -224,10 +224,10 @@ Promise.all([admin.importSchedules(), fixedBatchPromise, fixedSourceSavePromise]
   assert.equal(importPayload.list[0]['啟用起日'], '2026-08-01');
   assert.equal(importPayload.list[0]['啟用迄日'], '2026-08-15');
   assert.deepEqual(fixedBatchPayload.list.map(row => [row['教師姓名'], row['超鐘點節數'], row['超鐘點節次']]), [
-    ['一號', 3, '一1、三2、五3'],
+    ['一號', 2, '一1、三2'],
     ['二號', 0, '']
-  ], '一鍵代入應依目前課表的超鐘點與代課節次批次寫入所有教師，無標記者設為 0 節');
-  assert.equal(fixedBatchTeachers.value[0].fixedOvertimeSlotsText, '一1、三2、五3');
+  ], '一鍵代入只應依目前課表的超鐘點節次批次寫入所有教師，代課節次應留在小鐘點工作表，無標記者設為 0 節');
+  assert.equal(fixedBatchTeachers.value[0].fixedOvertimeSlotsText, '一1、三2');
   assert.equal(fixedBatchTeachers.value[1].fixedOvertimeHours, 0);
   assert.equal(fixedSourceSavePayload['超鐘點節數'], 1, '儲存經費來源時不得清除固定超鐘點節數');
   assert.equal(fixedSourceSavePayload['超鐘點節次'], '一1', '儲存經費來源時不得清除固定超鐘點節次');

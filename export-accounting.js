@@ -866,8 +866,15 @@
     return { configured: false, valid: false, hours: 0, slots: [], slotKeys: [], slotsText: '' };
   }
 
-  function isFixedOvertimeRecord(record, teacher, schoolSwapIndex) {
-    var setting = fixedOvertimeSetting(teacher);
+  function fixedOvertimeSettingForSchedules(teacher, schedules) {
+    if (root.DomainBilling && typeof root.DomainBilling.fixedOvertimeSettingForSchedules === 'function') {
+      return root.DomainBilling.fixedOvertimeSettingForSchedules(teacher, schedules || []);
+    }
+    return fixedOvertimeSetting(teacher);
+  }
+
+  function isFixedOvertimeRecord(record, teacher, schoolSwapIndex, schedules) {
+    var setting = fixedOvertimeSettingForSchedules(teacher, schedules);
     if (!setting.configured || !setting.valid) return false;
     var slot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
     return setting.slotKeys.indexOf(String(slot.dayOfWeek) + '|' + String(slot.period)) >= 0;
@@ -977,7 +984,7 @@
   function scheduleText(email, allSchedules, onlyOvertime, period) {
     var seen = {};
     var fixedSetting = onlyOvertime && email && typeof email === 'object'
-      ? fixedOvertimeSetting(email) : { configured: false, valid: false, slotKeys: [] };
+      ? fixedOvertimeSettingForSchedules(email, allSchedules) : { configured: false, valid: false, slotKeys: [] };
     var list = (allSchedules || []).filter(function (s) {
       if (!sameTeacher(s, email)) return false;
       if (!isWeeklyPeriod(s.period)) return false;
@@ -1103,9 +1110,9 @@
     var d = dateObj(record && record.date);
     var period = Number(record && record.period);
     if (!d || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
-    var fixedSetting = fixedOvertimeSetting(teacher);
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, schedules);
     if (fixedSetting.configured && fixedSetting.valid) {
-      return isFixedOvertimeRecord(record, teacher, schoolSwapIndex);
+      return isFixedOvertimeRecord(record, teacher, schoolSwapIndex, schedules);
     }
     if (hasCourseAttributeMetadata(record)) return isRecordOvertimeCourse(record);
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
@@ -1128,11 +1135,11 @@
          && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
     // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
-    var fixedSetting = fixedOvertimeSetting(teacher);
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, schedules);
     var selfRecords = eligible.filter(function (record) {
       return isSelfPaidRecord(record)
         && (!fixedSetting.configured || !fixedSetting.valid
-          || isFixedOvertimeRecord(record, teacher, schoolSwapIndex));
+          || isFixedOvertimeRecord(record, teacher, schoolSwapIndex, schedules));
     });
     var publicRecords = eligible.filter(function (record) {
       return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
@@ -1348,13 +1355,13 @@
           if (config.key !== 'overtime' || !expectedPlan) return true;
           return normalizeExpensePlan(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
-         var sourceFixedSetting = fixedOvertimeSetting(sourceRow);
+         var sourceFixedSetting = fixedOvertimeSettingForSchedules(sourceRow, opts.allSchedules || []);
          var selfCount = allocation
            ? chargedRecordsForSource.filter(isSelfPaidRecord).length
            : leave.filter(function (record) {
              return isSelfPaidRecord(record)
                && (!sourceFixedSetting.configured || !sourceFixedSetting.valid
-                 || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex));
+                 || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex, opts.allSchedules || []));
            }).length;
         var publicUsed = allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
