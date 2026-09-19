@@ -920,8 +920,8 @@ window.UiAdmin = (function () {
         var day = parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
         if (!(day >= 1 && day <= 5) || !(period === 0 || period === 45 || (period >= 1 && period <= 7))) return;
         if (!isScheduleActiveAtExpensePlanEnd(schedule, periodEnd)) return;
-        if (isSubstituteScheduleEntry(schedule) || schedule.isPreplanned || String(schedule.attr || '').trim() === '預排') return;
-        if (!isOvertimeScheduleEntry(schedule)) return;
+        if (schedule.isPreplanned || String(schedule.attr || '').trim() === '預排') return;
+        if (!isOvertimeScheduleEntry(schedule) && !isSubstituteScheduleEntry(schedule)) return;
         var key = day + '|' + period;
         if (seen[key]) return;
         seen[key] = true;
@@ -971,7 +971,7 @@ window.UiAdmin = (function () {
       var configuredCount = preview.filter(function (item) { return item.setting.hours > 0; }).length;
       var totalSlots = preview.reduce(function (sum, item) { return sum + item.setting.hours; }, 0);
       var ok = await showConfirm(
-        '將依 ' + (periodEnd || '目前') + ' 課表的「超鐘點」標記覆蓋全部 ' + teachers.length + ' 位教師的學期固定設定。\n'
+        '將依 ' + (periodEnd || '目前') + ' 課表的「超鐘點／代課」標記覆蓋全部 ' + teachers.length + ' 位教師的學期固定設定。\n'
           + '其中 ' + configuredCount + ' 位有固定超鐘點，共 ' + totalSlots + ' 節／週；沒有標記者將設為 0 節。\n\n'
           + '既有固定設定也會被覆蓋，確定執行？',
         '一鍵代入全部教師固定超鐘點'
