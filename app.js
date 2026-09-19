@@ -11261,8 +11261,9 @@ createApp({
     };
      const saveScheduleCell = (...a) => needUiAdmin('saveScheduleCell', ...a);
      const clearScheduleCell = (...a) => needUiAdmin('clearScheduleCell', ...a);
-     const updateTeacherBaseHours = (...a) => needUiAdmin('updateTeacherBaseHours', ...a);
-     const fillFixedOvertimeFromCurrentSchedule = (...a) => needUiAdmin('fillFixedOvertimeFromCurrentSchedule', ...a);
+      const updateTeacherBaseHours = (...a) => needUiAdmin('updateTeacherBaseHours', ...a);
+      const fillFixedOvertimeFromCurrentSchedule = (...a) => needUiAdmin('fillFixedOvertimeFromCurrentSchedule', ...a);
+      const fillFixedOvertimeForAllTeachers = (...a) => needUiAdmin('fillFixedOvertimeForAllTeachers', ...a);
     const openAddTeacherModal = (...a) => needUiAdmin('openAddTeacherModal', ...a);
     const openEditTeacherModal = (...a) => needUiAdmin('openEditTeacherModal', ...a);
     const saveTeacher = (...a) => needUiAdmin('saveTeacher', ...a);
@@ -12086,7 +12087,7 @@ createApp({
        isAdminBatchGroupSelected, toggleAdminBatchGroupSelection,
         batchAdminApprove, batchAdminReject, openBatchPendingPrintPreview, lastBatchPrintIds, showBatchPrintPrompt, printLastBatchNotices, dismissBatchPrintPrompt,
        closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, closeSuccessCopyLine,
-        openScheduleEditModal, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, pickScheduleAttr, normalizeScheduleFormFlags, getScheduleAttrLabel, getOvertimeExpenseSourceOptions, openOvertimePlanModal, saveOvertimePlan,
+        openScheduleEditModal, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, fillFixedOvertimeForAllTeachers, pickScheduleAttr, normalizeScheduleFormFlags, getScheduleAttrLabel, getOvertimeExpenseSourceOptions, openOvertimePlanModal, saveOvertimePlan,
       openAddTeacherModal, openEditTeacherModal, saveTeacher, deleteTeacher,
         handleFileChange, getMappingLabel, importSchedules, migrateNameKeySchema, toggleSelectAllRecords, isHistoryRecordSelected, isHistoryBatchGroupSelected, toggleHistoryBatchGroupSelection, loadTeacherClassesForExchange,
       printSelectedForms, sendSelectedBatchNotices, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel,

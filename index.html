@@ -1912,6 +1912,7 @@
               <span>👤 教師帳號與基本鐘點管理</span>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-success btn-md" @click="showImportTeachersModal = true">📥 批次匯入教師</button>
+                <button class="btn btn-secondary btn-md" @click="fillFixedOvertimeForAllTeachers">⚡ 全部代入固定超鐘點</button>
                 <button class="btn btn-primary btn-md" @click="openAddTeacherModal">➕ 新增教師</button>
               </div>
             </div>
@@ -3644,13 +3645,13 @@
           </div>
           <div class="modal-body">
             <p style="margin:0 0 12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;">
-               請為結算最後一天仍有效的每一個超鐘點或代課（小鐘點）課格選擇經費來源。已在結算最後一天前終止的課程不列入；若長期調課跨過最後一天，依最後一天的課表結算。儲存後會依日期、節次與班級分配至會計 Excel 的對應工作表。
+               超鐘點課格以教師前面設定的「固定超鐘點節次」為準；代課（小鐘點）首次設定時，取結算最後一天仍有效的課格。儲存後會保留經費來源快照，不因日後課表變更而移動，並依日期、節次與班級分配至會計 Excel 的對應工作表。
             </p>
             <div style="margin:-4px 0 12px;padding:8px 10px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:0.78rem;">
               判斷日期：結算最後一天 {{ overtimePlanPeriodEnd || '未設定' }}
             </div>
             <div v-if="!overtimePlanRows.length" class="empty-state" style="padding:24px 12px;">
-               目前課表沒有標記為「超鐘點」或「代課」的課格。
+               目前固定超鐘點或代課小鐘點快照沒有可設定的課格。
             </div>
             <div v-else style="display:flex;flex-direction:column;gap:8px;">
               <div v-for="row in overtimePlanRows" :key="row.key" style="display:grid;grid-template-columns:70px 78px minmax(90px,1fr) minmax(180px,1fr);align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">

@@ -909,7 +909,7 @@ window.UiAdmin = (function () {
       return { configured: false, valid: false, hours: 0, slotsText: '', error: '' };
     }
 
-    function currentFixedOvertimeSlots(teacher) {
+    function currentFixedOvertimeSlots(teacher, periodEnd) {
       var teacherKeys = teacherIdentityKeys(teacher);
       var seen = {};
       var slots = [];
@@ -918,6 +918,7 @@ window.UiAdmin = (function () {
         var period = parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10);
         var day = parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
         if (!(day >= 1 && day <= 5) || !(period === 0 || period === 45 || (period >= 1 && period <= 7))) return;
+        if (!isScheduleActiveAtExpensePlanEnd(schedule, periodEnd)) return;
         if (isSubstituteScheduleEntry(schedule) || schedule.isPreplanned || String(schedule.attr || '').trim() === '預排') return;
         if (!isOvertimeScheduleEntry(schedule)) return;
         var key = day + '|' + period;
@@ -933,7 +934,8 @@ window.UiAdmin = (function () {
       var current = teacherForm.value || {};
       var existing = fixedOvertimeSetting(current);
       if (existing.configured && !await showConfirm('將以目前課表標記為「超鐘點」的固定節次覆蓋現有設定，確定嗎？')) return;
-      var slotsText = currentFixedOvertimeSlots(current);
+      var periodEnd = getOvertimePlanPeriodEnd();
+      var slotsText = currentFixedOvertimeSlots(current, periodEnd);
       var parsed = fixedOvertimeSetting({
         fixedOvertimeHours: slotsText ? undefined : 0,
         fixedOvertimeSlots: slotsText
@@ -942,7 +944,90 @@ window.UiAdmin = (function () {
         fixedOvertimeHours: parsed.hours,
         fixedOvertimeSlots: parsed.slotsText
       });
-      showToast(slotsText ? '已從目前課表帶入 ' + parsed.hours + ' 節固定超鐘點' : '目前課表沒有標記超鐘點，已帶入 0 節', 'success');
+      showToast(slotsText
+        ? '已依 ' + (periodEnd || '目前') + ' 課表帶入 ' + parsed.hours + ' 節固定超鐘點'
+        : (periodEnd || '目前') + ' 課表沒有標記超鐘點，已帶入 0 節', 'success');
+    }
+
+    async function fillFixedOvertimeForAllTeachers() {
+      var teachers = (teachersList.value || []).filter(function (teacher) {
+        return String(teacher && (teacher.loginEmail || teacher.email || teacher['教師Email']) || '').trim()
+          && String(teacher && (teacher.name || teacher.teacherName || teacher['教師姓名']) || '').trim();
+      });
+      if (!teachers.length) {
+        showToast('目前沒有可設定的教師', 'warning');
+        return;
+      }
+      var periodEnd = getOvertimePlanPeriodEnd();
+      var preview = teachers.map(function (teacher) {
+        var slotsText = currentFixedOvertimeSlots(teacher, periodEnd);
+        var setting = fixedOvertimeSetting({
+          fixedOvertimeHours: slotsText ? undefined : 0,
+          fixedOvertimeSlots: slotsText
+        });
+        return { teacher: teacher, setting: setting };
+      });
+      var configuredCount = preview.filter(function (item) { return item.setting.hours > 0; }).length;
+      var totalSlots = preview.reduce(function (sum, item) { return sum + item.setting.hours; }, 0);
+      var ok = await showConfirm(
+        '將依 ' + (periodEnd || '目前') + ' 課表的「超鐘點」標記覆蓋全部 ' + teachers.length + ' 位教師的學期固定設定。\n'
+          + '其中 ' + configuredCount + ' 位有固定超鐘點，共 ' + totalSlots + ' 節／週；沒有標記者將設為 0 節。\n\n'
+          + '既有固定設定也會被覆蓋，確定執行？',
+        '一鍵代入全部教師固定超鐘點'
+      );
+      if (!ok) return;
+
+      loading.value = true;
+      loadingMessage.value = '正在代入全部教師固定超鐘點…';
+      try {
+        var rows = preview.map(function (item) {
+          var teacher = item.teacher;
+          return {
+            '學期代號': currentSemester.value,
+            '教師Email': teacher.loginEmail || teacher.email || teacher['教師Email'],
+            '教師姓名': teacher.name || teacher.teacherName || teacher['教師姓名'],
+            '超鐘點節數': item.setting.hours,
+            '超鐘點節次': item.setting.slotsText
+          };
+        });
+        var TCHUNK = 80;
+        for (var ti = 0; ti < rows.length; ti += TCHUNK) {
+          var chunk = rows.slice(ti, ti + TCHUNK);
+          var doneN = Math.min(ti + chunk.length, rows.length);
+          loadingMessage.value = '代入固定超鐘點 ' + doneN + '／' + rows.length + '…';
+          await callGasApiWithProgress(
+            'importTeachersBatch',
+            { list: chunk },
+            '固定超鐘點 ' + doneN + '／' + rows.length
+          );
+        }
+        var byEmail = {};
+        preview.forEach(function (item) {
+          var teacher = item.teacher;
+          var email = String(teacher.loginEmail || teacher.email || teacher['教師Email'] || '').toLowerCase().trim();
+          byEmail[email] = item.setting;
+        });
+        teachersList.value = (teachersList.value || []).map(function (teacher) {
+          var email = String(teacher.loginEmail || teacher.email || teacher['教師Email'] || '').toLowerCase().trim();
+          var setting = byEmail[email];
+          if (!setting) return teacher;
+          return Object.assign({}, teacher, {
+            fixedOvertimeHours: setting.hours,
+            fixedOvertimeSlots: setting.slotKeys,
+            fixedOvertimeSlotsText: setting.slotsText,
+            fixedOvertimeConfigured: true,
+            fixedOvertimeValid: true,
+            fixedOvertimeConfigError: ''
+          });
+        });
+        showToast('已依 ' + (periodEnd || '目前') + ' 課表代入全部 ' + rows.length + ' 位教師的固定超鐘點', 'success');
+        softRefreshInBackground({ force: true, delay: 500 });
+      } catch (e) {
+        console.error('批次代入固定超鐘點失敗：', e);
+        showToast('批次代入失敗：' + e.message, 'error');
+      } finally {
+        loading.value = false;
+      }
     }
 
     function normalizeFixedOvertimeForm() {
@@ -1075,35 +1160,126 @@ window.UiAdmin = (function () {
       return [row && row.day, row && row.period, String(row && row.className || '').trim()].join('|');
     }
 
+    function schedulePlanDay(schedule) {
+      return parseInt(schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期']), 10);
+    }
+
+    function schedulePlanPeriod(schedule) {
+      return parseInt(schedule && (schedule.period != null ? schedule.period : schedule['節次']), 10);
+    }
+
+    function schedulePlanSlot(schedule) {
+      return {
+        day: schedulePlanDay(schedule),
+        period: schedulePlanPeriod(schedule),
+        className: String(schedule && (schedule.className != null ? schedule.className : schedule['班級']) || '').trim()
+      };
+    }
+
     function openOvertimePlanModal(teacher) {
       if (!teacher) return;
       var periodEnd = getOvertimePlanPeriodEnd();
       overtimePlanPeriodEnd.value = periodEnd;
-      var rows = (allSchedules.value || []).filter(function (schedule) {
+      var teacherKeys = teacherIdentityKeys(teacher);
+      var rawPlan = teacher.expensePlan !== undefined
+        ? teacher.expensePlan
+        : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || '');
+      var parsedPlan = window.FieldMap && window.FieldMap.parseExpensePlan
+        ? window.FieldMap.parseExpensePlan(rawPlan)
+        : { mode: 'empty', slots: [], legacySource: '' };
+      var fixed = fixedOvertimeSetting(teacher);
+      var fixedKeys = {};
+      (fixed.valid && fixed.slots || []).forEach(function (slot) {
+        fixedKeys[String(slot.dayOfWeek) + '|' + String(slot.period)] = true;
+      });
+      var savedPlanDayKeys = {};
+      if (parsedPlan.mode === 'slots') {
+        (parsedPlan.slots || []).forEach(function (slot) {
+          savedPlanDayKeys[String(slot.day) + '|' + String(slot.period)] = true;
+        });
+      }
+      var candidates = (allSchedules.value || []).filter(function (schedule) {
         var scheduleKeys = teacherIdentityKeys(schedule);
-        return teacherIdentityKeys(teacher).some(function (key) {
-          return scheduleKeys.indexOf(key) >= 0;
-        }) && (isOvertimeScheduleEntry(schedule) || isSubstituteScheduleEntry(schedule))
-          && isScheduleActiveAtExpensePlanEnd(schedule, periodEnd);
-      }).slice().sort(function (a, b) {
-        return (parseInt(a.dayOfWeek, 10) || 0) - (parseInt(b.dayOfWeek, 10) || 0)
-          || (parseInt(a.period, 10) || 0) - (parseInt(b.period, 10) || 0)
+        if (!teacherKeys.some(function (key) { return scheduleKeys.indexOf(key) >= 0; })) return false;
+        return isScheduleActiveAtExpensePlanEnd(schedule, periodEnd);
+      });
+      var rows = [];
+      var seen = {};
+
+      function addRow(slot, source, schedule, kind) {
+        var day = parseInt(slot && slot.day, 10);
+        var period = parseInt(slot && slot.period, 10);
+        if (!(day >= 1 && day <= 7) || !(period === 0 || period === 45 || (period >= 1 && period <= 8))) return;
+        var className = String(slot && slot.className || '').trim();
+        var key = day + '|' + period + '|' + className;
+        if (seen[key]) return;
+        seen[key] = true;
+        var resolvedSource = source;
+        if (resolvedSource === undefined || resolvedSource === null) {
+          resolvedSource = schedule ? expenseSourceForSchedule(teacher, schedule) : '';
+        }
+        rows.push({
+          key: 'expense|' + key + '|' + rows.length,
+          day: day,
+          period: period,
+          className: className,
+          subject: String(schedule && (schedule.subject || schedule['科目']) || '').trim(),
+          activeFrom: schedule && (schedule.activeFrom || schedule['啟用起日']) || '',
+          activeTo: schedule && (schedule.activeTo || schedule['啟用迄日']) || '',
+          source: String(resolvedSource || '').trim(),
+          kind: kind || 'snapshot'
+        });
+      }
+
+      var useFixedOvertime = fixed.configured && fixed.valid;
+      var hasPlanSnapshot = parsedPlan.mode === 'slots';
+      candidates.forEach(function (schedule) {
+        var slot = schedulePlanSlot(schedule);
+        var slotKey = slot.day + '|' + slot.period;
+        var isSubstitute = isSubstituteScheduleEntry(schedule);
+        var isFixedOvertime = useFixedOvertime && !isSubstitute && !!fixedKeys[slotKey]
+          && !savedPlanDayKeys[slotKey];
+        var isLegacyOvertime = !hasPlanSnapshot && !useFixedOvertime && isOvertimeScheduleEntry(schedule);
+        var shouldAdd = isSubstitute
+          ? !hasPlanSnapshot
+          : (isFixedOvertime || isLegacyOvertime);
+        if (!shouldAdd) return;
+        addRow(slot, undefined, schedule, isSubstitute ? 'substitute' : 'fixed');
+      });
+
+      // 固定節次沒有對應課表時，仍保留可指定經費來源的空白課格。
+      if (useFixedOvertime) {
+        (fixed.slots || []).forEach(function (slot) {
+          var slotKey = String(slot.dayOfWeek) + '|' + String(slot.period);
+          var hasFixedRow = rows.some(function (row) {
+            return row.day + '|' + row.period === slotKey && row.kind === 'fixed';
+          });
+          var hasSavedSlot = parsedPlan.mode === 'slots' && (parsedPlan.slots || []).some(function (saved) {
+            return String(saved.day) + '|' + String(saved.period) === slotKey;
+          });
+          if (!hasFixedRow && !hasSavedSlot) {
+            var emptySlot = { day: slot.dayOfWeek, period: slot.period, className: '' };
+            var source = window.FieldMap && window.FieldMap.expensePlanSourceForSlot
+              ? window.FieldMap.expensePlanSourceForSlot(parsedPlan, emptySlot) : '';
+            addRow(emptySlot, source, null, 'fixed');
+          }
+        });
+      }
+
+      // 已儲存的課格是經費來源快照，課表後續變更不應讓它消失。
+      if (parsedPlan.mode === 'slots') {
+        (parsedPlan.slots || []).forEach(function (slot) {
+          addRow(slot, slot.source, null, 'snapshot');
+        });
+      }
+      rows.sort(function (a, b) {
+        return (a.day || 0) - (b.day || 0)
+          || (a.period || 0) - (b.period || 0)
           || String(a.className || '').localeCompare(String(b.className || ''), 'zh-Hant')
-          || String(a.activeFrom || '').localeCompare(String(b.activeFrom || ''));
+          || String(a.kind || '').localeCompare(String(b.kind || ''), 'en');
       });
       overtimePlanTeacher.value = teacher;
-      overtimePlanRows.value = rows.map(function (schedule, index) {
-        return {
-          key: String(schedule.id || '') + '|' + index,
-          day: parseInt(schedule.dayOfWeek, 10),
-          period: parseInt(schedule.period, 10),
-          className: String(schedule.className || '').trim(),
-          subject: String(schedule.subject || '').trim(),
-          activeFrom: schedule.activeFrom || '',
-          activeTo: schedule.activeTo || '',
-          source: expenseSourceForSchedule(teacher, schedule) || ''
-        };
-      });
+      overtimePlanRows.value = rows;
       showOvertimePlanModal.value = true;
     }
 
@@ -1111,7 +1287,8 @@ window.UiAdmin = (function () {
       var teacher = overtimePlanTeacher.value;
       var rows = overtimePlanRows.value || [];
       if (!teacher) return;
-      // 空白來源代表預設經費；序列化時會略過未指定的課格。
+      var fixedSetting = fixedOvertimeSetting(teacher);
+      // 空白來源代表預設經費，儲存後會成為穩定的來源快照。
       var visibleSlots = rows.map(function (row) {
         return {
           day: row.day,
@@ -1143,8 +1320,10 @@ window.UiAdmin = (function () {
         '教師姓名': teacher.name || teacher.teacherName || teacher['教師姓名'],
         '授課科目': teacher.subject || teacher['授課科目'] || '',
         '職務': teacher.jobTitle || teacher['職務'] || '',
-        '鐘點支出計畫': serialized,
-        '系統角色': teacher.role || teacher['系統角色'] || 'teacher',
+         '鐘點支出計畫': serialized,
+         '超鐘點節數': fixedSetting.configured ? fixedSetting.hours : '',
+         '超鐘點節次': fixedSetting.configured ? fixedSetting.slotsText : '',
+         '系統角色': teacher.role || teacher['系統角色'] || 'teacher',
         '基本鐘點': teacher.baseHours === 0 || teacher.baseHours === '0'
           ? 0 : (parseInt(teacher.baseHours, 10) || 16),
         '折抵額度': isNaN(quota) || quota < 0 ? 0 : Math.round(quota * 1000) / 1000
@@ -2118,6 +2297,7 @@ window.UiAdmin = (function () {
       clearScheduleCell: clearScheduleCell,
        updateTeacherBaseHours: updateTeacherBaseHours,
        fillFixedOvertimeFromCurrentSchedule: fillFixedOvertimeFromCurrentSchedule,
+       fillFixedOvertimeForAllTeachers: fillFixedOvertimeForAllTeachers,
        showOvertimePlanModal: showOvertimePlanModal,
       overtimePlanTeacher: overtimePlanTeacher,
       overtimePlanRows: overtimePlanRows,
