@@ -606,14 +606,26 @@ window.DomainBilling = (function () {
     var parsed = parseTeacherExpensePlan(teacher);
     if (parsed.mode === 'legacy') return parsed.legacySource;
     if (parsed.mode !== 'slots') return '';
+    var day = schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期']);
+    var period = schedule && (schedule.period != null ? schedule.period : schedule['節次']);
+    var className = schedule && (schedule.className != null ? schedule.className : schedule['班級']);
     if (window.FieldMap && window.FieldMap.expensePlanSourceForSlot) {
-      return window.FieldMap.expensePlanSourceForSlot(parsed, {
-        day: schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期']),
-        period: schedule && (schedule.period != null ? schedule.period : schedule['節次']),
-        className: schedule && (schedule.className != null ? schedule.className : schedule['班級'])
+      var direct = window.FieldMap.expensePlanSourceForSlot(parsed, {
+        day: day,
+        period: period,
+        className: className
       });
+      if (direct) return direct;
     }
-    return '';
+    // 課表版本更換後，快照班級可能與目前班級不同；同一星期／節次只有一個來源時仍沿用快照。
+    var dayNumber = parseInt(day, 10);
+    var periodNumber = parseInt(period, 10);
+    var sources = [];
+    (parsed.slots || []).forEach(function (item) {
+      if (item.day !== dayNumber || item.period !== periodNumber) return;
+      if (sources.indexOf(item.source) < 0) sources.push(item.source);
+    });
+    return sources.length === 1 ? sources[0] : '';
   }
 
   function expenseClassNamesOverlap(left, right) {
@@ -773,7 +785,33 @@ window.DomainBilling = (function () {
         warnings.push('教師「' + (teacher.name || teacher.teacherName || '') + '」第 ' + (weekIndex + 1) + ' 週超鐘點課格多於計算節數。');
       }
       if (candidates.length < target) {
-        addHours(DEFAULT_EXPENSE_SOURCE, target - candidates.length, weekIndex, null);
+        var candidateKeys = {};
+        candidates.forEach(function (schedule) {
+          candidateKeys[fixedOvertimeSlotKey(scheduleDay(schedule), schedulePeriod(schedule))] = true;
+        });
+        var missing = target - candidates.length;
+        var snapshotSlots = [];
+        if (fixedSetting.configured && fixedSetting.valid) {
+          (fixedSetting.slots || []).forEach(function (slot) {
+            if (snapshotSlots.length >= missing) return;
+            var key = fixedOvertimeSlotKey(slot.dayOfWeek, slot.period);
+            if (candidateKeys[key]) return;
+            var snapshot = (parsed.slots || []).find(function (item) {
+              return item.day === Number(slot.dayOfWeek) && item.period === Number(slot.period);
+            });
+            snapshotSlots.push({
+              dayOfWeek: Number(slot.dayOfWeek),
+              period: Number(slot.period),
+              className: snapshot ? snapshot.className : ''
+            });
+          });
+        }
+        snapshotSlots.forEach(function (schedule) {
+          addHours(sourceForOvertimeSchedule(teacher, schedule) || DEFAULT_EXPENSE_SOURCE, 1, weekIndex, schedule);
+        });
+        for (var missingIndex = snapshotSlots.length; missingIndex < missing; missingIndex += 1) {
+          addHours(DEFAULT_EXPENSE_SOURCE, 1, weekIndex, null);
+        }
       }
     });
 

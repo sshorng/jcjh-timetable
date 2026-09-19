@@ -742,6 +742,32 @@ assert.equal(defaultPlan.rows[0].actualHours, 1);
 assert.equal(missingSource.blocking.length, 0, 'default overtime plan must not block accounting export');
 assert.ok(missingSource.summary.some(item => item.key === 'overtime:國教' && item.hours === 1), 'default overtime plan must be included in export summary');
 
+const snapshotOnlyExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [{
+    email: 'snapshot-only@x', name: '快照無課表教師', baseHours: 0,
+    fixedOvertimeHours: 4, fixedOvertimeSlots: '一1、二2、三3、四4',
+    expensePlan: JSON.stringify([
+      { day: 1, period: 1, className: '無人機', source: '無人機' },
+      { day: 2, period: 2, className: '無人機', source: '無人機' },
+      { day: 3, period: 3, className: '無人機', source: '無人機' },
+      { day: 4, period: 4, className: '無人機', source: '無人機' }
+    ])
+  }],
+  allSchedules: [],
+  substitutionRecords: []
+});
+const snapshotOnlyPlanExport = snapshotOnlyExport.overtimePlans.find(group => group.plan === '無人機');
+assert.ok(snapshotOnlyPlanExport, '固定節次沒有目前課表時仍應建立無人機分表');
+assert.deepEqual([
+  snapshotOnlyPlanExport.rows[0].grossHours,
+  snapshotOnlyPlanExport.rows[0].actualHours
+], [4, 4], '無人機快照節數不應回退到國教');
+assert.equal(snapshotOnlyExport.overtimePlans.some(group => group.plan === '國教'), false,
+  '全數有來源快照時不應額外建立國教分表');
+
 const fixedExportSchedules = [];
 for (let i = 0; i < 13; i += 1) {
   fixedExportSchedules.push({

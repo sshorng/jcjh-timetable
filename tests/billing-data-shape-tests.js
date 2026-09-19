@@ -480,6 +480,45 @@ assert.deepEqual(partiallyConfiguredRow.expensePlanAllocations.map(row => [row.s
   ['預設', 1]
 ]);
 
+const snapshotOnlyPlan = JSON.stringify([
+  { day: 1, period: 1, className: '無人機', source: '無人機' },
+  { day: 2, period: 2, className: '無人機', source: '無人機' },
+  { day: 3, period: 3, className: '無人機', source: '無人機' },
+  { day: 4, period: 4, className: '無人機', source: '無人機' }
+]);
+const snapshotOnlyRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{
+    email: 'snapshot-only@x', name: '快照無課表教師', baseHours: 0,
+    fixedOvertimeHours: 4, fixedOvertimeSlots: '一1、二2、三3、四4',
+    expensePlan: snapshotOnlyPlan
+  }],
+  allSchedules: [],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportWeeksCount: 1
+})[0];
+assert.equal(snapshotOnlyRow.expensePlanSummary, '無人機（4節）',
+  '課表暫無對應班級時仍應保留快照計畫來源');
+assert.deepEqual(snapshotOnlyRow.expensePlanAllocations.map(row => [row.source, row.rawHours]), [
+  ['無人機', 4]
+], '固定超鐘點缺少目前課表時不應整批回退國教');
+
+const changedSmallCourseRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{
+    email: 'changed-small@x', name: '課表更版小鐘點教師', baseHours: 0,
+    expensePlan: JSON.stringify([{ day: 1, period: 1, className: '舊班', source: '資優' }])
+  }],
+  allSchedules: [{
+    teacherEmail: 'changed-small@x', dayOfWeek: 1, period: 1,
+    className: '新班', attr: '代課'
+  }],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportWeeksCount: 1
+})[0];
+assert.equal(changedSmallCourseRow.substituteAttributeDetails[0].source, '資優',
+  '小鐘點課表更版後仍應沿用唯一的星期／節次來源快照');
+
 const coEmployedRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'CoEmployed', name: '共聘教師', jobTitle: '共聘', baseHours: 0 }],
   allSchedules: [],

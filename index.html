@@ -3678,7 +3678,7 @@
               <div v-for="row in overtimePlanRows" :key="row.key" style="display:grid;grid-template-columns:70px 78px minmax(90px,1fr) minmax(180px,1fr);align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">
                  <span style="font-weight:700;">{{ ['日','一','二','三','四','五','六','日'][row.day] || row.day }}</span>
                 <span>{{ row.period === 0 ? '早自習' : (row.period === 45 ? '午休' : '第' + row.period + '節') }}</span>
-                 <span>{{ row.className || '未指定班級' }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small></span>
+                  <span>{{ row.className || (row.kind === 'fixed' ? '目前課表無對應班級' : '未指定班級') }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small></span>
                 <input type="text" class="form-input" list="overtime-expense-source-options" maxlength="40" placeholder="留白＝預設經費，可直接輸入計畫名稱" v-model="row.source">
               </div>
             </div>
@@ -4573,7 +4573,7 @@
       var _uiAdminP = null;
       window.ensureDomainBilling = function () {
         if (window.DomainBilling) return Promise.resolve();
-             if (!_billingP) _billingP = loadScript('domain-billing.js?v=20260917-quota-ledger3');
+             if (!_billingP) _billingP = loadScript('domain-billing.js?v=20260919-expense-snapshot1');
         return _billingP;
       };
       window.ensureExportAccounting = function () {
