@@ -11155,6 +11155,7 @@ createApp({
     const overtimePlanTeacher = ref(null);
     const overtimePlanRows = ref([]);
     const overtimePlanPeriodEnd = ref('');
+    const overtimePlanUsesFixedSlots = ref(false);
     const excelData = ref([]);
     const excelHeaders = ref([]);
     const mappingFields = ref({
@@ -11210,9 +11211,10 @@ createApp({
          teacherForm,
          showOvertimePlanModal,
          overtimePlanTeacher,
-         overtimePlanRows,
-         overtimePlanPeriodEnd,
-         accountingPeriod,
+          overtimePlanRows,
+          overtimePlanPeriodEnd,
+          overtimePlanUsesFixedSlots,
+          accountingPeriod,
          reportMonth,
          accountingPlanOptions,
          excelData,
@@ -12042,7 +12044,7 @@ createApp({
       adminSubTab,
       showImportTeachersModal, teacherExcelData, teacherExcelHeaders, teacherMappingFields, teacherImportPreview, runTeacherImportPreview, handleTeacherExcelChange, importTeachersBatch,
       isScheduleEditMode, showScheduleEditModal, scheduleForm,
-        showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd,
+         showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
         reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals, shiftReportPeriod,

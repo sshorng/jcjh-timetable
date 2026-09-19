@@ -79,9 +79,9 @@
       suffix: '小鐘點',
       titleSuffix: '代課鐘點費印領清冊',
       dataStart: 3,
-      templateTotalRow: 14,
+      templateTotalRow: 15,
       columns: 15,
-      kind: 'public'
+      kind: 'summary'
     },
     selfSub: {
       index: 3,
@@ -1486,19 +1486,108 @@
     });
   }
 
+  function expenseSourceForSubstituteSchedule(teacher, schedule) {
+    var raw = teacher && (teacher.expensePlan !== undefined
+      ? teacher.expensePlan
+      : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || ''));
+    var parsed = parseExpensePlan(raw);
+    if (parsed.mode === 'legacy') return outputExpensePlan(parsed.legacySource);
+    if (parsed.mode !== 'slots') return outputExpensePlan('預設');
+    var slot = {
+      day: Number(schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'])),
+      period: Number(schedule && (schedule.period != null ? schedule.period : schedule['節次'])),
+      className: String(schedule && (schedule.className || schedule['班級']) || '').trim()
+    };
+    if (root.FieldMap && typeof root.FieldMap.expensePlanSourceForSlot === 'function') {
+      return outputExpensePlan(root.FieldMap.expensePlanSourceForSlot(parsed, slot) || '預設');
+    }
+    var sources = parsed.slots.filter(function (item) {
+      return item.day === slot.day && item.period === slot.period
+        && (!item.className || !slot.className || item.className === slot.className);
+    }).map(function (item) { return outputExpensePlan(item.source); });
+    return sources.length ? sources[0] : outputExpensePlan('預設');
+  }
+
+  function substituteScheduleSlotsForPlan(source, opts, period, plan) {
+    var seen = {};
+    return (opts.allSchedules || []).filter(function (schedule) {
+      if (!sameTeacher(schedule, source) || !isSubstituteSchedule(schedule)
+          || !isWeeklyPeriod(schedule.period) || !scheduleActiveInPeriod(schedule, period)) return false;
+      return expenseSourceForSubstituteSchedule(source, schedule) === outputExpensePlan(plan);
+    }).map(function (schedule) {
+      var day = Number(schedule.dayOfWeek);
+      var periodValue = Number(schedule.period);
+      var key = day + '|' + periodValue;
+      if (seen[key]) return null;
+      seen[key] = true;
+      return { day: day, period: periodValue };
+    }).filter(Boolean).sort(function (left, right) {
+      return left.day - right.day || left.period - right.period;
+    });
+  }
+
+  function substituteDetailSlots(details) {
+    var seen = {};
+    return (details || []).map(function (detail) {
+      var key = dayPeriodKey(detail && detail.date, detail && detail.period);
+      if (!key || seen[key]) return null;
+      seen[key] = true;
+      var parts = key.split('|');
+      return { day: Number(parts[0]), period: Number(parts[1]) };
+    }).filter(Boolean).sort(function (left, right) {
+      return left.day - right.day || left.period - right.period;
+    });
+  }
+
+  function substitutePlanMetrics(source, sourceRow, group, groupCount, opts, period) {
+    var weeks = Number(sourceRow && sourceRow.reportWeeksCount) > 0
+      ? Number(sourceRow.reportWeeksCount)
+      : (Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1));
+    var scheduleSlots = substituteScheduleSlotsForPlan(sourceRow || source, opts, period, group.source);
+    var detailSlots = substituteDetailSlots(group.details);
+    var slots = scheduleSlots.length ? scheduleSlots : detailSlots;
+    var paid = Number(group.hours) || 0;
+    var scheduled = scheduleSlots.length ? scheduleSlots.length * weeks : paid;
+    var sourceScheduled = Number(sourceRow && sourceRow.substituteScheduledCount);
+    if (groupCount === 1 && Number.isFinite(sourceScheduled) && sourceScheduled >= paid) {
+      scheduled = sourceScheduled;
+    }
+    if (!scheduled) scheduled = paid;
+    var deduction = Math.max(0, scheduled - paid);
+    var sourceDeduction = Number(sourceRow && sourceRow.substituteDeduction);
+    if (groupCount === 1 && Number.isFinite(sourceDeduction)
+        && sourceDeduction >= 0 && sourceDeduction <= scheduled) {
+      deduction = sourceDeduction;
+    }
+    var weekly = scheduleSlots.length
+      ? scheduled / weeks
+      : (slots.length || paid);
+    return {
+      weekly: Math.round(weekly * 100) / 100,
+      schedule: slots.map(function (slot) { return dayPeriodText(slot.day, slot.period); }).filter(Boolean).join('、'),
+      weeks: weeks,
+      scheduled: scheduled,
+      deduction: deduction,
+      paid: paid
+    };
+  }
+
   function substituteAttributePlans(opts, period) {
     var teacherMap = {};
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     var groups = {};
+    var sourceRows = {};
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     (opts.monthlyReportRows || []).forEach(function (sourceRow) {
+      var sourceEmail = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
+      if (sourceEmail) sourceRows[sourceEmail] = sourceRow;
       var details = Array.isArray(sourceRow.substituteAttributeDetails)
         ? sourceRow.substituteAttributeDetails.filter(function (detail) {
           return dateInPeriod(detail.date, period);
         })
         : [];
       if (!details.length) return;
-      var email = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
+      var email = sourceEmail;
       if (!email) return;
       details.forEach(function (detail) {
         var source = planLabel(detail.source);
@@ -1517,6 +1606,11 @@
       });
     });
 
+    var groupCounts = {};
+    Object.keys(groups).forEach(function (key) {
+      var group = groups[key];
+      groupCounts[group.email] = (groupCounts[group.email] || 0) + 1;
+    });
     var bySource = {};
     Object.keys(groups).forEach(function (key) {
       var group = groups[key];
@@ -1533,6 +1627,15 @@
           || left.email.localeCompare(right.email);
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
+        var sourceRow = sourceRows[group.email] || t;
+        var metrics = substitutePlanMetrics(
+          { email: group.email, name: group.name },
+          sourceRow,
+          group,
+          groupCounts[group.email] || 1,
+          opts,
+          period
+        );
         var noteGroups = {};
         group.details.forEach(function (detail) {
           var target = String(detail.substituteForName || '').trim();
@@ -1565,9 +1668,15 @@
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
           name: teacherName(t, group.name || group.email),
+          weeklyOvertime: metrics.weekly,
+          schedule: metrics.schedule,
+          weeks: metrics.weeks,
+          grossHours: metrics.scheduled,
+          deduction: metrics.deduction,
+          actualHours: metrics.paid,
           hours: group.hours,
           rate: FEE_DEFAULT,
-          amount: group.hours * FEE_DEFAULT,
+          amount: metrics.paid * FEE_DEFAULT,
           note: noteParts.join('；')
         };
       });
@@ -1803,9 +1912,9 @@
 
   function noteColumnFor(config) {
     if (!config) return 0;
-    if (config.key === 'overtime') return 15;
+    if (config.key === 'overtime' || config.key === 'substituteAttribute') return 15;
     if (config.key === 'adjunct') return 14;
-    if (config.key === 'publicSub' || config.key === 'publicSubAdjustment' || config.key === 'substituteAttribute') return 9;
+    if (config.key === 'publicSub' || config.key === 'publicSubAdjustment') return 9;
     if (config.key === 'selfSub' || config.key === 'mentor') return 9;
     return 0;
   }
@@ -1872,7 +1981,7 @@
   }
 
   function mergeSummaryNoteRow(sheet, config, totalRow) {
-    var endColumn = config.key === 'overtime' ? 'O' : 'N';
+    var endColumn = config.key === 'overtime' || config.key === 'substituteAttribute' ? 'O' : 'N';
     var noteRow = totalRow + 1;
     mergeCellRange(sheet, 'B' + noteRow + ':' + endColumn + noteRow);
   }
@@ -1897,6 +2006,9 @@
       if (config.key === 'overtime') {
         return [row.serial, row.title, row.name, row.weeklyOvertime, row.schedule, row.weeks === '' ? null : row.weeks, row.grossHours, row.deduction, row.actualHours, row.rate, row.amount, row.reduceNote === '' ? null : row.reduceNote, null, null, row.note];
       }
+      if (config.key === 'substituteAttribute') {
+        return [row.serial, row.title, row.name, row.weeklyOvertime, row.schedule, row.weeks === '' ? null : row.weeks, row.grossHours, row.deduction, row.actualHours, row.rate, row.amount, null, null, null, row.note];
+      }
       return [row.serial, row.title, row.name, row.weeklyOvertime, row.schedule, row.weeks === '' ? null : row.weeks, row.grossHours, row.deduction, row.actualHours, row.rate, row.amount, null, null, row.note];
     });
     writeRows(sheet, config.dataStart, values);
@@ -1920,6 +2032,15 @@
     applyMoneyNumberFormat(sheet, [10, 11], config.dataStart, totalRow);
     mergeSummaryNoteRow(sheet, config, totalRow);
     return totalRow;
+  }
+
+  function applySummaryHeaderLabels(sheet, config) {
+    if (!sheet || !config || config.key !== 'substituteAttribute') return;
+    sheet.getCell(2, 4).value = '每週代課';
+    sheet.getCell(2, 5).value = '代課星期/節次';
+    sheet.getCell(2, 6).value = '應發周數';
+    sheet.getCell(2, 7).value = '代課課數';
+    sheet.getCell(2, 8).value = '請假扣代課';
   }
 
   function hidePublicAuxiliaryColumns(sheet) {
@@ -2031,7 +2152,7 @@
     var substituteAttributeSheets = (data.substituteAttributePlans || []).map(function (group, index) {
       return {
         group: group,
-        sheet: cloneWorksheet(publicSubTemplate, workbook, '__substitute_attribute_' + index, substituteAttributeConfig.columns)
+        sheet: cloneWorksheet(overtimeTemplate, workbook, '__substitute_attribute_' + index, substituteAttributeConfig.columns)
       };
     });
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
@@ -2088,7 +2209,8 @@
       }
       usedNames[name] = true;
       sheet.name = name;
-      writePublicSheet(sheet, substituteAttributeConfig, group.rows);
+      applySummaryHeaderLabels(sheet, substituteAttributeConfig);
+      writeSummarySheet(sheet, substituteAttributeConfig, group.rows);
     });
     if (!planSheets.length && typeof workbook.removeWorksheet === 'function') {
       workbook.removeWorksheet(overtimeTemplate.id);

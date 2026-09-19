@@ -77,6 +77,7 @@ window.UiAdmin = (function () {
     var overtimePlanTeacher = useRef('overtimePlanTeacher', null);
     var overtimePlanRows = useRef('overtimePlanRows', []);
     var overtimePlanPeriodEnd = useRef('overtimePlanPeriodEnd', '');
+    var overtimePlanUsesFixedSlots = useRef('overtimePlanUsesFixedSlots', false);
     var accountingPlanOptions = deps.accountingPlanOptions || { value: [] };
 
     var excelData = useRef('excelData', []);
@@ -1188,6 +1189,7 @@ window.UiAdmin = (function () {
         ? window.FieldMap.parseExpensePlan(rawPlan)
         : { mode: 'empty', slots: [], legacySource: '' };
       var fixed = fixedOvertimeSetting(teacher);
+      overtimePlanUsesFixedSlots.value = fixed.configured && fixed.valid;
       var fixedKeys = {};
       (fixed.valid && fixed.slots || []).forEach(function (slot) {
         fixedKeys[String(slot.dayOfWeek) + '|' + String(slot.period)] = true;
@@ -2300,8 +2302,9 @@ window.UiAdmin = (function () {
        fillFixedOvertimeForAllTeachers: fillFixedOvertimeForAllTeachers,
        showOvertimePlanModal: showOvertimePlanModal,
       overtimePlanTeacher: overtimePlanTeacher,
-      overtimePlanRows: overtimePlanRows,
-      overtimePlanPeriodEnd: overtimePlanPeriodEnd,
+       overtimePlanRows: overtimePlanRows,
+       overtimePlanPeriodEnd: overtimePlanPeriodEnd,
+       overtimePlanUsesFixedSlots: overtimePlanUsesFixedSlots,
       getOvertimeExpenseSourceOptions: getOvertimeExpenseSourceOptions,
       openOvertimePlanModal: openOvertimePlanModal,
       saveOvertimePlan: saveOvertimePlan,

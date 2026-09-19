@@ -2,6 +2,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 
 global.window = global;
 require('../field-map.js');
@@ -11,6 +12,16 @@ require('../domain-schedule.js');
 require('../domain-class-away.js');
 require('../domain-billing.js');
 require('../export-accounting.js');
+
+const exportAccountingSource = fs.readFileSync(require.resolve('../export-accounting.js'), 'utf8');
+assert.match(exportAccountingSource, /cloneWorksheet\(overtimeTemplate, workbook, '__substitute_attribute_'/,
+  '小鐘點工作表應複製一般超鐘點工作表版型');
+assert.match(exportAccountingSource, /每週代課/,
+  '小鐘點工作表應使用代課欄位標題');
+assert.match(exportAccountingSource, /代課星期\/節次/,
+  '小鐘點工作表應使用代課星期／節次欄位標題');
+assert.match(exportAccountingSource, /請假扣代課/,
+  '小鐘點工作表應使用請假扣代課欄位標題');
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
 assert.equal(
@@ -477,6 +488,17 @@ const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
 });
 assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.plan), ['計畫A', '計畫B'], '課表代課不同來源應分表');
 assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => group.rows[0].hours), [1, 1]);
+assert.deepEqual(splitSubstituteAttribute.substituteAttributePlans.map(group => [
+  group.rows[0].weeklyOvertime,
+  group.rows[0].schedule,
+  group.rows[0].weeks,
+  group.rows[0].grossHours,
+  group.rows[0].deduction,
+  group.rows[0].actualHours
+]), [
+  [1, '一1', 1, 1, 0, 1],
+  [1, '一2', 1, 1, 0, 1]
+], '小鐘點應使用超鐘點摘要版型的節數欄位');
 
 const fallbackClassNote = build([], 2, schedules);
 assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '', '沒有實際異動時超鐘點備註應留白');

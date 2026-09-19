@@ -57,6 +57,7 @@ schedules.value = [{
 }];
 admin.openOvertimePlanModal({ loginEmail: 'teacher@example.com', email: '教師', name: '教師' });
 assert.equal(admin.overtimePlanRows.value.length, 1, '登入 Email 與課表姓名鍵不同時仍應找到超鐘點課格');
+assert.equal(admin.overtimePlanUsesFixedSlots.value, false, '未設定固定節次時仍應使用課表日期判定');
 admin.overtimePlanRows.value[0].source = '校務自訂計畫';
 assert.ok(admin.getOvertimeExpenseSourceOptions().includes('校務自訂計畫'), '目前輸入的新計畫也應立即成為下拉建議');
 
@@ -100,6 +101,7 @@ const fixedSourceAdmin = window.UiAdmin.create({
   requestsList: ref([])
 });
 fixedSourceAdmin.openOvertimePlanModal(fixedSourceTeacher);
+assert.equal(fixedSourceAdmin.overtimePlanUsesFixedSlots.value, true, '固定節次來源設定不應再顯示日期判定');
 assert.deepEqual(fixedSourceAdmin.overtimePlanRows.value.map(row => row.className), ['701', '801'],
   '經費來源應以固定超鐘點節次與已保存的小鐘點快照為準');
 assert.deepEqual(fixedSourceAdmin.overtimePlanRows.value.map(row => row.source), ['固定國教', '小鐘點計畫']);
