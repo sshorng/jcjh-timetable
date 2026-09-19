@@ -115,6 +115,38 @@ assert.deepEqual(fixedSourceAdmin.overtimePlanRows.value.map(row => row.classNam
   '課表變更後仍應保留已保存的經費來源快照');
 const fixedSourceSavePromise = fixedSourceAdmin.saveOvertimePlan();
 
+const blankSnapshotSchedules = ref([
+  { teacherEmail: '空白快照@example.com', dayOfWeek: 2, period: 2, className: '706', subject: '自然', attr: '代課' }
+]);
+const blankSnapshotTeacher = {
+  loginEmail: '空白快照@example.com',
+  email: '空白快照',
+  name: '空白快照',
+  expensePlan: JSON.stringify([{ day: 2, period: 2, className: '', source: '小鐘點計畫' }])
+};
+const blankSnapshotAdmin = window.UiAdmin.create({
+  ref,
+  callGasApi: async () => ({ count: 1 }),
+  callGasApiWithProgress: async () => ({ count: 1 }),
+  showToast: () => {},
+  showConfirm: async () => true,
+  loading: ref(false),
+  loadingMessage: ref(''),
+  currentSemester: ref('S1'),
+  reportMonth: ref('2026-08'),
+  accountingPeriod,
+  teachersList: ref([blankSnapshotTeacher]),
+  allSchedules: blankSnapshotSchedules,
+  leaveReasonOptions: [],
+  historyEditForm: ref({}),
+  showHistoryEditModal: ref(false),
+  requestsList: ref([])
+});
+blankSnapshotAdmin.openOvertimePlanModal(blankSnapshotTeacher);
+assert.deepEqual(blankSnapshotAdmin.overtimePlanRows.value.map(row => row.className), ['706'],
+  '空白經費快照應以目前有效課表補上班級');
+assert.equal(blankSnapshotAdmin.overtimePlanRows.value[0].subject, '自然');
+
 let fixedBatchPayload = null;
 const fixedBatchTeachers = ref([
   { loginEmail: 'one@example.com', email: '一號', name: '一號' },

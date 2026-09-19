@@ -1205,6 +1205,14 @@ window.UiAdmin = (function () {
         if (!teacherKeys.some(function (key) { return scheduleKeys.indexOf(key) >= 0; })) return false;
         return isScheduleActiveAtExpensePlanEnd(schedule, periodEnd);
       });
+      var currentScheduleByDayKey = {};
+      candidates.forEach(function (schedule) {
+        var slot = schedulePlanSlot(schedule);
+        var className = String(slot.className || '').trim();
+        if (!className) return;
+        var key = slot.day + '|' + slot.period;
+        if (!currentScheduleByDayKey[key]) currentScheduleByDayKey[key] = schedule;
+      });
       var rows = [];
       var seen = {};
 
@@ -1271,7 +1279,12 @@ window.UiAdmin = (function () {
       // 已儲存的課格是經費來源快照，課表後續變更不應讓它消失。
       if (parsedPlan.mode === 'slots') {
         (parsedPlan.slots || []).forEach(function (slot) {
-          addRow(slot, slot.source, null, 'snapshot');
+          var snapshotSlot = slot;
+          var snapshotSchedule = currentScheduleByDayKey[String(slot.day) + '|' + String(slot.period)];
+          if (!String(slot.className || '').trim() && snapshotSchedule) {
+            snapshotSlot = Object.assign({}, slot, { className: schedulePlanSlot(snapshotSchedule).className });
+          }
+          addRow(snapshotSlot, slot.source, snapshotSchedule || null, 'snapshot');
         });
       }
       rows.sort(function (a, b) {
@@ -1300,7 +1313,11 @@ window.UiAdmin = (function () {
         };
       });
       var visibleKeys = {};
-      visibleSlots.forEach(function (slot) { visibleKeys[expensePlanSlotKey(slot)] = true; });
+      var visibleDayPeriodKeys = {};
+      visibleSlots.forEach(function (slot) {
+        visibleKeys[expensePlanSlotKey(slot)] = true;
+        visibleDayPeriodKeys[String(slot.day) + '|' + String(slot.period)] = true;
+      });
       var existingPlan = teacher.expensePlan !== undefined
         ? teacher.expensePlan
         : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || '');
@@ -1308,7 +1325,11 @@ window.UiAdmin = (function () {
         ? window.FieldMap.parseExpensePlan(existingPlan) : null;
       // 期間外的歷史課格不顯示，但保留其來源設定供舊結算期間回查。
       var historicalSlots = parsedPlan && parsedPlan.mode === 'slots'
-        ? parsedPlan.slots.filter(function (slot) { return !visibleKeys[expensePlanSlotKey(slot)]; })
+        ? parsedPlan.slots.filter(function (slot) {
+          if (visibleKeys[expensePlanSlotKey(slot)]) return false;
+          var key = String(slot.day) + '|' + String(slot.period);
+          return !(visibleDayPeriodKeys[key] && !String(slot.className || '').trim());
+        })
         : [];
       var slots = historicalSlots.concat(visibleSlots);
       var serialized = !visibleSlots.length && parsedPlan
