@@ -345,7 +345,7 @@ assert.equal(substituteAttribute.substituteAttributePlans.length, 1, '課表代�
 assert.equal(substituteAttribute.substituteAttributePlans[0].plan, '國教');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].name, 'Billing');
 assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].hours, 1);
-assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（7/6）');
+assert.equal(substituteAttribute.substituteAttributePlans[0].rows[0].note, '7/6');
 
 const substituteAttributeCoverage = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
@@ -457,7 +457,7 @@ const exchangedSubstituteAttribute = window.ExportAccounting.buildExportData({
 assert.equal(exchangedSubstituteAttribute.sheets.overtime.length, 0, '調課後小鐘點不應列入超鐘點工作表');
 assert.equal(exchangedSubstituteAttribute.sheets.publicSub.length, 0, '調課後小鐘點不應列入一般公付代課工作表');
 assert.equal(exchangedSubstituteAttribute.substituteAttributePlans[0].rows[0].name, '交換小鐘點');
-assert.equal(exchangedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課1節（9/22）', '調課後小鐘點應以實際授課日期列入小鐘點表');
+assert.equal(exchangedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '9/22', '調課後小鐘點應以實際授課日期列入小鐘點表');
 
 const publicLeaveTypes = build([
   {
@@ -495,7 +495,7 @@ const datedSubstituteAttribute = window.ExportAccounting.buildExportData({
   }]
 });
 assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].hours, 3);
-assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '代課3節（9/18、9/25）');
+assert.equal(datedSubstituteAttribute.substituteAttributePlans[0].rows[0].note, '9/18、9/25');
 
 const splitSubstituteAttribute = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

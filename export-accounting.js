@@ -1691,8 +1691,8 @@
           }).map(function (item, dateIndex, all) {
             return dateIndex === 0 || item.key !== all[dateIndex - 1].key ? item.label : '';
           }).filter(Boolean);
-          var prefix = key === '__default__' ? '代課' : '代' + key;
-          return prefix + displayCount(noteDetails.length) + '節（' + noteDates.join('、') + '）';
+          if (key === '__default__') return noteDates.join('、');
+          return '代' + key + displayCount(noteDetails.length) + '節（' + noteDates.join('、') + '）';
         });
         return {
           serial: index + 1,
