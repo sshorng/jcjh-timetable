@@ -542,6 +542,19 @@ assert.deepEqual([
   conflictExpensePlan.canAutoAllocate
 ], ['conflict', 'SNAPSHOT_SCHEDULE_MISMATCH', false]);
 
+const blankSlotExpensePlan = window.FieldMap.resolveExpenseSource(
+  JSON.stringify([{ day: 1, period: 1, className: '', source: '' }]),
+  { day: 1, period: 1, className: '701', effectiveSchedule: { dayOfWeek: 1, period: 1, className: '701' } }
+);
+assert.deepEqual([
+  blankSlotExpensePlan.status,
+  blankSlotExpensePlan.source,
+  blankSlotExpensePlan.canAutoAllocate
+], ['snapshot-unbound', '', true], '留白課格來源應視為可自動分配的預設經費');
+assert.equal(window.FieldMap.formatExpensePlanSummary(
+  JSON.stringify([{ day: 1, period: 1, className: '', source: '' }])
+), '預設（1節）', '留白課格來源摘要應顯示預設經費');
+
 const coEmployedRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'CoEmployed', name: '共聘教師', jobTitle: '共聘', baseHours: 0 }],
   allSchedules: [],

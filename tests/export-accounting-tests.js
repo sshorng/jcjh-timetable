@@ -738,6 +738,23 @@ assert.equal(defaultPlan, undefined, 'missing slot source must not silently beco
 assert.ok(missingSource.blocking.length > 0, 'missing slot source must block accounting export');
 assert.ok(missingSource.warnings.some(message => message.includes('尚未分配')), 'missing slot source must be visible in export warnings');
 
+const blankSourceInput = Object.assign({}, configuredInput, {
+  teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 0, expensePlan: JSON.stringify([
+    { day: 1, period: 1, className: '', source: '' },
+    { day: 1, period: 2, className: '', source: '' }
+  ])}],
+  substitutionRecords: []
+});
+blankSourceInput.monthlyReportRows = window.DomainBilling.buildMonthlyReportRows(blankSourceInput);
+const blankSource = window.ExportAccounting.buildExportData(blankSourceInput);
+const blankSourceRow = blankSourceInput.monthlyReportRows[0];
+assert.equal(blankSourceRow.expensePlanConflicts.length, 0, '留白課格來源不應產生來源衝突');
+assert.equal(blankSourceRow.expensePlanBlockedHours, 0, '留白課格來源不應產生阻擋節數');
+assert.ok(blankSource.overtimePlans.some(group => group.plan === '國教'), '留白課格來源應匯入預設經費分表');
+assert.equal(blankSource.blocking.length, 0, '留白課格來源不應阻擋會計匯出');
+assert.equal(blankSource.warnings.some(message => message.includes('經費來源') || message.includes('尚未分配')), false,
+  '留白課格來源不應顯示經費來源警告');
+
 const conflictExport = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',
   reportWeeksCount: 1,

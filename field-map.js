@@ -364,7 +364,8 @@ window.FieldMap = (function () {
     const period = parseInt(item.period !== undefined ? item.period : item['節次'], 10);
     const className = String(item.className !== undefined ? item.className
       : (item['班級'] !== undefined ? item['班級'] : '')).trim();
-    if (!source || !Number.isFinite(day) || day < 1 || day > 7 || !isExpensePeriod(period)) return null;
+    // 留白來源是合法值，結算層會將其視為預設經費；不可因留白丟掉整個課格。
+    if (!Number.isFinite(day) || day < 1 || day > 7 || !isExpensePeriod(period)) return null;
     return { day: day, period: period, className: className, source: source };
   }
 
@@ -605,7 +606,8 @@ window.FieldMap = (function () {
     const sources = [];
     if (parsed.mode === 'legacy' && parsed.legacySource) return [parsed.legacySource];
     (parsed.slots || []).forEach(function (item) {
-      if (sources.indexOf(item.source) < 0) sources.push(item.source);
+      const source = item.source || '預設';
+      if (sources.indexOf(source) < 0) sources.push(source);
     });
     return sources;
   }
@@ -631,11 +633,12 @@ window.FieldMap = (function () {
     const counts = {};
     const order = [];
     (parsed.slots || []).forEach(function (item) {
-      if (!counts[item.source]) {
-        counts[item.source] = 0;
-        order.push(item.source);
+      const source = item.source || '預設';
+      if (!counts[source]) {
+        counts[source] = 0;
+        order.push(source);
       }
-      counts[item.source] += 1;
+      counts[source] += 1;
     });
     return order.length ? order.map(function (source) {
       return source + '（' + counts[source] + '節）';
