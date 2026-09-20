@@ -20,6 +20,10 @@ assert.match(exportAccountingSource, /每週代課/,
   '小鐘點工作表應使用代課欄位標題');
 assert.match(exportAccountingSource, /代課星期\/節次/,
   '小鐘點工作表應使用代課星期／節次欄位標題');
+assert.match(exportAccountingSource, /代課節數/,
+  '小鐘點工作表應使用代課節數欄位標題');
+assert.doesNotMatch(exportAccountingSource, /代課課數/,
+  '小鐘點工作表不應再使用代課課數欄位標題');
 assert.match(exportAccountingSource, /請假扣代課/,
   '小鐘點工作表應使用請假扣代課欄位標題');
 
@@ -164,6 +168,7 @@ const teacherOrder = window.ExportAccounting.buildExportData({
 assert.deepEqual(teacherOrder.sheets.publicSub.map(row => row.name), ['Zeta', 'Alpha'], '公付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.selfSub.map(row => row.actualName), ['Zeta', 'Alpha'], '自付代課應依教師名單排序');
 assert.deepEqual(teacherOrder.sheets.mentor.map(row => row.actualName), ['Zeta', 'Alpha'], '代導明細應依教師名單排序');
+assert.equal(teacherOrder.sheets.mentor[0].note, '701導師', '代導備註應使用班級加導師');
 
 const mergedOvertime = window.ExportAccounting.buildExportData({
   reportMonth: '2026-09',
@@ -365,6 +370,15 @@ const substituteCoverageRow = substituteAttributeCoverage.substituteAttributePla
   .find(row => row.name === 'Cover');
 assert.ok(substituteCoverageRow, '小鐘點被代課應由實際授課人列入小鐘點表');
 assert.equal(substituteCoverageRow.note, '代Billing1節（7/6）', '小鐘點備註應標出被代的原任教師');
+assert.equal(substituteCoverageRow.isSubstituteHelper, true, '協助代課者應標記為黃底欄位免填');
+assert.deepEqual([
+  substituteCoverageRow.weeklyOvertime,
+  substituteCoverageRow.schedule,
+  substituteCoverageRow.weeks,
+  substituteCoverageRow.grossHours,
+  substituteCoverageRow.deduction,
+  substituteCoverageRow.actualHours
+], ['', '', '', '', '', 1], '協助代課者只保留實際代課節數');
 
 const substituteAttributeNotOvertimeSummary = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

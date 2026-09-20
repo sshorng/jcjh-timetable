@@ -2058,10 +2058,8 @@ window.DomainBilling = (function () {
       var origName = r.originalTeacherName || getTeacherNameByEmail(r.originalTeacherEmail) || '';
       var isHomeroom = r.className === '代導' || r.subject === '代導' || r.type === 'homeroom';
       if (isHomeroom) {
-        if (!origName || origName === '導師') {
-          var cls = (r.className !== '代導' ? r.className : '').replace('導師', '');
-          origName = cls ? (cls + '導師') : '導師';
-        }
+        var cls = (r.className !== '代導' ? r.className : '').replace(/導師$/, '');
+        origName = cls ? (cls + '導師') : '導師';
       }
       return origName || '其他';
     }
@@ -2136,10 +2134,8 @@ window.DomainBilling = (function () {
         var origName = r.originalTeacherName || getTeacherNameByEmail(r.originalTeacherEmail) || '';
         var isHomeroom = r.className === '代導' || r.subject === '代導' || r.type === 'homeroom';
         if (isHomeroom) {
-          if (!origName || origName === '導師') {
-            var cls = (r.className !== '代導' ? r.className : '').replace('導師', '');
-            origName = cls ? (cls + '導師') : '導師';
-          }
+          var cls = (r.className !== '代導' ? r.className : '').replace(/導師$/, '');
+          origName = cls ? (cls + '導師') : '導師';
         }
         var reason = r.reason || r.subFee || '';
         var dateRoc = formatRocDate(r.date);

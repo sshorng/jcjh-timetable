@@ -1655,6 +1655,9 @@
       }).map(function (group, index) {
         var t = teacherFromMap(teacherMap, group.email, group.name);
         var sourceRow = sourceRows[group.email] || t;
+        var isSubstituteHelper = group.details.some(function (detail) {
+          return String(detail.substituteForName || '').trim() !== '';
+        });
         var metrics = substitutePlanMetrics(
           { email: group.email, name: group.name },
           sourceRow,
@@ -1695,15 +1698,16 @@
           serial: index + 1,
           title: teacherTitle(t) || '\u6559\u5e2b',
           name: teacherName(t, group.name || group.email),
-          weeklyOvertime: metrics.weekly,
-          schedule: metrics.schedule,
-          weeks: metrics.weeks,
-          grossHours: metrics.scheduled,
-          deduction: metrics.deduction,
+          weeklyOvertime: isSubstituteHelper ? '' : metrics.weekly,
+          schedule: isSubstituteHelper ? '' : metrics.schedule,
+          weeks: isSubstituteHelper ? '' : metrics.weeks,
+          grossHours: isSubstituteHelper ? '' : metrics.scheduled,
+          deduction: isSubstituteHelper ? '' : metrics.deduction,
           actualHours: metrics.paid,
           hours: group.hours,
           rate: FEE_DEFAULT,
           amount: metrics.paid * FEE_DEFAULT,
+          isSubstituteHelper: isSubstituteHelper,
           note: noteParts.join('；')
         };
       });
@@ -1763,6 +1767,7 @@
     }).map(function (r) {
       var count = periodCount(r, true);
       var rate = feeRate(r, FEE_DEFAULT);
+      var className = String(r.className || '').trim();
       return {
         actualName: r.actualTeacherName || r.actualTeacherEmail,
         date: rocDate(r.date),
@@ -1772,9 +1777,9 @@
         count: count,
         rate: rate,
         amount: count * rate,
-        originalName: r.className || r.originalTeacherName || '',
-        reason: r.reason || '代導公付',
-        note: r.note || ''
+        originalName: '',
+        reason: '',
+        note: className ? (className.replace(/導師$/, '') + '導師') : '導師'
       };
     });
   }
@@ -2080,7 +2085,7 @@
     sheet.getCell(2, 4).value = '每週代課';
     sheet.getCell(2, 5).value = '代課星期/節次';
     sheet.getCell(2, 6).value = '應發周數';
-    sheet.getCell(2, 7).value = '代課課數';
+    sheet.getCell(2, 7).value = '代課節數';
     sheet.getCell(2, 8).value = '請假扣代課';
   }
 
