@@ -897,20 +897,18 @@ window.DomainBilling = (function () {
             });
           });
         }
-         snapshotSlots.forEach(function (schedule) {
-           var resolution = expenseSourceResolutionForSchedule(teacher, schedule, []);
-           if (resolution.canAutoAllocate) {
-             addHours(resolution.source || DEFAULT_EXPENSE_SOURCE, 1, weekIndex, schedule);
-           } else {
-             addSourceConflict(resolution, schedule, 1);
-           }
-         });
-         for (var missingIndex = snapshotSlots.length; missingIndex < missing; missingIndex += 1) {
-           addSourceConflict({
-             status: 'missing',
-             conflict: { code: 'SNAPSHOT_SOURCE_MISSING', snapshot: [], schedule: [] }
-           }, { dayOfWeek: 0, period: 0 }, 1);
-         }
+        snapshotSlots.forEach(function (schedule) {
+          var resolution = expenseSourceResolutionForSchedule(teacher, schedule, []);
+          if (resolution.canAutoAllocate) {
+            addHours(resolution.source || DEFAULT_EXPENSE_SOURCE, 1, weekIndex, schedule);
+          } else {
+            addSourceConflict(resolution, schedule, 1);
+          }
+        });
+        for (var missingIndex = snapshotSlots.length; missingIndex < missing; missingIndex += 1) {
+          // 沒有可對應課格時，留白仍採預設經費，不製造來源阻擋。
+          addHours(DEFAULT_EXPENSE_SOURCE, 1, weekIndex, null);
+        }
        }
     });
 

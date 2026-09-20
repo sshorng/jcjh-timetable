@@ -336,6 +336,11 @@ window.FieldMap = (function () {
     return String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
   }
 
+  function expenseSourceKey(raw) {
+    const source = normalizeExpenseSource(raw);
+    return !source || source === '預設' || source === '未分配' ? '預設' : source;
+  }
+
   function expenseClassTokens(raw) {
     return String(raw == null ? '' : raw).trim()
       .split(/[,，、\/／;；|｜\s]+/)
@@ -525,9 +530,12 @@ window.FieldMap = (function () {
     });
     result.candidates = candidates.slice();
     if (!candidates.length) {
-      result.status = 'missing';
-      result.origin = 'snapshot-missing';
-      result.conflict = { code: 'SNAPSHOT_SOURCE_MISSING', reason: 'no-snapshot-for-slot' };
+      // 未列出的課格等同留白，直接採用預設經費，不產生警告或阻擋。
+      result.source = '預設';
+      result.status = 'implicit-default';
+      result.origin = 'implicit-default';
+      result.explicit = false;
+      result.canAutoAllocate = true;
       return result;
     }
 
@@ -536,7 +544,8 @@ window.FieldMap = (function () {
     });
     const sources = [];
     exact.forEach(function (item) {
-      if (sources.indexOf(item.source) < 0) sources.push(item.source);
+      const source = expenseSourceKey(item.source);
+      if (sources.indexOf(source) < 0) sources.push(source);
     });
     if (sources.length > 1) {
       result.status = 'ambiguous';
@@ -551,7 +560,8 @@ window.FieldMap = (function () {
 
     const snapshotSources = [];
     candidates.forEach(function (item) {
-      if (snapshotSources.indexOf(item.source) < 0) snapshotSources.push(item.source);
+      const source = expenseSourceKey(item.source);
+      if (snapshotSources.indexOf(source) < 0) snapshotSources.push(source);
     });
     if (snapshotSources.length !== 1) {
       result.status = 'ambiguous';
@@ -564,9 +574,13 @@ window.FieldMap = (function () {
       return result;
     }
 
-    const source = snapshotSources[0];
+    const sourceKey = snapshotSources[0];
+    const sourceItem = candidates.find(function (item) {
+      return expenseSourceKey(item.source) === sourceKey;
+    });
+    const source = sourceItem ? normalizeExpenseSource(sourceItem.source) : sourceKey;
     result.source = source;
-    result.explicit = true;
+    result.explicit = sourceKey !== '預設';
     if (!scheduleContextProvided || !scheduleForSlot.length) {
       result.status = 'resolved';
       result.origin = 'snapshot-only';
@@ -575,7 +589,7 @@ window.FieldMap = (function () {
     }
 
     const hasClassBoundSnapshot = candidates.some(function (item) {
-      return String(item.className || '').trim() !== '';
+      return String(item.className || '').trim() !== '' && expenseSourceKey(item.source) !== '預設';
     });
     const scheduleMatchesSnapshot = scheduleForSlot.some(function (schedule) {
       return candidates.some(function (item) {

@@ -474,12 +474,13 @@ const partiallyConfiguredRow = window.DomainBilling.buildMonthlyReportRows({
   reportMonth: '2026-07',
   reportWeeksCount: 1
 })[0];
-assert.equal(partiallyConfiguredRow.expensePlanSummary, '計畫A（1節）');
+assert.equal(partiallyConfiguredRow.expensePlanSummary, '計畫A（1節）、預設（1節）');
 assert.deepEqual(partiallyConfiguredRow.expensePlanAllocations.map(row => [row.source, row.rawHours]), [
-  ['計畫A', 1]
+  ['計畫A', 1],
+  ['預設', 1]
 ]);
-assert.equal(partiallyConfiguredRow.expensePlanConflicts[0].code, 'SNAPSHOT_SOURCE_MISSING');
-assert.equal(partiallyConfiguredRow.expensePlanBlockedHours, 1);
+assert.equal(partiallyConfiguredRow.expensePlanConflicts.length, 0, '未列出的課格應視為預設經費');
+assert.equal(partiallyConfiguredRow.expensePlanBlockedHours, 0);
 
 const snapshotOnlyPlan = JSON.stringify([
   { day: 1, period: 1, className: '無人機', source: '無人機' },
@@ -554,6 +555,13 @@ assert.deepEqual([
 assert.equal(window.FieldMap.formatExpensePlanSummary(
   JSON.stringify([{ day: 1, period: 1, className: '', source: '' }])
 ), '預設（1節）', '留白課格來源摘要應顯示預設經費');
+
+const blankClassChangedExpensePlan = window.FieldMap.resolveExpenseSource(
+  JSON.stringify([{ day: 1, period: 1, className: '舊班', source: '' }]),
+  { day: 1, period: 1, className: '新班', effectiveSchedule: { dayOfWeek: 1, period: 1, className: '新班' } }
+);
+assert.equal(blankClassChangedExpensePlan.canAutoAllocate, true, '預設來源的舊班級快照不應阻擋分配');
+assert.equal(blankClassChangedExpensePlan.conflict, null, '預設來源不應因舊班級快照產生衝突');
 
 const coEmployedRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'CoEmployed', name: '共聘教師', jobTitle: '共聘', baseHours: 0 }],

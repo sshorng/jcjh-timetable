@@ -734,9 +734,10 @@ const missingSourceInput = Object.assign({}, configuredInput, {
 missingSourceInput.monthlyReportRows = window.DomainBilling.buildMonthlyReportRows(missingSourceInput);
 const missingSource = window.ExportAccounting.buildExportData(missingSourceInput);
 const defaultPlan = missingSource.overtimePlans.find(group => group.plan === '國教');
-assert.equal(defaultPlan, undefined, 'missing slot source must not silently become a national education plan');
-assert.ok(missingSource.blocking.length > 0, 'missing slot source must block accounting export');
-assert.ok(missingSource.warnings.some(message => message.includes('尚未分配')), 'missing slot source must be visible in export warnings');
+assert.ok(defaultPlan, '未列出的課格來源應直接歸入預設經費分表');
+assert.equal(missingSource.blocking.length, 0, '未列出的課格來源不應阻擋會計匯出');
+assert.equal(missingSource.warnings.some(message => message.includes('尚未分配') || message.includes('經費來源')), false,
+  '未列出的課格來源不應顯示經費來源警告');
 
 const blankSourceInput = Object.assign({}, configuredInput, {
   teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 0, expensePlan: JSON.stringify([
