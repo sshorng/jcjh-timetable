@@ -1682,8 +1682,6 @@ window.UiAdmin = (function () {
 
       if (parsed.mode === 'invalid' || parsed.invalid) {
         issues.push('鐘點支出計畫格式錯誤，無法自動整理');
-      } else if (parsed.mode === 'empty') {
-        issues.push('尚未設定來源，需確認是否採用預設經費');
       } else if (parsed.mode === 'slots' && window.FieldMap
           && typeof window.FieldMap.serializeExpensePlanSlots === 'function') {
         normalizedPlan = window.FieldMap.serializeExpensePlanSlots(parsed.slots || []);
@@ -1778,7 +1776,7 @@ window.UiAdmin = (function () {
       }
       var ok = await showConfirm(
         '將先備份 ' + rows.length + ' 位教師的原始經費資料，再標準化來源 JSON 與固定超鐘點欄位。\n'
-          + '格式錯誤與尚未設定來源的資料不會被改寫。\n\n確定整理？',
+          + '格式錯誤資料不會被改寫；空白經費計畫依規則視為預設經費。\n\n確定整理？',
         '整理教師經費資料'
       );
       if (!ok) return;

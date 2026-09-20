@@ -185,6 +185,28 @@ auditAdmin.openTeacherExpenseAuditModal();
 assert.equal(auditAdmin.teacherExpenseAuditSummary.value.normalizable, 1, '可標準化教師資料應列入整理預覽');
 const auditNormalizePromise = auditAdmin.normalizeTeacherExpenseData();
 
+const emptyPlanAdmin = window.UiAdmin.create({
+  ref,
+  callGasApi: async () => ({ count: 1 }),
+  callGasApiWithProgress: async () => ({ count: 1 }),
+  showToast: () => {},
+  showConfirm: async () => true,
+  loading: ref(false),
+  loadingMessage: ref(''),
+  currentSemester: ref('S1'),
+  reportMonth: ref('2026-08'),
+  accountingPeriod,
+  teachersList: ref([{ loginEmail: '空白@example.com', email: '空白', name: '空白' }]),
+  allSchedules: ref([]),
+  leaveReasonOptions: [],
+  historyEditForm: ref({}),
+  showHistoryEditModal: ref(false),
+  requestsList: ref([])
+});
+emptyPlanAdmin.openTeacherExpenseAuditModal();
+assert.equal(emptyPlanAdmin.teacherExpenseAuditSummary.value.ok, 1, '空白經費計畫應視為預設且直接通過');
+assert.equal(emptyPlanAdmin.teacherExpenseAuditSummary.value.review, 0, '空白經費計畫不應要求人工確認');
+
 let fixedBatchPayload = null;
 let fixedBatchBackupPayload = null;
 const fixedBatchTeachers = ref([
