@@ -136,10 +136,12 @@ function loadApproveRiskFlags() {
     },
     isExchangeLikeRequest: () => false,
     isQuotaDeductFee: fee => String(fee || '') === '扣額度' || String(fee || '') === '互代不結',
+    isTimetableOnlyFee: fee => String(fee || '') === '僅課表呈現（不結算）' || String(fee || '') === '僅課表呈現',
     isLeaveClassRestricted: () => false,
     isExchangeClassRestricted: () => false,
     isRequestExchangeRechanged: () => false,
     ACTIVITY_PUBLIC_FEE: '活動公費',
+    TIMETABLE_ONLY_FEE: '僅課表呈現（不結算）',
     String,
     Number,
     Array,
@@ -980,7 +982,9 @@ function runApplicationFormContractTest() {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   assert.match(html, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
   assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
-  assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
+   assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
+   assert.match(html, /<option v-if="!isMutualCover" :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）<\/option>/, '管理員應可選僅課表呈現');
+   assert.match(html, /僅建立課表異動，不發代課費、不扣鐘點、不扣額度，也不列入經費匯出。/, '畫面應說明僅課表不進結算');
   assert.match(html, /扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。/, '畫面應說明扣款對象與被代者零扣除');
   assert.match(html, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
   assert.match(html, /id="course-adjustment-only"/);

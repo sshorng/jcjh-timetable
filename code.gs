@@ -1018,9 +1018,9 @@ function initSheets() {
          oldName === "額度帳本" ||
          oldName === "代導紀錄" ||
          oldName === SCHOOL_SWAP_SHEET_ ||
-        oldName === "系統日誌" || oldName === "操作日誌" ||
-        oldName === "課表匯入暫存" || oldName === "課表匯入備份" ||
-        oldName === "教師匯入備份") {
+         oldName === "系統日誌" || oldName === "操作日誌" ||
+         oldName === "課表匯入暫存" || oldName === "課表匯入備份" ||
+         oldName === "教師匯入備份" || oldName === TEACHER_EXPENSE_BACKUP_SHEET_) {
       return;
     }
     if      (oldName.indexOf("課表") !== -1) { newName = "教師課表"; }
@@ -1796,6 +1796,7 @@ function bumpCacheGeneration_(namespace, semesterId) {
 var SCHEDULE_IMPORT_STAGING_SHEET_ = "課表匯入暫存";
 var SCHEDULE_IMPORT_BACKUP_SHEET_ = "課表匯入備份";
 var TEACHER_IMPORT_BACKUP_SHEET_ = "教師匯入備份";
+var TEACHER_EXPENSE_BACKUP_SHEET_ = "教師經費來源備份";
 
 function createScheduleImportVersion_() {
   return "sched_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
@@ -1833,6 +1834,37 @@ function writeScheduleImportBackupSheet_(sheet, headers, rows, version, semester
   });
   writeScheduleSnapshotSheet_(sheet, backupHeaders, backupRows);
   return { version: String(version || ""), count: backupRows.length, timestamp: stamp };
+}
+
+function backupTeacherExpensePlans_(semesterId, rows, operator, reason) {
+  var list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return { version: "", count: 0, timestamp: "" };
+  var sheet = getOrCreateScheduleImportSheet_(getSpreadsheet(), TEACHER_EXPENSE_BACKUP_SHEET_);
+  var headers = ["備份版本", "備份時間", "操作人", "來源學期", "備份原因", "教師Email", "教師姓名", "鐘點支出計畫", "超鐘點節數", "超鐘點節次"];
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#f1f5f9");
+  }
+  var version = "expense_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  var stamp = toLocalTimeStr(new Date());
+  var backupRows = list.map(function (row) {
+    var source = row || {};
+    return [
+      version,
+      stamp,
+      String(operator || ""),
+      String(semesterId || ""),
+      String(reason || ""),
+      String(source["教師Email"] || source.loginEmail || source.email || ""),
+      String(source["教師姓名"] || source.teacherName || source.name || ""),
+      source["鐘點支出計畫"] !== undefined ? source["鐘點支出計畫"] : (source.expensePlan || ""),
+      source["超鐘點節數"] !== undefined ? source["超鐘點節數"] : (source.fixedOvertimeHours !== undefined ? source.fixedOvertimeHours : ""),
+      source["超鐘點節次"] !== undefined ? source["超鐘點節次"] : (source.fixedOvertimeSlots || "")
+    ];
+  });
+  var startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, backupRows.length, headers.length).setValues(backupRows);
+  return { version: version, count: backupRows.length, timestamp: stamp };
 }
 
 function restoreScheduleImportSnapshots_(scheduleSheet, scheduleHeaders, scheduleRows,
@@ -2762,7 +2794,7 @@ function getSemesterHomeroomRecords_(semesterId) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」、不是僅課務調整且為整日請假才建立；不看原代課經費。
+ * 規則：請假教師職務含「導師」、不是僅課務調整或僅課表呈現且為整日請假才建立。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function extractHomeroomClass_(teacher, fallbackClassName) {
@@ -2774,7 +2806,7 @@ function extractHomeroomClass_(teacher, fallbackClassName) {
 
 /**
  * 依已核准代課申請同步一筆代導。
- * 規則：請假教師職務含「導師」、不是僅課務調整且為整日請假才建立；不看原代課經費。
+ * 規則：請假教師職務含「導師」、不是僅課務調整或僅課表呈現且為整日請假才建立。
  * 同一學期／日期／導師／班級只保留一筆，來源申請ID以逗號累積。
  */
 function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
@@ -2804,6 +2836,7 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
     && type === "substitution"
     && !!sid && !!rid && !!leaveEmail && !!dateStr
     && !homeroomRequestIsCourseAdjustmentOnly_(requestRow)
+    && !isTimetableOnlyFee_(requestRow["經費來源"] || requestRow.subFee)
     && homeroomRequestIsFullDay_(requestRow, teacher)
     && isHomeroomTeacher_(sid, leaveEmail);
 
@@ -3009,6 +3042,16 @@ function normalizeClassAwayPeriod_(value) {
 function isQuotaDeductFee_(fee) {
   var f = String(fee || "").trim();
   return f === "扣額度" || f === "互代不結";
+}
+
+/** 僅保留課表異動，不進任何鐘點／經費結算。 */
+var TIMETABLE_ONLY_FEE_ = "僅課表呈現（不結算）";
+function isTimetableOnlyFee_(fee) {
+  var f = String(fee || "").trim();
+  return f === TIMETABLE_ONLY_FEE_ || f === "僅課表呈現";
+}
+function normalizeTimetableOnlyFee_(fee) {
+  return isTimetableOnlyFee_(fee) ? TIMETABLE_ONLY_FEE_ : fee;
 }
 
 /** 星期數字 → 中文（1=一…7=日；0 亦當日） */
@@ -6544,7 +6587,7 @@ function doPost(e) {
       saveSemester: 1, deleteSemester: 1, setDefaultSemester: 1,
        saveClassAwayEvent: 1, deleteClassAwayEvent: 1,
        saveSchoolSwap: 1, deleteSchoolSwap: 1,
-      saveTeacher: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
+       saveTeacher: 1, backupTeacherExpensePlans: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
       earnMutualQuotaFromActivity: 1,
       saveScheduleCell: 1, clearScheduleCell: 1, importSchedulesBatch: 1,
       adminApprove: 1, adminReject: 1, adminApproveBatch: 1, adminRejectBatch: 1,
@@ -6726,7 +6769,20 @@ function doPost(e) {
        });
       invalidateScheduleCaches_(semesterId);
       
-    } else if (action === "saveTeacher") {
+     } else if (action === "backupTeacherExpensePlans") {
+       if (!isAdmin) throw new Error("無管理員權限！");
+       var expenseBackup = backupTeacherExpensePlans_(
+         semesterId,
+         reqData && reqData.rows,
+         userEmail,
+         reqData && reqData.reason
+       );
+       return ContentService.createTextOutput(JSON.stringify({
+         success: true,
+         backup: expenseBackup
+       })).setMimeType(ContentService.MimeType.JSON);
+
+     } else if (action === "saveTeacher") {
       if (!isAdmin) throw new Error("無管理員權限！");
       reqData["學期代號"] = semesterId;
       reqData["教師Email"] = normalizeEmail_(reqData["教師Email"] || reqData.email, "教師 Email");
@@ -7552,10 +7608,10 @@ function doPost(e) {
        } else {
          targetReq["對調目標日期"] = "";
          targetReq["對調目標星期"] = "";
-         targetReq["對調目標節次"] = "";
-         if (reqData.subFee != null && reqData.subFee !== "") {
-           targetReq["經費來源"] = String(reqData.subFee);
-         }
+          targetReq["對調目標節次"] = "";
+          if (reqData.subFee != null && reqData.subFee !== "") {
+            targetReq["經費來源"] = normalizeTimetableOnlyFee_(reqData.subFee);
+          }
        }
         if (combinedReturnEdit) {
           targetReq["異動類型"] = "substitution";
@@ -7731,9 +7787,12 @@ function doPost(e) {
          if (!reqData.request || typeof reqData.request !== "object") throw new Error("缺少申請單資料！");
          reqData.request = prepareNameKeyRequestRow_(reqData.request, semesterId, teachers);
          var emptySlotOne = isEmptySlotAssignmentRequest_(reqData.request);
-         var combinedReturnOne = isCombinedReturnRequest_(reqData.request);
-         normalizeCourseAdjustmentRequest_(reqData.request);
-         if (combinedReturnOne && !isAdmin) throw new Error("合班回原班僅限教學組建立！");
+          var combinedReturnOne = isCombinedReturnRequest_(reqData.request);
+          normalizeCourseAdjustmentRequest_(reqData.request);
+          if (isTimetableOnlyFee_(reqData.request["經費來源"] || reqData.request.subFee)) {
+            reqData.request["經費來源"] = TIMETABLE_ONLY_FEE_;
+          }
+          if (combinedReturnOne && !isAdmin) throw new Error("合班回原班僅限教學組建立！");
         var leaveEmailOne = normalizeEmail_(reqData.request["申請人Email"], "申請人 Email");
         var targetEmailOne = normalizeEmail_(reqData.request["受邀人Email"], "受邀人 Email");
         if (!findSemesterTeacher_(semesterId, leaveEmailOne)) throw new Error("申請人不在目前學期教師名單！");
@@ -7795,8 +7854,8 @@ function doPost(e) {
        if (combinedReturnOne) {
           validateCombinedReturnRequest_(reqData.request, semesterId);
        }
-      if ((feeOne === "扣額度" || feeOne === "互代不結" || feeOne === "活動公費" || feeOne === "第8節代課") && !isAdmin) {
-        throw new Error("扣額度／活動公費相關經費僅限管理員發起！");
+       if ((isQuotaDeductFee_(feeOne) || feeOne === "活動公費" || feeOne === "第8節代課" || isTimetableOnlyFee_(feeOne)) && !isAdmin) {
+         throw new Error("特殊經費（含扣額度、活動公費、第8節與僅課表呈現）僅限管理員發起！");
       }
       // 寫入狀態（伺服器最終裁定）
         if (combinedReturnOne) {
@@ -7919,15 +7978,18 @@ function doPost(e) {
         if (!findSemesterTeacher_(semesterId, leaveEmB)) throw new Error("批次申請人不在目前學期教師名單！");
         if (!findSemesterTeacher_(semesterId, targetEmB)) throw new Error("批次受邀人不在目前學期教師名單！");
         if (leaveEmB === targetEmB) throw new Error("批次申請人與受邀人不可為同一人！");
-        row["申請人Email"] = leaveEmB;
-        row["受邀人Email"] = targetEmB;
-        validateRequestRow_(row, semesterId);
+         row["申請人Email"] = leaveEmB;
+         row["受邀人Email"] = targetEmB;
+         if (isTimetableOnlyFee_(row["經費來源"] || row.subFee)) {
+           row["經費來源"] = TIMETABLE_ONLY_FEE_;
+         }
+         validateRequestRow_(row, semesterId);
         if (leaveEmB !== userEmail && !isAdmin && !isProxyBatch) {
           throw new Error("批次中含非本人申請，已拒絕！");
         }
         var feeRow = String(row["經費來源"] || "");
-        if ((feeRow === "扣額度" || feeRow === "互代不結" || feeRow === "活動公費" || feeRow === "第8節代課") && !isAdmin) {
-          throw new Error("扣額度／活動公費相關經費僅限管理員發起！");
+         if ((isQuotaDeductFee_(feeRow) || feeRow === "活動公費" || feeRow === "第8節代課" || isTimetableOnlyFee_(feeRow)) && !isAdmin) {
+           throw new Error("特殊經費（含扣額度、活動公費、第8節與僅課表呈現）僅限管理員發起！");
         }
          row["學期代號"] = semesterId;
          row["批次ID"] = batchId;

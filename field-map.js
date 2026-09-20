@@ -432,21 +432,172 @@ window.FieldMap = (function () {
   }
 
   function expensePlanSourceForSlot(value, slot) {
-    const parsed = value && value.mode ? value : parseExpensePlan(value);
+    const result = resolveExpenseSource(value, slot || {});
+    return result.canAutoAllocate ? result.source : '';
+  }
+
+  function expenseSourceScheduleList(value) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    return value ? [value] : [];
+  }
+
+  function expenseSourceSlotValue(slot, key, fallbackKey) {
     if (!slot) return '';
-    if (parsed.mode === 'legacy') return parsed.legacySource;
-    if (parsed.mode !== 'slots') return '';
-    const day = parseInt(slot.day !== undefined ? slot.day : slot.dayOfWeek, 10);
-    const period = parseInt(slot.period, 10);
-    const className = slot.className !== undefined ? slot.className : slot['班級'];
-    const hits = parsed.slots.filter(function (item) {
-      return item.day === day && item.period === period && expenseClassesOverlap(item.className, className);
+    return slot[key] !== undefined ? slot[key] : slot[fallbackKey];
+  }
+
+  function expenseSourceClassName(slot) {
+    return String(expenseSourceSlotValue(slot, 'className', '班級') == null
+      ? '' : expenseSourceSlotValue(slot, 'className', '班級')).trim();
+  }
+
+  function expenseSourceResolutionBase(context, day, period, className) {
+    const ctx = context || {};
+    return {
+      source: '',
+      status: 'missing',
+      origin: 'none',
+      explicit: false,
+      canAutoAllocate: false,
+      teacherKey: String(ctx.teacherKey || '').trim(),
+      semesterId: String(ctx.semesterId || '').trim(),
+      day: day,
+      period: period,
+      className: className,
+      candidates: [],
+      effectiveSchedules: [],
+      conflict: null
+    };
+  }
+
+  /**
+   * 統一解析教師課格的經費來源。
+   * 快照是歷史依據；傳入 effectiveSchedule 時，會檢查快照班級是否仍對得上課表。
+   * 不同來源、格式錯誤或班級衝突一律不可自動分表。
+   */
+  function resolveExpenseSource(value, context) {
+    const ctx = context || {};
+    const parsed = value && value.mode ? value : parseExpensePlan(value);
+    const scheduleContextProvided = Object.prototype.hasOwnProperty.call(ctx, 'effectiveSchedule');
+    const effectiveSchedules = expenseSourceScheduleList(ctx.effectiveSchedule);
+    const scheduleForSlot = effectiveSchedules.filter(function (schedule) {
+      const day = parseInt(expenseSourceSlotValue(schedule, 'day', 'dayOfWeek'), 10);
+      const period = parseInt(schedule.period, 10);
+      return (!Number.isFinite(parseInt(ctx.day, 10)) || day === parseInt(ctx.day, 10))
+        && (!Number.isFinite(parseInt(ctx.period, 10)) || period === parseInt(ctx.period, 10));
+    });
+    const day = parseInt(ctx.day !== undefined ? ctx.day
+      : (scheduleForSlot[0] ? expenseSourceSlotValue(scheduleForSlot[0], 'day', 'dayOfWeek') : ''), 10);
+    const period = parseInt(ctx.period !== undefined ? ctx.period
+      : (scheduleForSlot[0] ? scheduleForSlot[0].period : ''), 10);
+    const className = ctx.className !== undefined
+      ? expenseSourceClassName(ctx)
+      : expenseSourceClassName(scheduleForSlot[0]);
+    const result = expenseSourceResolutionBase(ctx, day, period, className);
+    result.effectiveSchedules = scheduleForSlot;
+
+    if (parsed.mode === 'legacy') {
+      result.source = parsed.legacySource;
+      result.status = 'legacy';
+      result.origin = 'legacy';
+      result.explicit = !!parsed.legacySource;
+      result.canAutoAllocate = !!parsed.legacySource;
+      return result;
+    }
+    if (parsed.mode === 'empty') {
+      result.source = '預設';
+      result.status = 'implicit-default';
+      result.origin = 'implicit-default';
+      result.explicit = false;
+      result.canAutoAllocate = true;
+      return result;
+    }
+    if (parsed.mode !== 'slots' || parsed.invalid) {
+      result.status = 'invalid';
+      result.origin = 'invalid';
+      result.conflict = { code: 'INVALID_EXPENSE_PLAN', reason: 'expense-plan-format' };
+      return result;
+    }
+
+    const candidates = parsed.slots.filter(function (item) {
+      return item.day === day && item.period === period;
+    });
+    result.candidates = candidates.slice();
+    if (!candidates.length) {
+      result.status = 'missing';
+      result.origin = 'snapshot-missing';
+      result.conflict = { code: 'SNAPSHOT_SOURCE_MISSING', reason: 'no-snapshot-for-slot' };
+      return result;
+    }
+
+    const exact = candidates.filter(function (item) {
+      return expenseClassesOverlap(item.className, className);
     });
     const sources = [];
-    hits.forEach(function (item) {
+    exact.forEach(function (item) {
       if (sources.indexOf(item.source) < 0) sources.push(item.source);
     });
-    return sources.length === 1 ? sources[0] : '';
+    if (sources.length > 1) {
+      result.status = 'ambiguous';
+      result.origin = 'snapshot-ambiguous';
+      result.conflict = {
+        code: 'SNAPSHOT_SOURCE_AMBIGUOUS',
+        reason: 'multiple-sources-for-slot',
+        snapshot: candidates.slice()
+      };
+      return result;
+    }
+
+    const snapshotSources = [];
+    candidates.forEach(function (item) {
+      if (snapshotSources.indexOf(item.source) < 0) snapshotSources.push(item.source);
+    });
+    if (snapshotSources.length !== 1) {
+      result.status = 'ambiguous';
+      result.origin = 'snapshot-ambiguous';
+      result.conflict = {
+        code: 'SNAPSHOT_SOURCE_AMBIGUOUS',
+        reason: 'multiple-sources-for-slot',
+        snapshot: candidates.slice()
+      };
+      return result;
+    }
+
+    const source = snapshotSources[0];
+    result.source = source;
+    result.explicit = true;
+    if (!scheduleContextProvided || !scheduleForSlot.length) {
+      result.status = 'resolved';
+      result.origin = 'snapshot-only';
+      result.canAutoAllocate = true;
+      return result;
+    }
+
+    const hasClassBoundSnapshot = candidates.some(function (item) {
+      return String(item.className || '').trim() !== '';
+    });
+    const scheduleMatchesSnapshot = scheduleForSlot.some(function (schedule) {
+      return candidates.some(function (item) {
+        return expenseClassesOverlap(item.className, expenseSourceClassName(schedule));
+      });
+    });
+    if (!scheduleMatchesSnapshot && hasClassBoundSnapshot) {
+      result.source = '';
+      result.status = 'conflict';
+      result.origin = 'snapshot-schedule-conflict';
+      result.conflict = {
+        code: 'SNAPSHOT_SCHEDULE_MISMATCH',
+        reason: 'class-mismatch',
+        snapshot: candidates.slice(),
+        schedule: scheduleForSlot.slice()
+      };
+      return result;
+    }
+
+    result.status = hasClassBoundSnapshot ? 'resolved' : 'snapshot-unbound';
+    result.origin = hasClassBoundSnapshot ? 'snapshot-exact' : 'snapshot-unbound';
+    result.canAutoAllocate = true;
+    return result;
   }
 
   function expensePlanSources(value) {
@@ -909,6 +1060,7 @@ window.FieldMap = (function () {
       saveClassAwayEvent: '儲存空堂事件',
       deleteClassAwayEvent: '刪除空堂事件',
       saveHistoryEdit: '編輯歷史紀錄',
+      backupTeacherExpensePlans: '備份教師經費來源',
       batchMarkPrinted: '標記已列印',
       saveMailSettings: '儲存系統設定',
       getInitialData: '載入資料'
@@ -956,6 +1108,7 @@ window.FieldMap = (function () {
     normalizeExpenseSource,
     expenseClassesOverlap,
     parseExpensePlan,
+    resolveExpenseSource,
     expensePlanSourceForSlot,
     expensePlanSources,
     serializeExpensePlanSlots,

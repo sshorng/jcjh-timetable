@@ -1,12 +1,13 @@
 /**
  * 經費顯示／判定小工具（讀取相容舊別名，寫入請用正式名稱）
- * 正式：扣額度、活動公費、第8節代課、自費代課、公費代課、無
+ * 正式：扣額度、活動公費、第8節代課、自費代課、公費代課、僅課表呈現（不結算）、無
  * 舊讀取：互代不結→扣額度；學校移撥→公費代課（僅標籤／統計）
  */
 window.FeeUtils = (function () {
   var QUOTA = '扣額度';
   var ACTIVITY_PUBLIC = '活動公費';
   var PERIOD8 = '第8節代課';
+  var TIMETABLE_ONLY = '僅課表呈現（不結算）';
 
   function isQuotaDeductFee(fee) {
     if (window.DomainActivityCover && window.DomainActivityCover.isQuotaDeductFee) {
@@ -33,13 +34,20 @@ window.FeeUtils = (function () {
     return f === '公費代課' || f === '學校移撥';
   }
 
+  function isTimetableOnlyFee(fee) {
+    var f = String(fee || '').trim();
+    return f === TIMETABLE_ONLY || f === '僅課表呈現';
+  }
+
   return {
     QUOTA: QUOTA,
     ACTIVITY_PUBLIC: ACTIVITY_PUBLIC,
     PERIOD8: PERIOD8,
+    TIMETABLE_ONLY: TIMETABLE_ONLY,
     isQuotaDeductFee: isQuotaDeductFee,
     displayFeeLabel: displayFeeLabel,
     isQuotaFeeColor: isQuotaFeeColor,
-    isPublicLeaveFee: isPublicLeaveFee
+    isPublicLeaveFee: isPublicLeaveFee,
+    isTimetableOnlyFee: isTimetableOnlyFee
   };
 })();

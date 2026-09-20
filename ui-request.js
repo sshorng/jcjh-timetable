@@ -214,8 +214,9 @@ window.UiSubmitHelpers = (function () {
      var directApproveMode = deps.directApproveMode;
      var paperFlow = deps.paperFlow;
      var isMutualCover = deps.isMutualCover;
-    var PERIOD8_FEE = deps.PERIOD8_FEE;
-    var ACTIVITY_PUBLIC_FEE = deps.ACTIVITY_PUBLIC_FEE;
+     var PERIOD8_FEE = deps.PERIOD8_FEE;
+     var ACTIVITY_PUBLIC_FEE = deps.ACTIVITY_PUBLIC_FEE;
+     var TIMETABLE_ONLY_FEE = deps.TIMETABLE_ONLY_FEE || '僅課表呈現（不結算）';
     var defaultSubFeeForReason = deps.defaultSubFeeForReason;
     var activeCell = deps.activeCell;
     var DAC = deps.DAC || function () { return window.DomainActivityCover; };
@@ -274,11 +275,15 @@ window.UiSubmitHelpers = (function () {
         finalFeeType = DAC()
           ? DAC().normalizeActivityFee(pending.subFee)
           : ACTIVITY_PUBLIC_FEE;
-      } else {
-        finalFeeType = pending.subFee
-          || defaultSubFeeForReason(pending.reason)
-          || '自費代課';
-      }
+       } else {
+         finalFeeType = pending.subFee
+           || defaultSubFeeForReason(pending.reason)
+           || '自費代課';
+       }
+       if (String(finalFeeType || '').trim() === TIMETABLE_ONLY_FEE
+           || String(finalFeeType || '').trim() === '僅課表呈現') {
+         finalFeeType = TIMETABLE_ONLY_FEE;
+       }
     }
 
     var baseNote = String(pending.note || '').trim();

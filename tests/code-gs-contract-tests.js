@@ -60,6 +60,11 @@ assert.match(source, /finalBal\[em\] = existingBalance/, '重複發放應修復�
 assert.match(source, /"空堂事件": \[[^\]]*"適用範圍"[^\]]*"停課節次"/, '空堂事件 schema 應包含範圍與節次欄位');
 assert.match(source, /function normalizeClassAwayScope_\(value\)/, '空堂事件範圍應由後端正規化');
 assert.match(source, /function normalizeClassAwayPeriod_\(value\)/, '空堂事件節次應由後端正規化');
+assert.match(source, /function isTimetableOnlyFee_\(fee\)/, '僅課表費用判定 helper 必須存在');
+assert.match(source, /function normalizeTimetableOnlyFee_\(fee\)/, '僅課表費用寫入正規化 helper 必須存在');
+assert.match(source, /!isTimetableOnlyFee_\(requestRow\["經費來源"\] \|\| requestRow\.subFee\)/, '代導同步不得處理僅課表申請');
+assert.match(source, /isTimetableOnlyFee_\(feeOne\)/, '單筆申請應限制僅課表費用權限');
+assert.match(source, /isTimetableOnlyFee_\(feeRow\)/, '批次申請應限制僅課表費用權限');
 assert.match(source, /function normalizeFixedOvertimeFields_\(row\)/, '教師固定超鐘點欄位應由後端正規化');
 const fixedOvertimeStart = source.indexOf('function normalizeFixedOvertimeFields_');
 const fixedOvertimeEnd = source.indexOf('function resolveTeacherRole_', fixedOvertimeStart);

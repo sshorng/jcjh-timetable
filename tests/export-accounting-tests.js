@@ -734,13 +734,53 @@ const missingSourceInput = Object.assign({}, configuredInput, {
 missingSourceInput.monthlyReportRows = window.DomainBilling.buildMonthlyReportRows(missingSourceInput);
 const missingSource = window.ExportAccounting.buildExportData(missingSourceInput);
 const defaultPlan = missingSource.overtimePlans.find(group => group.plan === '國教');
-assert.ok(defaultPlan, 'missing slot source must be grouped into the default overtime plan');
-assert.equal(missingSource.overtimePlans[0].plan, '國教', 'default overtime plan must be listed first');
-assert.equal(defaultPlan.rows[0].expensePlan, '國教');
-assert.equal(defaultPlan.rows[0].grossHours, 1);
-assert.equal(defaultPlan.rows[0].actualHours, 1);
-assert.equal(missingSource.blocking.length, 0, 'default overtime plan must not block accounting export');
-assert.ok(missingSource.summary.some(item => item.key === 'overtime:國教' && item.hours === 1), 'default overtime plan must be included in export summary');
+assert.equal(defaultPlan, undefined, 'missing slot source must not silently become a national education plan');
+assert.ok(missingSource.blocking.length > 0, 'missing slot source must block accounting export');
+assert.ok(missingSource.warnings.some(message => message.includes('尚未分配')), 'missing slot source must be visible in export warnings');
+
+const conflictExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [{
+    email: 'conflict-export@x', name: '衝突匯出教師', baseHours: 0,
+    fixedOvertimeHours: 1, fixedOvertimeSlots: '一1',
+    expensePlan: JSON.stringify([{ day: 1, period: 1, className: '舊班', source: '資優' }])
+  }],
+  allSchedules: [{
+    teacherEmail: 'conflict-export@x', dayOfWeek: 1, period: 1,
+    className: '新班', attr: '一般'
+  }],
+  substitutionRecords: []
+});
+assert.equal(conflictExport.overtimePlans.some(group => group.plan === '資優'), false,
+  '快照與課表衝突時不可建立來源分表');
+assert.ok(conflictExport.blocking.some(message => message.includes('衝突匯出教師')),
+  '快照與課表衝突時必須阻擋匯出');
+
+const mixedConflictExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [{
+    email: 'mixed-conflict@x', name: '部分衝突教師', baseHours: 0,
+    fixedOvertimeHours: 2, fixedOvertimeSlots: '一1、二2',
+    expensePlan: JSON.stringify([
+      { day: 1, period: 1, className: '舊班', source: '資優' },
+      { day: 2, period: 2, className: '702', source: '無人機' }
+    ])
+  }],
+  allSchedules: [
+    { teacherEmail: 'mixed-conflict@x', dayOfWeek: 1, period: 1, className: '新班', attr: '一般' },
+    { teacherEmail: 'mixed-conflict@x', dayOfWeek: 2, period: 2, className: '702', attr: '一般' }
+  ],
+  substitutionRecords: []
+});
+assert.equal(mixedConflictExport.overtimePlans.some(group => group.plan === '資優'), false,
+  '衝突課格不可建立來源分表');
+assert.equal(mixedConflictExport.overtimePlans.some(group => group.plan === '無人機'), true,
+  '同一教師未衝突課格仍應保留可判定來源分表');
+assert.ok(mixedConflictExport.blocking.length > 0, '部分衝突仍須阻擋整體匯出確認');
 
 const snapshotOnlyExport = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

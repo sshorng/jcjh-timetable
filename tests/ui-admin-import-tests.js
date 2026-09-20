@@ -79,9 +79,11 @@ const fixedSourceTeacher = {
   ])
 };
 let fixedSourceSavePayload = null;
+const fixedSourceActions = [];
 const fixedSourceAdmin = window.UiAdmin.create({
   ref,
   callGasApi: async (action, payload) => {
+    fixedSourceActions.push(action);
     if (action === 'saveTeacher') fixedSourceSavePayload = payload;
     return { count: 1 };
   },
@@ -102,6 +104,9 @@ const fixedSourceAdmin = window.UiAdmin.create({
 });
 fixedSourceAdmin.openOvertimePlanModal(fixedSourceTeacher);
 assert.equal(fixedSourceAdmin.overtimePlanUsesFixedSlots.value, true, '固定節次來源設定不應再顯示日期判定');
+fixedSourceAdmin.openTeacherExpenseAuditModal();
+assert.equal(fixedSourceAdmin.teacherExpenseAuditSummary.value.total, 1, '教師經費檢查應涵蓋目前教師名單');
+assert.equal(fixedSourceAdmin.teacherExpenseAuditSummary.value.blocked, 0, '有效教師經費資料不應被標記為不可整理');
 assert.deepEqual(fixedSourceAdmin.overtimePlanRows.value.map(row => row.className), ['701', '801'],
   '經費來源應以固定超鐘點節次與已保存的小鐘點快照為準');
 assert.deepEqual(fixedSourceAdmin.overtimePlanRows.value.map(row => row.source), ['固定國教', '小鐘點計畫']);
@@ -147,7 +152,41 @@ assert.deepEqual(blankSnapshotAdmin.overtimePlanRows.value.map(row => row.classN
   '空白經費快照應以目前有效課表補上班級');
 assert.equal(blankSnapshotAdmin.overtimePlanRows.value[0].subject, '自然');
 
+const auditTeacher = {
+  loginEmail: '整理@example.com',
+  email: '整理',
+  name: '整理',
+  fixedOvertimeHours: 2,
+  fixedOvertimeSlots: '三5、一2',
+  expensePlan: '[{"source":"計畫A", "period":"1", "className":"701", "day":"1"}]'
+};
+const auditActions = [];
+const auditAdmin = window.UiAdmin.create({
+  ref,
+  callGasApi: async (action, payload) => {
+    auditActions.push({ action, payload });
+    return { count: 1 };
+  },
+  showToast: () => {},
+  showConfirm: async () => true,
+  loading: ref(false),
+  loadingMessage: ref(''),
+  currentSemester: ref('S1'),
+  reportMonth: ref('2026-08'),
+  accountingPeriod,
+  teachersList: ref([auditTeacher]),
+  allSchedules: ref([]),
+  leaveReasonOptions: [],
+  historyEditForm: ref({}),
+  showHistoryEditModal: ref(false),
+  requestsList: ref([])
+});
+auditAdmin.openTeacherExpenseAuditModal();
+assert.equal(auditAdmin.teacherExpenseAuditSummary.value.normalizable, 1, '可標準化教師資料應列入整理預覽');
+const auditNormalizePromise = auditAdmin.normalizeTeacherExpenseData();
+
 let fixedBatchPayload = null;
+let fixedBatchBackupPayload = null;
 const fixedBatchTeachers = ref([
   { loginEmail: 'one@example.com', email: '一號', name: '一號' },
   { loginEmail: 'two@example.com', email: '二號', name: '二號' }
@@ -159,7 +198,10 @@ const fixedBatchSchedules = ref([
 ]);
 const fixedBatchAdmin = window.UiAdmin.create({
   ref,
-  callGasApi: async () => ({ count: 1 }),
+  callGasApi: async (action, payload) => {
+    if (action === 'backupTeacherExpensePlans') fixedBatchBackupPayload = payload;
+    return { count: 1 };
+  },
   callGasApiWithProgress: async (action, payload) => {
     assert.equal(action, 'importTeachersBatch');
     fixedBatchPayload = payload;
@@ -249,7 +291,7 @@ admin.excelData.value = [{
 
 admin.runImportPreview();
 assert.equal(admin.importPreview.value.ok, 1);
-Promise.all([admin.importSchedules(), fixedBatchPromise, fixedSourceSavePromise]).then(() => {
+Promise.all([admin.importSchedules(), fixedBatchPromise, fixedSourceSavePromise, auditNormalizePromise]).then(() => {
   assert.equal(importPayload.list[0]['節次'], 0);
    assert.equal(importPayload.list[0]['課堂屬性'], '一般');
    assert.equal(importPayload.list[0]['特殊標記'], '超鐘點');
@@ -258,13 +300,21 @@ Promise.all([admin.importSchedules(), fixedBatchPromise, fixedSourceSavePromise]
   assert.deepEqual(fixedBatchPayload.list.map(row => [row['教師姓名'], row['超鐘點節數'], row['超鐘點節次']]), [
     ['一號', 2, '一1、三2'],
     ['二號', 0, '']
-  ], '一鍵代入只應依目前課表的超鐘點節次批次寫入所有教師，代課節次應留在小鐘點工作表，無標記者設為 0 節');
-  assert.equal(fixedBatchTeachers.value[0].fixedOvertimeSlotsText, '一1、三2');
+   ], '一鍵代入只應依目前課表的超鐘點節次批次寫入所有教師，代課節次應留在小鐘點工作表，無標記者設為 0 節');
+   assert.equal(fixedBatchBackupPayload.rows.length, 2, '批次改寫固定超鐘點前應先備份全部教師經費資料');
+   assert.equal(fixedBatchTeachers.value[0].fixedOvertimeSlotsText, '一1、三2');
   assert.equal(fixedBatchTeachers.value[1].fixedOvertimeHours, 0);
-  assert.equal(fixedSourceSavePayload['超鐘點節數'], 1, '儲存經費來源時不得清除固定超鐘點節數');
-  assert.equal(fixedSourceSavePayload['超鐘點節次'], '一1', '儲存經費來源時不得清除固定超鐘點節次');
-  assert.match(fixedSourceSavePayload['鐘點支出計畫'], /固定國教/);
-  console.log('ui-admin import tests PASS');
+   assert.equal(fixedSourceSavePayload['超鐘點節數'], 1, '儲存經費來源時不得清除固定超鐘點節數');
+   assert.equal(fixedSourceSavePayload['超鐘點節次'], '一1', '儲存經費來源時不得清除固定超鐘點節次');
+   assert.match(fixedSourceSavePayload['鐘點支出計畫'], /固定國教/);
+   assert.deepEqual(fixedSourceActions, ['backupTeacherExpensePlans', 'saveTeacher'],
+     '儲存經費來源前應先備份教師資料');
+   assert.deepEqual(auditActions.map(item => item.action), ['backupTeacherExpensePlans', 'saveTeacher'],
+     '整理教師資料前應先備份，再逐筆儲存');
+   assert.match(auditActions[1].payload['鐘點支出計畫'], /^\[\{"day":1,"period":1,"className":"701","source":"計畫A"\}\]$/,
+     '整理後來源 JSON 應使用標準欄位順序與格式');
+   assert.equal(auditActions[1].payload['超鐘點節次'], '一2、三5', '整理後固定節次應排序並正規化');
+   console.log('ui-admin import tests PASS');
 }).catch(error => {
   console.error(error);
   process.exitCode = 1;

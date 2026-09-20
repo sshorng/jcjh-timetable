@@ -288,9 +288,9 @@
                 </div>
                 <div class="text-right-mt-6">
                   <a href="#" class="link-view-all" @click.prevent="activeTab = 'pending'">查看全部 →</a>
-                </div>
-              </div>
-            </div>
+               </div>
+             </div>
+           </div>
             
             <!-- 左欄：課表主畫面 -->
               <div class="card" style="grid-column: span 1;">
@@ -521,7 +521,7 @@
                         <span>{{ d.leaveName }}</span>
                         <span class="text-muted">{{ formatDateMMDD(d.dateStr) }} {{ formatPeriodText(d.period) }} {{ d.className }}</span>
                         <span>→ <strong class="text-draft-on">{{ d.subName }}</strong></span>
-                        <span :class="(d.fee==='扣額度' || d.fee==='互代不結') ? 'text-draft-on' : (d.fee==='第8節代課' ? 'text-period8' : 'text-amber')">{{ d.fee === '互代不結' ? '扣額度' : d.fee }}</span>
+                        <span :class="(d.fee==='扣額度' || d.fee==='互代不結') ? 'text-draft-on' : (d.fee==='第8節代課' ? 'text-period8' : (d.fee===TIMETABLE_ONLY_FEE ? 'text-timetable-only' : 'text-amber'))">{{ d.fee === '互代不結' ? '扣額度' : d.fee }}</span>
                         <button
                           type="button"
                           class="btn btn-secondary mutual-btn-x"
@@ -1826,8 +1826,8 @@
                   </div>
                 </div>
               </div>
-              <div class="report-table-container billing-table-wrap">
-                <table class="custom-table billing-table">
+               <div class="report-table-container billing-table-wrap">
+                 <table class="custom-table billing-table">
                   <thead>
                     <tr class="billing-th-group">
                        <th colspan="3" class="billing-th-id">教師</th>
@@ -1899,8 +1899,14 @@
                         <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再設定有效的結算日期區間。</td>
                     </tr>
                   </tbody>
-                </table>
-              </div>
+                 </table>
+               </div>
+               <div v-if="monthlyReportData.some(row => row.expensePlanConflicts && row.expensePlanConflicts.length)" style="margin-top:10px;padding:10px 12px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;color:#92400e;font-size:0.82rem;line-height:1.6;">
+                 <strong>⚠ 經費來源待核對</strong>
+                 <div v-for="row in monthlyReportData.filter(item => item.expensePlanConflicts && item.expensePlanConflicts.length)" :key="'expense-conflict-' + row.email">
+                   {{ row.name }}：{{ row.expensePlanWarnings.join('；') }}
+                 </div>
+               </div>
             </div>
           </div>
 
@@ -1913,6 +1919,7 @@
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-success btn-md" @click="showImportTeachersModal = true">📥 批次匯入教師</button>
                 <button class="btn btn-secondary btn-md" @click="fillFixedOvertimeForAllTeachers">⚡ 全部代入固定超鐘點</button>
+                <button class="btn btn-secondary btn-md" @click="openTeacherExpenseAuditModal">🔎 檢查經費來源</button>
                 <button class="btn btn-primary btn-md" @click="openAddTeacherModal">➕ 新增教師</button>
               </div>
             </div>
@@ -3094,14 +3101,19 @@
                         <template v-if="!isPeriod8FeeLocked">
                           <option v-if="!isMutualCover" value="自費代課">自費代課</option>
                           <option v-if="!isMutualCover" value="公費代課">公費代課</option>
+                          <option v-if="!isMutualCover" :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）</option>
+                          <option v-if="!isMutualCover && pendingRequestData.subFee === '僅課表呈現'" value="僅課表呈現">僅課表呈現（舊）</option>
                           <option value="扣額度">扣額度（不結鐘點＋扣折抵額度）</option>
                           <option v-if="isMutualCover" value="活動公費">活動公費（可領代課費）</option>
                           <option v-if="isAdmin || isMutualCover || pendingRequestData.subFee === '第8節代課'" value="第8節代課">第8節代課（計畫經費）</option>
                         </template>
                       </select>
-                      <span v-if="pendingRequestData.subFee === '扣額度'" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
-                        扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。
-                      </span>
+                       <span v-if="pendingRequestData.subFee === '扣額度'" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
+                         扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。
+                       </span>
+                       <span v-if="pendingRequestData.subFee === TIMETABLE_ONLY_FEE" style="font-size:0.72rem; color:#0369a1; display:block; margin-top:4px;">
+                         僅建立課表異動，不發代課費、不扣鐘點、不扣額度，也不列入經費匯出。
+                       </span>
                       <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
                         ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
                       </span>
@@ -3678,7 +3690,7 @@
               <div v-for="row in overtimePlanRows" :key="row.key" style="display:grid;grid-template-columns:70px 78px minmax(90px,1fr) minmax(180px,1fr);align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">
                  <span style="font-weight:700;">{{ ['日','一','二','三','四','五','六','日'][row.day] || row.day }}</span>
                 <span>{{ row.period === 0 ? '早自習' : (row.period === 45 ? '午休' : '第' + row.period + '節') }}</span>
-                  <span>{{ row.className || (row.kind === 'fixed' ? '目前課表無對應班級' : '未指定班級') }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small></span>
+                   <span>{{ row.className || (row.kind === 'fixed' ? '目前課表無對應班級' : '未指定班級') }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small><small v-if="row.sourceStatus === 'conflict'" style="display:block;color:#b45309;line-height:1.5;">⚠ 快照班級與目前課表不一致，目前：{{ row.currentClassName || '未指定' }} <button type="button" class="btn btn-sm btn-outline-warning" style="padding:1px 5px;font-size:0.68rem;" @click.stop="row.className = row.currentClassName">採用目前課表班級</button></small><small v-else-if="row.sourceStatus === 'missing' || row.sourceStatus === 'ambiguous' || row.sourceStatus === 'invalid'" style="display:block;color:#b91c1c;">⚠ {{ row.sourceStatus === 'ambiguous' ? '同一節有多個來源' : (row.sourceStatus === 'invalid' ? '來源格式錯誤' : '尚未找到唯一經費來源') }}</small></span>
                 <input type="text" class="form-input" list="overtime-expense-source-options" maxlength="40" placeholder="留白＝預設經費，可直接輸入計畫名稱" v-model="row.source">
               </div>
             </div>
@@ -3692,6 +3704,64 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-primary" :disabled="loading" @click="saveOvertimePlan">儲存來源設定</button>
             <button class="btn btn-secondary" @click="showOvertimePlanModal = false">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4.1b. 教師經費來源檢查與整理 Modal -->
+      <div v-if="showTeacherExpenseAuditModal" class="modal-overlay" @click.self="showTeacherExpenseAuditModal = false">
+        <div class="modal-card" style="max-width:1100px;">
+          <div class="modal-header">
+            <h3>🔎 教師經費來源檢查</h3>
+            <button class="btn-close" @click="showTeacherExpenseAuditModal = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin:0 0 12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;">
+              這是乾跑預覽，不會改寫課表或歷史月份。可整理資料會先備份原值，再只標準化來源 JSON 與固定超鐘點欄位；格式錯誤與尚未設定來源的資料保留原值，交由人工核對。
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:0.82rem;">
+              <span class="status-badge status-approved">一致 {{ teacherExpenseAuditSummary.ok }}</span>
+              <span class="status-badge status-pending-admin">可整理 {{ teacherExpenseAuditSummary.normalizable }}</span>
+              <span class="status-badge status-pending-teacher">待確認 {{ teacherExpenseAuditSummary.review }}</span>
+              <span class="status-badge status-rejected">暫不整理 {{ teacherExpenseAuditSummary.blocked }}</span>
+            </div>
+            <div v-if="!teacherExpenseAuditRows.length" class="empty-state" style="padding:24px 12px;">
+              目前沒有教師資料可檢查。
+            </div>
+            <div v-else class="table-responsive">
+              <table class="custom-table" style="font-size:0.8rem;min-width:900px;">
+                <thead>
+                  <tr>
+                    <th>狀態</th>
+                    <th style="text-align:left;">教師</th>
+                    <th style="text-align:left;">來源目前值</th>
+                    <th style="text-align:left;">標準化後</th>
+                    <th style="text-align:left;">固定超鐘點目前值</th>
+                    <th style="text-align:left;">處理說明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in teacherExpenseAuditRows" :key="'expense-audit-' + row.email">
+                    <td style="white-space:nowrap;">
+                      <span class="status-badge" :class="row.status === 'ok' ? 'status-approved' : (row.status === 'normalizable' ? 'status-pending-admin' : (row.status === 'blocked' ? 'status-rejected' : 'status-pending-teacher'))">
+                        {{ row.status === 'ok' ? '一致' : (row.status === 'normalizable' ? '可整理' : (row.status === 'blocked' ? '暫不整理' : '待確認')) }}
+                      </span>
+                    </td>
+                    <td style="text-align:left;vertical-align:top;">
+                      <strong>{{ row.name || '未命名' }}</strong><small style="display:block;color:var(--text-muted);word-break:break-all;">{{ row.email }}</small>
+                    </td>
+                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.planBefore }}</td>
+                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.planAfter }}</td>
+                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.fixedBefore }}</td>
+                    <td style="text-align:left;vertical-align:top;color:var(--text-secondary);">{{ row.issues.concat(row.changes).join('；') || '無需處理' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" :disabled="loading || !teacherExpenseAuditSummary.normalizable" @click="normalizeTeacherExpenseData">備份並整理可處理資料（{{ teacherExpenseAuditSummary.normalizable }} 位）</button>
+            <button class="btn btn-secondary" @click="showTeacherExpenseAuditModal = false">關閉</button>
           </div>
         </div>
       </div>
@@ -4000,9 +4070,11 @@
                  {{ historyEditForm.subFee || '請先選擇假別' }}（依假別自動帶入）
                </div>
                <select v-else class="form-select" v-model="historyEditForm.subFee">
-                 <option value="自費代課">自費代課</option>
-                 <option value="公費代課">公費代課</option>
-                 <option value="扣額度">扣額度</option>
+                  <option value="自費代課">自費代課</option>
+                  <option value="公費代課">公費代課</option>
+                  <option :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）</option>
+                  <option v-if="historyEditForm.subFee === '僅課表呈現'" value="僅課表呈現">僅課表呈現（舊）</option>
+                  <option value="扣額度">扣額度</option>
                  <option value="活動公費">活動公費</option>
                  <option value="第8節代課">第8節代課</option>
                  <option value="無">無</option>

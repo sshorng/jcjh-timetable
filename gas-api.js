@@ -10,7 +10,7 @@ window.GasApi = (function () {
     submitRequest: 1, submitRequestBatch: 1, submitTriangleRequest: 1, respondToRequest: 1, respondToBatch: 1, respondTriangleRequest: 1,
     adminApprove: 1, adminReject: 1, adminApproveBatch: 1, adminRejectBatch: 1,
     cancelRequest: 1, withdrawRequest: 1, deleteSubstitutionRecord: 1,
-    saveTeacher: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
+    saveTeacher: 1, backupTeacherExpensePlans: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
     earnMutualQuotaFromActivity: 1,
     saveScheduleCell: 1, clearScheduleCell: 1, importSchedulesBatch: 1,
      saveSemester: 1, deleteSemester: 1, setDefaultSemester: 1,
@@ -28,7 +28,7 @@ window.GasApi = (function () {
   };
   /** 課表／教師／學期結構變更 → 清全部分鍵 */
   var STRUCTURE_WRITE_ACTIONS = {
-    saveTeacher: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
+    saveTeacher: 1, backupTeacherExpensePlans: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
     earnMutualQuotaFromActivity: 1,
     saveScheduleCell: 1, clearScheduleCell: 1, importSchedulesBatch: 1,
      saveSemester: 1, deleteSemester: 1, setDefaultSemester: 1,

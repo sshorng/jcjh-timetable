@@ -1819,6 +1819,14 @@ createApp({
       return String(fee || '') === QUOTA_DEDUCT_FEE || String(fee || '') === '互代不結';
     };
     const PERIOD8_FEE = (window.DomainActivityCover && window.DomainActivityCover.PERIOD8_FEE) || '第8節代課';
+    const TIMETABLE_ONLY_FEE = (window.FeeUtils && window.FeeUtils.TIMETABLE_ONLY) || '僅課表呈現（不結算）';
+    const isTimetableOnlyFee = (fee) => {
+      if (window.FeeUtils && window.FeeUtils.isTimetableOnlyFee) {
+        return window.FeeUtils.isTimetableOnlyFee(fee);
+      }
+      const value = String(fee || '').trim();
+      return value === TIMETABLE_ONLY_FEE || value === '僅課表呈現';
+    };
     const MUTUAL_PANEL_LS_KEY = 'jcjh_mutual_panel_draft_v1';
     const mutualAwayClasses = ref([]);
     // 帶隊／請假外出教師（重算額度時排除，不寫入折抵額度）
@@ -6028,7 +6036,7 @@ createApp({
       }
       return window.UiSubmitHelpers.buildSubmitPayload({
         pendingRequestData, currentSemester, getTeacherNameByEmail, isAdmin, directApproveMode,
-        isMutualCover, PERIOD8_FEE, ACTIVITY_PUBLIC_FEE, defaultSubFeeForReason, activeCell, DAC,
+        isMutualCover, PERIOD8_FEE, ACTIVITY_PUBLIC_FEE, TIMETABLE_ONLY_FEE, defaultSubFeeForReason, activeCell, DAC,
         paperFlow,
         isProxySubmitActive: function () { return isProxySubmitActive.value; },
         canStaffProxySubmit: function () { return canStaffProxySubmit.value; },
@@ -9988,11 +9996,14 @@ createApp({
       }
       const period = parseInt(req.requestPeriod != null ? req.requestPeriod : req.period, 10);
       // 代申請已在申請人欄下方標示，不再加 Tag
-      if (req.type !== 'exchange' && isQuotaDeductFee(req.subFee)) {
+       const requestFee = req.subFee || req['經費來源'];
+       if (req.type !== 'exchange' && isTimetableOnlyFee(requestFee)) {
+        tags.push({ key: 'timetable-only', label: '僅課表呈現' });
+       } else if (req.type !== 'exchange' && isQuotaDeductFee(requestFee)) {
         tags.push({ key: 'quota', label: '扣額度' });
-      } else if (req.type !== 'exchange' && req.subFee === ACTIVITY_PUBLIC_FEE) {
+       } else if (req.type !== 'exchange' && requestFee === ACTIVITY_PUBLIC_FEE) {
         tags.push({ key: 'actpub', label: '活動公費' });
-      } else if (req.type !== 'exchange' && (req.subFee === '公費代課' || req.subFee === '學校移撥' || req.subFee === '活動公費')) {
+       } else if (req.type !== 'exchange' && (requestFee === '公費代課' || requestFee === '學校移撥' || requestFee === '活動公費')) {
         tags.push({ key: 'public', label: '公費' });
       }
       if (period === 8) tags.push({ key: 'p8', label: '第8節' });
@@ -10553,7 +10564,10 @@ createApp({
         }
       } catch (eR) { /* ignore */ }
       if (period === 8) flags.push({ key: 'p8', label: '第8節', level: 'info' });
-      if (!isEx && isQuotaDeductFee(req.subFee)) {
+       const requestFee = req.subFee || req['經費來源'];
+       if (!isEx && isTimetableOnlyFee(requestFee)) {
+        flags.push({ key: 'timetable-only', label: '僅課表呈現', level: 'info' });
+       } else if (!isEx && isQuotaDeductFee(requestFee)) {
         flags.push({ key: 'quota', label: '扣額度', level: 'info' });
         // soft refresh 合併列可能沒有 FieldMap 的非列舉 Email alias；姓名仍是代課者。
         const quotaTeacherKey = req.targetTeacherName
@@ -10569,7 +10583,7 @@ createApp({
             );
         const q = t ? (parseFloat(t.mutualQuota) || 0) : 0;
         if (q <= 0) flags.push({ key: 'quota0', label: '額度不足', level: 'danger' });
-      } else if (!isEx && (req.subFee === '公費代課' || req.subFee === '學校移撥' || req.subFee === ACTIVITY_PUBLIC_FEE || req.subFee === '活動公費')) {
+       } else if (!isEx && (requestFee === '公費代課' || requestFee === '學校移撥' || requestFee === ACTIVITY_PUBLIC_FEE || requestFee === '活動公費')) {
         flags.push({ key: 'public', label: '公費', level: 'info' });
       }
       if (isEx && req.targetDate && req.requestDate && String(req.targetDate) !== String(req.requestDate)) {
@@ -11156,6 +11170,9 @@ createApp({
     const overtimePlanRows = ref([]);
     const overtimePlanPeriodEnd = ref('');
     const overtimePlanUsesFixedSlots = ref(false);
+    const showTeacherExpenseAuditModal = ref(false);
+    const teacherExpenseAuditRows = ref([]);
+    const teacherExpenseAuditSummary = ref({ total: 0, ok: 0, normalizable: 0, review: 0, blocked: 0 });
     const excelData = ref([]);
     const excelHeaders = ref([]);
     const mappingFields = ref({
@@ -11214,6 +11231,9 @@ createApp({
           overtimePlanRows,
           overtimePlanPeriodEnd,
           overtimePlanUsesFixedSlots,
+          showTeacherExpenseAuditModal,
+          teacherExpenseAuditRows,
+          teacherExpenseAuditSummary,
           accountingPeriod,
          reportMonth,
          accountingPlanOptions,
@@ -11227,6 +11247,7 @@ createApp({
         bindFlagModal(showImportTeachersModal, () => { showImportTeachersModal.value = false; }, '匯入教師');
         bindFlagModal(showTeacherModal, () => { showTeacherModal.value = false; }, '教師資料');
         bindFlagModal(showOvertimePlanModal, () => { showOvertimePlanModal.value = false; }, '超鐘點經費來源');
+        bindFlagModal(showTeacherExpenseAuditModal, () => { showTeacherExpenseAuditModal.value = false; }, '教師經費來源檢查');
         bindFlagModal(showScheduleEditModal, () => { showScheduleEditModal.value = false; }, '編輯課表');
         bindFlagModal(showHistoryEditModal, () => { showHistoryEditModal.value = false; }, '編輯歷史');
       }
@@ -11275,6 +11296,8 @@ createApp({
     };
     const openOvertimePlanModal = (...a) => needUiAdmin('openOvertimePlanModal', ...a);
     const saveOvertimePlan = (...a) => needUiAdmin('saveOvertimePlan', ...a);
+    const openTeacherExpenseAuditModal = (...a) => needUiAdmin('openTeacherExpenseAuditModal', ...a);
+    const normalizeTeacherExpenseData = (...a) => needUiAdmin('normalizeTeacherExpenseData', ...a);
     const deleteTeacher = (...a) => needUiAdmin('deleteTeacher', ...a);
     const handleTeacherExcelChange = (...a) => needUiAdmin('handleTeacherExcelChange', ...a);
     const importTeachersBatch = (...a) => needUiAdmin('importTeachersBatch', ...a);
@@ -12016,7 +12039,7 @@ createApp({
        trianglePickB, trianglePickC, triangleNote, triangleSubmitting, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC,
         triangleParticipants, triangleLegs, trianglePreviewRows, trianglePreviewWeekDates, triangleTimetablePreview, triangleValidation, triangleReady, formatTriangleSlot, openTriangleTimetablePreview, submitTriangleRequest,
       batchSelectMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote,
-      isMutualCover, toggleMutualCover, setMutualCover, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, QUOTA_DEDUCT_FEE, PERIOD8_FEE,
+       isMutualCover, toggleMutualCover, setMutualCover, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, QUOTA_DEDUCT_FEE, PERIOD8_FEE, TIMETABLE_ONLY_FEE,
       mutualAwayClasses, mutualActivityStart, mutualActivityEnd, setMutualActivityThisWeek,
       toggleMutualAwayClass, selectAwayGrade, mutualCoverStats,
       mutualLeadEmails, toggleMutualLead, isMutualLead, onMutualLeadChipClick, jumpToTeacherTimetable,
@@ -12044,7 +12067,8 @@ createApp({
       adminSubTab,
       showImportTeachersModal, teacherExcelData, teacherExcelHeaders, teacherMappingFields, teacherImportPreview, runTeacherImportPreview, handleTeacherExcelChange, importTeachersBatch,
       isScheduleEditMode, showScheduleEditModal, scheduleForm,
-         showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots,
+          showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots,
+          showTeacherExpenseAuditModal, teacherExpenseAuditRows, teacherExpenseAuditSummary, openTeacherExpenseAuditModal, normalizeTeacherExpenseData,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
         reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals, shiftReportPeriod,

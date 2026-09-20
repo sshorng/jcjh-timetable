@@ -474,11 +474,12 @@ const partiallyConfiguredRow = window.DomainBilling.buildMonthlyReportRows({
   reportMonth: '2026-07',
   reportWeeksCount: 1
 })[0];
-assert.equal(partiallyConfiguredRow.expensePlanSummary, '計畫A（1節）、預設（1節）');
+assert.equal(partiallyConfiguredRow.expensePlanSummary, '計畫A（1節）');
 assert.deepEqual(partiallyConfiguredRow.expensePlanAllocations.map(row => [row.source, row.rawHours]), [
-  ['計畫A', 1],
-  ['預設', 1]
+  ['計畫A', 1]
 ]);
+assert.equal(partiallyConfiguredRow.expensePlanConflicts[0].code, 'SNAPSHOT_SOURCE_MISSING');
+assert.equal(partiallyConfiguredRow.expensePlanBlockedHours, 1);
 
 const snapshotOnlyPlan = JSON.stringify([
   { day: 1, period: 1, className: '無人機', source: '無人機' },
@@ -516,8 +517,30 @@ const changedSmallCourseRow = window.DomainBilling.buildMonthlyReportRows({
   reportMonth: '2026-07',
   reportWeeksCount: 1
 })[0];
-assert.equal(changedSmallCourseRow.substituteAttributeDetails[0].source, '資優',
-  '小鐘點課表更版後仍應沿用唯一的星期／節次來源快照');
+assert.equal(changedSmallCourseRow.substituteAttributeDetails[0].source, '',
+  '小鐘點課表班級更版時不可靜默沿用來源快照');
+assert.equal(changedSmallCourseRow.expensePlanConflicts[0].code, 'SNAPSHOT_SCHEDULE_MISMATCH');
+
+const resolvedExpensePlan = window.FieldMap.resolveExpenseSource(
+  JSON.stringify([{ day: 1, period: 1, className: '701', source: '計畫A' }]),
+  { day: 1, period: 1, className: '701', effectiveSchedule: { dayOfWeek: 1, period: 1, className: '701' } }
+);
+assert.deepEqual([
+  resolvedExpensePlan.status,
+  resolvedExpensePlan.origin,
+  resolvedExpensePlan.source,
+  resolvedExpensePlan.canAutoAllocate
+], ['resolved', 'snapshot-exact', '計畫A', true]);
+
+const conflictExpensePlan = window.FieldMap.resolveExpenseSource(
+  JSON.stringify([{ day: 1, period: 1, className: '舊班', source: '計畫A' }]),
+  { day: 1, period: 1, className: '新班', effectiveSchedule: { dayOfWeek: 1, period: 1, className: '新班' } }
+);
+assert.deepEqual([
+  conflictExpensePlan.status,
+  conflictExpensePlan.conflict.code,
+  conflictExpensePlan.canAutoAllocate
+], ['conflict', 'SNAPSHOT_SCHEDULE_MISMATCH', false]);
 
 const coEmployedRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'CoEmployed', name: '共聘教師', jobTitle: '共聘', baseHours: 0 }],

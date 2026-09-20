@@ -266,7 +266,7 @@ const adminOnlyActions = [
   'saveSemester', 'deleteSemester', 'setDefaultSemester',
   'saveClassAwayEvent', 'deleteClassAwayEvent',
   'saveSchoolSwap', 'deleteSchoolSwap',
-  'saveTeacher', 'deleteTeacher', 'importTeachersBatch', 'updateMutualQuotas',
+  'saveTeacher', 'backupTeacherExpensePlans', 'deleteTeacher', 'importTeachersBatch', 'updateMutualQuotas',
   'earnMutualQuotaFromActivity', 'saveScheduleCell', 'clearScheduleCell',
   'importSchedulesBatch', 'adminApprove', 'adminReject', 'adminApproveBatch',
   'adminRejectBatch', 'saveHomeroomCoverTeacher', 'deleteSubstitutionRecord',

@@ -44,6 +44,14 @@ window.DomainSchedule = (function () {
     return value === 'combined_return' || value === '合班回原班';
   }
 
+  function isTimetableOnlyFee(fee) {
+    if (window.FeeUtils && typeof window.FeeUtils.isTimetableOnlyFee === 'function') {
+      return window.FeeUtils.isTimetableOnlyFee(fee);
+    }
+    var value = String(fee || '').trim();
+    return value === '僅課表呈現（不結算）' || value === '僅課表呈現';
+  }
+
   var PATROL_INCOMING_TIP =
     '對方本節為【巡堂】。排入代課／調課後，請私下協調代巡堂或互換，系統不另開巡堂代課單。';
 
@@ -462,6 +470,8 @@ window.DomainSchedule = (function () {
             var src = otherIn ? formatShortDateAndPeriod(otherIn.date, otherIn.period, h.getWeekDayText) : '他處';
             subTextIn = '⇄ 調自 ' + src + ' ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
           }
+        } else if (isTimetableOnlyFee(incomingEdge.subFee || incomingEdge['經費來源'])) {
+          subTextIn = '📋 僅課表：' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         } else if (incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結') {
           subTextIn = '🔁 互代: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         } else {
@@ -629,6 +639,8 @@ window.DomainSchedule = (function () {
             var dest = otherSub ? formatShortDateAndPeriod(otherSub.date, otherSub.period, h.getWeekDayText) : '他處';
             subText = '⇄ 調至 ' + dest + ' ' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
           }
+        } else if (isTimetableOnlyFee(firstEdge.subFee || firstEdge['經費來源'])) {
+          subText = '📋 僅課表：' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
         } else if (firstEdge.subFee === '扣額度' || firstEdge.subFee === '互代不結') {
           subText = '🔁 互代: ' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
         } else {

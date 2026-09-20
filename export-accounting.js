@@ -702,6 +702,18 @@
     return String(record && (record.subFee || record['經費來源']) || '').trim();
   }
 
+  function isTimetableOnlyFee(fee) {
+    if (root.FeeUtils && typeof root.FeeUtils.isTimetableOnlyFee === 'function') {
+      return root.FeeUtils.isTimetableOnlyFee(fee);
+    }
+    var value = String(fee || '').trim();
+    return value === '僅課表呈現（不結算）' || value === '僅課表呈現';
+  }
+
+  function isTimetableOnlyRecord(record) {
+    return isTimetableOnlyFee(subFee(record));
+  }
+
   function reason(record) {
     return String(record && (record.reason || record['請假事由']) || '').trim();
   }
@@ -781,12 +793,15 @@
   }
 
   function homeroomIsBillable(record, substitutionRecords, teachers) {
+    if (isTimetableOnlyRecord(record)) return false;
     if (isCourseAdjustmentOnlyRecord(record)) return false;
     var ids = sourceRequestIds(record);
     var matched = (substitutionRecords || []).filter(function (request) {
       var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
       return requestId && ids.indexOf(requestId) >= 0;
     });
+    matched = matched.filter(function (request) { return !isTimetableOnlyRecord(request); });
+    if (!matched.length && ids.length) return false;
     if (!matched.length) return homeroomIsFullDayLeave(record, teachers);
     var teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
       || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
@@ -819,6 +834,7 @@
   }
 
   function isPublic(record) {
+    if (isTimetableOnlyRecord(record)) return false;
     var fee = subFee(record);
     var why = reason(record);
     if (['\u516c\u8cbb\u4ee3\u8ab2', '\u5b78\u6821\u79fb\u64a5', '\u6d3b\u52d5\u516c\u8cbb', '\u516c\u8cbb', '\u4ee3\u8ab2\u8cbb'].indexOf(fee) >= 0) return true;
@@ -837,6 +853,7 @@
   }
 
   function isPublicPayoutRecord(record) {
+    if (isTimetableOnlyRecord(record)) return false;
     var fee = subFee(record);
     return isPublicOvertimeRecord(record) || fee === '\u6d3b\u52d5\u516c\u8cbb';
   }
@@ -908,6 +925,7 @@
 
   function isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex) {
     if (!record) return false;
+    if (isTimetableOnlyRecord(record)) return false;
     if (hasCourseAttributeMetadata(record)) return isRecordSubstituteCourse(record);
     var date = dateObj(record.date);
     var period = Number(record.period);
@@ -926,6 +944,7 @@
   function isUsableSubstitution(record) {
     if (!record || !record.date || !isApprovedActive(record) || !isSubstitutionRecord(record)) return false;
     var fee = subFee(record);
+    if (isTimetableOnlyFee(fee)) return false;
     if (['\u6263\u984d\u5ea6', '\u4e92\u4ee3\u4e0d\u7d50', '\u7b2c8\u7bc0\u4ee3\u8ab2'].indexOf(fee) >= 0) return false;
     if (!isWeeklyPeriod(record.period)) return false;
     return true;
@@ -1084,7 +1103,7 @@
     var parsed = parseExpensePlan(source && source.expensePlan);
     if (parsed.mode === 'legacy' && parsed.legacySource) return parsed.legacySource;
     if (parsed.mode === 'empty') return '預設';
-    return '預設';
+    return '';
   }
 
   function substitutionKey(record) {
@@ -1197,9 +1216,9 @@
       });
       var sourceRecords = allSourceRecords.filter(function (record) {
         var key = substitutionKey(record);
-        if (chargedKeys[key] || adjunct) return true;
-        if (scheduledOvertime <= 0) return false;
         var plan = expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex);
+        if (chargedKeys[key] || adjunct) return adjunct || !!plan;
+        if (scheduledOvertime <= 0) return false;
         return isDefaultExpensePlan(plan);
       });
       sourceRecords
@@ -1304,7 +1323,8 @@
         };
       });
     }
-    if (!allocations.length && expensePlanSourcesForRow(source).indexOf(expectedPlan) >= 0) {
+    if (!allocations.length && !(source && source.expensePlanConflicts && source.expensePlanConflicts.length)
+        && expensePlanSourcesForRow(source).indexOf(expectedPlan) >= 0) {
       return [{ row: Object.assign({}, source, { expensePlan: expectedPlan }), allocation: null }];
     }
     return [];
@@ -1590,7 +1610,7 @@
       if (sourceEmail) sourceRows[sourceEmail] = sourceRow;
       var details = Array.isArray(sourceRow.substituteAttributeDetails)
         ? sourceRow.substituteAttributeDetails.filter(function (detail) {
-          return dateInPeriod(detail.date, period);
+          return dateInPeriod(detail.date, period) && String(detail.source || '').trim();
         })
         : [];
       if (!details.length) return;
@@ -1816,6 +1836,20 @@
       if (source.fixedOvertimeConfigError) {
         addUniqueMessage(data.warnings, '教師「' + teacherName(source, source.email)
           + '」的固定超鐘點設定有誤：' + source.fixedOvertimeConfigError + '，本次暫以課表推算。');
+      }
+      (source.expensePlanConflicts || []).forEach(function (conflict) {
+        var slot = conflict.day && conflict.period !== undefined
+          ? '（星期' + conflict.day + '第' + conflict.period + '節）' : '';
+        var conflictMessage = '教師「' + teacherName(source, source.email) + '」' + slot
+          + '的經費來源無法與課表一致，已停止自動分表，請先核對。';
+        addUniqueMessage(data.warnings, conflictMessage);
+        addUniqueMessage(data.blocking, conflictMessage);
+      });
+      if (Number(source.expensePlanBlockedHours) > 0) {
+        var blockedMessage = '教師「' + teacherName(source, source.email) + '」有 '
+          + Number(source.expensePlanBlockedHours) + ' 節經費來源尚未分配，請先核對。';
+        addUniqueMessage(data.warnings, blockedMessage);
+        addUniqueMessage(data.blocking, blockedMessage);
       }
     });
     planKeys.sort(function (a, b) {

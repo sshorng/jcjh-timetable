@@ -78,6 +78,11 @@ window.UiAdmin = (function () {
     var overtimePlanRows = useRef('overtimePlanRows', []);
     var overtimePlanPeriodEnd = useRef('overtimePlanPeriodEnd', '');
     var overtimePlanUsesFixedSlots = useRef('overtimePlanUsesFixedSlots', false);
+    var showTeacherExpenseAuditModal = useRef('showTeacherExpenseAuditModal', false);
+    var teacherExpenseAuditRows = useRef('teacherExpenseAuditRows', []);
+    var teacherExpenseAuditSummary = useRef('teacherExpenseAuditSummary', {
+      total: 0, ok: 0, normalizable: 0, review: 0, blocked: 0
+    });
     var accountingPlanOptions = deps.accountingPlanOptions || { value: [] };
 
     var excelData = useRef('excelData', []);
@@ -981,6 +986,10 @@ window.UiAdmin = (function () {
       loading.value = true;
       loadingMessage.value = '正在代入全部教師固定超鐘點…';
       try {
+        await callGasApi('backupTeacherExpensePlans', {
+          rows: teachers.map(function (teacher) { return teacherExpenseBackupPayload(teacher); }),
+          reason: '批次代入固定超鐘點前自動備份'
+        });
         var rows = preview.map(function (item) {
           var teacher = item.teacher;
           return {
@@ -1093,17 +1102,26 @@ window.UiAdmin = (function () {
     }
 
     function expenseSourceForSchedule(teacher, schedule) {
+      var resolution = expenseResolutionForSchedule(teacher, schedule);
+      return resolution && resolution.canAutoAllocate && resolution.status !== 'implicit-default'
+        ? resolution.source : '';
+    }
+
+    function expenseResolutionForSchedule(teacher, schedule, effectiveSchedule) {
       var raw = teacher && (teacher.expensePlan !== undefined
         ? teacher.expensePlan
         : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || ''));
-      if (window.FieldMap && window.FieldMap.expensePlanSourceForSlot) {
-        return window.FieldMap.expensePlanSourceForSlot(raw, {
+      if (window.FieldMap && window.FieldMap.resolveExpenseSource) {
+        var hasEffective = arguments.length >= 3;
+        return window.FieldMap.resolveExpenseSource(raw, {
           day: schedule.dayOfWeek,
           period: schedule.period,
-          className: schedule.className
+          className: schedule.className,
+          teacherKey: teacherIdentityKeys(teacher).join('|'),
+          effectiveSchedule: hasEffective ? effectiveSchedule : schedule
         });
       }
-      return '';
+      return { source: '', status: 'missing', canAutoAllocate: false, conflict: null };
     }
 
     function normalizeExpensePlanDate(value) {
@@ -1225,8 +1243,14 @@ window.UiAdmin = (function () {
         if (seen[key]) return;
         seen[key] = true;
         var resolvedSource = source;
+        var resolution = expenseResolutionForSchedule(teacher, {
+          dayOfWeek: day,
+          period: period,
+          className: className
+        }, schedule ? [schedule] : []);
         if (resolvedSource === undefined || resolvedSource === null) {
-          resolvedSource = schedule ? expenseSourceForSchedule(teacher, schedule) : '';
+          resolvedSource = resolution && resolution.canAutoAllocate
+            && resolution.status !== 'implicit-default' ? resolution.source : '';
         }
         rows.push({
           key: 'expense|' + key + '|' + rows.length,
@@ -1235,10 +1259,14 @@ window.UiAdmin = (function () {
           className: className,
           subject: String(schedule && (schedule.subject || schedule['科目']) || '').trim(),
           activeFrom: schedule && (schedule.activeFrom || schedule['啟用起日']) || '',
-          activeTo: schedule && (schedule.activeTo || schedule['啟用迄日']) || '',
-          source: String(resolvedSource || '').trim(),
-          kind: kind || 'snapshot'
-        });
+           activeTo: schedule && (schedule.activeTo || schedule['啟用迄日']) || '',
+           source: String(resolvedSource || '').trim(),
+           sourceStatus: resolution && resolution.status || 'missing',
+           sourceOrigin: resolution && resolution.origin || 'none',
+           sourceConflict: resolution && resolution.conflict || null,
+           currentClassName: String(schedule && (schedule.className || schedule['班級']) || '').trim(),
+           kind: kind || 'snapshot'
+         });
       }
 
       var useFixedOvertime = fixed.configured && fixed.valid;
@@ -1353,6 +1381,7 @@ window.UiAdmin = (function () {
       };
       loading.value = true;
       try {
+        await backupTeacherExpenseData(teacher);
         await callGasApi('saveTeacher', reqPayload);
         var mapped = window.FieldMap.mapTeacher(reqPayload);
         var list = teachersList.value.slice();
@@ -1600,6 +1629,189 @@ window.UiAdmin = (function () {
       showTeacherModal.value = true;
     }
 
+    function teacherExpenseBackupPayload(teacher) {
+      return {
+        '教師Email': teacher && (teacher.loginEmail || teacher.email || teacher['教師Email']) || '',
+        '教師姓名': teacher && (teacher.name || teacher.teacherName || teacher['教師姓名']) || '',
+        '鐘點支出計畫': teacher && (teacher.expensePlan !== undefined
+          ? teacher.expensePlan : (teacher['鐘點支出計畫'] || teacher['鐘點支出來源'] || '')) || '',
+        '超鐘點節數': teacher
+          ? (teacher.fixedOvertimeHours !== undefined
+            ? teacher.fixedOvertimeHours
+            : (teacher['超鐘點節數'] !== undefined ? teacher['超鐘點節數'] : ''))
+          : '',
+        '超鐘點節次': teacher && (teacher.fixedOvertimeSlotsText || teacher.fixedOvertimeSlots
+          || teacher['超鐘點節次']) || ''
+      };
+    }
+
+    async function backupTeacherExpenseData(teacher) {
+      if (!teacher || typeof callGasApi !== 'function') return;
+      await callGasApi('backupTeacherExpensePlans', {
+        rows: [teacherExpenseBackupPayload(teacher)],
+        reason: '更新教師經費來源前自動備份'
+      });
+    }
+
+    function teacherExpensePlanRaw(teacher) {
+      return teacher && teacher.expensePlan !== undefined
+        ? teacher.expensePlan
+        : (teacher && (teacher['鐘點支出計畫'] !== undefined
+          ? teacher['鐘點支出計畫']
+          : (teacher['鐘點支出來源'] || teacher['支出計畫'] || teacher['計畫'] || teacher.plan || '')));
+    }
+
+    function teacherExpenseAuditRow(teacher) {
+      var rawPlan = teacherExpensePlanRaw(teacher);
+      var parsed = window.FieldMap && window.FieldMap.parseExpensePlan
+        ? window.FieldMap.parseExpensePlan(rawPlan)
+        : { mode: String(rawPlan || '').trim() ? 'legacy' : 'empty', slots: [], legacySource: String(rawPlan || '').trim() };
+      var fixed = fixedOvertimeSetting(teacher);
+      var hasMappedFixedState = teacher && teacher.fixedOvertimeConfigured !== undefined;
+      var rawHours = teacher && (hasMappedFixedState
+        ? (teacher.fixedOvertimeConfigured ? teacher.fixedOvertimeHours : '')
+        : (teacher.fixedOvertimeHours !== undefined ? teacher.fixedOvertimeHours : teacher['超鐘點節數']));
+      var rawSlots = teacher && (hasMappedFixedState
+        ? (teacher.fixedOvertimeConfigured ? (teacher.fixedOvertimeSlotsText || teacher.fixedOvertimeSlots) : '')
+        : (teacher.fixedOvertimeSlotsText !== undefined
+          ? teacher.fixedOvertimeSlotsText
+          : (teacher.fixedOvertimeSlots !== undefined ? teacher.fixedOvertimeSlots : teacher['超鐘點節次'])));
+      var issues = [];
+      var changes = [];
+      var normalizedPlan = String(rawPlan == null ? '' : rawPlan).trim();
+
+      if (parsed.mode === 'invalid' || parsed.invalid) {
+        issues.push('鐘點支出計畫格式錯誤，無法自動整理');
+      } else if (parsed.mode === 'empty') {
+        issues.push('尚未設定來源，需確認是否採用預設經費');
+      } else if (parsed.mode === 'slots' && window.FieldMap
+          && typeof window.FieldMap.serializeExpensePlanSlots === 'function') {
+        normalizedPlan = window.FieldMap.serializeExpensePlanSlots(parsed.slots || []);
+        if (normalizedPlan !== String(rawPlan == null ? '' : rawPlan).trim()) {
+          changes.push('來源 JSON 標準化');
+        }
+      }
+
+      var hasFixedRaw = rawHours !== undefined && rawHours !== null && String(rawHours).trim() !== ''
+        || rawSlots !== undefined && rawSlots !== null && String(rawSlots).trim() !== '';
+      var normalizedHours = fixed.configured && fixed.valid ? fixed.hours : '';
+      var normalizedSlots = fixed.configured && fixed.valid ? fixed.slotsText : '';
+      if (fixed.configured && !fixed.valid) {
+        issues.push(fixed.error || '固定超鐘點設定格式錯誤');
+      } else if (fixed.configured && (String(rawHours == null ? '' : rawHours).trim() !== String(normalizedHours)
+          || String(rawSlots == null ? '' : rawSlots).trim() !== String(normalizedSlots))) {
+        changes.push('固定超鐘點欄位標準化');
+      } else if (hasFixedRaw && !fixed.configured) {
+        issues.push('固定超鐘點欄位無法辨識');
+      }
+
+      var name = String(teacher && (teacher.name || teacher.teacherName || teacher['教師姓名']) || '').trim();
+      var email = String(teacher && (teacher.loginEmail || teacher.email || teacher['教師Email']) || '').trim().toLowerCase();
+      var blocked = issues.some(function (issue) {
+        return issue.indexOf('格式錯誤') >= 0 || issue.indexOf('無法') >= 0 || issue.indexOf('辨識') >= 0;
+      });
+      var canApply = !issues.length && changes.length > 0;
+      return {
+        teacher: teacher,
+        email: email,
+        name: name,
+        planBefore: window.FieldMap && window.FieldMap.formatExpensePlanSummary
+          ? window.FieldMap.formatExpensePlanSummary(rawPlan) : (normalizedPlan || '預設'),
+        planAfter: window.FieldMap && window.FieldMap.formatExpensePlanSummary
+          ? window.FieldMap.formatExpensePlanSummary(normalizedPlan) : (normalizedPlan || '預設'),
+        fixedBefore: String(rawHours == null || String(rawHours).trim() === '' ? '未設定' : rawHours)
+          + '／' + String(rawSlots == null || String(rawSlots).trim() === '' ? '未設定' : rawSlots),
+        fixedAfter: fixed.configured && fixed.valid ? String(normalizedHours) + '／' + normalizedSlots : '保留原值',
+        normalizedPlan: normalizedPlan,
+        normalizedHours: normalizedHours,
+        normalizedSlots: normalizedSlots,
+        issues: issues,
+        changes: changes,
+        status: canApply ? 'normalizable' : (blocked ? 'blocked' : (issues.length ? 'review' : 'ok')),
+        canApply: canApply
+      };
+    }
+
+    function openTeacherExpenseAuditModal() {
+      var rows = (teachersList.value || []).map(teacherExpenseAuditRow);
+      var summary = {
+        total: rows.length,
+        ok: rows.filter(function (row) { return row.status === 'ok'; }).length,
+        normalizable: rows.filter(function (row) { return row.canApply; }).length,
+        review: rows.filter(function (row) { return row.status === 'review'; }).length,
+        blocked: rows.filter(function (row) { return row.status === 'blocked'; }).length
+      };
+      rows.sort(function (left, right) {
+        var order = { blocked: 0, review: 1, normalizable: 2, ok: 3 };
+        return (order[left.status] !== undefined ? order[left.status] : 9)
+          - (order[right.status] !== undefined ? order[right.status] : 9)
+          || left.name.localeCompare(right.name, 'zh-Hant');
+      });
+      teacherExpenseAuditRows.value = rows;
+      teacherExpenseAuditSummary.value = summary;
+      showTeacherExpenseAuditModal.value = true;
+    }
+
+    function teacherExpenseNormalizePayload(row) {
+      var teacher = row.teacher || {};
+      var quota = parseFloat(teacher.mutualQuota);
+      return {
+        '教師Email': teacher.loginEmail || teacher['教師Email'] || teacher.email,
+        '教師姓名': teacher.name || teacher.teacherName || teacher['教師姓名'],
+        '授課科目': teacher.subject || teacher['授課科目'] || '',
+        '職務': teacher.jobTitle || teacher['職務'] || '',
+        '鐘點支出計畫': row.normalizedPlan,
+        '超鐘點節數': row.normalizedHours,
+        '超鐘點節次': row.normalizedSlots,
+        '系統角色': teacher.role || teacher['系統角色'] || 'teacher',
+        '基本鐘點': teacher.baseHours === 0 || teacher.baseHours === '0'
+          ? 0 : (parseInt(teacher.baseHours, 10) || 16),
+        '折抵額度': isNaN(quota) || quota < 0 ? 0 : Math.round(quota * 1000) / 1000
+      };
+    }
+
+    async function normalizeTeacherExpenseData() {
+      var rows = (teacherExpenseAuditRows.value || []).filter(function (row) { return row.canApply; });
+      if (!rows.length) {
+        showToast('目前沒有可自動整理的教師資料', 'warning');
+        return;
+      }
+      var ok = await showConfirm(
+        '將先備份 ' + rows.length + ' 位教師的原始經費資料，再標準化來源 JSON 與固定超鐘點欄位。\n'
+          + '格式錯誤與尚未設定來源的資料不會被改寫。\n\n確定整理？',
+        '整理教師經費資料'
+      );
+      if (!ok) return;
+      loading.value = true;
+      loadingMessage.value = '正在備份教師經費資料…';
+      try {
+        await callGasApi('backupTeacherExpensePlans', {
+          rows: rows.map(function (row) { return teacherExpenseBackupPayload(row.teacher); }),
+          reason: '教師經費資料標準化前備份'
+        });
+        for (var i = 0; i < rows.length; i += 1) {
+          loadingMessage.value = '整理教師經費資料 ' + (i + 1) + '／' + rows.length + '…';
+          var payload = teacherExpenseNormalizePayload(rows[i]);
+          await callGasApi('saveTeacher', payload);
+          var mapped = window.FieldMap.mapTeacher(payload);
+          var list = teachersList.value.slice();
+          var index = list.findIndex(function (item) {
+            return String(item.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase();
+          });
+          if (index >= 0) list[index] = Object.assign({}, list[index], mapped);
+          teachersList.value = list;
+        }
+        showTeacherExpenseAuditModal.value = false;
+        showToast('已備份並整理 ' + rows.length + ' 位教師的經費資料', 'success');
+        softRefreshInBackground({ force: true, delay: 800 });
+      } catch (e) {
+        console.error(e);
+        showToast('整理教師經費資料失敗：' + e.message, 'error');
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function saveTeacher() {
       loading.value = true;
       var email = teacherForm.value.email.trim();
@@ -1647,6 +1859,7 @@ window.UiAdmin = (function () {
         })()
       };
       try {
+        if (existingTeacher) await backupTeacherExpenseData(existingTeacher);
         await callGasApi('saveTeacher', reqPayload);
         showTeacherModal.value = false;
          var mapped = window.FieldMap.mapTeacher(reqPayload);
@@ -2111,7 +2324,7 @@ window.UiAdmin = (function () {
         return;
       }
       if (typeof getHistoryEditDefaultSubFee !== 'function') return;
-      var autoFeeValues = ['', '無', '自費代課', '公費代課', '第8節代課'];
+       var autoFeeValues = ['', '無', '自費代課', '公費代課', '第8節代課'];
       var currentFee = String(form.subFee || '').trim();
       if (force || autoFeeValues.indexOf(currentFee) >= 0) {
         form.subFee = getHistoryEditDefaultSubFee(form.reason, form.requestPeriod);
@@ -2326,9 +2539,14 @@ window.UiAdmin = (function () {
        overtimePlanRows: overtimePlanRows,
        overtimePlanPeriodEnd: overtimePlanPeriodEnd,
        overtimePlanUsesFixedSlots: overtimePlanUsesFixedSlots,
-      getOvertimeExpenseSourceOptions: getOvertimeExpenseSourceOptions,
-      openOvertimePlanModal: openOvertimePlanModal,
-      saveOvertimePlan: saveOvertimePlan,
+       showTeacherExpenseAuditModal: showTeacherExpenseAuditModal,
+       teacherExpenseAuditRows: teacherExpenseAuditRows,
+       teacherExpenseAuditSummary: teacherExpenseAuditSummary,
+       getOvertimeExpenseSourceOptions: getOvertimeExpenseSourceOptions,
+       openOvertimePlanModal: openOvertimePlanModal,
+       saveOvertimePlan: saveOvertimePlan,
+       openTeacherExpenseAuditModal: openTeacherExpenseAuditModal,
+       normalizeTeacherExpenseData: normalizeTeacherExpenseData,
       openAddTeacherModal: openAddTeacherModal,
       openEditTeacherModal: openEditTeacherModal,
       saveTeacher: saveTeacher,
