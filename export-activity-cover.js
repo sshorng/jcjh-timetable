@@ -711,8 +711,14 @@ window.ExportActivityCover = (function () {
     return documentXml.replace(rowRe, rowsXml);
   }
 
+  function removeStatisticsParagraphs(documentXml) {
+    var statsParagraphRe = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?\{\{(?:DEMAND|ARRANGED|REMAINING)\}\}(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
+    return documentXml.replace(statsParagraphRe, '');
+  }
+
   function renderPageXml(templateXml, matrix, map, titleLine) {
     var xml = injectDataRows(templateXml, matrix);
+    if (map.HIDE_STATS) xml = removeStatisticsParagraphs(xml);
     var title = titleLine || map.TITLE_LINE || '';
     xml = xml.split('{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單').join(xmlEsc(title));
     xml = xml.split('{{GRADE}}年級課務').join(xmlEsc(map.STATS_GRADE || '　') + '年級課務');
@@ -814,7 +820,8 @@ window.ExportActivityCover = (function () {
         REMAINING: String(pageMatrix.remaining),
         EXPORT_DATE: formatExportDate(opts.exportDate),
         NOTE_P8: formatPeriod8Note(pageMatrix.period8Lines),
-        STATS_GRADE: gradeInStats || '　'
+        STATS_GRADE: gradeInStats || '　',
+        HIDE_STATS: page.role === 'covered' ? '1' : ''
       };
       var pageRoleLabel = page.role === 'covered' ? '被代課' : '輪值';
       var title = baseTitle + (page.name ? '（' + pageRoleLabel + '：' + page.name + '）' : '');

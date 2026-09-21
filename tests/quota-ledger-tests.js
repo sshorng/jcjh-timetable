@@ -489,7 +489,8 @@ console.log('quota ledger tests PASS');
     + '<w:p><w:r><w:t>{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單</w:t></w:r></w:p>'
     + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>header</w:t></w:r></w:p></w:tc></w:tr>'
     + '<w:tr>' + cells + '</w:tr></w:tbl>'
-    + '<w:p><w:r><w:t>{{DEMAND}}/{{ARRANGED}}/{{REMAINING}} {{NOTE_P8}}</w:t></w:r></w:p>'
+    + '<w:p><w:r><w:t>{{NOTE_P8}}</w:t></w:r></w:p>'
+    + '<w:p><w:r><w:t>【未執行的課務依比例共{{DEMAND}}節，本次輪值安排{{ARRANGED}}節，尚有{{REMAINING}}節】</w:t></w:r></w:p>'
     + '<w:sectPr><w:pgSz w:w="11906"/></w:sectPr></w:body></w:document>';
   let generatedXml = '';
   const fakeZip = {
@@ -543,6 +544,7 @@ console.log('quota ledger tests PASS');
   assert.match(generatedXml, /輪值：乙老師/);
   assert.match(generatedXml, /被代課：帶隊老師/);
   assert.match(generatedXml, /w:fill="D9D9D9"/);
+  assert.equal((generatedXml.match(/未執行的課務依比例/g) || []).length, 2);
   assert.doesNotMatch(generatedXml, /\{\{[A-Z0-9_]+\}\}/);
   console.log('quota ledger DOCX export test PASS');
 })().catch(function (error) {
