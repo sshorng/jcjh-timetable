@@ -120,6 +120,21 @@ assert.equal(
   '臺北市立建成國中115年8-9月超鐘點（校務計畫超鐘點費）印領清冊',
   '超鐘點標題應只使用輸入計畫的全稱，不應依簡稱硬編對照表'
 );
+const mergedPlanRows = [
+  { expensePlan: '工程輔導團', note: '' },
+  { expensePlan: '薪傳', note: '原有備註' },
+  { expensePlan: '共聘', note: '' }
+];
+window.ExportAccounting.appendMergedPlanNotes(
+  mergedPlanRows,
+  { key: 'overtime' },
+  '工程輔導團、薪傳、共聘'
+);
+assert.deepEqual(
+  mergedPlanRows.map(row => row.note),
+  ['計畫：工程輔導團', '原有備註；計畫：薪傳', '計畫：共聘'],
+  '合併計畫工作表應在各教師備註標示各自計畫'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },

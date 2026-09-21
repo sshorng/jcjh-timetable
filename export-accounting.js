@@ -623,6 +623,32 @@
     }).join('\n');
   }
 
+  function hasMergedExpensePlan(value) {
+    return String(value || '').split('、').map(function (part) {
+      return String(part || '').trim();
+    }).filter(Boolean).length > 1;
+  }
+
+  function appendMergedPlanNotes(rows, config, planFilter) {
+    if (!config || config.key !== 'overtime') return rows;
+    var rowPlans = uniqueNotes((rows || []).map(function (row) {
+      var rawPlan = String(row && (row.expensePlan || row.plan) || '').trim();
+      return rawPlan && !hasMergedExpensePlan(rawPlan) ? planFullLabel(rawPlan) : '';
+    }));
+    if (!hasMergedExpensePlan(planFilter) && rowPlans.length <= 1) return rows;
+    (rows || []).forEach(function (row) {
+      var rawPlan = String(row && (row.expensePlan || row.plan) || '').trim();
+      if (!rawPlan || hasMergedExpensePlan(rawPlan)) return;
+      var plan = planFullLabel(rawPlan);
+      if (!plan) return;
+      var note = '計畫：' + plan;
+      var current = String(row.note || '').trim();
+      if (current.indexOf(note) >= 0) return;
+      row.note = current ? current + '；' + note : note;
+    });
+    return rows;
+  }
+
   function noteDates(records) {
     return (records || []).map(function (record) {
       return shortDate(record.date);
@@ -1620,9 +1646,10 @@
         });
       });
     });
-    return config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport'
+    var output = config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport'
       ? mergeOvertimeSubstitutionRows(rows, substitutionRows, opts)
       : rows;
+    return appendMergedPlanNotes(output, config, planFilter);
   }
 
   function courseText(record) {
@@ -2608,6 +2635,7 @@
     monthLabelForPeriod: monthLabelForPeriod,
     titleFromTemplate: titleFromTemplate,
     titleFor: titleFor,
+    appendMergedPlanNotes: appendMergedPlanNotes,
     buildExportData: buildExportData,
     exportWorkbook: exportWorkbook
   };
