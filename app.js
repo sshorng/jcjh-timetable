@@ -3846,6 +3846,7 @@ createApp({
         classAwayEvents: classAwayEvents.value,
         semesterEndDate: semesterEndDate.value,
         getTeacherNameByEmail,
+        getClassAwayEventName,
         isSingleWeek
       });
     });

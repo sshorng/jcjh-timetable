@@ -2424,7 +2424,6 @@ body {
   min-height: 52px;
   padding: 3px 4px;
   border: 0;
-  border-left: 3px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--tt-ink, var(--text-primary));
@@ -2438,7 +2437,6 @@ body {
   box-shadow: inset 0 0 0 1px #9fc1f5;
   transform: none;
 }
-.period8-status-own { border-left-color: var(--tt-accent, #2563eb); }
 .period8-cell-button strong {
   font-size: 0.82rem;
 }
@@ -2458,17 +2456,16 @@ body {
   font-size: 0.62rem;
   font-weight: 600;
 }
-.period8-status-substitution { background: #fef2f2; border-left-color: #ef4444; }
+.period8-status-substitution { background: #fef2f2; }
 .period8-status-substitution .period8-status-badge { color: #b91c1c; }
-.period8-status-exchange { background: #eff6ff; border-left-color: var(--tt-accent, #2563eb); }
+.period8-status-exchange { background: #eff6ff; }
 .period8-status-exchange .period8-status-badge { color: var(--tt-accent-dark, #1d4ed8); }
-.period8-status-away { background: #f8fafc; border-left-color: #94a3b8; color: var(--tt-ink-2, var(--text-secondary)); }
+.period8-status-away { background: #f8fafc; color: var(--tt-ink-2, var(--text-secondary)); }
 .period8-status-away .period8-status-badge { color: #64748b; }
 .period8-cell-disabled {
   opacity: 0.58;
   filter: grayscale(0.35);
   background: repeating-linear-gradient(-45deg, #f8fafc, #f8fafc 4px, #f1f5f9 4px, #f1f5f9 8px) !important;
-  border-left: 3px dashed #94a3b8 !important;
   cursor: default !important;
   pointer-events: none;
 }
@@ -2476,9 +2473,9 @@ body {
   transform: none;
   background: repeating-linear-gradient(-45deg, #f8fafc, #f8fafc 4px, #f1f5f9 4px, #f1f5f9 8px) !important;
 }
-.period8-status-combined_return { background: #f8fafc; border-left-color: #94a3b8; }
+.period8-status-combined_return { background: #f8fafc; }
 .period8-status-combined_return .period8-status-badge { color: #64748b; }
-.period8-status-timetable_only { background: #fffaf0; border-left-color: #b78b2a; }
+.period8-status-timetable_only { background: #fffaf0; }
 .period8-status-timetable_only .period8-status-badge { color: #8a6a23; }
 .period8-empty-cell {
   display: flex;
