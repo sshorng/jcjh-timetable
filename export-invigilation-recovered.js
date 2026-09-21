@@ -654,12 +654,15 @@ window.ExportInvigilation = (function () {
     var noteRow = (layout && layout.noteRow) || 48;
     if (recipientName) {
       var label = '分發：' + recipientName;
+      var headerLabel = '&L&14' + label;
       try {
         if (!ws.headerFooter) ws.headerFooter = {};
-        ws.headerFooter.oddHeader = '&L' + label;
-        ws.headerFooter.evenHeader = '&L' + label;
+        ws.headerFooter.oddHeader = headerLabel;
+        ws.headerFooter.evenHeader = headerLabel;
       } catch (eH) { /* ignore */ }
-      setVal(ws.getCell(1, 25), label);
+      var labelCell = ws.getCell(1, 25);
+      setVal(labelCell, label);
+      setCellFontSizePreservingStyle(labelCell, 14);
     }
     var noteCell = ws.getCell(noteRow, 1);
     var noteText = noteCell.value;

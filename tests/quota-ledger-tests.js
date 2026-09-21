@@ -415,13 +415,26 @@ const noteCell = {
   }
 };
 const noteBorderBefore = JSON.stringify(noteCell.style.border);
-const labelCell = { address: 'Y1', value: null, style: {} };
+const labelCell = {
+  address: 'Y1',
+  value: null,
+  style: {
+    font: { name: '標楷體', size: 10 },
+    border: { bottom: { style: 'thin', color: { argb: 'FF000000' } } }
+  }
+};
+const labelBorderBefore = JSON.stringify(labelCell.style.border);
+const headerFooter = {};
 invigilation.personalizeValues({
-  headerFooter: {},
+  headerFooter,
   getCell: (row, col) => row === 48 && col === 1 ? noteCell : labelCell
 }, { noteRow: 48 }, '甲老師', 6, 1, 5);
 assert.equal(noteCell.style.font.size, 17, '第48列備註字型應稍微縮小');
 assert.equal(JSON.stringify(noteCell.style.border), noteBorderBefore, '第48列縮字不可改模板框線');
+assert.equal(labelCell.style.font.size, 14, '分發標籤字型應放大為 14pt');
+assert.equal(JSON.stringify(labelCell.style.border), labelBorderBefore, '分發標籤放大不可改模板框線');
+assert.equal(headerFooter.oddHeader, '&L&14分發：甲老師', '列印頁首分發標籤應使用 14pt');
+assert.equal(headerFooter.evenHeader, '&L&14分發：甲老師', '偶數頁頁首分發標籤應使用 14pt');
 
 const blankGridCells = new Map();
 const blankGridWorksheet = {
