@@ -2482,6 +2482,7 @@
       return [row.serial, row.title, row.name, row.weeklyOvertime, row.schedule, row.weeks === '' ? null : row.weeks, row.grossHours, row.deduction, row.actualHours, row.rate, row.amount, null, null, row.note];
     });
     writeRows(sheet, config.dataStart, values);
+    applyWarningRowFont(sheet, config, rows);
     applyActualAmountFormulas(sheet, config, rows);
     var end = config.dataStart + rows.length - 1;
     if (config.key === 'overtime') {

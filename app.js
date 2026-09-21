@@ -7959,6 +7959,7 @@ createApp({
         activityRequestIds,
         activityClasses: awayClasses,
         showAllChanges: true,
+        includeCoveredTeacherPages: true,
         getTeacherName: (em) => getTeacherNameByEmail(em),
         onlyActivityFee: true,
         requireActivityHint: true
@@ -7969,7 +7970,9 @@ createApp({
       }
       if (res.warning) showToast(res.warning, 'info');
       const p8 = res.period8Count ? `，第8節附註 ${res.period8Count} 筆` : '';
-       const pageTip = res.pageCount != null ? `，${res.pageCount} 位代課教師各 1 頁` : '';
+       const pageTip = res.pageCount != null
+         ? `，輪值 ${res.dutyPageCount || 0} 頁、被代課 ${res.coveredPageCount || 0} 頁`
+         : '';
        showToast(`已下載：${res.fileName}（釋出 ${res.demand}／扣額度安排 ${res.arranged}／尚有 ${res.remaining}${pageTip}${p8}）`, 'success');
     };
 

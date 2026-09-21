@@ -765,20 +765,26 @@ window.ExportActivityCover = (function () {
     var activity = activityRaw;
     var teacherPages = buildTeacherPages(opts);
     var hasTeacherPages = teacherPages.length > 0;
+    var dutyPageCount = teacherPages.filter(function (page) { return page.role !== 'covered'; }).length;
+    var coveredPageCount = teacherPages.filter(function (page) { return page.role === 'covered'; }).length;
     if (!hasTeacherPages) {
       // 沒有已送出的代理課務時仍保留一張空白底稿，方便管理員核對模板。
-      teacherPages = [{ key: '', name: '', teacher: null, matrix: buildMatrix(opts) }];
+      teacherPages = [{ key: '', role: 'duty', name: '', teacher: null, matrix: buildMatrix(opts) }];
     }
     var matrix = teacherPages[0].matrix;
     if (!matrix.dates.length) return { ok: false, error: '期間內沒有平日可匯出' };
 
-    var demand = teacherPages.reduce(function (sum, page) {
+    // 被代課頁是通知副本，不重複計入輪值額度統計。
+    var summaryPages = hasTeacherPages
+      ? teacherPages.filter(function (page) { return page.role !== 'covered'; })
+      : teacherPages;
+    var demand = summaryPages.reduce(function (sum, page) {
       return sum + (parseFloat(page.matrix.demand) || 0);
     }, 0);
-    var arranged = teacherPages.reduce(function (sum, page) {
+    var arranged = summaryPages.reduce(function (sum, page) {
       return sum + (parseFloat(page.matrix.arranged) || 0);
     }, 0);
-    var remaining = teacherPages.reduce(function (sum, page) {
+    var remaining = summaryPages.reduce(function (sum, page) {
       return sum + (parseFloat(page.matrix.remaining) || 0);
     }, 0);
 
@@ -810,7 +816,8 @@ window.ExportActivityCover = (function () {
         NOTE_P8: formatPeriod8Note(pageMatrix.period8Lines),
         STATS_GRADE: gradeInStats || '　'
       };
-      var title = baseTitle + (page.name ? '（輪值：' + page.name + '）' : '');
+      var pageRoleLabel = page.role === 'covered' ? '被代課' : '輪值';
+      var title = baseTitle + (page.name ? '（' + pageRoleLabel + '：' + page.name + '）' : '');
       return renderPageXml(templateXml, pageMatrix, map, title);
     });
     var xml = joinPageDocuments(templateXml, pageXmls);
@@ -851,10 +858,12 @@ window.ExportActivityCover = (function () {
       dayCount: matrix.dates.length,
       teacherCount: hasTeacherPages ? teacherPages.length : 0,
       pageCount: hasTeacherPages ? teacherPages.length : 1,
+      dutyPageCount: hasTeacherPages ? dutyPageCount : 0,
+      coveredPageCount: hasTeacherPages ? coveredPageCount : 0,
       arranged: arranged,
       demand: demand,
       remaining: remaining,
-      period8Count: teacherPages.reduce(function (sum, page) {
+      period8Count: summaryPages.reduce(function (sum, page) {
         return sum + (page.matrix.period8Lines || []).length;
       }, 0),
       warning: hasTeacherPages ? '' : '期間內沒有已送出的代理課務，已匯出空白表'
