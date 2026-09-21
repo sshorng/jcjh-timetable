@@ -640,22 +640,35 @@
     }).join('\n');
   }
 
-  function hasMergedExpensePlan(value) {
+  function mergedExpensePlanParts(value) {
     return String(value || '').split('、').map(function (part) {
       return String(part || '').trim();
-    }).filter(Boolean).length > 1;
+    }).filter(Boolean);
+  }
+
+  function hasMergedExpensePlan(value) {
+    return mergedExpensePlanParts(value).length > 1;
+  }
+
+  function rowHasMergedExpensePlan(row) {
+    return [row && row.expensePlanForNote, row && row.expensePlan, row && row.plan]
+      .some(hasMergedExpensePlan);
+  }
+
+  function individualExpensePlanForNote(row) {
+    return [row && row.expensePlanForNote, row && row.expensePlan, row && row.plan]
+      .map(function (value) { return String(value || '').trim(); })
+      .find(function (value) { return value && !hasMergedExpensePlan(value); }) || '';
   }
 
   function appendMergedPlanNotes(rows, config, planFilter) {
     if (!config || config.key !== 'overtime') return rows;
-    var rowPlans = uniqueNotes((rows || []).map(function (row) {
-      var rawPlan = String(row && (row.expensePlanForNote || row.expensePlan || row.plan) || '').trim();
-      return rawPlan && !hasMergedExpensePlan(rawPlan) ? planFullLabel(rawPlan) : '';
-    }));
-    if (!hasMergedExpensePlan(planFilter) && rowPlans.length <= 1) return rows;
+    var mergedPlanFilter = hasMergedExpensePlan(planFilter);
+    if (!mergedPlanFilter && !(rows || []).some(rowHasMergedExpensePlan)) return rows;
     (rows || []).forEach(function (row) {
-      var rawPlan = String(row && (row.expensePlanForNote || row.expensePlan || row.plan) || '').trim();
-      if (!rawPlan || hasMergedExpensePlan(rawPlan)) return;
+      if (!mergedPlanFilter && !rowHasMergedExpensePlan(row)) return;
+      var rawPlan = individualExpensePlanForNote(row);
+      if (!rawPlan) return;
       var plan = planFullLabel(rawPlan);
       if (!plan) return;
       var note = '計畫：' + plan;
@@ -664,6 +677,15 @@
       row.note = current ? current + '；' + note : note;
     });
     return rows;
+  }
+
+  function expensePlanMatchesFilter(value, expectedPlan) {
+    var candidate = planLabel(value);
+    if (candidate === expectedPlan) return true;
+    return hasMergedExpensePlan(expectedPlan)
+      && mergedExpensePlanParts(expectedPlan).some(function (part) {
+        return planLabel(part) === candidate;
+      });
   }
 
   function noteDates(records) {
@@ -1534,7 +1556,7 @@
     var allocations = Array.isArray(source && source.expensePlanAllocations)
       ? source.expensePlanAllocations : [];
     var matches = allocations.filter(function (allocation) {
-      return planLabel(allocation && allocation.source) === expectedPlan;
+      return expensePlanMatchesFilter(allocation && allocation.source, expectedPlan);
     });
     if (matches.length) {
       return matches.map(function (allocation) {
@@ -1548,7 +1570,9 @@
       });
     }
     if (!allocations.length && !(source && source.expensePlanConflicts && source.expensePlanConflicts.length)
-        && expensePlanSourcesForRow(source).indexOf(expectedPlan) >= 0) {
+        && expensePlanSourcesForRow(source).some(function (sourcePlan) {
+          return expensePlanMatchesFilter(sourcePlan, expectedPlan);
+        })) {
       return [{
         row: Object.assign({}, source, {
           expensePlan: expectedPlan,

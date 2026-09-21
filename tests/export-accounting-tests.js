@@ -188,6 +188,35 @@ assert.deepEqual(
   ['計畫：工程輔導團', '計畫：薪傳'],
   '合併計畫列應優先使用教師保留的個別計畫'
 );
+const mergedPlanOverallRows = [
+  { expensePlan: '工程輔導團、薪傳', expensePlanForNote: '工程輔導團', note: '' },
+  { expensePlan: '單一計畫', expensePlanForNote: '單一計畫', note: '' }
+];
+window.ExportAccounting.appendMergedPlanNotes(mergedPlanOverallRows, { key: 'overtime' }, '');
+assert.deepEqual(
+  mergedPlanOverallRows.map(row => row.note),
+  ['計畫：工程輔導團', ''],
+  '只有含頓號的計畫列應標示個別計畫，單一計畫列不應追加備註'
+);
+const mergedAllocationExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period, adjunct: period },
+  teachers: [{ email: 'merged@x', name: '合併計畫教師', baseHours: 0, expensePlan: '工程輔導團、薪傳' }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'merged@x', name: '合併計畫教師', expensePlan: '工程輔導團、薪傳',
+    weeklyOvertime: 1, scheduledOvertime: 1,
+    expensePlanAllocations: [{ source: '工程輔導團', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+  }]
+});
+const mergedAllocationPlan = mergedAllocationExport.overtimePlans.find(function (group) {
+  return group.plan === '工程輔導團、薪傳';
+});
+assert.ok(mergedAllocationPlan, '應建立含頓號計畫的超鐘點分表');
+assert.equal(mergedAllocationPlan.rows[0].note, '計畫：工程輔導團',
+  '合併計畫分表應從來源分配保留教師個別計畫');
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
