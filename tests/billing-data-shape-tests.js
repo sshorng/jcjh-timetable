@@ -259,6 +259,40 @@ assert.deepEqual([
   fixedSnapshotRow.expensePlanAllocations[0].deduction
 ], [2, 4, 1, 1, 2, 4, 2], '學期固定節數應優先於臨時課表，且只扣固定節次代課');
 
+const mixedSelfPaidRows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [
+    { email: 'mixed-self-owner@x', name: '混合自費原教師', baseHours: 0,
+      fixedOvertimeHours: 1, fixedOvertimeSlots: '二1' },
+    { email: 'mixed-self-regular-cover@x', name: '一般自費代課人', baseHours: 16 },
+    { email: 'mixed-self-overtime-cover@x', name: '超鐘自費代課人', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'mixed-self-owner@x', dayOfWeek: 2, period: 1,
+      className: '901', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'mixed-self-owner@x', dayOfWeek: 2, period: 6,
+      className: '903', attr: '一般' }
+  ],
+  substitutionRecords: [
+    { date: '2026-09-01', period: 6, className: '903', type: 'substitution',
+      originalTeacherEmail: 'mixed-self-owner@x', actualTeacherEmail: 'mixed-self-regular-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' },
+    { date: '2026-09-08', period: 1, className: '901', type: 'substitution',
+      originalTeacherEmail: 'mixed-self-owner@x', actualTeacherEmail: 'mixed-self-overtime-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' }
+  ],
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-01',
+  reportEndDate: '2026-09-30',
+  reportWeeksCount: 5
+});
+const mixedSelfOwner = mixedSelfPaidRows.find(row => row.email === 'mixed-self-owner@x');
+const mixedSelfRegularCover = mixedSelfPaidRows.find(row => row.email === 'mixed-self-regular-cover@x');
+const mixedSelfOvertimeCover = mixedSelfPaidRows.find(row => row.email === 'mixed-self-overtime-cover@x');
+assert.equal(mixedSelfOwner.selfPaidDeduction, 1, '自費只有原課為超鐘點時才扣原教師超鐘點');
+assert.equal(mixedSelfRegularCover.selfSubCount, 1, '非超鐘點自費仍應計入代課教師自費節數');
+assert.equal(mixedSelfRegularCover.selfSubFee, 455, '非超鐘點自費仍應計入代課教師自費費用');
+assert.equal(mixedSelfOvertimeCover.selfSubCount, 1, '超鐘點自費仍應保留代課教師自費節數摘要');
+
 const mixedFixedRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{
     email: 'mixed-fixed@x', name: '混合節次教師', baseHours: 0,

@@ -1044,7 +1044,8 @@
   }
 
   function isSelfPaidRecord(record) {
-    return subFee(record) === '\u81ea\u8cbb\u4ee3\u8ab2';
+    var fee = subFee(record);
+    return fee === '\u81ea\u8cbb\u4ee3\u8ab2' || fee === '\u81ea\u8cbb';
   }
 
   function isPublicOvertimeRecord(record) {
@@ -1381,11 +1382,9 @@
          && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
     // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
-    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, schedules);
     var selfRecords = eligible.filter(function (record) {
       return isSelfPaidRecord(record)
-        && (!fixedSetting.configured || !fixedSetting.valid
-          || isFixedOvertimeRecord(record, teacher, schoolSwapIndex, schedules));
+        && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
     });
     var publicRecords = eligible.filter(function (record) {
       return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
@@ -1661,13 +1660,11 @@
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
           return planLabel(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
-        var sourceFixedSetting = fixedOvertimeSettingForSchedules(sourceRow, opts.allSchedules || []);
         var selfCount = allocation
           ? chargedRecordsForSource.filter(isSelfPaidRecord).length
           : leave.filter(function (record) {
             return isSelfPaidRecord(record)
-              && (!sourceFixedSetting.configured || !sourceFixedSetting.valid
-                || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex, opts.allSchedules || []));
+              && isOvertimeSubstitution(record, opts.allSchedules || [], schoolSwapIndex, sourceRow);
           }).length;
         var publicUsed = allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
@@ -2025,6 +2022,7 @@
         && dateInPeriod(r.date, period) && isSelfPaidRecord(r) && r.actualTeacherEmail
         && !isSubstituteAttributePayoutRecord(r, opts.allSchedules || [], schoolSwapIndex)
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
+          || chargedMap.byKey[substitutionKey(r)].charged === false
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).sort(function (a, b) {
       return compareTeacherOrder(teacherOrder,
@@ -2329,64 +2327,6 @@
     }
   }
 
-  function noteColumnFor(config) {
-    if (!config) return 0;
-    if (config.key === 'overtime' || config.key === 'substituteAttribute') return 15;
-    if (config.key === 'adjunct' || config.key === 'teachingSupport') return 14;
-    if (config.key === 'publicSub' || config.key === 'publicSubAdjustment') return 9;
-    if (config.key === 'selfSub' || config.key === 'mentor') return 9;
-    return 0;
-  }
-
-  function textDisplayWidth(value) {
-    return Array.from(String(value == null ? '' : value)).reduce(function (sum, ch) {
-      return sum + (ch.charCodeAt(0) > 255 ? 1 : 0.6);
-    }, 0);
-  }
-
-  function applyNoteLayout(sheet, config, startRow, rows) {
-    var noteColumn = noteColumnFor(config);
-    if (!noteColumn) return;
-    var column = sheet.getColumn(noteColumn);
-    var columnWidth = Number(column && column.width);
-    // 自付代課／代導的備註欄會合併 I:J，列高估算要把兩欄寬度一起算入。
-    if (config.key === 'selfSub' || config.key === 'mentor') {
-      var mergedColumn = sheet.getColumn(noteColumn + 1);
-      var mergedWidth = Number(mergedColumn && mergedColumn.width);
-      if (Number.isFinite(mergedWidth) && mergedWidth > 0) columnWidth += mergedWidth;
-    }
-    var charsPerLine = Number.isFinite(columnWidth) && columnWidth > 0
-      ? Math.max(8, Math.floor(columnWidth * 0.85))
-      : 18;
-    (rows || []).forEach(function (row, index) {
-      var rowNumber = startRow + index;
-      var cell = sheet.getCell(rowNumber, noteColumn);
-      var value = cleanAccountingText(cell.value);
-      var alignment = Object.assign({}, cell.alignment || {});
-      alignment.wrapText = true;
-      alignment.shrinkToFit = false;
-      if (value) alignment.vertical = 'top';
-      cell.alignment = alignment;
-      if (!value) return;
-      var lines = value.split(/\r?\n/);
-      var baseFontSize = Number(cell.font && cell.font.size);
-      if (!Number.isFinite(baseFontSize) || baseFontSize <= 0) baseFontSize = 12;
-      var baseVisualLines = lines.reduce(function (sum, line) {
-        return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / charsPerLine));
-      }, 0);
-      // 長備註稍微縮小字級，讓換行內容在範本列高內完整顯示；短備註維持原字級。
-      var noteFontSize = baseVisualLines > 1
-        ? Math.max(10, baseFontSize - 2) : baseFontSize;
-      if (noteFontSize < baseFontSize) {
-        cell.font = Object.assign({}, cell.font || {}, { size: noteFontSize });
-      }
-      var lineHeight = Math.max(18, noteFontSize * 1.5);
-      var targetHeight = Math.min(409.5, Math.max(28, baseVisualLines * lineHeight + 8));
-      var targetRow = sheet.getRow(rowNumber);
-      targetRow.height = Math.max(Number(targetRow.height) || 15, targetHeight);
-    });
-  }
-
   function sumRows(rows, field) {
     return (rows || []).reduce(function (sum, row) {
       return sum + (Number(row && row[field]) || 0);
@@ -2433,12 +2373,6 @@
       .join('；');
   }
 
-  function mergeLineNoteColumns(sheet, totalRow) {
-    mergeCellRange(sheet, 'I2:J2');
-    sheet.getCell(2, 9).value = '備註';
-    for (var row = 3; row <= totalRow; row += 1) mergeCellRange(sheet, 'I' + row + ':J' + row);
-  }
-
   function writeSummarySheet(sheet, config, rows) {
     var totalRow = prepareRows(sheet, config, rows.length);
     var values = rows.map(function (row) {
@@ -2452,7 +2386,6 @@
     });
     writeRows(sheet, config.dataStart, values);
     applyActualAmountFormulas(sheet, config, rows);
-    applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     if (config.key === 'overtime') {
       sheet.getCell(totalRow, 2).value = '合計';
@@ -2488,19 +2421,11 @@
     sheet.getCell(2, 8).value = '請假扣代課';
   }
 
-  function hidePublicAuxiliaryColumns(sheet) {
-    for (var column = 10; column <= 15; column += 1) {
-      sheet.getColumn(column).hidden = true;
-    }
-  }
-
   function writePublicSheet(sheet, config, rows) {
-    hidePublicAuxiliaryColumns(sheet);
     var totalRow = prepareRows(sheet, config, rows.length);
     writeRows(sheet, config.dataStart, rows.map(function (row) {
       return [row.serial, row.title, row.name, row.hours, row.rate, row.amount, null, null, row.note, null, null, null, null, null, null];
     }));
-    applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     sheet.getCell(totalRow, 2).value = '合計';
     sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'hours'));
@@ -2514,8 +2439,6 @@
     writeRows(sheet, config.dataStart, rows.map(function (row) {
       return [row.actualName, row.date, row.time, row.course, row.period, row.count, row.rate, row.amount, lineNoteText(row), null];
     }));
-    mergeLineNoteColumns(sheet, totalRow);
-    applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     sheet.getCell(totalRow, 1).value = '合計';
     sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end, sumRows(rows, 'count'));

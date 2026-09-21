@@ -39,6 +39,10 @@ assert.match(exportAccountingSource, /formula: 'K' \+ rowNumber \+ '-L' \+ rowNu
   '實際金額公式應由程式依資料列固定產生');
 assert.match(exportAccountingSource, /sumFormula\('M', config\.dataStart, end, sumRows\(rows, 'amount'\)\)/,
   '兼課與教支合計列應加總實際金額');
+assert.doesNotMatch(exportAccountingSource, /mergeLineNoteColumns\(/,
+  '自付代課與代導工作表應沿用範本的備註欄合併設定');
+assert.doesNotMatch(exportAccountingSource, /hidePublicAuxiliaryColumns\(/,
+  '公付代課工作表應沿用範本的欄位顯示設定');
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
 const crossMonthAccountingPeriod = { start: '2026-08-31', end: '2026-10-02' };
@@ -771,16 +775,18 @@ assert.equal(fallbackClassNote.overtimePlans[0].rows[0].note, '', '沒有實際�
 
 const multiDateLeave = build([
   {
-    date: '2026-07-01', period: 1, className: '701', type: 'substitution',
+    date: '2026-07-06', period: 1, className: '701', type: 'substitution',
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '自費代課', reason: '事假', status: 'approved'
   },
   {
-    date: '2026-07-08', period: 2, className: '702', type: 'substitution',
+    date: '2026-07-13', period: 2, className: '702', type: 'substitution',
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '自費代課', reason: '事假', status: 'approved'
   }
-], 2, schedules);
+], 1, schedules.concat([
+  { teacherEmail: 'bill@x', dayOfWeek: 1, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' }
+]));
 const multiDateNote = multiDateLeave.overtimePlans[0].rows[0].note;
-assert.equal(multiDateNote, '7/1事假扣1節、7/8事假扣1節', '相同假別應合併日期並保留各日節數');
+assert.equal(multiDateNote, '7/6事假扣1節、7/13事假扣1節', '相同假別應合併日期並保留各日節數');
 
 const chronologicalLeave = window.ExportAccounting.buildExportData({
   reportMonth: '2026-09',
@@ -861,9 +867,59 @@ const mixed = build([
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '自費代課', status: 'approved'
   }
 ], 1, mixedSchedules);
+assert.equal(mixed.sheets.overtime.length, 2);
+assert.equal(mixed.sheets.overtime[0].name, 'Billing');
 assert.equal(mixed.sheets.overtime[0].deduction, 3);
 assert.equal(mixed.sheets.overtime[0].actualHours, -1);
+assert.equal(mixed.sheets.overtime[1].name, 'cover@x');
+assert.equal(mixed.sheets.overtime[1].actualHours, 2);
+assert.equal(mixed.sheets.selfSub.length, 1, '非超鐘點自費應保留在自付代課表');
+assert.equal(mixed.sheets.selfSub[0].course, '703');
 assert.equal(mixed.sheets.overtime[0].note.includes('\u8b8a\u52d5'), false, '超鐘點備註不應顯示變動字眼');
+
+const nonOvertimeSelfPeriod = { start: '2026-09-01', end: '2026-09-30' };
+const nonOvertimeSelfExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: nonOvertimeSelfPeriod.start,
+  reportEndDate: nonOvertimeSelfPeriod.end,
+  reportWeeksCount: 5,
+  periods: {
+    overtime: nonOvertimeSelfPeriod,
+    adjunct: nonOvertimeSelfPeriod,
+    publicSub: nonOvertimeSelfPeriod,
+    selfSub: nonOvertimeSelfPeriod,
+    mentor: nonOvertimeSelfPeriod
+  },
+  teachers: [
+    { email: 'self-owner@x', name: '自費原教師', baseHours: 0,
+      fixedOvertimeHours: 1, fixedOvertimeSlots: '二1' },
+    { email: 'self-regular-cover@x', name: '一般自費代課人', baseHours: 16 },
+    { email: 'self-overtime-cover@x', name: '超鐘自費代課人', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'self-owner@x', dayOfWeek: 2, period: 1,
+      className: '901', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'self-owner@x', dayOfWeek: 2, period: 6,
+      className: '903', attr: '一般' }
+  ],
+  substitutionRecords: [
+    { date: '2026-09-01', period: 6, className: '903', type: 'substitution',
+      originalTeacherEmail: 'self-owner@x', actualTeacherEmail: 'self-regular-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' },
+    { date: '2026-09-08', period: 1, className: '901', type: 'substitution',
+      originalTeacherEmail: 'self-owner@x', actualTeacherEmail: 'self-overtime-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' }
+  ]
+});
+assert.deepEqual(nonOvertimeSelfExport.sheets.selfSub.map(row => [row.actualName, row.period, row.originalName]), [
+  ['一般自費代課人', '六', '自費原教師']
+], '非超鐘點自費應列入自付代課明細表');
+assert.equal(nonOvertimeSelfExport.sheets.selfSub[0].amount, 455);
+assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 1, '超鐘點自費仍應扣原教師超鐘點');
+assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘自費代課人'),
+  '超鐘點自費代課仍應列入原計畫超鐘點代課列');
+assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,
+  '非超鐘點自費代課不可誤列入超鐘點代課列');
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
