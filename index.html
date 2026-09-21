@@ -1717,15 +1717,16 @@
                          <button
                            v-for="cell in period8CellsFor(row, dateStr)"
                            :key="row.className + '-' + dateStr + '-' + cell.teacherEmail + '-' + cell.status"
-                           type="button"
-                           class="period8-cell-button"
-                           :class="'period8-status-' + cell.status"
-                           :title="cell.subject ? (cell.teacherName + '／' + cell.subject) : cell.teacherName"
-                           @click="handlePeriod8CellClick(cell)"
+                            type="button"
+                            class="period8-cell-button"
+                            :class="['period8-status-' + cell.status, { 'period8-cell-disabled': cell.status === 'away' }]"
+                            :disabled="cell.status === 'away'"
+                            :title="cell.status === 'away' ? (cell.awayName || '空堂事件') : (cell.subject ? (cell.teacherName + '／' + cell.subject) : cell.teacherName)"
+                            @click="handlePeriod8CellClick(cell)"
                          >
                            <strong>{{ cell.teacherName }}</strong>
                            <small v-if="cell.subject">{{ cell.subject }}</small>
-                           <span v-if="period8StatusLabel(cell)" class="period8-status-badge">{{ period8StatusLabel(cell) }}</span>
+                            <span v-if="period8StatusLabel(cell)" class="period8-status-badge">{{ period8StatusLabel(cell) }}</span>
                          </button>
                        </template>
                        <span v-else class="period8-empty-cell">－</span>

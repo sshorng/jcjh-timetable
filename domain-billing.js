@@ -1101,6 +1101,7 @@ window.DomainBilling = (function () {
     var schedules = opts.allSchedules || [];
     var substitutionRecords = opts.substitutionRecords || [];
     var getTeacherNameByEmail = opts.getTeacherNameByEmail || function (email) { return email || ''; };
+    var getClassAwayEventName = opts.getClassAwayEventName || function () { return ''; };
     var classAwayEvents = opts.classAwayEvents || [];
     var classAwayApi = window.DomainClassAway;
     var isSingleWeek = typeof opts.isSingleWeek === 'function' ? opts.isSingleWeek : function () { return true; };
@@ -1156,6 +1157,9 @@ window.DomainBilling = (function () {
           var teacherName = actualName || originalName;
           var away = classAwayApi && typeof classAwayApi.isClassAwayOnDate === 'function'
             && classAwayApi.isClassAwayOnDate(className, date, classAwayEvents, opts.semesterEndDate || '', 8);
+          var awayName = away
+            ? String(getClassAwayEventName(className, date, 8) || '').trim() || '空堂事件'
+            : '';
           if (away) {
             status = 'away';
             actualEmail = '';
@@ -1177,6 +1181,7 @@ window.DomainBilling = (function () {
             teacherEmail: actualEmail || teacherEmail,
             teacherName: teacherName,
             status: status,
+            awayName: awayName,
             record: away ? null : record,
             schedule: schedule
           };

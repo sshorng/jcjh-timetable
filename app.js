@@ -3853,7 +3853,7 @@ createApp({
     const period8CellsFor = (row, dateStr) => (row && row.cells && row.cells[dateStr]) || [];
     const period8StatusLabel = (cell) => {
       if (!cell) return '';
-      if (cell.status === 'away') return '空堂';
+       if (cell.status === 'away') return cell.awayName || '空堂事件';
       if (cell.status === 'exchange') return '調課';
       if (cell.status === 'combined_return') return '併班';
       if (cell.status === 'timetable_only') return '僅課務';

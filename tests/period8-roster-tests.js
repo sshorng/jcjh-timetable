@@ -16,6 +16,7 @@ const roster = window.DomainBilling.buildPeriod8ClassRoster({
     { teacherEmail: 'owner@x', teacherName: '原任教師', dayOfWeek: 1, period: 8, className: '701', subject: '課輔' },
     { teacherEmail: 'owner@x', teacherName: '原任教師', dayOfWeek: 2, period: 8, className: '702', subject: '課輔' },
     { teacherEmail: 'gift@x', teacherName: '英資教師', dayOfWeek: 5, period: 8, className: '英資701', subject: '課輔' },
+    { teacherEmail: 'away@x', teacherName: '音樂教師', dayOfWeek: 3, period: 8, className: '705', subject: '音樂輔' },
     { teacherEmail: 'patrol@x', teacherName: '巡堂人員', dayOfWeek: 1, period: 8, className: '704', subject: '巡堂', attr: '巡堂' }
   ],
   substitutionRecords: [
@@ -33,18 +34,23 @@ const roster = window.DomainBilling.buildPeriod8ClassRoster({
   getTeacherNameByEmail: (email) => ({
     'owner@x': '原任教師',
     'gift@x': '英資教師',
+    'away@x': '音樂教師',
     'cover@x': '代課教師',
     'exchange@x': '調入教師'
   }[email] || email),
+  classAwayEvents: [{ name: '音樂班校外教學', startDate: '2026-09-23', endDate: '2026-09-23', scope: 'classes', classes: ['705'], period: '8' }],
+  getClassAwayEventName: (className) => className === '705' ? '音樂班校外教學' : '',
   isSingleWeek: () => true
 });
 
 assert.deepEqual(roster.dates, ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25']);
-assert.deepEqual(roster.rows.map((row) => row.className), ['701', '702', '英資701']);
+assert.deepEqual(roster.rows.map((row) => row.className), ['701', '702', '705', '英資701']);
 assert.equal(roster.rows.find((row) => row.className === '701').cells['2026-09-21'][0].teacherName, '代課教師');
 assert.equal(roster.rows.find((row) => row.className === '701').cells['2026-09-21'][0].status, 'substitution');
 assert.equal(roster.rows.find((row) => row.className === '702').cells['2026-09-22'][0].teacherName, '調入教師');
 assert.equal(roster.rows.find((row) => row.className === '702').cells['2026-09-22'][0].status, 'exchange');
+assert.equal(roster.rows.find((row) => row.className === '705').cells['2026-09-23'][0].status, 'away');
+assert.equal(roster.rows.find((row) => row.className === '705').cells['2026-09-23'][0].awayName, '音樂班校外教學');
 assert.equal(roster.rows.some((row) => row.className === '703'), false);
 assert.equal(roster.rows.some((row) => row.className === '704'), false);
 console.log('period8 roster tests PASS');
