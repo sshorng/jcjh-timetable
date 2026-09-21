@@ -43,12 +43,12 @@ const data = window.ExportPeriod8Accounting.buildExportData({
 });
 
 assert.equal(window.ExportPeriod8Accounting.FEE_8TH, 600);
-assert.equal(data.dates.length, 5);
+assert.deepEqual(data.dates, ['2026-06-01', '2026-06-02']);
 assert.equal(data.summary.hours, 2);
 assert.equal(data.summary.amount, 1200);
 assert.equal(data.fileName, '核銷-印領清冊-114-2 第8節鐘點費印領清冊  115.6月.xlsx');
 assert.equal(data.rows.find((row) => row.name === '原任教師').totalCount, 1);
 assert.equal(data.rows.find((row) => row.name === '代課教師').totalCount, 1);
-assert.equal(data.rows.find((row) => row.name === '零節教師').totalCount, 0);
+assert.equal(data.rows.some((row) => row.name === '零節教師'), false);
 assert.equal(data.rows.some((row) => row.name === '巡堂教師'), false);
 console.log('period8 accounting tests PASS');

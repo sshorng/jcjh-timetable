@@ -7616,7 +7616,7 @@ createApp({
           ? '\n\n匯出前提示：\n' + preview.warnings.map((warning) => '⚠️ ' + warning).join('\n')
           : '';
         const message = '將下載第八節鐘點費核銷清冊：\n\n結算區間：' + start + '～' + end
-          + '\n教師列數：' + preview.summary.count + ' 列（包含零節教師）'
+          + '\n教師列數：' + preview.summary.count + ' 列（僅列實際支用教師）'
           + '\n應發節數：' + preview.summary.hours + ' 節'
           + '\n應發金額：NT$ ' + Number(preview.summary.amount || 0).toLocaleString()
           + '\n單價：NT$ 600／節' + warningLines;

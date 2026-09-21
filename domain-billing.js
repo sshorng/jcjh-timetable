@@ -1071,6 +1071,9 @@ window.DomainBilling = (function () {
   function period8SortClassNames(left, right) {
     var a = String(left || '').trim();
     var b = String(right || '').trim();
+    var aIsEnglishGifted = /英資|英語資優/.test(a);
+    var bIsEnglishGifted = /英資|英語資優/.test(b);
+    if (aIsEnglishGifted !== bIsEnglishGifted) return aIsEnglishGifted ? 1 : -1;
     var aNumber = a.match(/^\d+/);
     var bNumber = b.match(/^\d+/);
     if (!!aNumber !== !!bNumber) return aNumber ? -1 : 1;

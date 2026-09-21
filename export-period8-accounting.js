@@ -2,7 +2,7 @@
  * 第八節鐘點費核銷清冊匯出
  *
  * 以 templates/period8-accounting-template.xlsx 為版型，
- * 每位教師一列、每個平日一欄，保留零節教師與原有簽核區。
+ * 每位有實際支用的教師一列、每個有實際支用的日期一欄，保留原有簽核區。
  */
 (function (root) {
   'use strict';
@@ -164,6 +164,10 @@
       row.amount = row.totalCount * FEE_8TH;
       return row;
     });
+    dates = dates.filter(function (date) {
+      return rows.some(function (row) { return (Number(row.counts[date]) || 0) > 0; });
+    });
+    rows = rows.filter(function (row) { return row.totalCount > 0; });
     var rocMonth = String(opts.reportMonth || (dates[0] || '').slice(0, 7)).slice(0, 7).split('-');
     var year = Number(rocMonth[0]);
     var month = Number(rocMonth[1]);
@@ -203,6 +207,13 @@
       value = Math.floor((value - 1) / 26);
     }
     return result;
+  }
+
+  function setFormula(cell, expression, result) {
+    cell.value = {
+      formula: expression,
+      result: Number.isFinite(Number(result)) ? Number(result) : 0
+    };
   }
 
   function copyCellStyle(source, target) {
@@ -307,25 +318,40 @@
       data.dates.forEach(function (date, dateIndex) {
         sheet.getCell(rowNumber, firstDateColumn + dateIndex).value = Number(row.counts[date]) || 0;
       });
-      sheet.getCell(rowNumber, columns.totalColumn).value = data.dates.length
-        ? '=SUM(' + columnLetter(firstDateColumn) + rowNumber + ':' + columnLetter(lastDateColumn) + rowNumber + ')'
-        : 0;
+      if (data.dates.length) {
+        setFormula(sheet.getCell(rowNumber, columns.totalColumn),
+          'SUM(' + columnLetter(firstDateColumn) + rowNumber + ':' + columnLetter(lastDateColumn) + rowNumber + ')',
+          row.totalCount);
+      } else {
+        sheet.getCell(rowNumber, columns.totalColumn).value = 0;
+      }
       sheet.getCell(rowNumber, columns.rateColumn).value = FEE_8TH;
-      sheet.getCell(rowNumber, columns.amountColumn).value = '=' + columnLetter(columns.totalColumn) + rowNumber + '*'
-        + columnLetter(columns.rateColumn) + rowNumber;
+      setFormula(sheet.getCell(rowNumber, columns.amountColumn),
+        columnLetter(columns.totalColumn) + rowNumber + '*' + columnLetter(columns.rateColumn) + rowNumber,
+        row.amount);
       sheet.getCell(rowNumber, columns.noteColumn).value = '';
     });
 
     for (var col = firstDateColumn; col <= lastDateColumn; col += 1) {
-      sheet.getCell(totalRow, col).value = '=SUM(' + columnLetter(col) + DATA_START_ROW + ':'
-        + columnLetter(col) + (totalRow - 1) + ')';
+      var dateTotal = data.rows.reduce(function (sum, row) {
+        return sum + (Number(row.counts[data.dates[col - firstDateColumn]]) || 0);
+      }, 0);
+      setFormula(sheet.getCell(totalRow, col),
+        'SUM(' + columnLetter(col) + DATA_START_ROW + ':' + columnLetter(col) + (totalRow - 1) + ')',
+        dateTotal);
     }
-    sheet.getCell(totalRow, columns.totalColumn).value = data.dates.length
-      ? '=SUM(' + columnLetter(firstDateColumn) + totalRow + ':' + columnLetter(lastDateColumn) + totalRow + ')'
-      : 0;
+    if (data.dates.length) {
+      setFormula(sheet.getCell(totalRow, columns.totalColumn),
+        'SUM(' + columnLetter(firstDateColumn) + totalRow + ':' + columnLetter(lastDateColumn) + totalRow + ')',
+        data.summary.hours);
+    } else {
+      sheet.getCell(totalRow, columns.totalColumn).value = 0;
+    }
     sheet.getCell(totalRow, columns.rateColumn).value = FEE_8TH;
-    sheet.getCell(totalRow, columns.amountColumn).value = '=SUM(' + columnLetter(columns.amountColumn) + DATA_START_ROW + ':'
-      + columnLetter(columns.amountColumn) + (totalRow - 1) + ')';
+    setFormula(sheet.getCell(totalRow, columns.amountColumn),
+      'SUM(' + columnLetter(columns.amountColumn) + DATA_START_ROW + ':'
+        + columnLetter(columns.amountColumn) + (totalRow - 1) + ')',
+      data.summary.amount);
     sheet.getCell(totalRow, columns.noteColumn).value = '';
     if (workbook.calcProperties) {
       workbook.calcProperties.fullCalcOnLoad = true;
