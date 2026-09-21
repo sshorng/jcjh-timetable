@@ -1124,7 +1124,8 @@
                       </td>
                       <td @click.stop>
                         <div class="action-buttons action-buttons-row">
-                           <button v-if="row.type !== 'triangle' || isPaperFlowRequest(row)" class="btn btn-secondary btn-md-nowrap" title="列印通知" aria-label="列印通知" @click="openPaperPrintForRequest(row)">🖨️</button>
+                          <button v-if="isAdmin" class="btn btn-secondary btn-md-nowrap" title="編輯申請" aria-label="編輯申請" @click="openHistoryEditModal(row)">編輯</button>
+                          <button v-if="row.type !== 'triangle' || isPaperFlowRequest(row)" class="btn btn-secondary btn-md-nowrap" title="列印通知" aria-label="列印通知" @click="openPaperPrintForRequest(row)">🖨️</button>
                           <button class="btn btn-success btn-md-nowrap" title="核准並出單" aria-label="核准並出單" @click="adminApprove(row.id)">✓</button>
                           <button class="btn btn-danger btn-md-nowrap" title="退回申請" aria-label="退回申請" @click="adminReject(row.id)">❌</button>
                         </div>
@@ -1239,8 +1240,9 @@
                     </td>
                     <td @click.stop>
                       <div class="action-buttons action-buttons-col">
+                        <button v-if="isAdmin" class="btn btn-secondary btn-md-nowrap" @click="openHistoryEditModal(req)">編輯</button>
                         <button class="btn btn-secondary btn-md-nowrap" @click="openPaperPrintForRequest(req)">🖨️ 列印</button>
-                         <button v-if="req.batchId && req.type !== 'triangle'" class="btn btn-success" style="padding: 5px 8px; font-size: 0.72rem; white-space: nowrap;" @click="respondToBatch(req.batchId, 'agree')">全部同意</button>
+                        <button v-if="req.batchId && req.type !== 'triangle'" class="btn btn-success" style="padding: 5px 8px; font-size: 0.72rem; white-space: nowrap;" @click="respondToBatch(req.batchId, 'agree')">全部同意</button>
                         <div class="flex-gap-6">
                           <button class="btn btn-success btn-md-nowrap" @click="respondToRequest(req.id, 'agree')">同意</button>
                           <button class="btn btn-danger btn-md-nowrap" @click="respondToRequest(req.id, 'decline')">拒絕</button>
@@ -1366,6 +1368,12 @@
                       </td>
                       <td class="td-actions" @click.stop>
                         <div class="req-action-stack">
+                          <button
+                            v-if="isAdmin"
+                            type="button"
+                            class="btn btn-secondary btn-req-action"
+                            @click="openHistoryEditModal(row)"
+                          >編輯</button>
                           <button
                             type="button"
                             class="btn btn-secondary btn-req-action"
@@ -1911,7 +1919,7 @@
                       <th title="教師基本授課鐘點">基鐘</th>
                        <th title="已設定固定超鐘點時採學期設定；未設定才使用排課 − 基鐘">超鐘點/週</th>
                       <th title="超鐘點固定為每週超鐘點 × 結算週數；放假／空堂不扣">空堂扣減</th>
-                       <th title="自己請假且自費代課；早自習、1～7、午休皆扣">自費扣</th>
+                        <th title="自己請假且自費代課，且原課為超鐘點；早自習、1～7、午休皆扣">自費扣</th>
                         <th title="自己請假且公費代課；正式課程原堂為超鐘點才扣，代課屬性另列代課另扣，含早自習、1～7、午休">公費扣</th>
                        <th title="小鐘點課程請假或放假未授課的另扣">代課另扣</th>
                       <th title="本月實得超時節數" class="billing-th-result">實得超時</th>
