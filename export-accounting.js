@@ -332,11 +332,21 @@
     return plan === '未分配' ? '預設' : plan;
   }
 
-  function expensePlanName(value) {
-    if (root.FieldMap && typeof root.FieldMap.expensePlanName === 'function') {
-      return root.FieldMap.expensePlanName(value);
-    }
+  function mergedExpensePlanAssignment(value) {
     var text = normalizeExpensePlan(value);
+    var match = text.match(/^(.+?)\s*-\s*(.+)$/);
+    if (match && hasMergedExpensePlan(match[1])) {
+      return { group: String(match[1]).trim(), individual: String(match[2]).trim() };
+    }
+    return { group: text, individual: '' };
+  }
+
+  function expensePlanName(value) {
+    var groupedValue = mergedExpensePlanAssignment(value).group;
+    if (root.FieldMap && typeof root.FieldMap.expensePlanName === 'function') {
+      return root.FieldMap.expensePlanName(groupedValue);
+    }
+    var text = groupedValue;
     if (!text || text === '預設') return { raw: text, short: '預設', full: '預設', explicit: false };
     var match = text.match(/^\[([^\]]+)\]\s*(.+)$/);
     if (!match) return { raw: text, short: text, full: text, explicit: false };
@@ -657,7 +667,10 @@
 
   function individualExpensePlanForNote(row) {
     return [row && row.expensePlanForNote, row && row.expensePlan, row && row.plan]
-      .map(function (value) { return String(value || '').trim(); })
+      .map(function (value) {
+        var assignment = mergedExpensePlanAssignment(value);
+        return assignment.individual || assignment.group;
+      })
       .find(function (value) { return value && !hasMergedExpensePlan(value); }) || '';
   }
 
@@ -686,6 +699,19 @@
       && mergedExpensePlanParts(expectedPlan).some(function (part) {
         return planLabel(part) === candidate;
       });
+  }
+
+  function individualExpensePlanSource(source, allocation) {
+    var sourcePlan = source && source.expensePlan;
+    var sourceAssignment = mergedExpensePlanAssignment(sourcePlan);
+    if (sourceAssignment.individual) return sourceAssignment.individual;
+    var parsedSource = parseExpensePlan(sourcePlan);
+    if (parsedSource.mode === 'legacy' && !hasMergedExpensePlan(sourcePlan)) return sourcePlan;
+    var allocationPlan = allocation && allocation.source;
+    var allocationAssignment = mergedExpensePlanAssignment(allocationPlan);
+    if (allocationAssignment.individual) return allocationAssignment.individual;
+    if (allocationPlan && !hasMergedExpensePlan(allocationPlan)) return allocationPlan;
+    return sourcePlan || allocationPlan || '';
   }
 
   function noteDates(records) {
@@ -1563,7 +1589,7 @@
         return {
           row: Object.assign({}, source, {
             expensePlan: expectedPlan,
-            expensePlanForNote: allocation && allocation.source || source.expensePlan
+            expensePlanForNote: individualExpensePlanSource(source, allocation)
           }),
           allocation: allocation
         };
@@ -1576,7 +1602,7 @@
       return [{
         row: Object.assign({}, source, {
           expensePlan: expectedPlan,
-          expensePlanForNote: source.expensePlan
+          expensePlanForNote: individualExpensePlanSource(source, null)
         }),
         allocation: null
       }];

@@ -217,6 +217,63 @@ const mergedAllocationPlan = mergedAllocationExport.overtimePlans.find(function 
 assert.ok(mergedAllocationPlan, '應建立含頓號計畫的超鐘點分表');
 assert.equal(mergedAllocationPlan.rows[0].note, '計畫：工程輔導團',
   '合併計畫分表應從來源分配保留教師個別計畫');
+const mergedAllocationFromTeacherExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period, adjunct: period },
+  teachers: [{ email: 'merged-teacher@x', name: '原始計畫教師', baseHours: 0, expensePlan: '工程輔導團' }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'merged-teacher@x', name: '原始計畫教師', expensePlan: '工程輔導團',
+    weeklyOvertime: 1, scheduledOvertime: 1,
+    expensePlanAllocations: [{ source: '工程輔導團、薪傳、共聘', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+  }]
+});
+const mergedAllocationFromTeacherPlan = mergedAllocationFromTeacherExport.overtimePlans.find(function (group) {
+  return group.plan === '工程輔導團、薪傳、共聘';
+});
+assert.ok(mergedAllocationFromTeacherPlan, '應建立來源分配帶出的合併計畫分表');
+assert.equal(mergedAllocationFromTeacherPlan.rows[0].note, '計畫：工程輔導團',
+  '合併計畫應優先保留教師原始個別計畫');
+const assignedMergedPlanExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period, adjunct: period },
+  teachers: [
+    { email: 'assigned-a@x', name: '教師甲', baseHours: 0, expensePlan: '工程輔導團、薪傳、共聘-工程輔導團' },
+    { email: 'assigned-b@x', name: '教師乙', baseHours: 0, expensePlan: '工程輔導團、薪傳、共聘-薪傳' },
+    { email: 'assigned-c@x', name: '教師丙', baseHours: 0, expensePlan: '工程輔導團、薪傳、共聘-共聘' }
+  ],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [
+    {
+      email: 'assigned-a@x', name: '教師甲', expensePlan: '工程輔導團、薪傳、共聘-工程輔導團',
+      weeklyOvertime: 1, scheduledOvertime: 1,
+      expensePlanAllocations: [{ source: '工程輔導團、薪傳、共聘-工程輔導團', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+    },
+    {
+      email: 'assigned-b@x', name: '教師乙', expensePlan: '工程輔導團、薪傳、共聘-薪傳',
+      weeklyOvertime: 1, scheduledOvertime: 1,
+      expensePlanAllocations: [{ source: '工程輔導團、薪傳、共聘-薪傳', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+    },
+    {
+      email: 'assigned-c@x', name: '教師丙', expensePlan: '工程輔導團、薪傳、共聘-共聘',
+      weeklyOvertime: 1, scheduledOvertime: 1,
+      expensePlanAllocations: [{ source: '工程輔導團、薪傳、共聘-共聘', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+    }
+  ]
+});
+assert.equal(assignedMergedPlanExport.overtimePlans.length, 1,
+  '個別計畫格式應合併為一張超鐘點分表');
+assert.equal(assignedMergedPlanExport.overtimePlans[0].plan, '工程輔導團、薪傳、共聘',
+  '分表名稱應移除教師個別計畫後綴');
+assert.deepEqual(
+  assignedMergedPlanExport.overtimePlans[0].rows.map(row => row.note),
+  ['計畫：工程輔導團', '計畫：薪傳', '計畫：共聘'],
+  '合併計畫應將連字號後的教師個別計畫寫入備註'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
