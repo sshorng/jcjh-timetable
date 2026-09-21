@@ -704,11 +704,16 @@ function nameKeyPublicRows_(sheetName, rows) {
   return (rows || []).map(function (row) { return nameKeyPublicRow_(sheetName, row); });
 }
 
+function getRequestNameKeyDirectory_() {
+  if (_nameKeyDirectoryMem_) return _nameKeyDirectoryMem_;
+  _nameKeyDirectoryMem_ = buildNameKeyDirectory_(getTableData("教師名單") || []);
+  return _nameKeyDirectoryMem_;
+}
+
 // Internal compatibility aliases let legacy business rules run without persisting Email columns.
 function hydrateNameKeyDomainRow_(sheetName, row) {
   if (!isNameKeyDomainSheet_(sheetName) || !row) return row;
-  var teacherRows = getTableData("教師名單") || [];
-  var directory = buildNameKeyDirectory_(teacherRows);
+  var directory = getRequestNameKeyDirectory_();
   var sid = nameKeySemester_(row);
   if (!sid) return row;
   var resolve = function (name, email, label, allowBlank) {
@@ -800,7 +805,7 @@ function migrateNameKeySchema_() {
     item.sheet.getRange(1, 1, values.length, item.headers.length).setValues(values);
     item.sheet.getRange(1, 1, 1, item.headers.length).setFontWeight("bold").setBackground("#f1f5f9");
   });
-  _tableDataMem_ = {};
+  bustTableDataMem_();
   _headersMem_ = {};
   prepared.forEach(function (item) { bustTableDataMem_(item.sheetName); });
   (getTableData("學期設定") || []).forEach(function (semester) {
@@ -1095,11 +1100,12 @@ function rowArrayToObject_(sheetName, headers, row) {
 // 同一次 doPost／doGet 內的服務物件與資料快取。
 var _tableDataMem_ = {}; // sheetName -> rows[]
 var _headersMem_ = {}; // sheetName -> headers[]
+var _nameKeyDirectoryMem_ = null;
 var _scheduleImportWriteContext_ = false;
 function resetRequestContext_() {
   _requestSpreadsheet_ = null;
   _requestSpreadsheetKey_ = "";
-  _tableDataMem_ = {};
+  bustTableDataMem_();
   _headersMem_ = {};
   _scheduleImportWriteContext_ = false;
 }
@@ -1107,9 +1113,11 @@ function resetRequestContext_() {
 function bustTableDataMem_(sheetName) {
   if (sheetName) {
     try { delete _tableDataMem_[sheetName]; } catch (e) { _tableDataMem_[sheetName] = undefined; }
+    if (sheetName === "教師名單") _nameKeyDirectoryMem_ = null;
     return;
   }
   _tableDataMem_ = {};
+  _nameKeyDirectoryMem_ = null;
 }
 
 // 讀取工作表並轉換為物件陣列（二維陣列一次性讀取；請求內 mem）
@@ -5237,6 +5245,26 @@ function assertPublicClassRateLimit_() {
   }
 }
 
+function getHistoryMonthRowsCached_(semesterId, monthStr, forceFresh) {
+  var dataGeneration = getCacheGeneration_("data", semesterId);
+  var histKey = "jcjh_hist_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_" + monthStr;
+  var monthRows = null;
+  if (!forceFresh) {
+    var histCached = getCacheChunked(histKey);
+    if (histCached) {
+      try {
+        var parsed = JSON.parse(histCached);
+        if (Array.isArray(parsed)) monthRows = parsed;
+      } catch (e) { monthRows = null; }
+    }
+  }
+  if (monthRows === null) {
+    monthRows = getMonthRequestsFromSheet_(semesterId, monthStr);
+    try { putCacheChunked(histKey, JSON.stringify(monthRows || []), 60); } catch (putError) {}
+  }
+  return monthRows || [];
+}
+
 // 讀取 API（僅經 doPost 呼叫；公開 action 免 Token）
 function handleReadAction_(postData) {
   const action = postData.action;
@@ -5436,16 +5464,8 @@ function handleReadAction_(postData) {
         error: "請提供月份 month=YYYY-MM"
       })).setMimeType(ContentService.MimeType.JSON);
     }
-    // 單月快取 60s（admin 全校）— 先查快取再掃
-     var histKey = "jcjh_hist_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_" + monthStr + (isAdminH ? "_a" : "_u");
-    if (isAdminH) {
-      var histCached = getCacheChunked(histKey);
-      if (histCached) {
-        return ContentService.createTextOutput(histCached).setMimeType(ContentService.MimeType.JSON);
-      }
-    }
-    // H1：只掃該月列（不建 historyAll 全量包）
-    var monthRows = getMonthRequestsFromSheet_(semesterId, monthStr);
+    // 共用未個人化月份列；命中後仍須依讀取者權限過濾並移除內部欄位。
+    var monthRows = getHistoryMonthRowsCached_(semesterId, monthStr, scope === "fresh");
     if (!isAdminH) {
       monthRows = monthRows.filter(function (req) {
         return requestVisibleToReader_(req, readerEmail, false);
@@ -5459,9 +5479,6 @@ function handleReadAction_(postData) {
       count: monthRows.length
     };
     var histJson = JSON.stringify(histPayload);
-    if (isAdminH) {
-      try { putCacheChunked(histKey, histJson, 60); } catch (hE) {}
-    }
     return ContentService.createTextOutput(histJson).setMimeType(ContentService.MimeType.JSON);
   }
 

@@ -24,9 +24,11 @@ assert.match(exportAccountingSource, /alignment\.shrinkToFit = false/, '一般�
 assert.match(exportAccountingSource, /alignment\.wrapText = true/, '一般會計工作表備註應允許換行');
 assert.match(exportAccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '一般會計工作表備註字級不可低於12pt');
 assert.match(exportAccountingSource, /font\.color = \{ argb: 'FFFF0000' \}/, '自費超扣列應以紅字標示');
+assert.match(exportAccountingSource, /function applyNoteRowHeight/, '一般會計工作表備註應依內容增加列高');
 assert.match(period8AccountingSource, /alignment\.shrinkToFit = false/, '第八節工作表備註不應無限制縮小字型');
 assert.match(period8AccountingSource, /alignment\.wrapText = true/, '第八節工作表備註應允許換行');
 assert.match(period8AccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '第八節工作表備註字級不可低於12pt');
+assert.match(period8AccountingSource, /function applyNoteRowHeight/, '第八節工作表備註應依內容增加列高');
 assert.match(exportAccountingSource, /cloneWorksheet\(overtimeTemplate, workbook, '__substitute_attribute_'/,
   '小鐘點工作表應複製一般超鐘點工作表版型');
 assert.match(exportAccountingSource, /每週代課/,
@@ -1075,6 +1077,15 @@ const courseAdjustmentNoteExport = build([{
 }], 0, schedules);
 const courseAdjustmentNoteRow = courseAdjustmentNoteExport.sheets.overtime.find(row => row.name === 'Billing');
 assert.equal(courseAdjustmentNoteRow.note, '7/13課務調整代課扣1節', '課務調整備註應明確寫出代課扣節數');
+
+const courseAdjustmentSelfExport = build([{
+  date: '2026-07-13', period: 3, className: '703', type: 'substitution',
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
+  subFee: '自費代課', reason: '課務調整', leaveTime: '08:00-16:00', status: 'approved'
+}], 1, mixedSchedules);
+const courseAdjustmentSelfRow = courseAdjustmentSelfExport.sheets.selfSub.find(row => row.actualName === 'cover@x');
+assert.equal(courseAdjustmentSelfRow.date, '115.07.13(一)', '課務調整自付明細仍應保留代課日期');
+assert.equal(courseAdjustmentSelfRow.time, '', '課務調整自付明細不應填入請假時間');
 
 const selfPaidOverdrawExport = window.ExportAccounting.buildExportData({
   reportMonth: '2026-07',

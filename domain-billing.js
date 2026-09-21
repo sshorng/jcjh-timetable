@@ -1878,7 +1878,7 @@ window.DomainBilling = (function () {
       ? reportWeekGroupsForRange(startDay, endDay)
       : reportWeekGroups(reportMonth, reportWeeksCount);
 
-    return teachers.map(function (t) {
+    var reportRows = teachers.map(function (t) {
       var email = t.email || t.teacherName || t.name || t.loginEmail || '';
       var em = emailKey(email);
       var teacherIdentity = teacherKeys(t);
@@ -2087,6 +2087,12 @@ window.DomainBilling = (function () {
         period8Details: p8row.details || []
       };
     });
+    Object.defineProperty(reportRows, 'period8Payout', {
+      configurable: true,
+      enumerable: false,
+      value: p8
+    });
+    return reportRows;
   }
 
   function toExcelRows(reportRows) {
@@ -2145,7 +2151,8 @@ window.DomainBilling = (function () {
 
   /** 第8節明細（匯出用） */
   function toPeriod8ExcelRows(opts) {
-    var p8 = buildPeriod8Payout(opts);
+    opts = opts || {};
+    var p8 = opts.preparedPayout || buildPeriod8Payout(opts);
     return (p8.details || []).filter(function (r) {
       return r.fee > 0 || r.source === 'away';
     }).map(function (r) {

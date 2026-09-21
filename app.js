@@ -3280,17 +3280,28 @@ createApp({
       return Date.now() - ms;
     };
 
+    const serverRequestChangesLocal = (localRow, serverRow) => {
+      if (!localRow || !serverRow) return true;
+      return Object.keys(serverRow).some(key => localRow[key] !== serverRow[key]);
+    };
+
     const mergeRequestsFromServer = (serverRows) => {
       if (!serverRows || !serverRows.length) return 0;
       const mapped = serverRows.map(r => window.FieldMap.mapRequest(r));
       const byId = {};
+      let changed = false;
       (requestsList.value || []).forEach(r => { if (r && r.id) byId[r.id] = r; });
       mapped.forEach(r => {
         if (!r || !r.id) return;
-        byId[r.id] = Object.assign({}, byId[r.id] || {}, r);
+        const localRow = byId[r.id];
+        if (!serverRequestChangesLocal(localRow, r)) return;
+        byId[r.id] = Object.assign({}, localRow || {}, r);
+        changed = true;
       });
-      requestsList.value = sortRequestListDesc(Object.keys(byId).map(k => byId[k]));
-      recomputeRequestBuckets();
+      if (changed) {
+        requestsList.value = sortRequestListDesc(Object.keys(byId).map(k => byId[k]));
+        recomputeRequestBuckets();
+      }
       bumpRequestsWatermarkFromRows(mapped);
       return mapped.length;
     };
@@ -3329,18 +3340,23 @@ createApp({
         const next = [];
         const seen = {};
         let ghosted = false;
+        let changed = false;
         (requestsList.value || []).forEach(r => {
           if (!r || !r.id) return;
           if (isOpenPending(r.status)) {
             if (serverPendingById[r.id]) {
               // 伺服器仍進行中：合併
-              next.push(Object.assign({}, r, serverPendingById[r.id]));
+              const serverRow = serverPendingById[r.id];
+              const rowChanged = serverRequestChangesLocal(r, serverRow);
+              next.push(rowChanged ? Object.assign({}, r, serverRow) : r);
+              if (rowChanged) changed = true;
               seen[r.id] = 1;
             } else if (mappedPending.length > 0) {
               // 伺服器有回其他 pending、唯獨本筆消失 → 才幽靈取消（已核准／已駁回）
               next.push(Object.assign({}, r, { status: 'cancelled' }));
               seen[r.id] = 1;
               ghosted = true;
+              changed = true;
             } else {
               // 伺服器空包：保留本地，交給後續 delta／全量
               next.push(r);
@@ -3355,10 +3371,13 @@ createApp({
           if (m && m.id && !seen[m.id]) {
             next.push(m);
             seen[m.id] = 1;
+            changed = true;
           }
         });
-        requestsList.value = sortRequestListDesc(next);
-        recomputeRequestBuckets();
+        if (changed) {
+          requestsList.value = sortRequestListDesc(next);
+          recomputeRequestBuckets();
+        }
         bumpRequestsWatermarkFromRows(mappedPending);
         return ghosted ? 'ghost' : true;
       } catch (e) {
@@ -7485,6 +7504,7 @@ createApp({
        XLSX.utils.book_append_sheet(wb, ws, `${rangeLabel}大鐘點1-7午休`);
        if (window.DomainBilling.toPeriod8ExcelRows) {
          const p8 = window.DomainBilling.toPeriod8ExcelRows({
+           preparedPayout: monthlyReportData.value && monthlyReportData.value.period8Payout,
            reportMonth: reportMonth.value,
            reportStartDate: reportStartDate.value,
            reportEndDate: reportEndDate.value,

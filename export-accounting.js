@@ -2095,7 +2095,7 @@
       return {
         actualName: teacherName(t, r.actualTeacherName || r.actualTeacherEmail),
         date: rocDate(r.date),
-        time: r.leaveTime || r.timeRange || '08:00-16:00',
+        time: isCourseAdjustmentOnlyRecord(r) ? '' : (r.leaveTime || r.timeRange || '08:00-16:00'),
         course: courseText(r),
         period: periodText(r.period),
         count: periodCount(r, false),
@@ -2393,6 +2393,40 @@
     cell.font = font;
   }
 
+  function noteDisplayWidth(value) {
+    return String(value == null ? '' : value).split('').reduce(function (sum, character) {
+      if (character === '\t') return sum + 4;
+      return sum + (/^[\u0000-\u00ff]$/.test(character) ? 1 : 2);
+    }, 0);
+  }
+
+  function noteLineCount(value, columnWidth) {
+    var width = Math.max(1, Math.floor(Number(columnWidth) || 1));
+    return String(value == null ? '' : value).replace(/\r\n/g, '\n').split('\n')
+      .reduce(function (count, line) {
+        return count + Math.max(1, Math.ceil(noteDisplayWidth(line) / width));
+      }, 0);
+  }
+
+  function noteWidthForColumns(sheet, startColumn, endColumn) {
+    var width = 0;
+    for (var column = startColumn; column <= endColumn; column += 1) {
+      width += Number(sheet.getColumn(column).width) || 0;
+    }
+    return width || 1;
+  }
+
+  function applyNoteRowHeight(sheet, rowNumber, cell, columnWidth) {
+    if (!cell || cell.value === null || cell.value === undefined || cell.value === '') return;
+    var fontSize = Number(cell.font && cell.font.size);
+    if (!Number.isFinite(fontSize)) fontSize = 12;
+    var lineHeight = fontSize * 1.25 + 2;
+    var requiredHeight = noteLineCount(cell.value, columnWidth) * lineHeight + 4;
+    var row = sheet.getRow(rowNumber);
+    var currentHeight = Number(row.height) || 0;
+    if (requiredHeight > currentHeight) row.height = requiredHeight;
+  }
+
   function applyWarningRowFont(sheet, config, rows) {
     (rows || []).forEach(function (row, index) {
       if (!row || !row._selfPaidOverdrawn) return;
@@ -2408,11 +2442,22 @@
 
   function applyNoteColumnFit(sheet, config, totalRow) {
     if (!sheet || !config || !config.noteColumn) return;
+    var noteWidth = noteWidthForColumns(sheet, config.noteColumn, config.noteColumn);
     for (var row = config.dataStart; row <= totalRow; row += 1) {
-      applyNoteCellFit(sheet.getCell(row, config.noteColumn));
+      var cell = sheet.getCell(row, config.noteColumn);
+      applyNoteCellFit(cell);
+      applyNoteRowHeight(sheet, row, cell, noteWidth);
     }
     if (config.kind === 'summary') {
-      applyNoteCellFit(sheet.getCell(totalRow + 1, 2));
+      var summaryNoteCell = sheet.getCell(totalRow + 1, 2);
+      var summaryEndColumn = config.key === 'overtime' || config.key === 'substituteAttribute' ? 15 : 14;
+      applyNoteCellFit(summaryNoteCell);
+      applyNoteRowHeight(
+        sheet,
+        totalRow + 1,
+        summaryNoteCell,
+        noteWidthForColumns(sheet, 2, summaryEndColumn)
+      );
     }
   }
 

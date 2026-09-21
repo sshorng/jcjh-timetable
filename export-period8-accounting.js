@@ -271,7 +271,34 @@
     for (var col = 1; col <= lastColumn; col += 1) sheet.getCell(rowNumber, col).value = null;
   }
 
+  function noteDisplayWidth(value) {
+    return String(value == null ? '' : value).split('').reduce(function (sum, character) {
+      if (character === '\t') return sum + 4;
+      return sum + (/^[\u0000-\u00ff]$/.test(character) ? 1 : 2);
+    }, 0);
+  }
+
+  function noteLineCount(value, columnWidth) {
+    var width = Math.max(1, Math.floor(Number(columnWidth) || 1));
+    return String(value == null ? '' : value).replace(/\r\n/g, '\n').split('\n')
+      .reduce(function (count, line) {
+        return count + Math.max(1, Math.ceil(noteDisplayWidth(line) / width));
+      }, 0);
+  }
+
+  function applyNoteRowHeight(sheet, rowNumber, cell, columnWidth) {
+    if (!cell || cell.value === null || cell.value === undefined || cell.value === '') return;
+    var fontSize = Number(cell.font && cell.font.size);
+    if (!Number.isFinite(fontSize)) fontSize = 12;
+    var lineHeight = fontSize * 1.25 + 2;
+    var requiredHeight = noteLineCount(cell.value, columnWidth) * lineHeight + 4;
+    var row = sheet.getRow(rowNumber);
+    var currentHeight = Number(row.height) || 0;
+    if (requiredHeight > currentHeight) row.height = requiredHeight;
+  }
+
   function applyNoteColumnFit(sheet, noteColumn, startRow, endRow) {
+    var noteWidth = Number(sheet.getColumn(noteColumn).width) || 1;
     for (var row = startRow; row <= endRow; row += 1) {
       var cell = sheet.getCell(row, noteColumn);
       var alignment = cell.alignment ? clone(cell.alignment) : {};
@@ -282,6 +309,7 @@
       var fontSize = Number(font.size);
       font.size = Number.isFinite(fontSize) ? Math.max(fontSize, 12) : 12;
       cell.font = font;
+      applyNoteRowHeight(sheet, row, cell, noteWidth);
     }
   }
 

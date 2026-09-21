@@ -659,6 +659,24 @@ const defaultJobRow = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(defaultJobRow.jobTitle, '教師');
 assert.equal(window.DomainBilling.toExcelRows([defaultJobRow])[0]['職務'], '教師');
 
+const reusablePeriod8Rows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'p8@x', name: '第八節教師', baseHours: 0 }],
+  allSchedules: [{ teacherEmail: 'p8@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔' }],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-06',
+  reportEndDate: '2026-07-06',
+  getTeacherNameByEmail: email => email === 'p8@x' ? '第八節教師' : email,
+  isSingleWeek: () => true
+});
+assert.equal(reusablePeriod8Rows.period8Payout.byEmail['p8@x'].count, 1, '月報結果應保留已計算的第8節 payout');
+assert.equal(Object.keys(reusablePeriod8Rows).includes('period8Payout'), false, '第8節 payout 不應污染月報列舉資料');
+const reusedPeriod8Export = window.DomainBilling.toPeriod8ExcelRows({
+  preparedPayout: reusablePeriod8Rows.period8Payout
+});
+assert.equal(reusedPeriod8Export.length, 1, '第8節匯出應可直接重用月報 payout');
+assert.equal(reusedPeriod8Export[0]['金額'], 600);
+
 const reportTotals = window.DomainBilling.sumMonthlyReportRows([
   {
     weeklyPeriods: 20, baseHours: 16, weeklyOvertime: 4, reduceDeduction: 1,

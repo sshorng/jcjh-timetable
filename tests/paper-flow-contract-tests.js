@@ -889,6 +889,13 @@ function runFieldMapTest() {
 }
 
 function runRequestListSortTest() {
+  const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  assert.match(appSource, /const serverRequestChangesLocal = \(localRow, serverRow\) =>/,
+    '背景同步應共用伺服器列變更檢查');
+  assert.match(appSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(Object\.keys\(byId\)/,
+    '一般申請合併無變更時應跳過整表排序與 bucket 重算');
+  assert.match(appSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(next\);\s*recomputeRequestBuckets\(\);/,
+    'pendingOnly 無變更時應跳過整表排序與 bucket 重算');
   const sorter = loadRequestListSorter();
   const rows = [
     { id: 'old', serial: 'SWP5814', createdAt: '2026-08-28 11:20:09', updatedAt: '2026-08-28 11:59:59', requestDate: '2026-09-01' },
