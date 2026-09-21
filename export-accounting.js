@@ -15,6 +15,7 @@
   // 同一頁面內的範本不會變動，避免每次匯出都重新抓取與解析前置資料。
   var templateBufferPromise = null;
   var FEE_DEFAULT = 455;
+  var DEFAULT_EXPENSE_PLAN_FULL = '補助調整教師授課鐘點費（國教）';
   var MONEY_NUMBER_FORMAT = '#,##0';
   var DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
   var PERIOD_NAMES = {
@@ -353,7 +354,8 @@
 
   function planFullLabel(value) {
     var plan = expensePlanName(value);
-    return !plan.full || plan.short === '預設' ? '國教' : plan.full;
+    if (!plan.full || plan.short === '預設' || plan.short === '國教') return DEFAULT_EXPENSE_PLAN_FULL;
+    return plan.full;
   }
 
   function teacherExpensePlan(teacher) {
@@ -419,8 +421,7 @@
   }
 
   function overtimeTitleSuffix(expensePlan) {
-    var plan = planLabel(expensePlan);
-    return plan ? '超鐘點（' + planFullLabel(expensePlan) + '）印領清冊' : '超鐘點印領清冊';
+    return planFullLabel(expensePlan) + '印領清冊';
   }
 
   function titleFor(config, reportMonth, period, expensePlan) {
@@ -436,7 +437,7 @@
     if (config.key === 'teachingSupport') {
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
     }
-    if (config.key === 'selfSub' || config.key === 'mentor') {
+    if (config.key === 'overtime' || config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
     }
     return '臺北市立建成國中' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
@@ -2140,7 +2141,8 @@
   function titleForSheet(sheet, config, reportMonth, period, expensePlan) {
     var titleCell = firstTitleCell(sheet, config.columns);
     var templateTitle = titleFromTemplate(titleCell.value, reportMonth, period, expensePlan);
-    if (templateTitle && config.key !== 'substituteAttribute' && config.key !== 'teachingSupport') {
+    if (templateTitle && config.key !== 'overtime'
+        && config.key !== 'substituteAttribute' && config.key !== 'teachingSupport') {
       return templateTitle;
     }
     return titleFor(config, reportMonth, period, expensePlan);

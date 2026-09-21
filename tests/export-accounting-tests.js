@@ -144,8 +144,18 @@ assert.equal(
     { start: '2026-08-31', end: '2026-10-02' },
     '[超]校務計畫超鐘點費'
   ),
-  '臺北市立建成國中115年8-9月超鐘點（校務計畫超鐘點費）印領清冊',
+  '臺北市立建成國民中學115年8-9月校務計畫超鐘點費印領清冊',
   '超鐘點標題應只使用輸入計畫的全稱，不應依簡稱硬編對照表'
+);
+assert.equal(
+  window.ExportAccounting.titleFor(
+    { key: 'overtime', titleSuffix: '' },
+    '2026-08',
+    crossMonthAccountingPeriod,
+    '國教'
+  ),
+  '臺北市立建成國民中學115年8-9月補助調整教師授課鐘點費（國教）印領清冊',
+  '預設國教計畫應使用指定全稱'
 );
 const mergedPlanRows = [
   { expensePlan: '工程輔導團', note: '' },
