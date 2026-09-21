@@ -12,6 +12,8 @@
 
   var TEMPLATE_URL = 'templates/accounting-template.xlsx';
   var STORAGE_KEY = 'school-substitution-accounting-periods-v1';
+  // 同一頁面內的範本不會變動，避免每次匯出都重新抓取與解析前置資料。
+  var templateBufferPromise = null;
   var FEE_DEFAULT = 455;
   var MONEY_NUMBER_FORMAT = '#,##0';
   var DAY_NAMES = ['日', '一', '二', '三', '四', '五', '六'];
@@ -1819,7 +1821,15 @@
 
     var overtimeConfig = SHEET_CONFIG.overtime;
     var overtimePeriod = getPeriod(periods, 'overtime', opts.reportMonth);
-    var chargedMap = buildChargedRecordMap(opts, overtimePeriod, schoolSwapIndex);
+    var chargedMapCache = {};
+    var chargedMapFor = function (period) {
+      var periodKey = String(period && period.start || '') + '|' + String(period && period.end || '');
+      if (!chargedMapCache[periodKey]) {
+        chargedMapCache[periodKey] = buildChargedRecordMap(opts, period, schoolSwapIndex);
+      }
+      return chargedMapCache[periodKey];
+    };
+    var chargedMap = chargedMapFor(overtimePeriod);
     data.sheets.overtime = buildSummaryRows(overtimeConfig, opts, overtimePeriod, '', chargedMap, schoolSwapIndex);
 
     var planKeys = [];
@@ -1873,7 +1883,8 @@
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
       var periodKey = config.key === 'publicSubAdjustment' ? 'publicSub' : config.key;
       var period = getPeriod(periods, periodKey, opts.reportMonth);
-      var periodChargedMap = buildChargedRecordMap(opts, period, schoolSwapIndex);
+      // 代導明細不使用 chargedMap；其餘同期間工作表共用同一份索引。
+      var periodChargedMap = config.key === 'mentor' ? null : chargedMapFor(period);
       if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
       if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false, schoolSwapIndex);
       if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true, schoolSwapIndex);
@@ -2275,14 +2286,26 @@
     }
   }
   async function loadTemplateBuffer() {
-    var response = await root.fetch(TEMPLATE_URL + '?t=' + Date.now(), { cache: 'no-cache' });
-    if (!response.ok) throw new Error('無法載入會計範本（HTTP ' + response.status + '）');
-    return response.arrayBuffer();
+    if (!templateBufferPromise) {
+      templateBufferPromise = root.fetch(TEMPLATE_URL + '?t=' + Date.now(), { cache: 'no-cache' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('無法載入會計範本（HTTP ' + response.status + '）');
+          return response.arrayBuffer();
+        })
+        .catch(function (error) {
+          // 失敗時允許下一次匯出重新嘗試。
+          templateBufferPromise = null;
+          throw error;
+        });
+    }
+    var buffer = await templateBufferPromise;
+    return buffer && buffer.slice ? buffer.slice(0) : buffer;
   }
 
   async function exportWorkbook(opts) {
     opts = opts || {};
-    var data = buildExportData(opts);
+    // 確認視窗前已建立過預覽時直接重用，避免確認後再次掃描全校資料。
+    var data = opts.preparedData || buildExportData(opts);
     if (data.blocking && data.blocking.length) {
       throw new Error('會計匯出被阻擋：\n' + data.blocking.join('\n'));
     }

@@ -1895,9 +1895,12 @@
                        <td class="num">{{ monthlyReportTotals.period8SubCount }}</td>
                         <td class="num result-p8">${{ formatMoney(monthlyReportTotals.period8Fee) }}</td>
                      </tr>
-                     <tr v-if="monthlyReportData.length === 0">
-                        <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再設定有效的結算日期區間。</td>
-                    </tr>
+                      <tr v-if="monthlyReportLoading && monthlyReportData.length === 0">
+                         <td colspan="18" class="billing-empty">正在整理本期月報，請稍候…</td>
+                      </tr>
+                      <tr v-else-if="monthlyReportData.length === 0">
+                         <td colspan="18" class="billing-empty">請先在「教師名單」設定基本授課鐘點，再設定有效的結算日期區間。</td>
+                      </tr>
                   </tbody>
                  </table>
                </div>

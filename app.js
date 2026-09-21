@@ -3624,6 +3624,56 @@ createApp({
       return 0;
     });
     const monthlyReportData = ref([]);
+    const monthlyReportLoading = ref(false);
+    let monthlyReportRevision = 0;
+    let monthlyReportLastCalculationKey = null;
+    let monthlyReportCalculationId = 0;
+    let monthlyReportScheduleTimer = null;
+    let monthlyReportIdleHandle = null;
+    const monthlyReportKey = () => [
+      monthlyReportRevision,
+      reportMonth.value,
+      reportStartDate.value,
+      reportEndDate.value,
+      reportWeeksCount.value
+    ].join('|');
+    const cancelScheduledMonthlyReport = () => {
+      if (monthlyReportScheduleTimer) {
+        clearTimeout(monthlyReportScheduleTimer);
+        monthlyReportScheduleTimer = null;
+      }
+      if (monthlyReportIdleHandle !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(monthlyReportIdleHandle);
+        monthlyReportIdleHandle = null;
+      }
+    };
+    const scheduleMonthlyReportCalculation = () => {
+      cancelScheduledMonthlyReport();
+      if (activeTab.value !== 'admin' || adminSubTab.value !== 'billing') {
+        monthlyReportLoading.value = false;
+        return;
+      }
+      if (monthlyReportLastCalculationKey === monthlyReportKey()) {
+        monthlyReportLoading.value = false;
+        return;
+      }
+      monthlyReportLoading.value = true;
+      const run = () => {
+        monthlyReportScheduleTimer = null;
+        monthlyReportIdleHandle = null;
+        if (activeTab.value === 'admin' && adminSubTab.value === 'billing') {
+          calculateMonthlyReport();
+        } else {
+          monthlyReportLoading.value = false;
+        }
+      };
+      if (typeof window.requestIdleCallback === 'function') {
+        monthlyReportIdleHandle = window.requestIdleCallback(run, { timeout: 500 });
+      } else {
+        // 先讓後台外框完成一次繪製，再執行同步月報計算。
+        monthlyReportScheduleTimer = setTimeout(run, 0);
+      }
+    };
     const monthlyReportTotals = computed(() =>
       window.DomainBilling && typeof window.DomainBilling.sumMonthlyReportRows === 'function'
         ? window.DomainBilling.sumMonthlyReportRows(monthlyReportData.value)
@@ -3694,15 +3744,19 @@ createApp({
       }
     });
 
-      // P2：月報只在後台「經費／鐘點」分頁時重算（避免全校異動就掃全表）
-      watch(
-        [substitutionRecords, teachersList, allSchedules, classAwayEvents, semesterEndDate, reportMonth, reportWeeksCount, adminSubTab, activeTab],
-        () => {
-          if (activeTab.value === 'admin' && adminSubTab.value === 'billing') {
-            calculateMonthlyReport(); // async 延後載入 billing
-          }
+    // P2：月報只在後台「經費／鐘點」分頁時重算（避免全校異動就掃全表）
+    watch(
+      [substitutionRecords, teachersList, allSchedules, schoolSwaps, classAwayEvents, semesterEndDate, reportMonth, reportStartDate, reportEndDate, reportWeeksCount, adminSubTab, activeTab],
+      () => {
+        monthlyReportRevision += 1;
+        if (activeTab.value === 'admin' && adminSubTab.value === 'billing') {
+          scheduleMonthlyReportCalculation();
+        } else {
+          cancelScheduledMonthlyReport();
+          monthlyReportLoading.value = false;
         }
-      );
+      }
+    );
 
 
     // ════════════════════════════════════════
@@ -7257,30 +7311,55 @@ createApp({
       if (!window.DomainBilling) throw new Error('大鐘點模組未載入');
     };
     const calculateMonthlyReport = async () => {
+      cancelScheduledMonthlyReport();
+      const calculationKey = monthlyReportKey();
+      if (monthlyReportLastCalculationKey === calculationKey) {
+        monthlyReportLoading.value = false;
+        return;
+      }
+      const calculationId = ++monthlyReportCalculationId;
+      monthlyReportLoading.value = true;
       if (!reportWeeksCount.value) {
         monthlyReportData.value = [];
+        monthlyReportLastCalculationKey = calculationKey;
+        monthlyReportLoading.value = false;
         return;
       }
       try {
         await ensureBillingReady();
+        if (calculationId !== monthlyReportCalculationId) return;
       } catch (e) {
-        monthlyReportData.value = [];
+        if (calculationId === monthlyReportCalculationId) {
+          monthlyReportData.value = [];
+          monthlyReportLoading.value = false;
+        }
         return;
       }
-      monthlyReportData.value = window.DomainBilling.buildMonthlyReportRows({
-        teachers: teachersList.value,
-        allSchedules: allSchedules.value,
-        schoolSwaps: schoolSwaps.value,
-        substitutionRecords: substitutionRecords.value,
-        reportMonth: reportMonth.value,
-        reportWeeksCount: reportWeeksCount.value,
-        reportStartDate: reportStartDate.value,
-        reportEndDate: reportEndDate.value,
-        getTeacherNameByEmail,
-        classAwayEvents: classAwayEvents.value,
-        semesterEndDate: semesterEndDate.value,
-        isSingleWeek
-      });
+      try {
+        const rows = window.DomainBilling.buildMonthlyReportRows({
+          teachers: teachersList.value,
+          allSchedules: allSchedules.value,
+          schoolSwaps: schoolSwaps.value,
+          substitutionRecords: substitutionRecords.value,
+          reportMonth: reportMonth.value,
+          reportWeeksCount: reportWeeksCount.value,
+          reportStartDate: reportStartDate.value,
+          reportEndDate: reportEndDate.value,
+          getTeacherNameByEmail,
+          classAwayEvents: classAwayEvents.value,
+          semesterEndDate: semesterEndDate.value,
+          isSingleWeek
+        });
+        if (calculationId === monthlyReportCalculationId) {
+          monthlyReportData.value = rows;
+          monthlyReportLastCalculationKey = calculationKey;
+        }
+      } catch (e) {
+        console.error('月報計算失敗：', e);
+        if (calculationId === monthlyReportCalculationId) monthlyReportData.value = [];
+      } finally {
+        if (calculationId === monthlyReportCalculationId) monthlyReportLoading.value = false;
+      }
     };
 
     // 匯出 Excel：1～7 一表＋第8節明細一表（誰上誰拿）
@@ -7325,9 +7404,10 @@ createApp({
       if (accountingExportLoading.value) return;
       accountingExportLoading.value = true;
       try {
-        await ensureBillingReady();
-        if (typeof window.ensureExportAccounting === 'function') await window.ensureExportAccounting();
-        if (typeof window.ensureExcelJS === 'function') await window.ensureExcelJS();
+        const readyTasks = [ensureBillingReady()];
+        if (typeof window.ensureExportAccounting === 'function') readyTasks.push(window.ensureExportAccounting());
+        if (typeof window.ensureExcelJS === 'function') readyTasks.push(window.ensureExcelJS());
+        await Promise.all(readyTasks);
         if (!window.ExportAccounting || !window.ExportAccounting.buildExportData || !window.ExportAccounting.exportWorkbook) {
           throw new Error('會計匯出模組未載入');
         }
@@ -7379,7 +7459,9 @@ createApp({
         if (window.ExportAccounting.savePeriodSettings) {
           window.ExportAccounting.savePeriodSettings(reportMonth.value, period);
         }
-        const result = await window.ExportAccounting.exportWorkbook(exportOpts);
+        const result = await window.ExportAccounting.exportWorkbook(Object.assign({}, exportOpts, {
+          preparedData: preview
+        }));
         const blob = new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -11313,16 +11395,24 @@ createApp({
     bindFlagModal(showClassAwayModal, () => { showClassAwayModal.value = false; }, '空堂事件');
     bindFlagModal(showBatchPrintPrompt, () => { dismissBatchPrintPrompt(); }, '批次列印');
 
-    // 管理員進後台時預載 ui-admin（不擋首屏）
+    // ui-admin 不在切頁同步載入；畫面完成後閒置預載，實際操作時可直接取用。
+    let uiAdminWarmupHandle = null;
     watch([paperMode, isAdmin, activeTab], ([paper, admin, tab]) => {
       if (paper && !admin && tab === 'pending' && isMutualCover.value && !paperFlow.value) {
         setActiveTab('timetable');
       }
     });
-    watch([isAdmin, activeTab], ([adm, tab]) => {
-      if (adm && tab === 'admin' && typeof window.ensureUiAdmin === 'function') {
-        ensureUiAdminApi().catch(function () {});
-      }
+    watch([isAdmin, activeTab], ([admin, tab]) => {
+      if (!admin || tab !== 'admin' || _uiAdminApi || uiAdminWarmupHandle !== null) return;
+      const warmup = () => {
+        uiAdminWarmupHandle = null;
+        if (isAdmin.value && activeTab.value === 'admin') {
+          ensureUiAdminApi().catch(function () {});
+        }
+      };
+      uiAdminWarmupHandle = typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(warmup, { timeout: 1200 })
+        : setTimeout(warmup, 300);
     });
 
     // ── 後台：折抵額度歷程（額度帳本）──
@@ -12071,7 +12161,7 @@ createApp({
           showTeacherExpenseAuditModal, teacherExpenseAuditRows, teacherExpenseAuditSummary, openTeacherExpenseAuditModal, normalizeTeacherExpenseData,
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
-        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportTotals, shiftReportPeriod,
+       reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportLoading, monthlyReportTotals, shiftReportPeriod,
       accountingPeriod, accountingExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
