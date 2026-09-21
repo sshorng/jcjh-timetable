@@ -56,7 +56,7 @@
     teachingSupport: {
       key: 'teachingSupport',
       label: '教支人員鐘點',
-      suffix: '教支兼課',
+      suffix: '教支人員',
       titleSuffix: '教師兼課費印領清冊',
       dataStart: 3,
       templateTotalRow: 10,
@@ -2433,8 +2433,8 @@
     });
     if (planSheets.length || teachingSupportSheets.length || substituteAttributeSheets.length || baseSheets.length) {
       var orderedSheets = planSheets.map(function (entry) { return entry.sheet; })
-        .concat(teachingSupportSheets.map(function (entry) { return entry.sheet; }))
         .concat(substituteAttributeSheets.map(function (entry) { return entry.sheet; }))
+        .concat(teachingSupportSheets.map(function (entry) { return entry.sheet; }))
         .concat(baseSheets);
       orderedSheets.forEach(function (sheet, index) {
         sheet.orderNo = index;

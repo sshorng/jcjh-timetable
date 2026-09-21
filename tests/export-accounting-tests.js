@@ -26,6 +26,13 @@ assert.doesNotMatch(exportAccountingSource, /代課課數/,
   '小鐘點工作表不應再使用代課課數欄位標題');
 assert.match(exportAccountingSource, /請假扣代課/,
   '小鐘點工作表應使用請假扣代課欄位標題');
+assert.match(exportAccountingSource, /suffix: '教支人員'/,
+  '教支工作表名稱應使用教支人員');
+assert.match(
+  exportAccountingSource,
+  /orderedSheets = planSheets\.map[\s\S]*?\.concat\(substituteAttributeSheets\.map[\s\S]*?\.concat\(teachingSupportSheets\.map/,
+  '工作表順序應為小鐘點後接教支人員，再接一般兼課'
+);
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
 assert.equal(
