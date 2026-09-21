@@ -276,11 +276,48 @@
     return { year: parts[0] || new Date().getFullYear(), month: parts[1] || (new Date().getMonth() + 1) };
   }
 
+  function reportPartsForPeriod(reportMonth, period) {
+    var fallback = reportParts(reportMonth);
+    var start = dateObj(period && period.start);
+    var end = dateObj(period && period.end);
+    if (!start || !end || start.getMonth() === end.getMonth() || end.getDate() > 7) return fallback;
+    var nominal = new Date(end.getFullYear(), end.getMonth(), 0);
+    return { year: nominal.getFullYear(), month: nominal.getMonth() + 1 };
+  }
+
+  function reportMonthForPeriod(reportMonth, period) {
+    var parts = reportPartsForPeriod(reportMonth, period);
+    return parts.year + '-' + pad2(parts.month);
+  }
+
   function rangeLabel(period) {
     var a = dateObj(period.start);
     var b = dateObj(period.end);
     if (!a || !b) return '';
     return (a.getMonth() + 1) + '/' + a.getDate() + '-' + (b.getMonth() + 1) + '/' + b.getDate();
+  }
+
+  function monthLabelForPeriod(reportMonth, period) {
+    var parts = reportPartsForPeriod(reportMonth, period);
+    var primaryMonth = parts.month;
+    var start = dateObj(period && period.start);
+    var startMonth = start ? start.getMonth() + 1 : primaryMonth;
+    return start && startMonth !== primaryMonth
+      ? startMonth + '-' + primaryMonth
+      : String(primaryMonth);
+  }
+
+  function titleFromTemplate(templateValue, reportMonth, period, expensePlan) {
+    var title = String(templateValue == null ? '' : templateValue).trim();
+    if (!title || title.indexOf('[[') < 0) return '';
+    var parts = reportPartsForPeriod(reportMonth, period);
+    return title
+      .replace(/\[\[年\]\]/g, String(rocYear(parts.year)))
+      .replace(/\[\[月\]\]/g, monthLabelForPeriod(reportMonth, period))
+      .replace(/\s*[（(]\s*\[\[日期\]\]\s*[）)]/g, '')
+      .replace(/\[\[日期\]\]/g, '')
+      .replace(/\[\[計畫\]\]/g, planLabel(expensePlan))
+      .trim();
   }
 
   function dateRangeFileLabel(period, reportMonth) {
@@ -378,8 +415,8 @@
   }
 
   function titleFor(config, reportMonth, period, expensePlan) {
-    var parts = reportParts(reportMonth);
-    var range = rangeLabel(period);
+    var parts = reportPartsForPeriod(reportMonth, period);
+    var monthLabel = monthLabelForPeriod(reportMonth, period);
     var suffix = config.titleSuffix;
     if (config.key === 'overtime') {
       suffix = overtimeTitleSuffix(expensePlan);
@@ -391,9 +428,9 @@
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
     }
     if (config.key === 'selfSub' || config.key === 'mentor') {
-      return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
+      return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
     }
-    return '臺北市立建成國中' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
+    return '臺北市立建成國中' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
   }
 
   function safeSheetPart(value) {
@@ -739,6 +776,25 @@
     if (bad.indexOf(status) >= 0) return false;
     var good = ['approved', 'active', 'effective', 'approved_active', 'assigned', '核准生效', '已核准', '核准', '已生效', '生效', '有效', '啟用', '已指定', '已指派', '已分派', '指定'];
     return good.indexOf(status) >= 0 || !!record.actualTeacherEmail;
+  }
+
+  function missingActualTeacherWarning(record, opts) {
+    var className = String(record && (record.className || record['班級']) || '').trim() || '未記載';
+    var originalTeacherEmail = String(record && (
+      record.originalTeacherEmail || record['原授課教師Email'] || record['原任課教師Email']
+    ) || '').trim();
+    var originalTeacher = String(record && (
+      record.originalTeacherName || record['原授課教師姓名'] || record['原任課教師姓名'] || record['原導師姓名']
+    ) || '').trim();
+    if (!originalTeacher && originalTeacherEmail) {
+      originalTeacher = lookupTeacherName(opts, originalTeacherEmail, originalTeacherEmail);
+    }
+    originalTeacher = originalTeacher || '未記載';
+    var subject = String(record && (record.subject || record['科目']) || '').trim();
+    var course = subject ? '、科目「' + subject + '」' : '';
+    return '代課紀錄 ' + (record.date || record['異動日期'] || '')
+      + '：班級「' + className + '」、原授課教師「' + originalTeacher + '」' + course
+      + '的課缺少實際代課教師，未列入會計表。';
   }
 
   function subFee(record) {
@@ -2033,7 +2089,7 @@
     (opts.substitutionRecords || []).filter(function (r) {
       return r && r.date && isApprovedActive(r) && dateInPeriod(r.date, getPeriod(periods, 'publicSub', opts.reportMonth)) && !r.actualTeacherEmail;
     }).forEach(function (r) {
-      data.warnings.push('代課紀錄 ' + (r.date || '') + ' 缺少實際代課教師，未列入會計表。');
+      data.warnings.push(missingActualTeacherWarning(r, opts));
     });
     if (!data.summary.some(function (x) { return x.count > 0; })) data.warnings.push('目前會計匯出範圍內沒有可匯出的資料。');
     return data;
@@ -2044,6 +2100,15 @@
       if (cell && cell.value !== null && cell.value !== undefined && String(cell.value).trim()) return cell;
     }
     return sheet.getCell(1, 1);
+  }
+
+  function titleForSheet(sheet, config, reportMonth, period, expensePlan) {
+    var titleCell = firstTitleCell(sheet, config.columns);
+    var templateTitle = titleFromTemplate(titleCell.value, reportMonth, period, expensePlan);
+    if (templateTitle && config.key !== 'substituteAttribute' && config.key !== 'teachingSupport') {
+      return templateTitle;
+    }
+    return titleFor(config, reportMonth, period, expensePlan);
   }
 
   function clearRow(sheet, rowNumber, columns) {
@@ -2384,7 +2449,7 @@
       var period = getPeriod(data.periods, periodKey, opts.reportMonth);
       var plan = null;
       var titleCell = firstTitleCell(sheet, config.columns);
-      titleCell.value = titleFor(config, opts.reportMonth, period, plan);
+      titleCell.value = titleForSheet(sheet, config, opts.reportMonth, period, plan);
       var name = sheetName(config, opts.reportMonth, period, plan);
       var base = name;
       var suffix = 2;
@@ -2403,7 +2468,7 @@
       var sheet = entry.sheet;
       var period = getPeriod(data.periods, 'overtime', opts.reportMonth);
       var titleCell = firstTitleCell(sheet, overtimeConfig.columns);
-      titleCell.value = titleFor(overtimeConfig, opts.reportMonth, period, group.plan);
+      titleCell.value = titleForSheet(sheet, overtimeConfig, opts.reportMonth, period, group.plan);
       var name = sheetName(overtimeConfig, opts.reportMonth, period, group.plan);
       var base = name;
       var suffix = 2;
@@ -2420,7 +2485,7 @@
       var sheet = entry.sheet;
       var period = getPeriod(data.periods, 'adjunct', opts.reportMonth);
       var titleCell = firstTitleCell(sheet, teachingSupportConfig.columns);
-      titleCell.value = titleFor(teachingSupportConfig, opts.reportMonth, period, group.plan);
+      titleCell.value = titleForSheet(sheet, teachingSupportConfig, opts.reportMonth, period, group.plan);
       var name = sheetName(teachingSupportConfig, opts.reportMonth, period, group.plan);
       var base = name;
       var suffix = 2;
@@ -2437,7 +2502,7 @@
       var sheet = entry.sheet;
       var period = getPeriod(data.periods, 'publicSub', opts.reportMonth);
       var titleCell = firstTitleCell(sheet, substituteAttributeConfig.columns);
-      titleCell.value = titleFor(substituteAttributeConfig, opts.reportMonth, period, group.plan);
+      titleCell.value = titleForSheet(sheet, substituteAttributeConfig, opts.reportMonth, period, group.plan);
       var name = sheetName(substituteAttributeConfig, opts.reportMonth, period, group.plan);
       var base = name;
       var suffix = 2;
@@ -2531,6 +2596,9 @@
     loadPeriodSettings: loadPeriodSettings,
     savePeriodSettings: savePeriodSettings,
     dateRangeFileLabel: dateRangeFileLabel,
+    reportMonthForPeriod: reportMonthForPeriod,
+    monthLabelForPeriod: monthLabelForPeriod,
+    titleFromTemplate: titleFromTemplate,
     titleFor: titleFor,
     buildExportData: buildExportData,
     exportWorkbook: exportWorkbook

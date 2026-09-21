@@ -58,7 +58,7 @@ assert.equal(
     { start: '2026-08-31', end: '2026-10-02' },
     '國教'
   ),
-  '臺北市立建成國中115年8月(8/31-10/2)代課鐘點費（國教）印領清冊',
+  '臺北市立建成國中115年8月代課鐘點費（國教）印領清冊',
   '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
 );
 [
@@ -79,7 +79,7 @@ assert.equal(
       { start: '2026-08-31', end: '2026-10-02' },
       plan
     ),
-    '臺北市立建成國中115年8月(8/31-10/2)' + suffix,
+    '臺北市立建成國中115年8月' + suffix,
     plan + '超鐘點工作表應使用正式標題'
   );
 });
@@ -116,6 +116,14 @@ const noOvertimeWithLeave = build([{
 }], 3, schedules);
 assert.equal(noOvertimeWithLeave.sheets.overtime.length, 0, '沒有超鐘點時即使有代課紀錄也不應建立超鐘點列');
 assert.equal(noOvertimeWithLeave.sheets.publicSub.length, 0, '沒有超鐘點的代課不應被重複列入公付代課表');
+const missingActualTeacher = build([{
+  date: '2026-07-13', period: 1, className: '701', subject: '國文',
+  originalTeacherName: '原授課教師', subFee: '公費代課', status: 'approved'
+}], 3, schedules);
+assert.ok(missingActualTeacher.warnings.some(message => message.includes('班級「701」')
+  && message.includes('原授課教師「原授課教師」')
+  && message.includes('科目「國文」')),
+  '缺少代課教師時，警告應指出班級、原授課教師與科目');
 const substituteIsSeparate = build([], 0, [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 3, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
@@ -981,7 +989,7 @@ assert.equal(
     period,
     '本土語'
   ),
-  '臺北市立建成國中115年7月(7/1-7/31)教支人員鐘點費印領清冊（國中本土語開課經費）',
+  '臺北市立建成國中115年7月教支人員鐘點費印領清冊（國中本土語開課經費）',
   '教支分表標題應使用精簡正式計畫名稱'
 );
 assert.equal(
@@ -991,7 +999,7 @@ assert.equal(
     period,
     '本土語-代課鐘點費'
   ),
-  '臺北市立建成國中115年7月(7/1-7/31)教支人員鐘點費印領清冊（本土語-代課鐘點費）',
+  '臺北市立建成國中115年7月教支人員鐘點費印領清冊（本土語-代課鐘點費）',
   '本土語代課鐘點費計畫名稱應原樣保留'
 );
 assert.equal(teachingSupportExport.overtimePlans.length, 0, '教支人員不應混入一般超鐘點分表');

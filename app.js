@@ -7516,11 +7516,14 @@ createApp({
           showToast('請先設定有效的結算起日與迄日。', 'warning');
           return;
         }
-        reportMonth.value = start.slice(0, 7);
         const period = { start, end };
+        const exportMonth = window.ExportAccounting.reportMonthForPeriod
+          ? window.ExportAccounting.reportMonthForPeriod(reportMonth.value, period)
+          : reportMonth.value || start.slice(0, 7);
+        reportMonth.value = exportMonth;
         await calculateMonthlyReport();
         const exportOpts = {
-          reportMonth: reportMonth.value,
+          reportMonth: exportMonth,
           reportStartDate: start,
           reportEndDate: end,
           reportWeeksCount: weeks,
@@ -7555,7 +7558,7 @@ createApp({
           return;
         }
         if (window.ExportAccounting.savePeriodSettings) {
-          window.ExportAccounting.savePeriodSettings(reportMonth.value, period);
+          window.ExportAccounting.savePeriodSettings(exportMonth, period);
         }
         const result = await window.ExportAccounting.exportWorkbook(Object.assign({}, exportOpts, {
           preparedData: preview
