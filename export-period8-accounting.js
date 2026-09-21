@@ -275,9 +275,13 @@
     for (var row = startRow; row <= endRow; row += 1) {
       var cell = sheet.getCell(row, noteColumn);
       var alignment = cell.alignment ? clone(cell.alignment) : {};
-      alignment.wrapText = false;
-      alignment.shrinkToFit = true;
+      alignment.wrapText = true;
+      alignment.shrinkToFit = false;
       cell.alignment = alignment;
+      var font = cell.font ? clone(cell.font) : {};
+      var fontSize = Number(font.size);
+      font.size = Number.isFinite(fontSize) ? Math.max(fontSize, 12) : 12;
+      cell.font = font;
     }
   }
 

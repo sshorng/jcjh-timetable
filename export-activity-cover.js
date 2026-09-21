@@ -144,9 +144,30 @@ window.ExportActivityCover = (function () {
     ].map(emailKey).filter(Boolean);
   }
 
+  function requestRequesterValues(request) {
+    return [
+      request && request.requesterName,
+      request && request.requesterEmail,
+      request && request.originalTeacherName,
+      request && request.originalTeacherEmail,
+      request && request['申請人姓名'],
+      request && request['申請人Email'],
+      request && request['原任教師姓名'],
+      request && request['原任教師Email'],
+      request && request['請假教師姓名'],
+      request && request['請假教師Email']
+    ].map(emailKey).filter(Boolean);
+  }
+
   function requestMatchesTeacher(request, teacher) {
+    return requestMatchesPageTeacher(request, teacher, 'duty');
+  }
+
+  function requestMatchesPageTeacher(request, teacher, role) {
     if (!teacher) return true;
-    var target = requestTargetValues(request);
+    var target = role === 'covered'
+      ? requestRequesterValues(request)
+      : requestTargetValues(request);
     var teacherKeys = identityValues(teacher);
     return target.some(function (value) { return teacherKeys.indexOf(value) >= 0; });
   }
@@ -223,7 +244,7 @@ window.ExportActivityCover = (function () {
     var date = String(request.requestDate || request.date || request['異動日期'] || '').slice(0, 10);
     if (!date || !dateSet[date]) return false;
     if (opts.showAllChanges || opts.includeAllChanges) return true;
-    return requestMatchesTeacher(request, opts.teacher || opts.teacherKey || null);
+    return requestMatchesPageTeacher(request, opts.teacher || opts.teacherKey || null, opts.pageRole);
   }
 
   function demandForTeacher(opts, teacher) {
@@ -259,77 +280,106 @@ window.ExportActivityCover = (function () {
     return typeof nameOf === 'function' ? String(nameOf(email) || email || '').trim() : String(email || '').trim();
   }
 
-  /** 依實際受邀代課教師分組；每組會成為通知單的一頁。 */
+  function requestRequesterName(request, nameOf) {
+    var name = String(request && (request.requesterName || request.originalTeacherName
+      || request['申請人姓名'] || request['原任教師姓名'] || request['請假教師姓名']) || '').trim();
+    if (name) return name;
+    var email = request && (request.requesterEmail || request.originalTeacherEmail
+      || request['申請人Email'] || request['原任教師Email'] || request['請假教師Email']);
+    return typeof nameOf === 'function' ? String(nameOf(email) || email || '').trim() : String(email || '').trim();
+  }
+
+  function pageIdentityValues(request, role) {
+    return role === 'covered' ? requestRequesterValues(request) : requestTargetValues(request);
+  }
+
+  function pageTeacherName(request, role, nameOf) {
+    return role === 'covered' ? requestRequesterName(request, nameOf) : requestTargetName(request, nameOf);
+  }
+
+  /** 依教師角色分組；每組會成為通知單的一頁。 */
   function buildTeacherPages(opts) {
     opts = opts || {};
-    var dates = listDatesInRange(opts.startDate, opts.endDate).filter(function (date) {
-      var d = parseDate(date);
-      if (!d) return false;
-      var wd = d.getDay();
-      return wd >= 1 && wd <= 5;
-    });
-    var dateSet = {};
-    dates.forEach(function (date) { dateSet[date] = true; });
     var nameOf = typeof opts.getTeacherName === 'function' ? opts.getTeacherName : function (email) { return email || ''; };
-    var groups = [];
-    uniqueRequests(opts.requests).forEach(function (request) {
-      if (!requestMatchesMatrix(request, opts, dateSet)) return;
-      var targetValues = requestTargetValues(request);
-      if (!targetValues.length) return;
-      var rosterTeacher = (opts.teachers || []).find(function (teacher) {
-        return teacher && targetValues.some(function (value) {
-          return identityValues(teacher).indexOf(value) >= 0;
+    function buildRolePages(role) {
+      var dates = listDatesInRange(opts.startDate, opts.endDate).filter(function (date) {
+        var d = parseDate(date);
+        if (!d) return false;
+        var wd = d.getDay();
+        return wd >= 1 && wd <= 5;
+      });
+      var dateSet = {};
+      dates.forEach(function (date) { dateSet[date] = true; });
+      var collectOpts = Object.assign({}, opts, {
+        pageRole: role,
+        teacher: null,
+        teacherKey: null
+      });
+      var groups = [];
+      uniqueRequests(opts.requests).forEach(function (request) {
+        if (!requestMatchesMatrix(request, collectOpts, dateSet)) return;
+        var values = pageIdentityValues(request, role);
+        if (!values.length) return;
+        var rosterTeacher = (opts.teachers || []).find(function (teacher) {
+          return teacher && values.some(function (value) {
+            return identityValues(teacher).indexOf(value) >= 0;
+          });
         });
-      });
-      var values = targetValues.slice();
-      if (rosterTeacher) {
-        identityValues(rosterTeacher).forEach(function (value) {
-          if (values.indexOf(value) < 0) values.push(value);
+        if (rosterTeacher) {
+          identityValues(rosterTeacher).forEach(function (value) {
+            if (values.indexOf(value) < 0) values.push(value);
+          });
+        }
+        var group = groups.find(function (candidate) {
+          return values.some(function (value) { return candidate.keys.indexOf(value) >= 0; });
         });
-      }
-      var group = groups.find(function (candidate) {
-        return values.some(function (value) { return candidate.keys.indexOf(value) >= 0; });
+        if (!group) {
+          group = {
+            key: values[0],
+            keys: [],
+            name: rosterTeacher
+              ? String(rosterTeacher.name || rosterTeacher.teacherName || pageTeacherName(request, role, nameOf)).trim()
+              : pageTeacherName(request, role, nameOf)
+          };
+          groups.push(group);
+        }
+        values.forEach(function (value) {
+          if (group.keys.indexOf(value) < 0) group.keys.push(value);
+        });
+        if (!group.name) group.name = pageTeacherName(request, role, nameOf);
       });
-      if (!group) {
-        group = {
-          key: values[0],
-          keys: [],
-          name: rosterTeacher
-            ? String(rosterTeacher.name || rosterTeacher.teacherName || requestTargetName(request, nameOf)).trim()
-            : requestTargetName(request, nameOf)
-        };
-        groups.push(group);
-      }
-      values.forEach(function (value) {
-        if (group.keys.indexOf(value) < 0) group.keys.push(value);
-      });
-      if (!group.name) group.name = requestTargetName(request, nameOf);
-    });
 
-    return groups.map(function (group) {
-      var rosterTeacher = (opts.teachers || []).find(function (teacher) {
-        return teacher && group.keys.some(function (value) {
-          return identityValues(teacher).indexOf(value) >= 0;
+      return groups.map(function (group) {
+        var rosterTeacher = (opts.teachers || []).find(function (teacher) {
+          return teacher && group.keys.some(function (value) {
+            return identityValues(teacher).indexOf(value) >= 0;
+          });
         });
+        var teacher = rosterTeacher || {
+          email: group.key,
+          name: group.name || group.key,
+          teacherName: group.name || group.key
+        };
+        var pageOpts = Object.assign({}, opts, {
+          teacher: teacher,
+          teacherKey: group.key,
+          pageRole: role
+        });
+        var demand = demandForTeacher(opts, teacher);
+        if (demand !== null) pageOpts.teacherDemand = demand;
+        return {
+          key: group.key,
+          role: role,
+          name: String(teacher.name || teacher.teacherName || group.name || group.key).trim(),
+          teacher: teacher,
+          matrix: buildMatrix(pageOpts)
+        };
       });
-      var teacher = rosterTeacher || {
-        email: group.key,
-        name: group.name || group.key,
-        teacherName: group.name || group.key
-      };
-      var pageOpts = Object.assign({}, opts, {
-        teacher: teacher,
-        teacherKey: group.key
-      });
-      var demand = demandForTeacher(opts, teacher);
-      if (demand !== null) pageOpts.teacherDemand = demand;
-      return {
-        key: group.key,
-        name: String(teacher.name || teacher.teacherName || group.name || group.key).trim(),
-        teacher: teacher,
-        matrix: buildMatrix(pageOpts)
-      };
-    });
+    }
+
+    var pages = buildRolePages('duty');
+    if (opts.includeCoveredTeacherPages) pages = pages.concat(buildRolePages('covered'));
+    return pages;
   }
 
   /**
@@ -376,10 +426,15 @@ window.ExportActivityCover = (function () {
       if (!requestMatchesMatrix(r, opts, dateSet)) return;
       var period = requestPeriod(r);
       var fee = r.subFee || r['經費來源'] || '';
-      var belongsToPageTeacher = requestMatchesTeacher(r, opts.teacher || opts.teacherKey || null);
+      var belongsToPageTeacher = requestMatchesPageTeacher(
+        r,
+        opts.teacher || opts.teacherKey || null,
+        opts.pageRole
+      );
       var rd = String(r.requestDate || r.date || r['異動日期'] || '').slice(0, 10);
 
-      var leaveName = String(r.requesterName || r['申請人姓名'] || '').trim()
+      var leaveName = String(r.requesterName || r.originalTeacherName || r['申請人姓名']
+        || r['原任教師姓名'] || r['請假教師姓名'] || '').trim()
         || nameOf(r.requesterEmail || r.originalTeacherEmail || r['申請人Email']);
       var subName = String(r.targetTeacherName || r['受邀人姓名'] || '').trim()
         || nameOf(r.targetTeacherEmail || r.actualTeacherEmail || r['受邀人Email']);
@@ -392,7 +447,8 @@ window.ExportActivityCover = (function () {
         leaveName: leaveName,
         subName: subName,
         subject: subject,
-        fee: fee
+        fee: fee,
+        highlight: belongsToPageTeacher
       };
 
       if (period === 8) {
@@ -476,11 +532,13 @@ window.ExportActivityCover = (function () {
       var sub = String(it.subName || '').trim();
       // 範本常見「707鄭惠文→黃慧菁」或「701 莊淨婷→陸天馨」；統一：班與名之間無空白（班碼短）
       var left = cn + leave;
-      if (!left && !sub) return '';
-      if (!sub) return left;
-      if (!left) return '→' + sub;
-      return left + '→' + sub;
-    }).filter(Boolean).join('\n');
+      var text = '';
+      if (!left && !sub) return null;
+      if (!sub) text = left;
+      else if (!left) text = '→' + sub;
+      else text = left + '→' + sub;
+      return { text: text, highlight: !!it.highlight };
+    }).filter(Boolean);
   }
 
   /**
@@ -554,7 +612,7 @@ window.ExportActivityCover = (function () {
    * 多行文字 → 多個 <w:p>；沿用 sampleP 的 pPr／rPr
    */
   function paragraphsFromText(samplePXml, text) {
-    var lines = String(text || '').split(/\r?\n/);
+    var lines = Array.isArray(text) ? text : String(text || '').split(/\r?\n/);
     if (!lines.length) lines = [''];
     // 從 sample 抽出 pPr、rPr
     var pPrMatch = samplePXml.match(/<w:pPr[\s\S]*?<\/w:pPr>/);
@@ -564,10 +622,15 @@ window.ExportActivityCover = (function () {
     // 抓 sample 的 p 開頭屬性
     var pOpenMatch = samplePXml.match(/<w:p\b[^>]*>/);
     var pOpen = pOpenMatch ? pOpenMatch[0] : '<w:p>';
-    return lines.map(function (line) {
+    return lines.map(function (lineItem) {
+      var highlighted = !!(lineItem && typeof lineItem === 'object' && lineItem.highlight);
+      var line = lineItem && typeof lineItem === 'object' ? lineItem.text : lineItem;
+      var lineRPr = highlighted
+        ? rPr.replace(/<\/w:rPr>$/, '<w:shd w:val="clear" w:color="auto" w:fill="D9D9D9"/></w:rPr>')
+        : rPr;
       return pOpen
         + pPr
-        + '<w:r>' + rPr + '<w:t xml:space="preserve">' + xmlEsc(line) + '</w:t></w:r>'
+        + '<w:r>' + lineRPr + '<w:t xml:space="preserve">' + xmlEsc(line) + '</w:t></w:r>'
         + '</w:p>';
     }).join('');
   }

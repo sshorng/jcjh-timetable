@@ -20,10 +20,12 @@ assert.equal(
   '1、9/22代余明錦休假1節',
   '會計備註應移除行政代申請標記與其後活動文字'
 );
-assert.match(exportAccountingSource, /alignment\.shrinkToFit = true/, '一般會計工作表備註應啟用縮小字型');
-assert.match(exportAccountingSource, /alignment\.wrapText = false/, '一般會計工作表備註不應換行');
-assert.match(period8AccountingSource, /alignment\.shrinkToFit = true/, '第八節工作表備註應啟用縮小字型');
-assert.match(period8AccountingSource, /alignment\.wrapText = false/, '第八節工作表備註不應換行');
+assert.match(exportAccountingSource, /alignment\.shrinkToFit = false/, '一般會計工作表備註不應無限制縮小字型');
+assert.match(exportAccountingSource, /alignment\.wrapText = true/, '一般會計工作表備註應允許換行');
+assert.match(exportAccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '一般會計工作表備註字級不可低於12pt');
+assert.match(period8AccountingSource, /alignment\.shrinkToFit = false/, '第八節工作表備註不應無限制縮小字型');
+assert.match(period8AccountingSource, /alignment\.wrapText = true/, '第八節工作表備註應允許換行');
+assert.match(period8AccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '第八節工作表備註字級不可低於12pt');
 assert.match(exportAccountingSource, /cloneWorksheet\(overtimeTemplate, workbook, '__substitute_attribute_'/,
   '小鐘點工作表應複製一般超鐘點工作表版型');
 assert.match(exportAccountingSource, /每週代課/,

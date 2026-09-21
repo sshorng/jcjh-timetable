@@ -447,6 +447,22 @@
     if (message && list.indexOf(message) < 0) list.push(message);
   }
 
+  function selfPaidOverdrawWarning(row, fallbackPlan) {
+    var name = String(row && row.name || '').trim() || '未具名教師';
+    var plan = planLabel((row && row.expensePlan) || fallbackPlan);
+    var planText = plan ? '的「' + plan + '」計畫' : '';
+    return '教師「' + name + '」' + planText + '自費代課扣除'
+      + displayCount(row && row._selfPaidDeduction) + '節，超過可扣超鐘點'
+      + displayCount(row && row._selfPaidAvailableHours) + '節，請核對。';
+  }
+
+  function appendSelfPaidOverdrawWarnings(warnings, rows, fallbackPlan) {
+    (rows || []).forEach(function (row) {
+      if (!row || !row._selfPaidOverdrawn) return;
+      addUniqueMessage(warnings, selfPaidOverdrawWarning(row, fallbackPlan));
+    });
+  }
+
   function planLabel(value) {
     return outputExpensePlan(value);
   }
@@ -777,6 +793,7 @@
 
   function deductionReasonLabel(record, fallback) {
     var value = reason(record);
+    if (value.indexOf('\u8ab2\u52d9\u8abf\u6574') >= 0) return '\u8ab2\u52d9\u8abf\u6574\u4ee3\u8ab2';
     if (!value) return fallback;
     if (value.indexOf('\u516c\u5047') >= 0 || value.indexOf('\u516c\u5dee') >= 0) return '\u516c\u5047';
     if (value.indexOf('\u4e8b\u5047') >= 0) return '\u4e8b\u5047';
@@ -844,17 +861,28 @@
     }).filter(Boolean);
   }
 
-  function summaryNote(opts, source, period, leaveRecords, publicUsed, schoolSwapIndex) {
+  function summaryNote(opts, source, period, leaveRecords, publicUsed, schoolSwapIndex, expectedPlan) {
+    var matchesExpectedPlan = function (record) {
+      return recordMatchesExpensePlan(opts, source, record, expectedPlan, schoolSwapIndex);
+    };
     var actualRecords = (opts.substitutionRecords || []).filter(function (record) {
       return isUsableSubstitution(record)
         && !isCombinedReturnRecord(record)
         && dateInPeriod(record.date, period)
-         && sameTeacher(record.actualTeacherEmail, source)
-        && isWeeklyPeriod(record.period);
+        && sameTeacher(record.actualTeacherEmail, source)
+        && isWeeklyPeriod(record.period)
+        && matchesExpectedPlan(record);
     });
     var notes = groupedCoverNoteParts(actualRecords, opts);
     if (!actualRecords.length) notes = notes.concat(legacySelfSubNoteParts(source && source.selfSubDetail));
-    var chargedRecords = chargedSubstitutionRecords(opts.substitutionRecords || [], opts.allSchedules || [], source, period, schoolSwapIndex, source);
+    var chargedRecords = chargedSubstitutionRecords(
+      opts.substitutionRecords || [],
+      opts.allSchedules || [],
+      source,
+      period,
+      schoolSwapIndex,
+      source
+    ).filter(matchesExpectedPlan);
     notes = notes.concat(leaveNoteParts(
       chargedRecords,
       publicUsed,
@@ -1345,6 +1373,12 @@
     return '';
   }
 
+  function recordMatchesExpensePlan(opts, source, record, expectedPlan, schoolSwapIndex) {
+    if (!expectedPlan) return true;
+    var recordPlan = expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex);
+    return !!recordPlan && expensePlanMatchesFilter(recordPlan, expectedPlan);
+  }
+
   function substitutionKey(record) {
     var id = record && (record.id || record.recordId || record['紀錄ID'] || record['調代課紀錄ID']);
     if (id) return 'id:' + String(id);
@@ -1648,17 +1682,22 @@
         if (config.key === 'overtime' && (adjunct || teachingSupport)) return;
         var title = teacherTitle(t) || (adjunct || teachingSupport ? '兼課教師' : '教師');
         var leave = leaveRecordsFor(source, records, period, opts.allSchedules || [], schoolSwapIndex);
+        var matchesExpectedPlan = function (record) {
+          return recordMatchesExpensePlan(opts, source, record, expectedPlan, schoolSwapIndex);
+        };
+        var planLeave = expectedPlan ? leave.filter(matchesExpectedPlan) : leave;
         var sourceItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
         var chargedItems = null;
         if (sourceItems) {
           sourceItems = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
-            ? sourceItems.filter(function (item) { return planLabel(item.plan) === expectedPlan; })
+            ? sourceItems.filter(function (item) { return expensePlanMatchesFilter(item.plan, expectedPlan); })
             : sourceItems.slice();
           chargedItems = sourceItems.filter(function (item) { return item.charged !== false; });
         }
         var chargedRecordsForSource = chargedItems
           ? chargedItems.map(function (item) { return item.record; })
           : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex, source);
+        if (expectedPlan) chargedRecordsForSource = chargedRecordsForSource.filter(matchesExpectedPlan);
         var chargedCombinedRecords = chargedSubstitutionRecords(
           records,
           opts.allSchedules || [],
@@ -1669,10 +1708,10 @@
         ).filter(function (record) {
           if (!isCombinedReturnRecord(record)) return false;
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
-          return planLabel(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
+          return matchesExpectedPlan(record);
         });
-        var selfCount = leave.filter(isSelfPaidRecord).length;
-        var publicUsed = allocation
+        var selfCount = planLeave.filter(isSelfPaidRecord).length;
+        var publicUsed = expectedPlan || allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
         // 超鐘點／兼課鐘點不因放假或空堂減少；小鐘點的實際未授課扣減
@@ -1705,6 +1744,9 @@
         var actualHours = allocation && allocation.actualHours !== undefined && !noAwayDeduction
           ? Number(allocation.actualHours) || 0
           : grossHours - deduction;
+        var selfPaidDeduction = notePeriodCount(planLeave.filter(isSelfPaidRecord));
+        var selfPaidAvailableHours = Math.max(0, Number(grossHours) || 0);
+        var selfPaidOverdrawn = selfPaidDeduction > selfPaidAvailableHours;
         var weeklyOvertime = allocation
           ? (allocation.weeklyHours !== undefined
             ? (Number(allocation.weeklyHours) || 0)
@@ -1714,19 +1756,19 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
-        var deductionRecordsForSource = leave.filter(isSelfPaidRecord).concat(
+        var deductionRecordsForSource = planLeave.filter(isSelfPaidRecord).concat(
           chargedRecordsForSource.filter(isPublicOvertimeRecord)
         );
         var overtimeNotes = leaveNoteParts(
           deductionRecordsForSource,
           publicUsed,
-          chargedCombinedRecords.concat(leave.filter(function (record) {
+          chargedCombinedRecords.concat(planLeave.filter(function (record) {
             return isSelfPaidRecord(record) && isCombinedReturnRecord(record);
           }))
         );
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
-          : summaryNote(opts, sourceRow, period, leave, publicUsed, schoolSwapIndex);
+          : summaryNote(opts, sourceRow, period, planLeave, publicUsed, schoolSwapIndex, expectedPlan);
         if (config.key === 'teachingSupport') {
           var teachingSupportDates = teachingSupportDateNote(t || sourceRow, opts.allSchedules || [], period);
           if (teachingSupportDates) notes = [notes, teachingSupportDates].filter(Boolean).join('；');
@@ -1750,12 +1792,15 @@
           rate: rate,
           amount: actualHours * rate,
           reduceNote: reduce ? ('空堂扣減 ' + reduce + ' 節') : '',
-          note: notes
+          note: notes,
+          _selfPaidDeduction: selfPaidDeduction,
+          _selfPaidAvailableHours: selfPaidAvailableHours,
+          _selfPaidOverdrawn: selfPaidOverdrawn
         };
         // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
         var hasCombinedReturn = chargedCombinedRecords.length > 0;
         if ((config.key !== 'overtime' && config.key !== 'adjunct' && config.key !== 'teachingSupport')
-            || actualHours !== 0 || hasCombinedReturn) rows.push(row);
+            || actualHours !== 0 || hasCombinedReturn || selfPaidOverdrawn) rows.push(row);
         var substitutionItems = config.key === 'overtime' && chargedItems
           ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
           : (config.key === 'adjunct' || config.key === 'teachingSupport') && sourceItems
@@ -2140,6 +2185,7 @@
     };
     var chargedMap = chargedMapFor(overtimePeriod);
     data.sheets.overtime = buildSummaryRows(overtimeConfig, opts, overtimePeriod, '', chargedMap, schoolSwapIndex);
+    appendSelfPaidOverdrawWarnings(data.warnings, data.sheets.overtime, '');
 
     var planKeys = [];
     var planFullNames = {};
@@ -2193,8 +2239,9 @@
         plan: outputPlan,
         fullPlan: planFullNames[outputPlan] || planFullLabel(plan),
         rows: rows
-      });
-      summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
+       });
+       appendSelfPaidOverdrawWarnings(data.warnings, rows, outputPlan);
+       summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
     });
 
     var teachingSupportConfig = SHEET_CONFIG.teachingSupport;
@@ -2237,6 +2284,7 @@
         fullPlan: teachingSupportPlanFullNames[outputPlan] || planFullLabel(plan),
         rows: rows
       });
+      appendSelfPaidOverdrawWarnings(data.warnings, rows, outputPlan);
       data.sheets.teachingSupport = data.sheets.teachingSupport.concat(rows);
       summaryFor('teachingSupport:' + outputPlan, '教支人員-' + outputPlan, rows);
     });
@@ -2246,7 +2294,10 @@
       var period = getPeriod(periods, periodKey, opts.reportMonth);
       // 代導明細不使用 chargedMap；其餘同期間工作表共用同一份索引。
       var periodChargedMap = config.key === 'mentor' ? null : chargedMapFor(period);
-      if (config.kind === 'summary') data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
+       if (config.kind === 'summary') {
+         data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
+         appendSelfPaidOverdrawWarnings(data.warnings, data.sheets[config.key], '');
+       }
       if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false, schoolSwapIndex);
       if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true, schoolSwapIndex);
       if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap, schoolSwapIndex);
@@ -2331,10 +2382,28 @@
   }
 
   function applyNoteCellFit(cell) {
+    if (!cell) return;
     var alignment = cell && cell.alignment ? clone(cell.alignment) : {};
-    alignment.wrapText = false;
-    alignment.shrinkToFit = true;
+    alignment.wrapText = true;
+    alignment.shrinkToFit = false;
     cell.alignment = alignment;
+    var font = cell.font ? clone(cell.font) : {};
+    var fontSize = Number(font.size);
+    font.size = Number.isFinite(fontSize) ? Math.max(fontSize, 12) : 12;
+    cell.font = font;
+  }
+
+  function applyWarningRowFont(sheet, config, rows) {
+    (rows || []).forEach(function (row, index) {
+      if (!row || !row._selfPaidOverdrawn) return;
+      var rowNumber = config.dataStart + index;
+      for (var column = 1; column <= config.columns; column += 1) {
+        var cell = sheet.getCell(rowNumber, column);
+        var font = cell.font ? clone(cell.font) : {};
+        font.color = { argb: 'FFFF0000' };
+        cell.font = font;
+      }
+    });
   }
 
   function applyNoteColumnFit(sheet, config, totalRow) {

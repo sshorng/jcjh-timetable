@@ -375,6 +375,27 @@ assert.deepEqual(
   { before: 3, used: 1, remaining: 2 },
   '無帳本歷程時應能用教師姓名回退計算空堂扣額度'
 );
+const invigZeroQuotaPatrol = invigilation.buildExamQuotaStats({
+  ledgerRows: [],
+  ledgerHistoryComplete: true,
+  teacher: { name: '丙老師', mutualQuota: 0 },
+  requests: [{
+    status: 'approved',
+    subFee: '扣額度',
+    targetTeacherName: '丙老師',
+    reason: '空堂排班',
+    subject: '段考巡堂',
+    requestDate: '2026-10-10'
+  }],
+  rangeDates: ['2026-10-10'],
+  startDate: '2026-10-10',
+  endDate: '2026-10-10'
+});
+assert.deepEqual(
+  { before: invigZeroQuotaPatrol.before, used: invigZeroQuotaPatrol.used, remaining: invigZeroQuotaPatrol.remaining },
+  { before: 0, used: 0, remaining: 0 },
+  '完整帳本中沒有實際扣款時，段考巡堂不可被回退計為額度使用'
+);
 
 const printTarget = {};
 invigilation.copyPrintSettings({

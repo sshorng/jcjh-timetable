@@ -8006,6 +8006,7 @@ createApp({
       if (typeof window.ensureJSZip === 'function') {
         try { await window.ensureJSZip(); } catch (eZ) { /* 單份可不需 */ }
       }
+      await ensureDAC();
       if (typeof window.ensureExportInvigilation === 'function') {
         await window.ensureExportInvigilation();
       }
@@ -8130,6 +8131,7 @@ createApp({
           getCell: getCellFn,
            requests: requestsList.value || [],
            ledgerRows: ledgerRows,
+           ledgerHistoryComplete: true,
            allSchedules: allSchedules.value || [],
           onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
@@ -11560,6 +11562,9 @@ createApp({
     };
     const openHistoryEditModal = (...a) => needUiAdmin('openHistoryEditModal', ...a);
     const saveHistoryEdit = (...a) => needUiAdmin('saveHistoryEdit', ...a);
+    const onHistoryEditReasonChange = (...a) => needUiAdmin('onHistoryEditReasonChange', ...a);
+    const onHistoryEditTypeChange = (...a) => needUiAdmin('onHistoryEditTypeChange', ...a);
+    const onHistoryEditPeriodChange = (...a) => needUiAdmin('onHistoryEditPeriodChange', ...a);
     const onHistoryEditDateChange = (...a) => needUiAdmin('onHistoryEditDateChange', ...a);
 
     bindFlagModal(showClassAwayModal, () => { showClassAwayModal.value = false; }, '空堂事件');
@@ -12388,7 +12393,7 @@ createApp({
        getTeacherNameByEmail, getTeacherSubjectByEmail, getTeacherIdentityTooltip, getTeacherTimetableHours, getRealTeacherName, startSecondSub,
         getTeacherJobTitleByEmail, isHomeroomTeacher,
        getSubjectStyle, getClassBadgeStyle, formatMoney,
-      changeHistoryPage, openHistoryEditModal, saveHistoryEdit, onHistoryEditDateChange, changePendingPage,
+       changeHistoryPage, openHistoryEditModal, saveHistoryEdit, onHistoryEditReasonChange, onHistoryEditTypeChange, onHistoryEditPeriodChange, onHistoryEditDateChange, changePendingPage,
       openAddSemesterModal, openEditSemesterModal, saveSemester, deleteSemester, setDefaultSemester,
       // 工具函數
       toLocalDateStr,

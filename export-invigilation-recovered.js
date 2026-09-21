@@ -337,7 +337,9 @@ window.ExportInvigilation = (function () {
       startDate: opts.startDate,
       endDate: opts.endDate
     });
-    return stats && stats.hasHistory ? stats : fallback;
+    // 完整帳本中沒有該師列，代表沒有實際扣款；不可再把巡堂申請回退算成額度使用。
+    // 未標記為完整歷程時，保留舊資料的申請單回退計算。
+    return stats && (stats.hasHistory || opts.ledgerHistoryComplete === true) ? stats : fallback;
   }
 
   function getExcelJS() {
@@ -888,7 +890,8 @@ window.ExportInvigilation = (function () {
         requests: opts.requests,
         rangeDates: range.dates,
         startDate: range.dates[0],
-        endDate: range.dates[range.dates.length - 1]
+        endDate: range.dates[range.dates.length - 1],
+        ledgerHistoryComplete: opts.ledgerHistoryComplete === true
       });
 
       if (i === 0 || (i + 1) % 5 === 0 || i === total - 1) {
