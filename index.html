@@ -3687,20 +3687,20 @@
               <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師" v-model="teacherForm.jobTitle">
             </div>
              <div class="form-group">
-                <label class="form-label">超鐘點／代課（小鐘點）支出計畫</label>
-               <template v-if="String(teacherForm.expensePlan || '').trim().charAt(0) === '['">
+                 <label class="form-label">超鐘點／代課（小鐘點）支出計畫（格式：[簡稱]全稱）</label>
+                <template v-if="isExpensePlanSlotConfig(teacherForm.expensePlan)">
                  <div style="padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--surface-muted,#f8fafc);font-size:0.82rem;">
                    {{ getExpensePlanSummary(teacherForm.expensePlan) }}
                    <button v-if="overtimePlanTeacher" type="button" class="btn btn-secondary" style="display:block;margin-top:7px;padding:4px 8px;font-size:0.75rem;" @click="showTeacherModal = false; openOvertimePlanModal(overtimePlanTeacher)">編輯課格來源</button>
                  </div>
                </template>
                <template v-else>
-                 <input type="text" class="form-input" list="accounting-plan-options" maxlength="40" placeholder="留白＝原本的超鐘點（預設經費）" v-model="teacherForm.expensePlan">
+                  <input type="text" class="form-input" list="accounting-plan-options" maxlength="80" placeholder="例如：[公代]公費代課鐘點費；留白＝預設經費" v-model="teacherForm.expensePlan">
                  <datalist id="accounting-plan-options">
                    <option v-for="plan in accountingPlanOptions" :key="'accounting-plan-' + plan" :value="plan"></option>
                  </datalist>
                </template>
-                <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">超鐘點與代課（小鐘點）會依計畫拆表；若要分節指定來源，請按教師列表的「超鐘點來源」。</span>
+                 <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">畫面與工作表頁籤使用簡稱，Excel 標題使用全稱；超鐘點與代課（小鐘點）會依計畫拆表。</span>
              </div>
             <div class="form-group">
               <label class="form-label">系統角色</label>
@@ -3762,14 +3762,14 @@
                  <span style="font-weight:700;">{{ ['日','一','二','三','四','五','六','日'][row.day] || row.day }}</span>
                 <span>{{ row.period === 0 ? '早自習' : (row.period === 45 ? '午休' : '第' + row.period + '節') }}</span>
                    <span>{{ row.className || (row.kind === 'fixed' ? '目前課表無對應班級' : '未指定班級') }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small><small v-if="row.sourceStatus === 'conflict'" style="display:block;color:#b45309;line-height:1.5;">⚠ 快照班級與目前課表不一致，目前：{{ row.currentClassName || '未指定' }} <button type="button" class="btn btn-sm btn-outline-warning" style="padding:1px 5px;font-size:0.68rem;" @click.stop="row.className = row.currentClassName">採用目前課表班級</button></small><small v-else-if="row.sourceStatus === 'missing' || row.sourceStatus === 'ambiguous' || row.sourceStatus === 'invalid'" style="display:block;color:#b91c1c;">⚠ {{ row.sourceStatus === 'ambiguous' ? '同一節有多個來源' : (row.sourceStatus === 'invalid' ? '來源格式錯誤' : '尚未找到唯一經費來源') }}</small></span>
-                <input type="text" class="form-input" list="overtime-expense-source-options" maxlength="40" placeholder="留白＝預設經費，可直接輸入計畫名稱" v-model="row.source">
+                 <input type="text" class="form-input" list="overtime-expense-source-options" maxlength="80" placeholder="例如：[公代]公費代課鐘點費；留白＝預設經費" v-model="row.source">
               </div>
             </div>
             <datalist id="overtime-expense-source-options">
-              <option v-for="source in getOvertimeExpenseSourceOptions()" :key="'overtime-source-' + source" :value="source"></option>
+               <option v-for="source in getOvertimeExpenseSourceOptions()" :key="'overtime-source-' + source" :value="source"></option>
             </datalist>
             <div style="margin-top:12px;font-size:0.75rem;color:var(--text-muted);">
-              可直接輸入新的計畫名稱，也可從下拉建議套用其他教師已使用過的計畫；留白代表預設經費。已設定 {{ overtimePlanRows.filter(row => row.source).length }}／{{ overtimePlanRows.length }} 個課格。
+               可輸入 `[簡稱]全稱`；摘要與工作表頁籤顯示簡稱，Excel 標題使用全稱。留白代表預設經費。已設定 {{ overtimePlanRows.filter(row => row.source).length }}／{{ overtimePlanRows.length }} 個課格。
             </div>
           </div>
           <div class="modal-footer">

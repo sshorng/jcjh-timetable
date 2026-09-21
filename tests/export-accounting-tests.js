@@ -62,10 +62,33 @@ assert.equal(
     '臺北市立建成國民中學[[年]]年[[月]]月([[日期]])公付代課-身心調適假鐘點費印領清冊',
     '2026-08',
     crossMonthAccountingPeriod,
-    '國教'
+    '[公代]公費代課鐘點費'
   ),
   '臺北市立建成國民中學115年8-9月公付代課-身心調適假鐘點費印領清冊',
   '匯出應沿用範本的身心調適假標題文字'
+);
+assert.deepEqual(
+  window.FieldMap.expensePlanName('[公代]公費代課鐘點費'),
+  { raw: '[公代]公費代課鐘點費', short: '公代', full: '公費代課鐘點費', explicit: true },
+  '計畫設定應解析簡稱與全稱'
+);
+assert.equal(window.FieldMap.expenseSourceShort('[公代]公費代課鐘點費'), '公代',
+  '網頁與工作表頁籤應使用計畫簡稱');
+assert.equal(window.FieldMap.expenseSourceFull('[公代]公費代課鐘點費'), '公費代課鐘點費',
+  'Excel 標題應使用計畫全稱');
+assert.equal(window.FieldMap.parseExpensePlan('[公代]公費代課鐘點費').mode, 'legacy',
+  '簡稱／全稱格式不可被誤判為課格 JSON');
+assert.equal(window.FieldMap.formatExpensePlanSummary('[公代]公費代課鐘點費'), '公代',
+  '網頁計畫摘要應只顯示簡稱');
+assert.equal(
+  window.ExportAccounting.titleFromTemplate(
+    '[[計畫]]',
+    '2026-08',
+    crossMonthAccountingPeriod,
+    '[公代]公費代課鐘點費'
+  ),
+  '公費代課鐘點費',
+  '範本計畫欄位應使用計畫全稱'
 );
 assert.equal(
   window.ExportAccounting.dateRangeFileLabel({ start: '2026-09-01', end: '2026-09-30' }, '2026-09'),
@@ -82,33 +105,21 @@ assert.equal(
     { key: 'substituteAttribute', titleSuffix: '' },
     '2026-08',
     { start: '2026-08-31', end: '2026-10-02' },
-    '國教'
+    '[小鐘]課表代課鐘點費'
   ),
-  '臺北市立建成國中115年8-9月代課鐘點費（國教）印領清冊',
+  '臺北市立建成國中115年8-9月代課鐘點費（課表代課鐘點費）印領清冊',
   '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
 );
-[
-  ['國教', '補助調整教師授課鐘點費(國教)印領清冊'],
-  ['雙語', '雙語實驗課程學校教師減課鐘點費印領清冊'],
-  ['特教', '補助調整教師授課鐘點費(特教)印領清冊'],
-  ['資優', '補助調整教師授課鐘點費(特教)印領清冊'],
-  ['閱推', '國中閱讀推動教師鐘點費印領清冊'],
-  ['藝才', '補助調整教師授課鐘點費(藝才)印領清冊'],
-  ['無人機', '無人機教育中心種子教師減授鐘點費印領清冊'],
-  ['輔導團', '國教輔導團印領清冊'],
-  ['本土語', '國中本土語開課經費印領清冊']
-].forEach(([plan, suffix]) => {
-  assert.equal(
-    window.ExportAccounting.titleFor(
-      { key: 'overtime', titleSuffix: '' },
-      '2026-08',
-      { start: '2026-08-31', end: '2026-10-02' },
-      plan
-    ),
-    '臺北市立建成國中115年8-9月' + suffix,
-    plan + '超鐘點工作表應使用正式標題'
-  );
-});
+assert.equal(
+  window.ExportAccounting.titleFor(
+    { key: 'overtime', titleSuffix: '' },
+    '2026-08',
+    { start: '2026-08-31', end: '2026-10-02' },
+    '[超]校務計畫超鐘點費'
+  ),
+  '臺北市立建成國中115年8-9月超鐘點（校務計畫超鐘點費）印領清冊',
+  '超鐘點標題應只使用輸入計畫的全稱，不應依簡稱硬編對照表'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
@@ -132,6 +143,8 @@ assert.equal(coEmployed.sheets.adjunct.length, 0, '共聘教師不應列入兼�
 assert.equal(coEmployed.sheets.overtime.length, 1, '共聘教師應列入預設超鐘點工作表');
 assert.equal(coEmployed.sheets.overtime[0].title, '共聘教師', '預設超鐘點工作表應保留共聘職務名稱');
 assert.equal(coEmployed.overtimePlans[0].plan, '國教', '共聘教師空白經費應輸出為國教經費');
+const namedPlanExport = build([], 0, schedules, [], { expensePlan: '[校]校務超鐘點費' });
+assert.equal(namedPlanExport.overtimePlans[0].plan, '校', '會計分表與工作表頁籤應使用計畫簡稱');
 
 const noOvertime = build([], 3, schedules);
 assert.equal(noOvertime.sheets.overtime.length, 0, '沒有超鐘點的教師不應列入超鐘點工作表');
@@ -1013,10 +1026,10 @@ assert.equal(
     { key: 'teachingSupport', titleSuffix: '' },
     '2026-07',
     period,
-    '本土語'
+    '[本土語]國中本土語開課經費'
   ),
   '臺北市立建成國中115年7月教支人員鐘點費印領清冊（國中本土語開課經費）',
-  '教支分表標題應使用精簡正式計畫名稱'
+  '教支分表標題應使用輸入計畫全稱'
 );
 assert.equal(
   window.ExportAccounting.titleFor(

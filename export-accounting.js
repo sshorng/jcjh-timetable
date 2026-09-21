@@ -316,7 +316,7 @@
       .replace(/\[\[月\]\]/g, monthLabelForPeriod(reportMonth, period))
       .replace(/\s*[（(]\s*\[\[日期\]\]\s*[）)]/g, '')
       .replace(/\[\[日期\]\]/g, '')
-      .replace(/\[\[計畫\]\]/g, planLabel(expensePlan))
+      .replace(/\[\[計畫\]\]/g, planFullLabel(expensePlan))
       .trim();
   }
 
@@ -331,9 +331,29 @@
     return plan === '未分配' ? '預設' : plan;
   }
 
+  function expensePlanName(value) {
+    if (root.FieldMap && typeof root.FieldMap.expensePlanName === 'function') {
+      return root.FieldMap.expensePlanName(value);
+    }
+    var text = normalizeExpensePlan(value);
+    if (!text || text === '預設') return { raw: text, short: '預設', full: '預設', explicit: false };
+    var match = text.match(/^\[([^\]]+)\]\s*(.+)$/);
+    if (!match) return { raw: text, short: text, full: text, explicit: false };
+    var short = String(match[1] || '').trim();
+    var full = String(match[2] || '').trim();
+    return short && full
+      ? { raw: text, short: short, full: full, explicit: true }
+      : { raw: text, short: text, full: text, explicit: false };
+  }
+
   function outputExpensePlan(value) {
-    var plan = normalizeExpensePlan(value);
-    return !plan || plan === '預設' ? '國教' : plan;
+    var plan = expensePlanName(value);
+    return !plan.short || plan.short === '預設' ? '國教' : plan.short;
+  }
+
+  function planFullLabel(value) {
+    var plan = expensePlanName(value);
+    return !plan.full || plan.short === '預設' ? '國教' : plan.full;
   }
 
   function teacherExpensePlan(teacher) {
@@ -350,6 +370,7 @@
     var text = normalizeExpensePlan(value);
     if (!text) return { mode: 'empty', slots: [], legacySource: '', invalid: false, invalidCount: 0 };
     if (text.charAt(0) !== '[') return { mode: 'legacy', slots: [], legacySource: text, invalid: false, invalidCount: 0 };
+    if (/^\[[^\]]+\]\s*\S/.test(text)) return { mode: 'legacy', slots: [], legacySource: text, invalid: false, invalidCount: 0 };
     try {
       var raw = JSON.parse(text);
       if (!Array.isArray(raw)) throw new Error('not array');
@@ -372,7 +393,7 @@
   function expensePlanSourcesForRow(row) {
     var sources = [];
     function add(source) {
-      var value = normalizeExpensePlan(source);
+      var value = outputExpensePlan(source);
       if (value && sources.indexOf(value) < 0) sources.push(value);
     }
     (row && row.expensePlanAllocations || []).forEach(function (allocation) {
@@ -394,24 +415,12 @@
   }
 
   function teachingSupportPlanLabel(value) {
-    var plan = planLabel(value);
-    return plan === '本土語' ? '國中本土語開課經費' : plan;
+    return planFullLabel(value);
   }
 
   function overtimeTitleSuffix(expensePlan) {
     var plan = planLabel(expensePlan);
-    var formalTitles = {
-      '國教': '補助調整教師授課鐘點費(國教)印領清冊',
-      '雙語': '雙語實驗課程學校教師減課鐘點費印領清冊',
-      '特教': '補助調整教師授課鐘點費(特教)印領清冊',
-      '資優': '補助調整教師授課鐘點費(特教)印領清冊',
-      '閱推': '國中閱讀推動教師鐘點費印領清冊',
-      '藝才': '補助調整教師授課鐘點費(藝才)印領清冊',
-      '無人機': '無人機教育中心種子教師減授鐘點費印領清冊',
-      '輔導團': '國教輔導團印領清冊',
-      '本土語': '國中本土語開課經費印領清冊'
-    };
-    return formalTitles[plan] || (plan ? '超鐘點（' + plan + '）印領清冊' : '超鐘點印領清冊');
+    return plan ? '超鐘點（' + planFullLabel(expensePlan) + '）印領清冊' : '超鐘點印領清冊';
   }
 
   function titleFor(config, reportMonth, period, expensePlan) {
@@ -422,7 +431,7 @@
       suffix = overtimeTitleSuffix(expensePlan);
     }
     if (config.key === 'substituteAttribute') {
-      suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
+      suffix = '代課鐘點費（' + planFullLabel(expensePlan) + '）印領清冊';
     }
     if (config.key === 'teachingSupport') {
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
@@ -962,8 +971,7 @@
   }
 
   function isDefaultExpensePlan(value) {
-    var plan = normalizeExpensePlan(value);
-    return !plan || plan === '預設' || plan === '國教';
+    return planLabel(value) === '國教';
   }
 
   function isSubstitutionRecord(record) {
@@ -1455,7 +1463,7 @@
     var allocations = Array.isArray(source && source.expensePlanAllocations)
       ? source.expensePlanAllocations : [];
     var matches = allocations.filter(function (allocation) {
-      return normalizeExpensePlan(allocation && allocation.source) === expectedPlan;
+      return planLabel(allocation && allocation.source) === expectedPlan;
     });
     if (matches.length) {
       return matches.map(function (allocation) {
@@ -1480,7 +1488,7 @@
     var rows = [];
     var substitutionRows = [];
     var expectedPlan = (config.key === 'overtime' || config.key === 'teachingSupport')
-      ? normalizeExpensePlan(planFilter) : null;
+      ? planLabel(planFilter) : null;
     reportSourceRows(opts).forEach(function (source) {
       var variants = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
         ? overtimeSourceVariants(source, expectedPlan)
@@ -1503,7 +1511,7 @@
         var chargedItems = null;
         if (sourceItems) {
           sourceItems = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
-            ? sourceItems.filter(function (item) { return normalizeExpensePlan(item.plan) === expectedPlan; })
+            ? sourceItems.filter(function (item) { return planLabel(item.plan) === expectedPlan; })
             : sourceItems.slice();
           chargedItems = sourceItems.filter(function (item) { return item.charged !== false; });
         }
@@ -1520,7 +1528,7 @@
         ).filter(function (record) {
           if (!isCombinedReturnRecord(record)) return false;
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
-          return normalizeExpensePlan(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
+          return planLabel(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
         var sourceFixedSetting = fixedOvertimeSettingForSchedules(sourceRow, opts.allSchedules || []);
         var selfCount = allocation
@@ -1987,7 +1995,7 @@
     reportSourceRows(opts).forEach(function (source) {
       var parsed = parseExpensePlan(source.expensePlan);
       var addPlan = function (value) {
-        var plan = normalizeExpensePlan(value);
+        var plan = planLabel(value);
         if (plan && planKeys.indexOf(plan) < 0) planKeys.push(plan);
       };
       expensePlanSourcesForRow(source).forEach(addPlan);
@@ -2019,8 +2027,8 @@
       }
     });
     planKeys.sort(function (a, b) {
-      if (a === '預設') return -1;
-      if (b === '預設') return 1;
+      if (a === '國教') return -1;
+      if (b === '國教') return 1;
       return a.localeCompare(b, 'zh-Hant', { numeric: true });
     });
     planKeys.forEach(function (plan) {
@@ -2039,13 +2047,13 @@
       var sourceTeacher = (opts.teachers || []).find(function (teacher) { return sameTeacher(teacher, source); }) || source;
       if (!isTeachingSupportTeacher(sourceTeacher)) return;
       expensePlanSourcesForRow(source).forEach(function (value) {
-        var plan = normalizeExpensePlan(value);
+        var plan = planLabel(value);
         if (plan && teachingSupportPlanKeys.indexOf(plan) < 0) teachingSupportPlanKeys.push(plan);
       });
     });
     teachingSupportPlanKeys.sort(function (a, b) {
-      if (a === '預設') return -1;
-      if (b === '預設') return 1;
+      if (a === '國教') return -1;
+      if (b === '國教') return 1;
       return a.localeCompare(b, 'zh-Hant', { numeric: true });
     });
     data.sheets.teachingSupport = [];

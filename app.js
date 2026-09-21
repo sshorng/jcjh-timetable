@@ -4628,6 +4628,10 @@ createApp({
     const getExpensePlanSummary = (value) => window.FieldMap && window.FieldMap.formatExpensePlanSummary
       ? window.FieldMap.formatExpensePlanSummary(value)
       : String(value || '預設').trim() || '預設';
+    const isExpensePlanSlotConfig = (value) => {
+      if (!window.FieldMap || typeof window.FieldMap.parseExpensePlan !== 'function') return false;
+      return window.FieldMap.parseExpensePlan(value).mode === 'slots';
+    };
     const pendingHomeroomRecords = computed(() => {
       return (homeroomRecords.value || [])
         .filter(r => r && r.enabled !== false && String(r.status || '').toLowerCase() !== 'cancelled')
@@ -12338,7 +12342,7 @@ createApp({
       isProxySubmitEmailGranted, toggleProxySubmitEmail, clearAllProxySubmitEmails, persistProxySubmitEmails,
       proxyTargetEmail, proxyTargetName, proxyTargetQuery, showProxyTargetDropdown, filteredProxyTeachers,
       setProxyTarget, clearProxyTarget, canOperateOnTeacherEmail, ensureProxyTargetForTeacher,
-       userRoleText, subjectsList, filteredTeachers, displayTimetableTeachers, pendingCount, myInviteCount, adminTodoCount, hasQuickTodo, quickTodoSentOpen, allTeachersList, teachersListDetails, accountingPlanOptions, getExpensePlanSummary,
+        userRoleText, subjectsList, filteredTeachers, displayTimetableTeachers, pendingCount, myInviteCount, adminTodoCount, hasQuickTodo, quickTodoSentOpen, allTeachersList, teachersListDetails, accountingPlanOptions, getExpensePlanSummary, isExpensePlanSlotConfig,
       pendingHomeroomRecords, homeroomAssignSelections, homeroomRecordsLoading, getHomeroomCoverCandidates, loadHomeroomRecords, assignHomeroomTeacher, homeroomTeachersList, onHomeroomInputSelect, onManualCoverTeacherInput,
       showManualHomeroomModal, homeroomStatusFilter, manualHomeroomForm, openManualHomeroomModal, onManualHomeroomLeaveTeacherChange, currentMonthHomeroomRecords, currentMonthHomeroomFeeTotal, currentMonthHomeroomAssignedCount, currentMonthHomeroomPendingCount, saveManualHomeroomRecord, deleteHomeroomRecord,
       matchPreview,

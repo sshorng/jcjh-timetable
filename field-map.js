@@ -336,8 +336,29 @@ window.FieldMap = (function () {
     return String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
   }
 
+  function expensePlanName(raw) {
+    const text = normalizeExpenseSource(raw);
+    if (!text || text === '預設' || text === '未分配') {
+      return { raw: text, short: '預設', full: '預設', explicit: false };
+    }
+    const match = text.match(/^\[([^\]]+)\]\s*(.+)$/);
+    if (!match) return { raw: text, short: text, full: text, explicit: false };
+    const short = normalizeExpenseSource(match[1]);
+    const full = normalizeExpenseSource(match[2]);
+    if (!short || !full) return { raw: text, short: text, full: text, explicit: false };
+    return { raw: text, short: short, full: full, explicit: true };
+  }
+
+  function expenseSourceShort(raw) {
+    return expensePlanName(raw).short;
+  }
+
+  function expenseSourceFull(raw) {
+    return expensePlanName(raw).full;
+  }
+
   function expenseSourceKey(raw) {
-    const source = normalizeExpenseSource(raw);
+    const source = expenseSourceShort(raw);
     return !source || source === '預設' || source === '未分配' ? '預設' : source;
   }
 
@@ -382,6 +403,9 @@ window.FieldMap = (function () {
 
     let raw;
     if (text.charAt(0) !== '[') {
+      return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
+    }
+    if (/^\[[^\]]+\]\s*\S/.test(text)) {
       return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
     }
     try {
@@ -618,9 +642,9 @@ window.FieldMap = (function () {
   function expensePlanSources(value) {
     const parsed = value && value.mode ? value : parseExpensePlan(value);
     const sources = [];
-    if (parsed.mode === 'legacy' && parsed.legacySource) return [parsed.legacySource];
+    if (parsed.mode === 'legacy' && parsed.legacySource) return [expenseSourceShort(parsed.legacySource)];
     (parsed.slots || []).forEach(function (item) {
-      const source = item.source || '預設';
+      const source = expenseSourceShort(item.source || '預設');
       if (sources.indexOf(source) < 0) sources.push(source);
     });
     return sources;
@@ -642,12 +666,12 @@ window.FieldMap = (function () {
 
   function formatExpensePlanSummary(value) {
     const parsed = value && value.mode ? value : parseExpensePlan(value);
-    if (parsed.mode === 'legacy') return parsed.legacySource || '預設';
+    if (parsed.mode === 'legacy') return expenseSourceShort(parsed.legacySource || '預設');
     if (parsed.mode !== 'slots') return parsed.invalid ? '配置格式錯誤' : '預設';
     const counts = {};
     const order = [];
     (parsed.slots || []).forEach(function (item) {
-      const source = item.source || '預設';
+      const source = expenseSourceShort(item.source || '預設');
       if (!counts[source]) {
         counts[source] = 0;
         order.push(source);
@@ -1123,6 +1147,9 @@ window.FieldMap = (function () {
     normalizeRole,
     normalizeTeacherRole,
     normalizeExpenseSource,
+    expensePlanName,
+    expenseSourceShort,
+    expenseSourceFull,
     expenseClassesOverlap,
     parseExpensePlan,
     resolveExpenseSource,
