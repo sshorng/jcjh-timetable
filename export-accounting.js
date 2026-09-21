@@ -356,6 +356,11 @@
     return outputExpensePlan(value);
   }
 
+  function teachingSupportPlanLabel(value) {
+    var plan = planLabel(value);
+    return plan === '本土語' ? '國中本土語開課經費' : plan;
+  }
+
   function overtimeTitleSuffix(expensePlan) {
     var plan = planLabel(expensePlan);
     var formalTitles = {
@@ -383,7 +388,7 @@
       suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
     }
     if (config.key === 'teachingSupport') {
-      suffix = '教師兼課費印領清冊（教支人員／超鐘點計畫：' + planLabel(expensePlan) + '）';
+      suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
     }
     if (config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;

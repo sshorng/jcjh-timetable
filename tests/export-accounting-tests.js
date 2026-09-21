@@ -968,8 +968,18 @@ assert.equal(
     period,
     '本土語'
   ),
-  '臺北市立建成國中115年7月(7/1-7/31)教師兼課費印領清冊（教支人員／超鐘點計畫：本土語）',
-  '教支分表標題應標示人員類型與超鐘點計畫'
+  '臺北市立建成國中115年7月(7/1-7/31)教支人員鐘點費印領清冊（國中本土語開課經費）',
+  '教支分表標題應使用精簡正式計畫名稱'
+);
+assert.equal(
+  window.ExportAccounting.titleFor(
+    { key: 'teachingSupport', titleSuffix: '' },
+    '2026-07',
+    period,
+    '本土語-代課鐘點費'
+  ),
+  '臺北市立建成國中115年7月(7/1-7/31)教支人員鐘點費印領清冊（本土語-代課鐘點費）',
+  '本土語代課鐘點費計畫名稱應原樣保留'
 );
 assert.equal(teachingSupportExport.overtimePlans.length, 0, '教支人員不應混入一般超鐘點分表');
 
