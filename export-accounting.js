@@ -649,12 +649,12 @@
   function appendMergedPlanNotes(rows, config, planFilter) {
     if (!config || config.key !== 'overtime') return rows;
     var rowPlans = uniqueNotes((rows || []).map(function (row) {
-      var rawPlan = String(row && (row.expensePlan || row.plan) || '').trim();
+      var rawPlan = String(row && (row.expensePlanForNote || row.expensePlan || row.plan) || '').trim();
       return rawPlan && !hasMergedExpensePlan(rawPlan) ? planFullLabel(rawPlan) : '';
     }));
     if (!hasMergedExpensePlan(planFilter) && rowPlans.length <= 1) return rows;
     (rows || []).forEach(function (row) {
-      var rawPlan = String(row && (row.expensePlan || row.plan) || '').trim();
+      var rawPlan = String(row && (row.expensePlanForNote || row.expensePlan || row.plan) || '').trim();
       if (!rawPlan || hasMergedExpensePlan(rawPlan)) return;
       var plan = planFullLabel(rawPlan);
       if (!plan) return;
@@ -1179,6 +1179,34 @@
       return dayPeriodText(x.day, x.period);
     }).filter(Boolean).join('\u3001');
   }
+
+  function teachingSupportDateNote(teacher, allSchedules, period) {
+    var start = dateObj(period && period.start);
+    var end = dateObj(period && period.end);
+    if (!teacher || !start || !end || start > end) return '';
+    var fixedSetting = fixedOvertimeSettingForSchedules(teacher, allSchedules || []);
+    var dates = [];
+    for (var date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      var dateStr = isoDate(date);
+      var hasClass = (allSchedules || []).some(function (schedule) {
+        var scheduleDay = Number(schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期']));
+        var schedulePeriod = Number(schedule && (schedule.period != null ? schedule.period : schedule['節次']));
+        if (!sameTeacher(schedule, teacher) || !isWeeklyPeriod(schedulePeriod)
+            || isSubstituteSchedule(schedule) || !isScheduleActiveOnDate(schedule, dateStr)) return false;
+        var actualDay = date.getDay() === 0 ? 7 : date.getDay();
+        if (Number.isFinite(scheduleDay) && scheduleDay !== actualDay) return false;
+        var slotKey = String(scheduleDay) + '|' + String(schedulePeriod);
+        if (fixedSetting.configured && fixedSetting.valid) {
+          return fixedSetting.slotKeys.indexOf(slotKey) >= 0;
+        }
+        return isOvertimeSchedule(schedule);
+      });
+      if (hasClass) dates.push(shortDate(dateStr));
+    }
+    return dates.filter(function (date, index, all) {
+      return date && all.indexOf(date) === index;
+    }).join('、');
+  }
   function accountingClassParts(value) {
     return String(value == null ? '' : value)
       .trim()
@@ -1511,14 +1539,23 @@
     if (matches.length) {
       return matches.map(function (allocation) {
         return {
-          row: Object.assign({}, source, { expensePlan: expectedPlan }),
+          row: Object.assign({}, source, {
+            expensePlan: expectedPlan,
+            expensePlanForNote: allocation && allocation.source || source.expensePlan
+          }),
           allocation: allocation
         };
       });
     }
     if (!allocations.length && !(source && source.expensePlanConflicts && source.expensePlanConflicts.length)
         && expensePlanSourcesForRow(source).indexOf(expectedPlan) >= 0) {
-      return [{ row: Object.assign({}, source, { expensePlan: expectedPlan }), allocation: null }];
+      return [{
+        row: Object.assign({}, source, {
+          expensePlan: expectedPlan,
+          expensePlanForNote: source.expensePlan
+        }),
+        allocation: null
+      }];
     }
     return [];
   }
@@ -1631,8 +1668,15 @@
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
           : summaryNote(opts, sourceRow, period, leave, publicUsed, schoolSwapIndex);
+        if (config.key === 'teachingSupport') {
+          var teachingSupportDates = teachingSupportDateNote(t || sourceRow, opts.allSchedules || [], period);
+          if (teachingSupportDates) notes = [notes, teachingSupportDates].filter(Boolean).join('；');
+        }
         var row = {
           expensePlan: sourcePlan,
+          expensePlanForNote: sourceRow.expensePlanForNote
+            || (allocation && allocation.source)
+            || sourceRow.expensePlan,
           _rowKind: 'summary',
           _teacherKey: teacherSortKey(t) || teacherSortKey(sourceRow),
           serial: rows.length + 1,

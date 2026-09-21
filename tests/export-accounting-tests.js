@@ -174,6 +174,20 @@ assert.deepEqual(
   ['計畫：工程輔導團', '原有備註；計畫：薪傳', '計畫：共聘'],
   '合併計畫工作表應在各教師備註標示各自計畫'
 );
+const mergedPlanSourceRows = [
+  { expensePlan: '工程輔導團、薪傳、共聘', expensePlanForNote: '工程輔導團', note: '' },
+  { expensePlan: '工程輔導團、薪傳、共聘', expensePlanForNote: '薪傳', note: '' }
+];
+window.ExportAccounting.appendMergedPlanNotes(
+  mergedPlanSourceRows,
+  { key: 'overtime' },
+  '工程輔導團、薪傳、共聘'
+);
+assert.deepEqual(
+  mergedPlanSourceRows.map(row => row.note),
+  ['計畫：工程輔導團', '計畫：薪傳'],
+  '合併計畫列應優先使用教師保留的個別計畫'
+);
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
@@ -1046,7 +1060,10 @@ const teachingSupportExport = window.ExportAccounting.buildExportData({
     },
     { email: 'adjunct@x', name: '一般兼課', jobTitle: '兼課教師', baseHours: 0, expensePlan: '計畫A' }
   ],
-  allSchedules: [],
+  allSchedules: [
+    { teacherEmail: 'support-b@x', dayOfWeek: 2, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'support-a@x', dayOfWeek: 3, period: 1, className: '801', attr: '一般', specialTags: '超鐘點' }
+  ],
   substitutionRecords: [],
   monthlyReportRows: [
     {
@@ -1072,6 +1089,11 @@ assert.deepEqual(
   teachingSupportExport.teachingSupportPlans[0].rows.map(row => row.name),
   ['教支乙', '教支甲'],
   '教支分表應按照教師名單順序排列'
+);
+assert.deepEqual(
+  teachingSupportExport.teachingSupportPlans[0].rows.map(row => row.note),
+  ['7/7、7/14、7/21、7/28', '7/1、7/8、7/15、7/22、7/29'],
+  '教支人員備註應列出結算期間的上課日期'
 );
 assert.equal(teachingSupportExport.sheets.adjunct.length, 1, '一般兼課人員應維持單一工作表');
 assert.equal(teachingSupportExport.sheets.adjunct[0].name, '一般兼課', '一般兼課工作表不應混入教支人員');
