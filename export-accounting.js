@@ -334,6 +334,7 @@
 
   function mergedExpensePlanAssignment(value) {
     var text = normalizeExpensePlan(value);
+    if (text.charAt(0) === '[') return { group: text, individual: '' };
     var match = text.match(/^(.+?)\s*-\s*(.+)$/);
     if (match && hasMergedExpensePlan(match[1])) {
       return { group: String(match[1]).trim(), individual: String(match[2]).trim() };

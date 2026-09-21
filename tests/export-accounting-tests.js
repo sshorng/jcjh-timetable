@@ -274,6 +274,30 @@ assert.deepEqual(
   ['計畫：工程輔導團', '計畫：薪傳', '計畫：共聘'],
   '合併計畫應將連字號後的教師個別計畫寫入備註'
 );
+function assignedPlanJson(individualPlan) {
+  return JSON.stringify([{ day: 3, period: 4, className: '908', source: '工程輔導團、薪傳、共聘-' + individualPlan }]);
+}
+const jsonAssignedPlanExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period, adjunct: period },
+  teachers: [{
+    email: 'json-assigned@x', name: 'JSON計畫教師', baseHours: 0,
+    expensePlan: assignedPlanJson('工程輔導團')
+  }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'json-assigned@x', name: 'JSON計畫教師', expensePlan: assignedPlanJson('工程輔導團'),
+    weeklyOvertime: 1, scheduledOvertime: 1,
+    expensePlanAllocations: [{
+      source: '工程輔導團、薪傳、共聘-工程輔導團', rawHours: 1, weeklyHours: 1,
+      grossHours: 1, deduction: 0, actualHours: 1
+    }]
+  }]
+});
+assert.equal(jsonAssignedPlanExport.overtimePlans[0].rows[0].note, '計畫：工程輔導團',
+  '課格 JSON 的合併計畫備註不可混入 JSON 尾端');
 const schedules = [
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
   { teacherEmail: 'bill@x', dayOfWeek: 1, period: 0, className: '702', attr: '一般', specialTags: '超鐘點' },
