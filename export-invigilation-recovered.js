@@ -498,6 +498,66 @@ window.ExportInvigilation = (function () {
     return left.some(function (value) { return right.indexOf(value) >= 0; });
   }
 
+  /** 個人分發頁：只標示收件教師所在的半邊整列，黑白列印仍可辨識。 */
+  function highlightRecipientRow(ws, matrix, layout, recipient) {
+    if (!ws || !matrix || !layout || !recipient) return false;
+    var sides = [
+      { list: matrix.left || [], nameCol: 1, dataColStart: 2 },
+      { list: matrix.right || [], nameCol: 13, dataColStart: 14 }
+    ];
+    var placement = null;
+    var sideIndex;
+    var teacherIndex;
+    for (sideIndex = 0; sideIndex < sides.length && !placement; sideIndex++) {
+      var side = sides[sideIndex];
+      for (teacherIndex = 0; teacherIndex < side.list.length; teacherIndex++) {
+        if (teachersMatch(recipient, side.list[teacherIndex])) {
+          placement = {
+            nameCol: side.nameCol,
+            dataColStart: side.dataColStart,
+            index: teacherIndex
+          };
+          break;
+        }
+      }
+    }
+    if (!placement) return false;
+
+    var row = layout.teacherRowStart + placement.index;
+    if (row > layout.teacherRowEnd) return false;
+    var endCol = placement.dataColStart + EXAM_SLOTS_PER_SIDE - 1;
+    var blackEdge = function () {
+      return { style: 'thick', color: { argb: 'FF000000' } };
+    };
+    var col;
+    for (col = placement.nameCol; col <= endCol; col++) {
+      var cell = ws.getCell(row, col);
+      if (!cell) continue;
+      var style = clonePlain(cell.style) || {};
+      var border = clonePlain(style.border) || {};
+      border.top = blackEdge();
+      border.bottom = blackEdge();
+      if (col === placement.nameCol) border.left = blackEdge();
+      if (col === endCol) border.right = blackEdge();
+      style.border = border;
+
+      if (col === placement.nameCol) {
+        style.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6E6E6' },
+          bgColor: { argb: 'FFE6E6E6' }
+        };
+        var font = clonePlain(style.font) || clonePlain(cell.font) || {};
+        font.bold = true;
+        font.size = 16;
+        style.font = font;
+      }
+      cell.style = style;
+    }
+    return true;
+  }
+
   function buildTeacherMatrix(teachers, periodSpec, getCell, slotsPerSide, onProgress, allSchedules) {
     var cap = slotsPerSide || TEACHER_SLOTS_FALLBACK;
     var cache = Object.create(null);
@@ -655,8 +715,8 @@ window.ExportInvigilation = (function () {
   function personalizeValues(ws, layout, recipientName, before, used, remain) {
     var noteRow = (layout && layout.noteRow) || 48;
     if (recipientName) {
-      var label = '分發：' + recipientName;
-      var headerLabel = '&L&14' + label;
+      var label = '教師：' + recipientName;
+      var headerLabel = '&L&B&16&U' + label;
       try {
         if (!ws.headerFooter) ws.headerFooter = {};
         ws.headerFooter.oddHeader = headerLabel;
@@ -664,7 +724,13 @@ window.ExportInvigilation = (function () {
       } catch (eH) { /* ignore */ }
       var labelCell = ws.getCell(1, 25);
       setVal(labelCell, label);
-      setCellFontSizePreservingStyle(labelCell, 14);
+      var labelFont = clonePlain(labelCell.font)
+        || clonePlain(labelCell.style && labelCell.style.font)
+        || {};
+      labelFont.size = 16;
+      labelFont.bold = true;
+      labelFont.underline = 'single';
+      setCellFontPreservingStyle(labelCell, labelFont);
     }
     var noteCell = ws.getCell(noteRow, 1);
     var noteText = noteCell.value;
@@ -905,6 +971,7 @@ window.ExportInvigilation = (function () {
       if (!tempSheet) return { ok: false, error: '底稿讀取失敗' };
       tempSheet.name = sheetName;
       applyChangeFonts(tempSheet, matrix, layout);
+      highlightRecipientRow(tempSheet, matrix, layout, rec);
       personalizeValues(
         tempSheet,
         layout,
@@ -978,6 +1045,7 @@ window.ExportInvigilation = (function () {
     normalizePrintArea: normalizePrintArea,
     copyPrintSettings: copyPrintSettings,
     applyChangeFonts: applyChangeFonts,
+    highlightRecipientRow: highlightRecipientRow,
     personalizeValues: personalizeValues,
     linkMasterRange: linkMasterRange,
     exportWorkbook: exportWorkbook,

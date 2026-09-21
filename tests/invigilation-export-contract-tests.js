@@ -16,10 +16,12 @@ const linkMasterRange = context.window.ExportInvigilation.linkMasterRange;
 const buildTeacherMatrix = context.window.ExportInvigilation.buildTeacherMatrix;
 const isSpecialEducationTeacher = context.window.ExportInvigilation.isSpecialEducationTeacher;
 const applySpecialEducationRows = context.window.ExportInvigilation.applySpecialEducationRows;
+const highlightRecipientRow = context.window.ExportInvigilation.highlightRecipientRow;
 assert.equal(typeof linkMasterRange, 'function');
 assert.equal(typeof buildTeacherMatrix, 'function');
 assert.equal(typeof isSpecialEducationTeacher, 'function');
 assert.equal(typeof applySpecialEducationRows, 'function');
+assert.equal(typeof highlightRecipientRow, 'function');
 
 function columnName(number) {
   let value = number;
@@ -120,6 +122,25 @@ assert.equal(worksheet.cells.get('A48').value, 'personal note', 'personal quota 
 assert.equal(worksheet.cells.get('Y1').value, 'distribution label', 'distribution label is outside the linked range');
 assert.equal(JSON.stringify(worksheet.cells.get('A1').style), beforeStyles.get('A1'));
 assert.equal(JSON.stringify(worksheet.cells.get('B9').style), beforeStyles.get('B9'));
+
+const highlightedWorksheet = makeWorksheet();
+const untouchedRowStyle = JSON.stringify(highlightedWorksheet.getCell(10, 1).style);
+assert.equal(
+  highlightRecipientRow(
+    highlightedWorksheet,
+    { left: [{ email: 'target@example.com', name: '目標教師' }], right: [] },
+    { teacherRowStart: 9, teacherRowEnd: 46 },
+    { email: 'target@example.com', name: '目標教師' }
+  ),
+  true
+);
+assert.equal(highlightedWorksheet.cells.get('A9').style.border.top.style, 'thick');
+assert.equal(highlightedWorksheet.cells.get('A9').style.border.left.style, 'thick');
+assert.equal(highlightedWorksheet.cells.get('L9').style.border.right.style, 'thick');
+assert.equal(highlightedWorksheet.cells.get('A9').style.fill.fgColor.argb, 'FFE6E6E6');
+assert.equal(highlightedWorksheet.cells.get('A9').style.font.bold, true);
+assert.equal(highlightedWorksheet.cells.get('A9').style.font.size, 16);
+assert.equal(JSON.stringify(highlightedWorksheet.getCell(10, 1).style), untouchedRowStyle);
 
 assert.equal(isSpecialEducationTeacher({ jobTitle: '特教教師' }), true);
 assert.equal(isSpecialEducationTeacher({ subject: '特教' }), true);

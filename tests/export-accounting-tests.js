@@ -23,6 +23,7 @@ assert.equal(
 assert.match(exportAccountingSource, /alignment\.shrinkToFit = false/, '一般會計工作表備註不應無限制縮小字型');
 assert.match(exportAccountingSource, /alignment\.wrapText = true/, '一般會計工作表備註應允許換行');
 assert.match(exportAccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '一般會計工作表備註字級不可低於12pt');
+assert.match(exportAccountingSource, /font\.color = \{ argb: 'FFFF0000' \}/, '自費超扣列應以紅字標示');
 assert.match(period8AccountingSource, /alignment\.shrinkToFit = false/, '第八節工作表備註不應無限制縮小字型');
 assert.match(period8AccountingSource, /alignment\.wrapText = true/, '第八節工作表備註應允許換行');
 assert.match(period8AccountingSource, /font\.size = Number\.isFinite\(fontSize\) \? Math\.max\(fontSize, 12\) : 12/, '第八節工作表備註字級不可低於12pt');
@@ -1026,6 +1027,96 @@ assert.ok(configuredA.rows.some(row => row.name === 'Cover' && row.expensePlan =
 assert.ok(configuredB.rows.some(row => row.name === 'Cover' && row.expensePlan === '計畫B'));
 assert.equal(configured.blocking.length, 0);
 assert.equal(configured.summary.some(item => item.key === 'overtime'), false, 'split export must not include the aggregate overtime summary');
+
+const planNoteIsolation = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportStartDate: '2026-09-01',
+  reportEndDate: '2026-09-30',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-09-01', end: '2026-09-30' } },
+  teachers: [
+    {
+      email: 'chen@x', name: '陳柏宏', baseHours: 0,
+      expensePlan: JSON.stringify([
+        { day: 3, period: 1, className: '無人機', source: '無人機' },
+        { day: 3, period: 2, className: '國教班', source: '國教' }
+      ])
+    },
+    { email: 'cover@x', name: '代課教師', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'chen@x', dayOfWeek: 3, period: 1, className: '無人機', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'chen@x', dayOfWeek: 3, period: 2, className: '國教班', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    {
+      id: 'drone-leave', date: '2026-09-16', period: 1, className: '無人機',
+      type: 'substitution', originalTeacherEmail: 'chen@x', actualTeacherEmail: 'cover@x',
+      subFee: '公費代課', reason: '公假', status: 'approved'
+    },
+    {
+      id: 'national-leave', date: '2026-09-16', period: 2, periodCount: 2, className: '國教班',
+      type: 'substitution', originalTeacherEmail: 'chen@x', actualTeacherEmail: 'cover@x',
+      subFee: '自費代課', reason: '事假', status: 'approved'
+    }
+  ]
+});
+const dronePlanNote = planNoteIsolation.overtimePlans.find(group => group.plan === '無人機')
+  .rows.find(row => row.name === '陳柏宏');
+const nationalPlanNote = planNoteIsolation.overtimePlans.find(group => group.plan === '國教')
+  .rows.find(row => row.name === '陳柏宏');
+assert.equal(dronePlanNote.note, '9/16公假扣1節', '無人機分表不可混入國教自費假別備註');
+assert.equal(nationalPlanNote.note, '9/16事假扣2節', '國教分表應保留自己的自費假別備註');
+
+const courseAdjustmentNoteExport = build([{
+  date: '2026-07-13', period: 1, className: '701', type: 'substitution',
+  originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
+  subFee: '公費代課', reason: '課務調整', status: 'approved'
+}], 0, schedules);
+const courseAdjustmentNoteRow = courseAdjustmentNoteExport.sheets.overtime.find(row => row.name === 'Billing');
+assert.equal(courseAdjustmentNoteRow.note, '7/13課務調整代課扣1節', '課務調整備註應明確寫出代課扣節數');
+
+const selfPaidOverdrawExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-01',
+  reportEndDate: '2026-07-31',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [
+    { email: 'overdraw@x', name: '超扣教師', baseHours: 0, expensePlan: '計畫A' },
+    { email: 'overdraw-cover@x', name: '超扣代課人', baseHours: 16 }
+  ],
+  allSchedules: [{
+    teacherEmail: 'overdraw@x', dayOfWeek: 1, period: 1,
+    className: '701', attr: '一般', specialTags: '超鐘點'
+  }],
+  monthlyReportRows: [{
+    email: 'overdraw@x', name: '超扣教師', expensePlan: '計畫A',
+    weeklyOvertime: 1, scheduledOvertime: 1,
+    expensePlanAllocations: [{
+      source: '計畫A', rawHours: 1, weeklyHours: 1,
+      grossHours: 1, deduction: 1, actualHours: 0
+    }]
+  }],
+  substitutionRecords: [
+    {
+      id: 'overdraw-a', date: '2026-07-06', period: 1, className: '701',
+      type: 'substitution', originalTeacherEmail: 'overdraw@x', actualTeacherEmail: 'overdraw-cover@x',
+      subFee: '自費代課', reason: '事假', status: 'approved'
+    },
+    {
+      id: 'overdraw-b', date: '2026-07-06', period: 1, className: '701',
+      type: 'substitution', originalTeacherEmail: 'overdraw@x', actualTeacherEmail: 'overdraw-cover@x',
+      subFee: '自費代課', reason: '事假', status: 'approved'
+    }
+  ]
+});
+const selfPaidOverdrawRow = selfPaidOverdrawExport.overtimePlans[0].rows.find(row => row.name === '超扣教師');
+assert.ok(selfPaidOverdrawRow, '自費超扣即使實得為零仍應保留摘要列');
+assert.equal(selfPaidOverdrawRow._selfPaidOverdrawn, true, '自費扣除超過可支用超鐘點應標記');
+assert.ok(selfPaidOverdrawExport.warnings.some(message => message.includes('超扣教師')
+  && message.includes('自費代課扣除2節') && message.includes('超過可扣超鐘點1節')),
+  '自費超扣應在匯出前提示核對');
 
 const scheduleFormatInput = Object.assign({}, configuredInput, {
   teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 0, expensePlan: JSON.stringify([

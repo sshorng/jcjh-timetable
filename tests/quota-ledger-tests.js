@@ -452,10 +452,12 @@ invigilation.personalizeValues({
 }, { noteRow: 48 }, '甲老師', 6, 1, 5);
 assert.equal(noteCell.style.font.size, 17, '第48列備註字型應稍微縮小');
 assert.equal(JSON.stringify(noteCell.style.border), noteBorderBefore, '第48列縮字不可改模板框線');
-assert.equal(labelCell.style.font.size, 14, '分發標籤字型應放大為 14pt');
+assert.equal(labelCell.style.font.size, 16, '教師標籤字型應放大為 16pt');
+assert.equal(labelCell.style.font.bold, true, '教師標籤應使用粗體');
+assert.equal(labelCell.style.font.underline, 'single', '教師標籤應加底線');
 assert.equal(JSON.stringify(labelCell.style.border), labelBorderBefore, '分發標籤放大不可改模板框線');
-assert.equal(headerFooter.oddHeader, '&L&14分發：甲老師', '列印頁首分發標籤應使用 14pt');
-assert.equal(headerFooter.evenHeader, '&L&14分發：甲老師', '偶數頁頁首分發標籤應使用 14pt');
+assert.equal(headerFooter.oddHeader, '&L&B&16&U教師：甲老師', '列印頁首教師標籤應醒目');
+assert.equal(headerFooter.evenHeader, '&L&B&16&U教師：甲老師', '偶數頁頁首教師標籤應醒目');
 
 const blankGridCells = new Map();
 const blankGridWorksheet = {
@@ -527,15 +529,20 @@ console.log('quota ledger tests PASS');
       { email: 'b@example.test', name: '乙老師', releasedSlots: 1 }
     ],
     ledgerRows,
+    includeCoveredTeacherPages: true,
     requireActivityHint: true
   });
   assert.equal(result.ok, true);
-  assert.equal(result.pageCount, 2);
-  assert.equal((generatedXml.match(/w:type="page"/g) || []).length, 1);
-  assert.equal((generatedXml.match(/<w:tbl>/g) || []).length, 2);
+  assert.equal(result.pageCount, 3);
+  assert.equal(result.dutyPageCount, 2);
+  assert.equal(result.coveredPageCount, 1);
+  assert.equal((generatedXml.match(/w:type="page"/g) || []).length, 2);
+  assert.equal((generatedXml.match(/<w:tbl>/g) || []).length, 3);
   assert.equal((generatedXml.match(/<w:sectPr/g) || []).length, 1);
   assert.match(generatedXml, /輪值：甲老師/);
   assert.match(generatedXml, /輪值：乙老師/);
+  assert.match(generatedXml, /被代課：帶隊老師/);
+  assert.match(generatedXml, /w:fill="D9D9D9"/);
   assert.doesNotMatch(generatedXml, /\{\{[A-Z0-9_]+\}\}/);
   console.log('quota ledger DOCX export test PASS');
 })().catch(function (error) {
