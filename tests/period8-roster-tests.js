@@ -15,6 +15,7 @@ const roster = window.DomainBilling.buildPeriod8ClassRoster({
   allSchedules: [
     { teacherEmail: 'owner@x', teacherName: '原任教師', dayOfWeek: 1, period: 8, className: '701', subject: '課輔' },
     { teacherEmail: 'owner@x', teacherName: '原任教師', dayOfWeek: 2, period: 8, className: '702', subject: '課輔' },
+    { teacherEmail: 'gift@x', teacherName: '英資教師', dayOfWeek: 5, period: 8, className: '英資701', subject: '課輔' },
     { teacherEmail: 'patrol@x', teacherName: '巡堂人員', dayOfWeek: 1, period: 8, className: '704', subject: '巡堂', attr: '巡堂' }
   ],
   substitutionRecords: [
@@ -31,6 +32,7 @@ const roster = window.DomainBilling.buildPeriod8ClassRoster({
   ],
   getTeacherNameByEmail: (email) => ({
     'owner@x': '原任教師',
+    'gift@x': '英資教師',
     'cover@x': '代課教師',
     'exchange@x': '調入教師'
   }[email] || email),
@@ -38,10 +40,11 @@ const roster = window.DomainBilling.buildPeriod8ClassRoster({
 });
 
 assert.deepEqual(roster.dates, ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25']);
-assert.deepEqual(roster.rows.map((row) => row.className), ['701', '702', '703', '704', '英資701']);
+assert.deepEqual(roster.rows.map((row) => row.className), ['701', '702', '英資701']);
 assert.equal(roster.rows.find((row) => row.className === '701').cells['2026-09-21'][0].teacherName, '代課教師');
 assert.equal(roster.rows.find((row) => row.className === '701').cells['2026-09-21'][0].status, 'substitution');
 assert.equal(roster.rows.find((row) => row.className === '702').cells['2026-09-22'][0].teacherName, '調入教師');
 assert.equal(roster.rows.find((row) => row.className === '702').cells['2026-09-22'][0].status, 'exchange');
-assert.deepEqual(roster.rows.find((row) => row.className === '704').cells, {});
+assert.equal(roster.rows.some((row) => row.className === '703'), false);
+assert.equal(roster.rows.some((row) => row.className === '704'), false);
 console.log('period8 roster tests PASS');

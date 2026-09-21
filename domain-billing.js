@@ -1199,6 +1199,11 @@ window.DomainBilling = (function () {
         });
       });
     });
+    classNames = classNames.filter(function (className) {
+      return Object.keys(classRows[className].cells).some(function (date) {
+        return classRows[className].cells[date].length > 0;
+      });
+    });
     return {
       dates: dates,
       rows: classNames.map(function (className) { return classRows[className]; })
