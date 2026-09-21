@@ -939,7 +939,7 @@
                                      <span v-if="entry.restriction === 'restricted' || hasScheduleSpecialTag(entry, '綁課')" class="cell-badge tag-restricted">綁課</span>
                                       <span v-if="hasScheduleSpecialTag(entry, '預排')" class="cell-badge tag-preplanned">預排</span>
                                      <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
-                                      <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="cell-badge tag-warning">{{ getClassAwayEventName(selectedClass, dateStr, period) || '空堂事件' }}</span>
+                                       <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="away-class-badge">{{ getClassAwayEventName(selectedClass, dateStr, period) || '空堂事件' }}</span>
                                   </div>
                                   <div class="cell-class-name">
                                     {{ getRealTeacherName(entry) }}
@@ -1707,12 +1707,12 @@
                <div v-else class="period8-table-wrap">
                  <div class="period8-grid">
                    <div class="period8-grid-header period8-class-header">班級</div>
-                    <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="'p8-head-' + dateStr" :class="['period8-grid-header', 'period8-day-' + dateIndex]">
+                    <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="'p8-head-' + dateStr" class="period8-grid-header">
                      {{ formatDateMMDD(dateStr) }}<br><span>{{ ['一','二','三','四','五'][dateIndex] }}</span>
                    </div>
                    <template v-for="row in period8RosterRows" :key="'p8-row-' + row.className">
                      <div class="period8-class-label">{{ row.className }}</div>
-                      <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="row.className + '-' + dateStr" :class="['period8-grid-cell', 'period8-day-' + dateIndex]">
+                      <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="row.className + '-' + dateStr" class="period8-grid-cell">
                        <template v-if="period8CellsFor(row, dateStr).length">
                          <button
                            v-for="cell in period8CellsFor(row, dateStr)"
@@ -1724,12 +1724,13 @@
                             :title="cell.status === 'away' ? (cell.awayName || '空堂事件') : (cell.subject ? (cell.teacherName + '／' + cell.subject) : cell.teacherName)"
                             @click="handlePeriod8CellClick(cell)"
                          >
-                           <strong>{{ cell.teacherName }}</strong>
-                           <small v-if="cell.subject">{{ cell.subject }}</small>
-                            <span v-if="period8StatusLabel(cell)" class="period8-status-badge">{{ period8StatusLabel(cell) }}</span>
+                            <strong>{{ cell.teacherName }}</strong>
+                            <span v-if="cell.subject" class="subject-color-tag period8-subject" :style="getSubjectStyle(cell.subject)">{{ cell.subject }}</span>
+                            <span v-if="cell.status === 'away'" class="away-class-badge">{{ period8StatusLabel(cell) }}</span>
+                            <span v-else-if="period8StatusLabel(cell)" class="period8-status-badge">{{ period8StatusLabel(cell) }}</span>
                          </button>
                        </template>
-                       <span v-else class="period8-empty-cell">－</span>
+                        <span v-else class="period8-empty-cell"></span>
                      </div>
                    </template>
                  </div>
