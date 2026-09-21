@@ -271,6 +271,16 @@
     for (var col = 1; col <= lastColumn; col += 1) sheet.getCell(rowNumber, col).value = null;
   }
 
+  function applyNoteColumnFit(sheet, noteColumn, startRow, endRow) {
+    for (var row = startRow; row <= endRow; row += 1) {
+      var cell = sheet.getCell(row, noteColumn);
+      var alignment = cell.alignment ? clone(cell.alignment) : {};
+      alignment.wrapText = false;
+      alignment.shrinkToFit = true;
+      cell.alignment = alignment;
+    }
+  }
+
   function prepareRows(sheet, rowCount, lastColumn) {
     var totalRow = TEMPLATE_TOTAL_ROW;
     var capacity = totalRow - DATA_START_ROW;
@@ -353,6 +363,7 @@
         + columnLetter(columns.amountColumn) + (totalRow - 1) + ')',
       data.summary.amount);
     sheet.getCell(totalRow, columns.noteColumn).value = '';
+    applyNoteColumnFit(sheet, columns.noteColumn, DATA_START_ROW, totalRow);
     if (workbook.calcProperties) {
       workbook.calcProperties.fullCalcOnLoad = true;
       workbook.calcProperties.forceFullCalc = true;

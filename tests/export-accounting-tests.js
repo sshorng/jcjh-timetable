@@ -14,6 +14,16 @@ require('../domain-billing.js');
 require('../export-accounting.js');
 
 const exportAccountingSource = fs.readFileSync(require.resolve('../export-accounting.js'), 'utf8');
+const period8AccountingSource = fs.readFileSync(require.resolve('../export-period8-accounting.js'), 'utf8');
+assert.equal(
+  window.ExportAccounting.cleanAccountingText('1、9/22代余明錦休假1節\n2、[行政代申請：洪筱仙 代 余明錦] 愛知名古屋亞洲運動會'),
+  '1、9/22代余明錦休假1節',
+  '會計備註應移除行政代申請標記與其後活動文字'
+);
+assert.match(exportAccountingSource, /alignment\.shrinkToFit = true/, '一般會計工作表備註應啟用縮小字型');
+assert.match(exportAccountingSource, /alignment\.wrapText = false/, '一般會計工作表備註不應換行');
+assert.match(period8AccountingSource, /alignment\.shrinkToFit = true/, '第八節工作表備註應啟用縮小字型');
+assert.match(period8AccountingSource, /alignment\.wrapText = false/, '第八節工作表備註不應換行');
 assert.match(exportAccountingSource, /cloneWorksheet\(overtimeTemplate, workbook, '__substitute_attribute_'/,
   '小鐘點工作表應複製一般超鐘點工作表版型');
 assert.match(exportAccountingSource, /每週代課/,

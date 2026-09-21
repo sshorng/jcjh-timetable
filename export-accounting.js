@@ -41,6 +41,7 @@
       dataStart: 3,
       templateTotalRow: 15,
       columns: 15,
+      noteColumn: 15,
       kind: 'summary'
     },
     adjunct: {
@@ -52,6 +53,7 @@
       dataStart: 3,
       templateTotalRow: 10,
       columns: 14,
+      noteColumn: 14,
       kind: 'summary'
     },
     teachingSupport: {
@@ -62,6 +64,7 @@
       dataStart: 3,
       templateTotalRow: 10,
       columns: 14,
+      noteColumn: 14,
       kind: 'summary'
     },
     publicSub: {
@@ -73,6 +76,7 @@
       dataStart: 3,
       templateTotalRow: 14,
       columns: 15,
+      noteColumn: 9,
       kind: 'public'
     },
     publicSubAdjustment: {
@@ -84,6 +88,7 @@
       dataStart: 3,
       templateTotalRow: 14,
       columns: 15,
+      noteColumn: 9,
       kind: 'public'
     },
     substituteAttribute: {
@@ -94,6 +99,7 @@
       dataStart: 3,
       templateTotalRow: 15,
       columns: 15,
+      noteColumn: 15,
       kind: 'summary'
     },
     selfSub: {
@@ -105,6 +111,7 @@
       dataStart: 3,
       templateTotalRow: 14,
       columns: 10,
+      noteColumn: 9,
       kind: 'line'
     },
     mentor: {
@@ -116,6 +123,7 @@
       dataStart: 3,
       templateTotalRow: 11,
       columns: 10,
+      noteColumn: 9,
       kind: 'line'
     }
   };
@@ -1027,6 +1035,9 @@
           .replace(/[ \t]{2,}/g, ' ')
           .replace(/[ \t]*([；;、,，])[ \t]*/g, '$1')
           .trim();
+      })
+      .filter(function (line) {
+        return !/\[行政代申請[^\]]*\]/.test(line);
       })
       .filter(Boolean)
       .join('\n')
@@ -2319,6 +2330,23 @@
     });
   }
 
+  function applyNoteCellFit(cell) {
+    var alignment = cell && cell.alignment ? clone(cell.alignment) : {};
+    alignment.wrapText = false;
+    alignment.shrinkToFit = true;
+    cell.alignment = alignment;
+  }
+
+  function applyNoteColumnFit(sheet, config, totalRow) {
+    if (!sheet || !config || !config.noteColumn) return;
+    for (var row = config.dataStart; row <= totalRow; row += 1) {
+      applyNoteCellFit(sheet.getCell(row, config.noteColumn));
+    }
+    if (config.kind === 'summary') {
+      applyNoteCellFit(sheet.getCell(totalRow + 1, 2));
+    }
+  }
+
   function applyMoneyNumberFormat(sheet, columns, start, end) {
     for (var row = start; row <= end; row += 1) {
       columns.forEach(function (column) {
@@ -2409,6 +2437,7 @@
     if (isNetAmountSummary(config)) moneyColumns.push(13);
     applyMoneyNumberFormat(sheet, moneyColumns, config.dataStart, totalRow);
     mergeSummaryNoteRow(sheet, config, totalRow);
+    applyNoteColumnFit(sheet, config, totalRow);
     return totalRow;
   }
 
@@ -2431,6 +2460,7 @@
     sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'hours'));
     sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end, sumRows(rows, 'amount'));
     applyMoneyNumberFormat(sheet, [5, 6], config.dataStart, totalRow);
+    applyNoteColumnFit(sheet, config, totalRow);
     return totalRow;
   }
 
@@ -2444,6 +2474,7 @@
     sheet.getCell(totalRow, 6).value = sumFormula('F', config.dataStart, end, sumRows(rows, 'count'));
     sheet.getCell(totalRow, 8).value = sumFormula('H', config.dataStart, end, sumRows(rows, 'amount'));
     applyMoneyNumberFormat(sheet, [7, 8], config.dataStart, totalRow);
+    applyNoteColumnFit(sheet, config, totalRow);
     return totalRow;
   }
 
@@ -2691,6 +2722,7 @@
     monthLabelForPeriod: monthLabelForPeriod,
     titleFromTemplate: titleFromTemplate,
     titleFor: titleFor,
+    cleanAccountingText: cleanAccountingText,
     appendMergedPlanNotes: appendMergedPlanNotes,
     buildExportData: buildExportData,
     exportWorkbook: exportWorkbook
