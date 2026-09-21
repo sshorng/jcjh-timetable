@@ -33,6 +33,12 @@ assert.match(
   /orderedSheets = planSheets\.map[\s\S]*?\.concat\(substituteAttributeSheets\.map[\s\S]*?\.concat\(teachingSupportSheets\.map/,
   '工作表順序應為小鐘點後接教支人員，再接一般兼課'
 );
+assert.match(exportAccountingSource, /applyActualAmountFormulas\(sheet, config, rows\)/,
+  '兼課與教支工作表應套用實際金額公式');
+assert.match(exportAccountingSource, /formula: 'K' \+ rowNumber \+ '-L' \+ rowNumber/,
+  '實際金額公式應由程式依資料列固定產生');
+assert.match(exportAccountingSource, /sumFormula\('M', config\.dataStart, end, sumRows\(rows, 'amount'\)\)/,
+  '兼課與教支合計列應加總實際金額');
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
 assert.equal(

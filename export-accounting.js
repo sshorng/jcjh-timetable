@@ -2141,8 +2141,13 @@
       var baseVisualLines = lines.reduce(function (sum, line) {
         return sum + Math.max(1, Math.ceil(textDisplayWidth(line) / charsPerLine));
       }, 0);
-      // 備註欄維持範本字級，內容較多時用換行與列高承載，避免短內容被連帶縮小。
-      var lineHeight = Math.max(18, baseFontSize * 1.5);
+      // 長備註稍微縮小字級，讓換行內容在範本列高內完整顯示；短備註維持原字級。
+      var noteFontSize = baseVisualLines > 1
+        ? Math.max(10, baseFontSize - 2) : baseFontSize;
+      if (noteFontSize < baseFontSize) {
+        cell.font = Object.assign({}, cell.font || {}, { size: noteFontSize });
+      }
+      var lineHeight = Math.max(18, noteFontSize * 1.5);
       var targetHeight = Math.min(409.5, Math.max(28, baseVisualLines * lineHeight + 8));
       var targetRow = sheet.getRow(rowNumber);
       targetRow.height = Math.max(Number(targetRow.height) || 15, targetHeight);
@@ -2160,6 +2165,21 @@
       formula: end >= start ? 'SUM(' + column + start + ':' + column + end + ')' : '0',
       result: Number(result) || 0
     };
+  }
+
+  function isNetAmountSummary(config) {
+    return !!config && (config.key === 'adjunct' || config.key === 'teachingSupport');
+  }
+
+  function applyActualAmountFormulas(sheet, config, rows) {
+    if (!isNetAmountSummary(config)) return;
+    (rows || []).forEach(function (row, index) {
+      var rowNumber = config.dataStart + index;
+      sheet.getCell(rowNumber, 13).value = {
+        formula: 'K' + rowNumber + '-L' + rowNumber,
+        result: Number(row && row.amount) || 0
+      };
+    });
   }
 
   function mergeCellRange(sheet, range) {
@@ -2198,6 +2218,7 @@
       return [row.serial, row.title, row.name, row.weeklyOvertime, row.schedule, row.weeks === '' ? null : row.weeks, row.grossHours, row.deduction, row.actualHours, row.rate, row.amount, null, null, row.note];
     });
     writeRows(sheet, config.dataStart, values);
+    applyActualAmountFormulas(sheet, config, rows);
     applyNoteLayout(sheet, config, config.dataStart, rows);
     var end = config.dataStart + rows.length - 1;
     if (config.key === 'overtime') {
@@ -2215,7 +2236,12 @@
       sheet.getCell(totalRow, 9).value = sumFormula('I', config.dataStart, end, sumRows(rows, 'actualHours'));
       sheet.getCell(totalRow, 11).value = sumFormula('K', config.dataStart, end, sumRows(rows, 'amount'));
     }
-    applyMoneyNumberFormat(sheet, [10, 11], config.dataStart, totalRow);
+    if (isNetAmountSummary(config)) {
+      sheet.getCell(totalRow, 13).value = sumFormula('M', config.dataStart, end, sumRows(rows, 'amount'));
+    }
+    var moneyColumns = [10, 11];
+    if (isNetAmountSummary(config)) moneyColumns.push(13);
+    applyMoneyNumberFormat(sheet, moneyColumns, config.dataStart, totalRow);
     mergeSummaryNoteRow(sheet, config, totalRow);
     return totalRow;
   }
