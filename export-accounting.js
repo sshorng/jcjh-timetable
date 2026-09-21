@@ -370,7 +370,6 @@
     var text = normalizeExpensePlan(value);
     if (!text) return { mode: 'empty', slots: [], legacySource: '', invalid: false, invalidCount: 0 };
     if (text.charAt(0) !== '[') return { mode: 'legacy', slots: [], legacySource: text, invalid: false, invalidCount: 0 };
-    if (/^\[[^\]]+\]\s*\S/.test(text)) return { mode: 'legacy', slots: [], legacySource: text, invalid: false, invalidCount: 0 };
     try {
       var raw = JSON.parse(text);
       if (!Array.isArray(raw)) throw new Error('not array');
@@ -386,6 +385,7 @@
       });
       return { mode: 'slots', slots: slots, legacySource: '', invalid: slots.length !== raw.length, invalidCount: raw.length - slots.length };
     } catch (e) {
+      if (/^\[[^\]]+\]\s*\S/.test(text)) return { mode: 'legacy', slots: [], legacySource: text, invalid: false, invalidCount: 0 };
       return { mode: 'invalid', slots: [], legacySource: '', invalid: true, invalidCount: 1 };
     }
   }

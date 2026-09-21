@@ -80,6 +80,33 @@ assert.equal(window.FieldMap.parseExpensePlan('[公代]公費代課鐘點費').m
   '簡稱／全稱格式不可被誤判為課格 JSON');
 assert.equal(window.FieldMap.formatExpensePlanSummary('[公代]公費代課鐘點費'), '公代',
   '網頁計畫摘要應只顯示簡稱');
+const slotPlanWithBracket = JSON.stringify([{
+  day: 1, period: 1, className: '9英黃B', source: '[英資]英文資優'
+}]);
+assert.equal(window.FieldMap.parseExpensePlan(slotPlanWithBracket).mode, 'slots',
+  '課格 JSON 內含中括號計畫名稱時仍應解析為課格配置');
+assert.deepEqual(window.FieldMap.expensePlanSources(slotPlanWithBracket), ['英資'],
+  '課格 JSON 的計畫摘要應取簡稱，不應顯示 JSON 內容');
+const jsonPlanPreview = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { period: period },
+  teachers: [{ email: 'json-plan@x', name: 'JSON計畫', baseHours: 0, expensePlan: slotPlanWithBracket }],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [{
+    email: 'json-plan@x', name: 'JSON計畫', expensePlan: slotPlanWithBracket,
+    weeklyOvertime: 1, scheduledOvertime: 1,
+    expensePlanAllocations: [{
+      source: '[英資]英文資優', rawHours: 1, weeklyHours: 1,
+      grossHours: 1, deduction: 0, actualHours: 1
+    }]
+  }]
+});
+assert.equal(jsonPlanPreview.summary.some(item => item.label === '超鐘點-英資'), true,
+  '會計預覽應以計畫簡稱建立摘要');
+assert.equal(jsonPlanPreview.summary.some(item => item.label.includes('{"day"')), false,
+  '會計預覽不可把課格 JSON 當成計畫名稱');
 assert.equal(
   window.ExportAccounting.titleFromTemplate(
     '[[計畫]]',

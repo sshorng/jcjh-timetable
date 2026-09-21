@@ -405,12 +405,12 @@ window.FieldMap = (function () {
     if (text.charAt(0) !== '[') {
       return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
     }
-    if (/^\[[^\]]+\]\s*\S/.test(text)) {
-      return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
-    }
     try {
       raw = JSON.parse(text);
     } catch (e) {
+      if (/^\[[^\]]+\]\s*\S/.test(text)) {
+        return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
+      }
       return { mode: 'invalid', slots: [], legacySource: '', invalid: true, invalidCount: 1 };
     }
     if (!Array.isArray(raw)) {
