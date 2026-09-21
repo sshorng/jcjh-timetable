@@ -22,6 +22,7 @@ assert.strictEqual(resolvePublicFile('/app.js?v=security1'), path.join(root, 'ap
 assert.strictEqual(resolvePublicFile('/code.gs'), null);
 assert.strictEqual(resolvePublicFile('/docs/A-%E7%B3%BB%E7%B5%B1%E4%BB%8B%E7%B4%B9.html'), null);
 assert.strictEqual(resolvePublicFile('/templates/invigilation-template.xlsx'), path.join(root, 'templates', 'invigilation-template.xlsx'));
+assert.strictEqual(resolvePublicFile('/templates/period8-accounting-template.xlsx'), path.join(root, 'templates', 'period8-accounting-template.xlsx'));
 assert.strictEqual(resolvePublicFile('/export-invigilation-recovered.js?v=contract1'), path.join(root, 'export-invigilation-recovered.js'));
 assert.strictEqual(resolvePublicFile('/templates/test_out.xlsx'), null);
 assert.strictEqual(resolvePublicFile('/%2e%2e%2fcode.gs'), null);

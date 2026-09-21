@@ -231,6 +231,7 @@ window.DomainBilling = (function () {
   }
 
   function isPatrolScheduleSlot(schedule) {
+    if (schedule && schedule.isPatrol === true) return true;
     var attr = String(schedule && (schedule.attr || schedule['課堂屬性']) || '').trim();
     if (attr.indexOf('巡堂') >= 0) return true;
     var className = String(schedule && (schedule.className || schedule['班級']) || '').trim();
@@ -411,7 +412,9 @@ window.DomainBilling = (function () {
     return Object.assign({}, setting, {
       hours: slots.length,
       slots: slots,
-      slotKeys: slots.map(fixedOvertimeSlotKey),
+      slotKeys: slots.map(function (slot) {
+        return fixedOvertimeSlotKey(slot.dayOfWeek, slot.period);
+      }),
       slotsText: slots.map(function (slot) {
         var period = Number(slot.period);
         var day = ['', '一', '二', '三', '四', '五'][Number(slot.dayOfWeek)] || '';
@@ -1033,6 +1036,172 @@ window.DomainBilling = (function () {
     return good.indexOf(status) >= 0;
   }
 
+  function period8ClassNames(raw) {
+    if (window.DateUtils && typeof window.DateUtils.parseCombinedClasses === 'function') {
+      return window.DateUtils.parseCombinedClasses(raw);
+    }
+    return String(raw == null ? '' : raw).split(/[、,，/／|｜\s]+/)
+      .map(function (value) { return String(value || '').trim(); })
+      .filter(Boolean);
+  }
+
+  function period8ActualEmail(record) {
+    return String(record && (
+      record.actualTeacherEmail || record['實際授課教師Email']
+      || record['代課教師Email'] || record.targetTeacherEmail || record['受邀人Email']
+    ) || '').trim();
+  }
+
+  function period8ActualName(record, getTeacherNameByEmail) {
+    var name = String(record && (
+      record.actualTeacherName || record['實際授課教師姓名']
+      || record['代課教師姓名'] || record.targetTeacherName || record['受邀人姓名']
+    ) || '').trim();
+    if (name) return name;
+    var email = period8ActualEmail(record);
+    return email && typeof getTeacherNameByEmail === 'function'
+      ? String(getTeacherNameByEmail(email) || '').trim() : '';
+  }
+
+  function period8DayOfWeek(dateStr) {
+    var date = new Date(String(dateStr || '').replace(/-/g, '/') + ' 00:00:00');
+    return isNaN(date.getTime()) ? 0 : date.getDay();
+  }
+
+  function period8SortClassNames(left, right) {
+    var a = String(left || '').trim();
+    var b = String(right || '').trim();
+    var aNumber = a.match(/^\d+/);
+    var bNumber = b.match(/^\d+/);
+    if (!!aNumber !== !!bNumber) return aNumber ? -1 : 1;
+    if (aNumber && bNumber && Number(aNumber[0]) !== Number(bNumber[0])) {
+      return Number(aNumber[0]) - Number(bNumber[0]);
+    }
+    return a.localeCompare(b, 'zh-Hant', { numeric: true });
+  }
+
+  function isPeriod8PatrolLabel(value) {
+    return String(value || '').trim().indexOf('巡堂') >= 0;
+  }
+
+  /**
+   * 第八節班級週表資料：每格保留原任與實際授課教師，供後台操作與顯示。
+   * 核銷仍以 buildPeriod8Payout 為準；本函式只負責班級視角，不計巡堂。
+   */
+  function buildPeriod8ClassRoster(opts) {
+    opts = opts || {};
+    var dates = (Array.isArray(opts.dates) ? opts.dates : listWeekdaysInRange(opts.reportStartDate, opts.reportEndDate))
+      .map(normalizeDateKey)
+      .filter(Boolean);
+    var classRows = {};
+    var classNames = [];
+    var schedules = opts.allSchedules || [];
+    var substitutionRecords = opts.substitutionRecords || [];
+    var getTeacherNameByEmail = opts.getTeacherNameByEmail || function (email) { return email || ''; };
+    var classAwayEvents = opts.classAwayEvents || [];
+    var classAwayApi = window.DomainClassAway;
+    var isSingleWeek = typeof opts.isSingleWeek === 'function' ? opts.isSingleWeek : function () { return true; };
+    var recordBySlot = {};
+
+    function ensureClassRow(className) {
+      var key = String(className || '').trim();
+      if (!key) return null;
+      if (!classRows[key]) {
+        classRows[key] = { className: key, cells: {} };
+        classNames.push(key);
+      }
+      return classRows[key];
+    }
+
+    (opts.classNames || []).forEach(function (value) {
+      period8ClassNames(value).forEach(function (className) {
+        if (!isPeriod8PatrolLabel(className)) ensureClassRow(className);
+      });
+    });
+
+    substitutionRecords.forEach(function (record) {
+      var date = recordDate(record);
+      var type = recordType(record);
+      if (!date || !isActiveSubstitutionRecord(record) || recordPeriod(record) !== 8) return;
+      if (type && type !== 'substitution' && type !== '代課'
+          && type !== 'exchange' && type !== '對調') return;
+      period8ClassNames(record && record.className).forEach(function (className) {
+        recordBySlot[date + '|' + className] = record;
+      });
+    });
+
+    schedules.forEach(function (schedule) {
+      if (schedulePeriod(schedule) !== 8 || !schedule || isPatrolScheduleSlot(schedule)) return;
+      var teacherEmail = String(schedule.teacherEmail || schedule['教師Email'] || '').trim();
+      var classList = period8ClassNames(schedule.className);
+      var day = scheduleDay(schedule);
+      if (!teacherEmail || !classList.length || day < 1 || day > 5) return;
+      dates.forEach(function (date) {
+        if (period8DayOfWeek(date) !== day || !isScheduleActiveOnDate(schedule, date)) return;
+        var attr = String(schedule.attr || schedule['課堂屬性'] || '').trim();
+        if (attr === '單週' && !isSingleWeek(date)) return;
+        if (attr === '雙週' && isSingleWeek(date)) return;
+        classList.forEach(function (className) {
+          var row = ensureClassRow(className);
+          if (!row.cells[date]) row.cells[date] = [];
+          var record = recordBySlot[date + '|' + className] || null;
+          var originalName = String(schedule.teacherName || schedule['教師姓名'] || '').trim()
+            || String(getTeacherNameByEmail(teacherEmail) || '').trim() || teacherEmail;
+          var actualEmail = record ? period8ActualEmail(record) : teacherEmail;
+          var actualName = record ? period8ActualName(record, getTeacherNameByEmail) : '';
+          var status = 'own';
+          var teacherName = actualName || originalName;
+          var away = classAwayApi && typeof classAwayApi.isClassAwayOnDate === 'function'
+            && classAwayApi.isClassAwayOnDate(className, date, classAwayEvents, opts.semesterEndDate || '', 8);
+          if (away) {
+            status = 'away';
+            actualEmail = '';
+            teacherName = originalName;
+          } else if (record) {
+            if (isCombinedReturnRecord(record)) status = 'combined_return';
+            else if (recordType(record) === 'exchange' || recordType(record) === '對調') status = 'exchange';
+            else status = isTimetableOnlyRecord(record) ? 'timetable_only' : 'substitution';
+            if (!actualEmail && !actualName) teacherName = '併班上課';
+          }
+          var assignment = {
+            date: date,
+            dayOfWeek: period8DayOfWeek(date),
+            period: 8,
+            className: className,
+            subject: String((record && record.subject) || schedule.subject || '').trim(),
+            originalTeacherEmail: teacherEmail,
+            originalTeacherName: originalName,
+            teacherEmail: actualEmail || teacherEmail,
+            teacherName: teacherName,
+            status: status,
+            record: away ? null : record,
+            schedule: schedule
+          };
+          var duplicate = row.cells[date].some(function (item) {
+            return String(item.teacherEmail || '').toLowerCase() === String(assignment.teacherEmail || '').toLowerCase()
+              && item.status === assignment.status
+              && item.subject === assignment.subject;
+          });
+          if (!duplicate) row.cells[date].push(assignment);
+        });
+      });
+    });
+
+    classNames.sort(period8SortClassNames);
+    classNames.forEach(function (className) {
+      var cells = classRows[className].cells;
+      Object.keys(cells).forEach(function (date) {
+        cells[date].sort(function (a, b) {
+          return String(a.teacherName || '').localeCompare(String(b.teacherName || ''), 'zh-Hant');
+        });
+      });
+    });
+    return {
+      dates: dates,
+      rows: classNames.map(function (className) { return classRows[className]; })
+    };
+  }
+
   /**
    * 是否計入「每週排課鐘點」
    * - 節次：早自習 0、1–7 或 午休 45
@@ -1443,7 +1612,7 @@ window.DomainBilling = (function () {
     var period8SchedulesByTeacherDay = {};
     var teachersWithP8 = {};
     allSchedules.forEach(function (s) {
-      if (parseInt(s.period, 10) !== 8 || !s.teacherEmail) return;
+      if (parseInt(s.period, 10) !== 8 || !s.teacherEmail || isPatrolScheduleSlot(s)) return;
       var em = emailKey(s.teacherEmail);
       var day = parseInt(s.dayOfWeek, 10);
       var key = em + '|' + day;
@@ -2212,6 +2381,7 @@ window.DomainBilling = (function () {
     buildOvertimeExpenseBuckets: buildOvertimeExpenseBuckets,
     applyOvertimeExpenseDeductions: applyOvertimeExpenseDeductions,
     buildPeriod8Payout: buildPeriod8Payout,
+    buildPeriod8ClassRoster: buildPeriod8ClassRoster,
     buildMonthlyReportRows: buildMonthlyReportRows,
     toExcelRows: toExcelRows,
     sumMonthlyReportRows: sumMonthlyReportRows,

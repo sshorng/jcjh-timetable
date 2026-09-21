@@ -1627,14 +1627,21 @@
           
           <!-- 後台管理子頁籤 -->
           <div style="display: flex; gap: 8px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 8px; flex-wrap: wrap;">
-            <button 
-              class="btn btn-pill" 
+            <button
+              class="btn btn-pill"
               :class="adminSubTab === 'billing' ? 'btn-primary' : 'btn-secondary'"
               @click="adminSubTab = 'billing'"
             >
               💰 鐘點結算
             </button>
-            <button 
+            <button
+              class="btn btn-pill"
+              :class="adminSubTab === 'period8' ? 'btn-primary' : 'btn-secondary'"
+              @click="adminSubTab = 'period8'"
+            >
+              🕗 第八節
+            </button>
+             <button
               class="btn btn-pill" 
               :class="adminSubTab === 'teachers' ? 'btn-primary' : 'btn-secondary'"
               @click="adminSubTab = 'teachers'"
@@ -1669,9 +1676,68 @@
             >
               📄 課表匯出
             </button>
-          </div>
+           </div>
 
-          <!-- 子分頁：課表匯出（共用日期） -->
+           <!-- 子分頁：第八節班級週表與核銷匯出 -->
+           <div v-if="adminSubTab === 'period8'" class="period8-admin-page">
+             <div class="card">
+               <div class="card-title card-title-between">
+                 <span>🕗 第八節班級課表</span>
+                 <button
+                   type="button"
+                   class="btn btn-primary btn-sm-pad"
+                   :disabled="period8Loading || period8ExportLoading"
+                   @click="exportPeriod8Accounting"
+                 >
+                   {{ period8ExportLoading ? '正在整理清冊…' : '匯出第八節核銷清冊' }}
+                 </button>
+               </div>
+               <div class="period8-toolbar">
+                 <button type="button" class="btn btn-secondary btn-week-round" @click="changePeriod8Week(-1)" title="上一週">◀</button>
+                 <div class="week-label">
+                   🗓️ {{ formatDateMMDD(period8WeekDates[0]) }} ~ {{ formatDateMMDD(period8WeekDates[4]) }}
+                   <span v-if="period8WeekNumber" class="text-primary-bold">（{{ period8WeekNumber }}）</span>
+                 </div>
+                 <button type="button" class="btn btn-secondary btn-week-round" @click="changePeriod8Week(1)" title="下一週">▶</button>
+                 <button type="button" class="btn btn-secondary btn-sm-78" @click="goToPeriod8ThisWeek">本週</button>
+                 <span class="period8-range-note">核銷區間：{{ reportStartDate }} ～ {{ reportEndDate }}，單價 NT$ 600／節</span>
+               </div>
+               <div v-if="period8Loading" class="billing-empty">正在載入第八節資料，請稍候…</div>
+               <div v-else-if="period8RosterRows.length === 0" class="billing-empty">目前沒有可顯示的班級第八節資料。</div>
+               <div v-else class="period8-table-wrap">
+                 <div class="period8-grid">
+                   <div class="period8-grid-header period8-class-header">班級</div>
+                   <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="'p8-head-' + dateStr" class="period8-grid-header">
+                     {{ formatDateMMDD(dateStr) }}<br><span>{{ ['一','二','三','四','五'][dateIndex] }}</span>
+                   </div>
+                   <template v-for="row in period8RosterRows" :key="'p8-row-' + row.className">
+                     <div class="period8-class-label">{{ row.className }}</div>
+                     <div v-for="dateStr in period8WeekDates" :key="row.className + '-' + dateStr" class="period8-grid-cell">
+                       <template v-if="period8CellsFor(row, dateStr).length">
+                         <button
+                           v-for="cell in period8CellsFor(row, dateStr)"
+                           :key="row.className + '-' + dateStr + '-' + cell.teacherEmail + '-' + cell.status"
+                           type="button"
+                           class="period8-cell-button"
+                           :class="'period8-status-' + cell.status"
+                           :title="cell.subject ? (cell.teacherName + '／' + cell.subject) : cell.teacherName"
+                           @click="handlePeriod8CellClick(cell)"
+                         >
+                           <strong>{{ cell.teacherName }}</strong>
+                           <small v-if="cell.subject">{{ cell.subject }}</small>
+                           <span v-if="period8StatusLabel(cell)" class="period8-status-badge">{{ period8StatusLabel(cell) }}</span>
+                         </button>
+                       </template>
+                       <span v-else class="period8-empty-cell">－</span>
+                     </div>
+                   </template>
+                 </div>
+               </div>
+               <div class="period8-help-text">點擊有教師的格子即可進入既有調代課媒合；已有異動的格子會開啟異動詳情。</div>
+             </div>
+           </div>
+
+           <!-- 子分頁：課表匯出（共用日期） -->
           <div v-if="adminSubTab === 'schoolExport'">
             <div class="card">
               <div class="card-title">
@@ -3615,7 +3681,7 @@
               <input type="text" class="form-input" placeholder="國文" v-model="teacherForm.subject">
             </div>
             <div class="form-group">
-               <label class="form-label">職務（含「導師」即列入代導費；「兼課」列入兼課教師鐘點；「共聘」使用預設）</label>
+                <label class="form-label">職務（含「導師」即列入代導費；「兼課」列入兼課教師鐘點；「教支人員＋本土語」依計畫分表；「共聘」使用預設）</label>
               <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師" v-model="teacherForm.jobTitle">
             </div>
              <div class="form-group">
@@ -4626,7 +4692,7 @@
         <script defer src="ui-approval.js?v=20260917-quota-ledger3"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
         <script defer src="app-shell-utils.js?v=20260917-quota-ledger3"></script>
-                   <script defer src="app.js?v=20260917-quota-ledger3"></script>
+       <script defer src="app.js?v=20260917-quota-ledger3"></script>
   <script>
     (function () {
       function loadScript(src) {
@@ -4643,7 +4709,8 @@
       var _exportP = null;
       var _xlsxP = null;
       var _billingP = null;
-      var _accountingP = null;
+       var _accountingP = null;
+       var _period8AccountingP = null;
       var _domainActivityP = null;
       var _uiAdminP = null;
       window.ensureDomainBilling = function () {
@@ -4655,6 +4722,11 @@
         if (window.ExportAccounting) return Promise.resolve();
               if (!_accountingP) _accountingP = loadScript('export-accounting.js?v=20260918-accounting2');
         return _accountingP;
+      };
+      window.ensureExportPeriod8Accounting = function () {
+        if (window.ExportPeriod8Accounting) return Promise.resolve();
+        if (!_period8AccountingP) _period8AccountingP = loadScript('export-period8-accounting.js?v=20260921-period8-1');
+        return _period8AccountingP;
       };
       /** 活動互代／額度／空堂任務邏輯（首屏不載） */
       window.ensureDomainActivityCover = function () {

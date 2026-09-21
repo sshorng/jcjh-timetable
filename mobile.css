@@ -6,6 +6,19 @@
    ========================================================= */
 
 @media (max-width: 768px) {
+  .period8-toolbar {
+    align-items: center;
+    gap: 6px;
+  }
+  .period8-range-note {
+    flex: 1 0 100%;
+    margin-left: 0;
+    font-size: 0.72rem;
+  }
+  .period8-grid {
+    min-width: 760px;
+  }
+
   .tt-display-switch {
     flex-shrink: 0;
   }

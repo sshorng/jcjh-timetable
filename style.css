@@ -2329,6 +2329,142 @@ body {
   border: 1px solid var(--border-color);
 }
 
+.period8-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.period8-range-note {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+.period8-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #fff;
+}
+.period8-grid {
+  display: grid;
+  grid-template-columns: minmax(78px, 0.6fr) repeat(5, minmax(145px, 1fr));
+  min-width: 820px;
+}
+.period8-grid-header,
+.period8-class-label,
+.period8-grid-cell {
+  min-height: 72px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.period8-grid-header {
+  min-height: 52px;
+  padding: 7px 5px;
+  background: #f1f5f9;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+.period8-grid-header span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+.period8-class-header,
+.period8-class-label {
+  border-left: 0;
+}
+.period8-class-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: #f8fafc;
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.period8-grid-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  background: #fff;
+}
+.period8-cell-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 60px;
+  padding: 6px 5px 5px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.25;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+.period8-cell-button:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  transform: translateY(-1px);
+}
+.period8-cell-button strong {
+  font-size: 0.86rem;
+}
+.period8-cell-button small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.period8-status-badge {
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+.period8-status-substitution { background: #fff7ed; border-color: #fdba74; }
+.period8-status-substitution .period8-status-badge { background: #ffedd5; color: #c2410c; }
+.period8-status-exchange { background: #eff6ff; border-color: #93c5fd; }
+.period8-status-exchange .period8-status-badge { background: #dbeafe; color: #1d4ed8; }
+.period8-status-away { background: #f8fafc; border-color: #cbd5e1; color: var(--text-secondary); }
+.period8-status-away .period8-status-badge { background: #e2e8f0; color: #475569; }
+.period8-status-combined_return { background: #f5f3ff; border-color: #c4b5fd; }
+.period8-status-combined_return .period8-status-badge { background: #ede9fe; color: #6d28d9; }
+.period8-status-timetable_only { background: #fefce8; border-color: #fde68a; }
+.period8-status-timetable_only .period8-status-badge { background: #fef3c7; color: #a16207; }
+.period8-empty-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+.period8-help-text {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
 .report-table-container {
   overflow-x: auto;
   border-radius: 12px;

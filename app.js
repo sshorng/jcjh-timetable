@@ -518,7 +518,7 @@ createApp({
     const TAB_LS_KEY = 'jcjh_active_tab';
     const ADMIN_SUBTAB_LS_KEY = 'jcjh_admin_sub_tab';
     const VALID_TABS = ['timetable', 'pending', 'records', 'class', 'admin'];
-     const VALID_ADMIN_SUBTABS = ['billing', 'teachers', 'classAway', 'schoolSwap', 'settings', 'schoolExport'];
+     const VALID_ADMIN_SUBTABS = ['billing', 'period8', 'teachers', 'classAway', 'schoolSwap', 'settings', 'schoolExport'];
     const readHashTab = () => {
       try {
         const h = String(window.location.hash || '').replace(/^#/, '').split('?')[0].trim().toLowerCase();
@@ -2032,6 +2032,7 @@ createApp({
     const classViewClassAwayEvents = ref([]);
     const classViewLoadedClass = ref('');
     const selectedClassDate = ref(toLocalDateStr(new Date()));
+    const period8WeekDate = ref(toLocalDateStr(new Date()));
     const selectedClassWeekDates = computed(() => {
       const dates = [];
       const current = new Date(selectedClassDate.value + 'T00:00:00');
@@ -2046,9 +2047,28 @@ createApp({
       }
       return dates;
     });
+    const period8WeekDates = computed(() => {
+      const dates = [];
+      const current = new Date(period8WeekDate.value + 'T00:00:00');
+      const day = current.getDay();
+      const mondayDiff = day === 0 ? -6 : 1 - day;
+      const monday = new Date(current);
+      monday.setDate(current.getDate() + mondayDiff);
+      for (let i = 0; i < 5; i += 1) {
+        const next = new Date(monday);
+        next.setDate(monday.getDate() + i);
+        dates.push(toLocalDateStr(next));
+      }
+      return dates;
+    });
     const classWeekNumber = computed(() => {
       if (!selectedClassWeekDates.value.length) return '';
       const wn = getWeekNumber(selectedClassWeekDates.value[0]);
+      return wn > 0 ? `第 ${wn} 週` : '';
+    });
+    const period8WeekNumber = computed(() => {
+      if (!period8WeekDates.value.length) return '';
+      const wn = getWeekNumber(period8WeekDates.value[0]);
       return wn > 0 ? `第 ${wn} 週` : '';
     });
 
@@ -3680,6 +3700,9 @@ createApp({
         : {}
     );
     const accountingExportLoading = ref(false);
+    const period8Ready = ref(false);
+    const period8Loading = ref(false);
+    const period8ExportLoading = ref(false);
     watch([reportStartDate, reportEndDate], ([start, end]) => {
       if (!accountingPeriodNavigation && /^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) {
         reportMonth.value = String(start).slice(0, 7);
@@ -3808,6 +3831,35 @@ createApp({
         return a.localeCompare(b, 'zh-Hant', { numeric: true });
       });
     });
+
+    const period8RosterData = computed(() => {
+      const dates = period8WeekDates.value || [];
+      if (!period8Ready.value || !window.DomainBilling
+          || typeof window.DomainBilling.buildPeriod8ClassRoster !== 'function') {
+        return { dates, rows: [] };
+      }
+      return window.DomainBilling.buildPeriod8ClassRoster({
+        dates,
+        classNames: classList.value,
+        allSchedules: allSchedules.value,
+        substitutionRecords: substitutionRecords.value,
+        classAwayEvents: classAwayEvents.value,
+        semesterEndDate: semesterEndDate.value,
+        getTeacherNameByEmail,
+        isSingleWeek
+      });
+    });
+    const period8RosterRows = computed(() => period8RosterData.value.rows || []);
+    const period8CellsFor = (row, dateStr) => (row && row.cells && row.cells[dateStr]) || [];
+    const period8StatusLabel = (cell) => {
+      if (!cell) return '';
+      if (cell.status === 'away') return '空堂';
+      if (cell.status === 'exchange') return '調課';
+      if (cell.status === 'combined_return') return '併班';
+      if (cell.status === 'timetable_only') return '僅課務';
+      if (cell.status === 'substitution') return '代課';
+      return '';
+    };
 
     const parseScheduleClasses = (raw) => (window.DateUtils && window.DateUtils.parseCombinedClasses)
       ? window.DateUtils.parseCombinedClasses(raw)
@@ -7193,6 +7245,16 @@ createApp({
       selectedClassDate.value = toLocalDateStr(d);
     };
 
+    const changePeriod8Week = (offset) => {
+      const d = new Date(period8WeekDate.value + 'T00:00:00');
+      d.setDate(d.getDate() + offset * 7);
+      period8WeekDate.value = toLocalDateStr(d);
+    };
+
+    const goToPeriod8ThisWeek = () => {
+      period8WeekDate.value = toLocalDateStr(new Date());
+    };
+
     const goToClassThisWeek = () => {
       selectedClassDate.value = toLocalDateStr(new Date());
     };
@@ -7256,6 +7318,22 @@ createApp({
       }, cls, day, period, entryOrIndex);
     };
 
+    const handlePeriod8CellClick = (cell) => {
+      const a = getTimetableApi();
+      if (!a || typeof a.handlePeriod8CellClick !== 'function') {
+        showToast('課表模組未載入', 'error');
+        return;
+      }
+      return a.handlePeriod8CellClick({
+        activeCell, inputRequestDate, matchMode, matchPreview, showMatchModal,
+        recommendedTeachers, matchSearchQuery, matchDisplayCount, fetchRecommendations,
+        detailRequest, detailSubRecord, showDetailModal, resolveDetailRequest,
+        getTeacherNameByEmail, isAdmin, user, showToast,
+        canOperateOnTeacherEmail: canOperateOnTeacherEmail,
+        ensureProxyTargetForTeacher: ensureProxyTargetForTeacher
+      }, cell);
+    };
+
     const handleCellClick = async (teacherEmail, dayOfWeek, period, dateStr) => {
       const a = getTimetableApi();
       if (!a) {
@@ -7310,6 +7388,25 @@ createApp({
       }
       if (!window.DomainBilling) throw new Error('大鐘點模組未載入');
     };
+    let period8ReadyPromise = null;
+    const ensurePeriod8Ready = async () => {
+      if (period8Ready.value && window.DomainBilling) return;
+      if (!period8ReadyPromise) {
+        period8Loading.value = true;
+        period8ReadyPromise = ensureBillingReady()
+          .then(() => { period8Ready.value = true; })
+          .finally(() => {
+            period8Loading.value = false;
+            period8ReadyPromise = null;
+          });
+      }
+      await period8ReadyPromise;
+    };
+    watch([activeTab, adminSubTab], ([tab, subTab]) => {
+      if (tab === 'admin' && subTab === 'period8') {
+        ensurePeriod8Ready().catch((error) => console.error('第八節模組載入失敗：', error));
+      }
+    }, { immediate: true });
     const calculateMonthlyReport = async () => {
       cancelScheduledMonthlyReport();
       const calculationKey = monthlyReportKey();
@@ -7479,6 +7576,71 @@ createApp({
         showToast('會計版 Excel 匯出失敗：' + (e.message || e), 'error');
       } finally {
         accountingExportLoading.value = false;
+      }
+    };
+
+    const exportPeriod8Accounting = async () => {
+      if (period8ExportLoading.value) return;
+      period8ExportLoading.value = true;
+      try {
+        const readyTasks = [ensurePeriod8Ready()];
+        if (typeof window.ensureExportPeriod8Accounting === 'function') {
+          readyTasks.push(window.ensureExportPeriod8Accounting());
+        }
+        if (typeof window.ensureExcelJS === 'function') readyTasks.push(window.ensureExcelJS());
+        await Promise.all(readyTasks);
+        if (!window.ExportPeriod8Accounting || !window.ExportPeriod8Accounting.buildExportData
+            || !window.ExportPeriod8Accounting.exportWorkbook) {
+          throw new Error('第八節核銷匯出模組未載入');
+        }
+        const start = String(reportStartDate.value || '').trim();
+        const end = String(reportEndDate.value || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) {
+          showToast('請先設定有效的第八節核銷起日與迄日。', 'warning');
+          return;
+        }
+        const exportOpts = {
+          reportMonth: String(reportMonth.value || start.slice(0, 7)),
+          reportStartDate: start,
+          reportEndDate: end,
+          teachers: teachersList.value,
+          allSchedules: allSchedules.value,
+          substitutionRecords: substitutionRecords.value,
+          classAwayEvents: classAwayEvents.value,
+          semesterEndDate: semesterEndDate.value,
+          getTeacherNameByEmail,
+          isSingleWeek
+        };
+        const preview = window.ExportPeriod8Accounting.buildExportData(exportOpts);
+        const warningLines = (preview.warnings || []).length
+          ? '\n\n匯出前提示：\n' + preview.warnings.map((warning) => '⚠️ ' + warning).join('\n')
+          : '';
+        const message = '將下載第八節鐘點費核銷清冊：\n\n結算區間：' + start + '～' + end
+          + '\n教師列數：' + preview.summary.count + ' 列（包含零節教師）'
+          + '\n應發節數：' + preview.summary.hours + ' 節'
+          + '\n應發金額：NT$ ' + Number(preview.summary.amount || 0).toLocaleString()
+          + '\n單價：NT$ 600／節' + warningLines;
+        if (!await showConfirm(message, '匯出第八節核銷清冊')) return;
+        const result = await window.ExportPeriod8Accounting.exportWorkbook(Object.assign({}, exportOpts, {
+          preparedData: preview
+        }));
+        const blob = new Blob([result.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = result.fileName;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          try { document.body.removeChild(link); } catch (e) { /* ignore */ }
+          try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+        }, 1200);
+        showToast('已下載：' + result.fileName, 'success');
+      } catch (e) {
+        console.error(e);
+        showToast('第八節核銷清冊匯出失敗：' + (e.message || e), 'error');
+      } finally {
+        period8ExportLoading.value = false;
       }
     };
     // 全校課表彙整 Word 匯出（後台）：.docx、試算表順序、可選教師
@@ -12162,7 +12324,7 @@ createApp({
       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportLoading, monthlyReportTotals, shiftReportPeriod,
-      accountingPeriod, accountingExportLoading,
+       accountingPeriod, accountingExportLoading, period8Loading, period8ExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
       isSubFeeLockedToSelf, isPeriod8FeeLocked, quotaDeductPreview, quotaDeductInsufficient, switchQuotaDeductToSelfPay, hasSubTeacherConflict,
@@ -12189,10 +12351,11 @@ createApp({
       loginWithGoogle, logout, gsiButtonReady, gsiButtonError, gsiLoggingIn, reloadGsiLoginButton,
       changeWeek,       getPeriodTimeSpan, getWeekDayText, formatDateMMDD,
         timetablePeriods, getPeriodLabel, formatPeriodText, isLunchPeriod, getPeriodClass, formatClassName, isCombinedClass, getScheduleSpecialTags, hasScheduleSpecialTag, isTimetablePullout, isTimetableRestricted,
-      getClassCellClassForDate, getClassCellClassForClass, getScheduleForDate, weekScheduleGrid, cellFromGrid, handleCellClick, handleClassCellClick,
+       getClassCellClassForDate, getClassCellClassForClass, getScheduleForDate, weekScheduleGrid, cellFromGrid, handleCellClick, handleClassCellClick, handlePeriod8CellClick,
       isMatchSourceCell, isMatchSourceEntry, isMatchHoverCell, isMatchHoverEntry,
       selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, isMatchPreviewSelected,
-       selectedClassDate, selectedClassWeekDates, classWeekNumber, classSubstitutionMap, classChangeSummary, getClassChangeTypeLabel, changeClassWeek, goToClassThisWeek,
+        selectedClassDate, selectedClassWeekDates, classWeekNumber, classSubstitutionMap, classChangeSummary, getClassChangeTypeLabel, changeClassWeek, goToClassThisWeek,
+        period8WeekDate, period8WeekDates, period8WeekNumber, changePeriod8Week, goToPeriod8ThisWeek, period8RosterRows, period8CellsFor, period8StatusLabel,
        prepCompare, startCombinedReturn, getCompareCellText, getCompareCellClass, executeSubmitRequest, isSubmitting,
        getStatusText, changeMatchMode, respondToRequest, respondToBatch, adminApprove, adminReject, cancelRequest, deleteSubstitutionRecord, loadMoreMatches,
        isTriangleRequest, isExchangeLikeRequest,
@@ -12206,7 +12369,7 @@ createApp({
         openScheduleEditModal, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, fillFixedOvertimeForAllTeachers, pickScheduleAttr, normalizeScheduleFormFlags, getScheduleAttrLabel, getOvertimeExpenseSourceOptions, openOvertimePlanModal, saveOvertimePlan,
       openAddTeacherModal, openEditTeacherModal, saveTeacher, deleteTeacher,
         handleFileChange, getMappingLabel, importSchedules, migrateNameKeySchema, toggleSelectAllRecords, isHistoryRecordSelected, isHistoryBatchGroupSelected, toggleHistoryBatchGroupSelection, loadTeacherClassesForExchange,
-      printSelectedForms, sendSelectedBatchNotices, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel,
+       printSelectedForms, sendSelectedBatchNotices, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel, exportPeriod8Accounting,
       schoolExportStart, schoolExportEnd, schoolExportIncludeWeekend, schoolExportOnlyChanged,
       schoolExportSelectedEmails, schoolExportTeacherFilter, filteredSchoolExportTeachers,
       isSchoolExportTeacherSelected, toggleSchoolExportTeacher, selectAllSchoolExportTeachers, clearSchoolExportTeachers,

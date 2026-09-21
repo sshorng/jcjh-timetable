@@ -46,6 +46,7 @@ assert.equal(fixedTeacher.fixedOvertimeHours, 2);
 assert.equal(fixedTeacher.fixedOvertimeSlotsText, '一2、三5');
 assert.equal(fixedTeacher.fixedOvertimeConfigured, true);
 assert.equal(fixedTeacher.fixedOvertimeValid, true);
+assert.deepEqual(fixedTeacher.fixedOvertimeSlots, ['1|2', '3|5']);
 assert.equal(window.FieldMap.serializeFixedOvertimeSlots([{ dayOfWeek: 1, period: 0 }, { dayOfWeek: 5, period: 45 }]), '一早自習、五午休');
 
 const request = window.FieldMap.mapRequest({
@@ -257,6 +258,47 @@ assert.deepEqual([
   fixedSnapshotRow.expensePlanAllocations[0].rawHours,
   fixedSnapshotRow.expensePlanAllocations[0].deduction
 ], [2, 4, 1, 1, 2, 4, 2], '學期固定節數應優先於臨時課表，且只扣固定節次代課');
+
+const mixedFixedRow = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{
+    email: 'mixed-fixed@x', name: '混合節次教師', baseHours: 0,
+    fixedOvertimeHours: 3, fixedOvertimeSlots: '一1、一2、一3'
+  }],
+  allSchedules: [
+    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
+    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 2, className: 'O02', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 3, className: 'O03', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    {
+      date: '2026-07-06', period: 1, className: 'S01', type: 'substitution',
+      originalTeacherEmail: 'mixed-fixed@x', actualTeacherEmail: 'cover@x',
+      subFee: '公費代課', reason: '公假', status: 'approved',
+      courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
+    },
+    {
+      date: '2026-07-06', period: 3, className: 'O03', type: 'substitution',
+      originalTeacherEmail: 'mixed-fixed@x', actualTeacherEmail: 'cover@x',
+      subFee: '公費代課', reason: '公假', status: 'approved',
+      courseAttr: '一般', courseSpecialTags: '超鐘點', courseIsOvertime: true, courseIsSubstitute: false
+    }
+  ],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-06',
+  reportEndDate: '2026-07-10',
+  reportWeeksCount: 1
+})[0];
+assert.deepEqual([
+  mixedFixedRow.fixedOvertimeSlots,
+  mixedFixedRow.weeklyOvertime,
+  mixedFixedRow.scheduledOvertime,
+  mixedFixedRow.publicOvertimeUsed,
+  mixedFixedRow.substituteDeduction,
+  mixedFixedRow.actualOvertime,
+  mixedFixedRow.expensePlanAllocations[0].deduction,
+  mixedFixedRow.expensePlanAllocations[0].actualHours
+], ['一2、一3', 2, 2, 1, 1, 1, 1, 1],
+  '同一教師的代課屬性只應排除該節，其他超鐘點節仍須扣除');
 
 const substitutedFixedRow = window.DomainBilling.buildMonthlyReportRows(Object.assign({}, fixedInput, {
   substitutionRecords: [{

@@ -917,4 +917,88 @@ assert.deepEqual([
   legacyAwayRow.actualHours
 ], [15, 2, 13], '會計匯出不應沿用舊月報的放假扣減');
 
+const teachingSupportExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period, adjunct: period },
+  teachers: [
+    {
+      email: 'support-b@x', name: '教支乙', subject: '本土語',
+      jobTitle: '教支人員（本土語）', baseHours: 0, expensePlan: '本土語'
+    },
+    {
+      email: 'support-a@x', name: '教支甲', subject: '本土語',
+      jobTitle: '教支人員（本土語）', baseHours: 0, expensePlan: '本土語'
+    },
+    { email: 'adjunct@x', name: '一般兼課', jobTitle: '兼課教師', baseHours: 0, expensePlan: '計畫A' }
+  ],
+  allSchedules: [],
+  substitutionRecords: [],
+  monthlyReportRows: [
+    {
+      email: 'support-b@x', name: '教支乙', expensePlan: '本土語',
+      weeklyOvertime: 2, scheduledOvertime: 2,
+      expensePlanAllocations: [{ source: '本土語', rawHours: 2, weeklyHours: 2, grossHours: 2, deduction: 0, actualHours: 2 }]
+    },
+    {
+      email: 'support-a@x', name: '教支甲', expensePlan: '本土語',
+      weeklyOvertime: 1, scheduledOvertime: 1,
+      expensePlanAllocations: [{ source: '本土語', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+    },
+    {
+      email: 'adjunct@x', name: '一般兼課', expensePlan: '計畫A',
+      weeklyOvertime: 1, scheduledOvertime: 1,
+      expensePlanAllocations: [{ source: '計畫A', rawHours: 1, weeklyHours: 1, grossHours: 1, deduction: 0, actualHours: 1 }]
+    }
+  ]
+});
+assert.equal(teachingSupportExport.teachingSupportPlans.length, 1, '教支人員應依計畫建立分表資料');
+assert.equal(teachingSupportExport.teachingSupportPlans[0].plan, '本土語', '教支分表應保留超鐘點計畫名稱');
+assert.deepEqual(
+  teachingSupportExport.teachingSupportPlans[0].rows.map(row => row.name),
+  ['教支乙', '教支甲'],
+  '教支分表應按照教師名單順序排列'
+);
+assert.equal(teachingSupportExport.sheets.adjunct.length, 1, '一般兼課人員應維持單一工作表');
+assert.equal(teachingSupportExport.sheets.adjunct[0].name, '一般兼課', '一般兼課工作表不應混入教支人員');
+assert.equal(
+  window.ExportAccounting.titleFor(
+    { key: 'teachingSupport', titleSuffix: '' },
+    '2026-07',
+    period,
+    '本土語'
+  ),
+  '臺北市立建成國中115年7月(7/1-7/31)教師兼課費印領清冊（教支人員／超鐘點計畫：本土語）',
+  '教支分表標題應標示人員類型與超鐘點計畫'
+);
+assert.equal(teachingSupportExport.overtimePlans.length, 0, '教支人員不應混入一般超鐘點分表');
+
+const groupedCoverExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-07',
+  reportWeeksCount: 1,
+  periods: { overtime: period },
+  teachers: [
+    { email: 'cover-order@x', name: '代課教師', jobTitle: '一般教師', baseHours: 0 },
+    { email: 'origin-order@x', name: '原超鐘教師', jobTitle: '一般教師', baseHours: 0 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'cover-order@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'origin-order@x', dayOfWeek: 2, period: 1, className: '702', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [{
+    date: '2026-07-07', period: 1, className: '702', type: 'substitution',
+    originalTeacherEmail: 'origin-order@x', actualTeacherEmail: 'cover-order@x',
+    subFee: '公費代課', status: 'approved'
+  }]
+});
+const groupedCoverRows = groupedCoverExport.overtimePlans[0].rows;
+assert.deepEqual(
+  groupedCoverRows.map(row => row.name),
+  ['代課教師', '代課教師'],
+  '代他人課應歸在實際代課教師自己的主列下方'
+);
+assert.equal(groupedCoverRows[0].actualHours, 1, '代課教師主列應保留自己的超鐘時數');
+assert.equal(groupedCoverRows[1].actualHours, 1, '代課明細應保留實際代課時數');
+assert.match(groupedCoverRows[1].note, /代原超鐘教師/, '代課明細備註應保留原授課教師');
+
 console.log('export accounting tests PASS');

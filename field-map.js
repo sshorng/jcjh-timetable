@@ -203,7 +203,7 @@ window.FieldMap = (function () {
       valid: valid,
       hours: hours >= 0 ? hours : 0,
       slots: slots,
-      slotKeys: slots.map(fixedOvertimeSlotKey),
+      slotKeys: slots.map(function (slot) { return fixedOvertimeSlotKey(slot); }),
       slotsText: slots.map(fixedOvertimeSlotLabel).join('、'),
       error: !configured ? '' : (hours < 0 || hours > 40
         ? '超鐘點節數須介於 0 至 40 節'

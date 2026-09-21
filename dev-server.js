@@ -21,7 +21,7 @@ const MIME = {
 };
 
 const PUBLIC_ROOT_FILE = /^[a-z0-9._-]+\.(?:html|css|js|png|jpg|jpeg|svg|ico)$/i;
-const PUBLIC_TEMPLATE_FILE = /^templates\/(?:accounting-template\.xlsx|activity-cover-template\.docx|invigilation-template\.xlsx)$/i;
+const PUBLIC_TEMPLATE_FILE = /^templates\/(?:accounting-template\.xlsx|period8-accounting-template\.xlsx|activity-cover-template\.docx|invigilation-template\.xlsx)$/i;
 const CONTENT_SECURITY_POLICY = "default-src 'self' https://accounts.google.com https://cdn.jsdelivr.net https://www.gstatic.com https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: https://www.gstatic.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net; frame-ancestors 'none';";
 
 function resolvePublicFile(requestUrl) {

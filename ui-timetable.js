@@ -714,6 +714,61 @@ window.UiTimetable = (function () {
       showMatchModal.value = true;
     }
 
+    /** 第八節班級週表：沿用既有調代課媒合與異動詳情流程。 */
+    function handlePeriod8CellClick(deps, cell) {
+      if (!cell) return;
+      var record = cell.record;
+      var detailSubRecord = deps.detailSubRecord;
+      var detailRequest = deps.detailRequest;
+      var showDetailModal = deps.showDetailModal;
+      var resolveDetailRequest = deps.resolveDetailRequest;
+      var getTeacherNameByEmail = deps.getTeacherNameByEmail;
+      if (record) {
+        detailSubRecord.value = record;
+        var requestId = record.requestId || record.id;
+        detailRequest.value = resolveDetailRequest(requestId, record) || {
+          id: 'N/A', serial: '---', type: 'substitution', requestDate: record.date
+        };
+        showDetailModal.value = true;
+        return;
+      }
+      if (cell.status === 'away') {
+        if (deps.showToast) deps.showToast('此班本節為空堂事件，不需申請代課。', 'info');
+        return;
+      }
+      var teacherEmail = String(cell.originalTeacherEmail || cell.teacherEmail || '').trim();
+      var canAct = !!(deps.isAdmin && deps.isAdmin.value);
+      if (!canAct && deps.canOperateOnTeacherEmail) canAct = !!deps.canOperateOnTeacherEmail(teacherEmail);
+      if (!canAct) {
+        if (deps.showToast) deps.showToast('目前帳號沒有操作這位教師第八節的權限。', 'warning');
+        return;
+      }
+      if (deps.ensureProxyTargetForTeacher) {
+        try { deps.ensureProxyTargetForTeacher(teacherEmail); } catch (eProxy) { /* ignore */ }
+      }
+      deps.activeCell.value = {
+        teacherEmail: teacherEmail,
+        teacherName: cell.originalTeacherName || getTeacherNameByEmail(teacherEmail),
+        dayOfWeek: parseInt(cell.dayOfWeek, 10),
+        period: 8,
+        classData: {
+          className: cell.className,
+          subject: cell.subject || '課輔',
+          teacherName: cell.originalTeacherName || getTeacherNameByEmail(teacherEmail),
+          attr: '課輔',
+          restriction: ''
+        }
+      };
+      deps.inputRequestDate.value = cell.date;
+      deps.matchMode.value = 'substitution';
+      deps.matchPreview.value = null;
+      deps.recommendedTeachers.value = [];
+      deps.matchSearchQuery.value = '';
+      deps.matchDisplayCount.value = 10;
+      if (deps.fetchRecommendations) deps.fetchRecommendations();
+      deps.showMatchModal.value = true;
+    }
+
     /**
      * 單節媒合（批次「每節不同人」）
      */
@@ -980,9 +1035,10 @@ window.UiTimetable = (function () {
       slotFromGrid: slotFromGrid,
       isAwayClassCell: isAwayClassCell,
       getClassCellClassForDate: getClassCellClassForDate,
-      fetchRecommendations: fetchRecommendations,
-      handleCellClick: handleCellClick,
-      fetchSingleSlotRecommendations: fetchSingleSlotRecommendations,
+       fetchRecommendations: fetchRecommendations,
+       handleCellClick: handleCellClick,
+       handlePeriod8CellClick: handlePeriod8CellClick,
+       fetchSingleSlotRecommendations: fetchSingleSlotRecommendations,
       fetchBatchRecommendations: fetchBatchRecommendations,
 
       // ── 媒合預覽（課表高亮）──

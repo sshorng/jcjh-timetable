@@ -53,6 +53,16 @@
       columns: 14,
       kind: 'summary'
     },
+    teachingSupport: {
+      key: 'teachingSupport',
+      label: '教支人員鐘點',
+      suffix: '教支兼課',
+      titleSuffix: '教師兼課費印領清冊',
+      dataStart: 3,
+      templateTotalRow: 10,
+      columns: 14,
+      kind: 'summary'
+    },
     publicSub: {
       index: 2,
       key: 'publicSub',
@@ -372,6 +382,9 @@
     if (config.key === 'substituteAttribute') {
       suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
     }
+    if (config.key === 'teachingSupport') {
+      suffix = '教師兼課費印領清冊（教支人員／超鐘點計畫：' + planLabel(expensePlan) + '）';
+    }
     if (config.key === 'selfSub' || config.key === 'mentor') {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + parts.month + '月(' + range + ')' + suffix;
     }
@@ -388,7 +401,8 @@
     var b = dateObj(period.end);
     var prefix = rocYear(parts.year) + '.' + (a ? (a.getMonth() + 1) : parts.month) + '.' + (a ? a.getDate() : 1)
       + '-' + (b ? (b.getMonth() + 1) : parts.month) + '.' + (b ? b.getDate() : 31);
-    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute') && outputExpensePlan(expensePlan)
+    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute'
+      || config.key === 'teachingSupport') && outputExpensePlan(expensePlan)
       ? '-' + safeSheetPart(expensePlan)
       : '';
     var name = prefix + config.suffix + planSuffix;
@@ -430,6 +444,19 @@
     return String((teacher && (teacher.jobTitle || teacher.title || teacher['\u8077\u52d9'] || teacher['\u8077\u7a31'] || teacher['\u8077\u4f4d'] || teacher.teacherTitle)) || '').trim();
   }
 
+  function teacherSubject(teacher) {
+    return String((teacher && (teacher.subject || teacher['\u6388\u8ab2\u79d1\u76ee'] || teacher['\u79d1\u76ee'])) || '').trim();
+  }
+
+  var LOCAL_LANGUAGE_MARKERS = ['本土語', '本土語文', '閩南語', '台語', '臺語', '客語', '原住民族語', '族語'];
+
+  function isTeachingSupportTeacher(teacher) {
+    var title = teacherTitle(teacher);
+    if (title.indexOf('教支') < 0 && title.indexOf('教學支援') < 0) return false;
+    var text = [title, teacherSubject(teacher), teacherExpensePlan(teacher)].join(' ');
+    return LOCAL_LANGUAGE_MARKERS.some(function (marker) { return text.indexOf(marker) >= 0; });
+  }
+
   function addTeacherToMap(map, teacher) {
     var email = teacherEmail(teacher);
     var name = teacherName(teacher, '');
@@ -463,7 +490,16 @@
   }
   function isAdjunctTeacher(teacher) {
     var title = teacherTitle(teacher);
-    return title.indexOf('兼課') >= 0 && title.indexOf('共聘') < 0;
+    return !isTeachingSupportTeacher(teacher)
+      && title.indexOf('兼課') >= 0 && title.indexOf('共聘') < 0;
+  }
+
+  function isAdjunctStyleTeacher(teacher) {
+    return isAdjunctTeacher(teacher) || isTeachingSupportTeacher(teacher);
+  }
+
+  function teacherSortKey(value) {
+    return teacherIdentityKeys(value)[0] || '';
   }
 
   function feeRate(record, fallback) {
@@ -1190,7 +1226,7 @@
       var sourceTeacher = (opts.teachers || []).find(function (teacher) {
         return sameTeacher(teacher, source);
       });
-      var adjunct = isAdjunctTeacher(sourceTeacher || source);
+      var adjunct = isAdjunctStyleTeacher(sourceTeacher || source);
       if (!expensePlanSourcesForRow(source).length) return;
       var weeks = Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1);
       var scheduledOvertime = source.scheduledOvertime !== undefined
@@ -1252,11 +1288,14 @@
     var rate = feeRate(record, FEE_DEFAULT);
     var originalName = teacherName(sourceTeacher, source.name || source.email);
     var detail = substitutionNoteText(record, opts, originalName);
+    var actualTeacherKey = teacherSortKey(actualTeacher)
+      || teacherSortKey(record.actualTeacherEmail)
+      || teacherSortKey(record.actualTeacherName);
     return {
       expensePlan: planLabel(item.plan || source.expensePlan),
       serial: serial,
       _rowKind: 'overtimeSubstitution',
-      _teacherKey: teacherEmail(record.actualTeacherEmail),
+      _teacherKey: actualTeacherKey,
       title: teacherTitle(actualTeacher) || '\u6559\u5e2b',
       name: teacherName(actualTeacher, record.actualTeacherName || record.actualTeacherEmail),
       weeklyOvertime: '',
@@ -1273,36 +1312,76 @@
     };
   }
 
-  function mergeOvertimeSubstitutionRows(rows, opts) {
-    var output = [];
-    var groups = {};
+  function summaryRowTeacherKey(row) {
+    return String((row && row._teacherKey) || (row && row.name) || '')
+      .trim().toLowerCase();
+  }
+
+  function mergeOvertimeSubstitutionRows(rows, substitutionRows, opts) {
+    var teacherOrder = teacherOrderMap(opts.teachers || []);
+    var primaryGroups = {};
+    var substitutionGroups = {};
+    var labels = {};
+
+    function rememberLabel(key, row) {
+      if (key && !labels[key]) labels[key] = String(row && row.name || '').trim();
+    }
+
     (rows || []).forEach(function (row) {
-      if (!row || row._rowKind !== 'overtimeSubstitution') {
-        output.push(row);
-        return;
-      }
-      var key = String(row._teacherKey || row.name || '').trim().toLowerCase()
-        + '|' + (Number(row.rate) || 0);
-      if (!groups[key]) {
-        groups[key] = row;
-        output.push(row);
-        return;
-      }
-      var merged = groups[key];
-      merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
-      merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
-      merged._noteRecords = (merged._noteRecords || []).concat(row._noteRecords || []);
-    });
-    output.forEach(function (row, index) {
       if (!row) return;
-      if (row._rowKind === 'overtimeSubstitution') {
+      var key = summaryRowTeacherKey(row) || '__unknown__';
+      if (!primaryGroups[key]) primaryGroups[key] = [];
+      primaryGroups[key].push(row);
+      rememberLabel(key, row);
+    });
+
+    var mergedSubstitutionGroups = {};
+    (substitutionRows || []).forEach(function (row) {
+      if (!row) return;
+      var teacherKey = summaryRowTeacherKey(row) || '__unknown__';
+      var groupKey = teacherKey + '|' + (Number(row.rate) || 0);
+      if (!mergedSubstitutionGroups[groupKey]) {
+        mergedSubstitutionGroups[groupKey] = row;
+      } else {
+        var merged = mergedSubstitutionGroups[groupKey];
+        merged.amount = (Number(merged.amount) || 0) + (Number(row.amount) || 0);
+        merged.actualHours = (Number(merged.actualHours) || 0) + (Number(row.actualHours) || 0);
+        merged._noteRecords = (merged._noteRecords || []).concat(row._noteRecords || []);
+      }
+      rememberLabel(teacherKey, row);
+    });
+
+    Object.keys(mergedSubstitutionGroups).forEach(function (groupKey) {
+      var row = mergedSubstitutionGroups[groupKey];
+      var teacherKey = summaryRowTeacherKey(row) || '__unknown__';
+      if (!substitutionGroups[teacherKey]) substitutionGroups[teacherKey] = [];
+      substitutionGroups[teacherKey].push(row);
+    });
+
+    var teacherKeys = [];
+    Object.keys(primaryGroups).concat(Object.keys(substitutionGroups)).forEach(function (key) {
+      if (teacherKeys.indexOf(key) < 0) teacherKeys.push(key);
+    });
+    teacherKeys.sort(function (left, right) {
+      var rankDiff = teacherOrderValue(teacherOrder, left) - teacherOrderValue(teacherOrder, right);
+      if (rankDiff) return rankDiff;
+      return String(labels[left] || left).localeCompare(String(labels[right] || right), 'zh-Hant');
+    });
+
+    var output = [];
+    teacherKeys.forEach(function (key) {
+      (primaryGroups[key] || []).forEach(function (row) { output.push(row); });
+      (substitutionGroups[key] || []).forEach(function (row) {
         row.weeklyOvertime = '';
         row.schedule = '';
         row.weeks = '';
         row.grossHours = '';
         row.deduction = '';
         row.note = joinAccountingNotes(groupedCoverNoteParts(row._noteRecords || [], opts));
-      }
+        output.push(row);
+      });
+    });
+    output.forEach(function (row, index) {
       row.serial = index + 1;
       delete row._rowKind;
       delete row._teacherKey;
@@ -1338,9 +1417,11 @@
     var records = opts.substitutionRecords || [];
     var weeks = Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1);
     var rows = [];
-    var expectedPlan = config.key === 'overtime' ? normalizeExpensePlan(planFilter) : null;
+    var substitutionRows = [];
+    var expectedPlan = (config.key === 'overtime' || config.key === 'teachingSupport')
+      ? normalizeExpensePlan(planFilter) : null;
     reportSourceRows(opts).forEach(function (source) {
-      var variants = config.key === 'overtime' && expectedPlan
+      var variants = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
         ? overtimeSourceVariants(source, expectedPlan)
         : [{ row: source, allocation: null }];
       variants.forEach(function (variant) {
@@ -1350,47 +1431,51 @@
         var sourcePlan = allocation
           ? planLabel(allocation.source)
           : outputExpensePlan(sourceRow.expensePlan || sourceRow['鐘點支出計畫'] || sourceRow.plan);
-        var adjunct = isAdjunctTeacher(t);
-        if (config.key === 'adjunct' ? !adjunct : adjunct) return;
-        var title = teacherTitle(t) || (adjunct ? '兼課教師' : '教師');
+        var teachingSupport = isTeachingSupportTeacher(t || sourceRow);
+        var adjunct = isAdjunctTeacher(t || sourceRow);
+        if (config.key === 'adjunct' && !adjunct) return;
+        if (config.key === 'teachingSupport' && !teachingSupport) return;
+        if (config.key === 'overtime' && (adjunct || teachingSupport)) return;
+        var title = teacherTitle(t) || (adjunct || teachingSupport ? '兼課教師' : '教師');
         var leave = leaveRecordsFor(source, records, period, opts.allSchedules || [], schoolSwapIndex);
         var sourceItems = chargedMap && chargedMap.byOriginal[teacherEmail(source.email)] || null;
         var chargedItems = null;
         if (sourceItems) {
-          sourceItems = config.key === 'overtime' && expectedPlan
+          sourceItems = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
             ? sourceItems.filter(function (item) { return normalizeExpensePlan(item.plan) === expectedPlan; })
             : sourceItems.slice();
           chargedItems = sourceItems.filter(function (item) { return item.charged !== false; });
         }
-         var chargedRecordsForSource = chargedItems
-           ? chargedItems.map(function (item) { return item.record; })
-           : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex, source);
-         var chargedCombinedRecords = chargedSubstitutionRecords(
+        var chargedRecordsForSource = chargedItems
+          ? chargedItems.map(function (item) { return item.record; })
+          : chargedSubstitutionRecords(records, opts.allSchedules || [], source, period, schoolSwapIndex, source);
+        var chargedCombinedRecords = chargedSubstitutionRecords(
           records,
           opts.allSchedules || [],
-           source,
-           period,
-           schoolSwapIndex,
-           source
+          source,
+          period,
+          schoolSwapIndex,
+          source
         ).filter(function (record) {
           if (!isCombinedReturnRecord(record)) return false;
-          if (config.key !== 'overtime' || !expectedPlan) return true;
+          if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
           return normalizeExpensePlan(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
-         var sourceFixedSetting = fixedOvertimeSettingForSchedules(sourceRow, opts.allSchedules || []);
-         var selfCount = allocation
-           ? chargedRecordsForSource.filter(isSelfPaidRecord).length
-           : leave.filter(function (record) {
-             return isSelfPaidRecord(record)
-               && (!sourceFixedSetting.configured || !sourceFixedSetting.valid
-                 || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex, opts.allSchedules || []));
-           }).length;
+        var sourceFixedSetting = fixedOvertimeSettingForSchedules(sourceRow, opts.allSchedules || []);
+        var selfCount = allocation
+          ? chargedRecordsForSource.filter(isSelfPaidRecord).length
+          : leave.filter(function (record) {
+            return isSelfPaidRecord(record)
+              && (!sourceFixedSetting.configured || !sourceFixedSetting.valid
+                || isFixedOvertimeRecord(record, sourceRow, schoolSwapIndex, opts.allSchedules || []));
+          }).length;
         var publicUsed = allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
-           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
+          : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
         // 超鐘點／兼課鐘點不因放假或空堂減少；小鐘點的實際未授課扣減
         // 會在 substituteAttributePlans 依逐日明細處理。
-        var noAwayDeduction = config.key === 'overtime' || config.key === 'adjunct';
+        var noAwayDeduction = config.key === 'overtime'
+          || config.key === 'adjunct' || config.key === 'teachingSupport';
         var reduce = noAwayDeduction ? 0 : (allocation
           ? Math.max(0, Number(allocation.reduceHours) || 0)
           : (Number(sourceRow.reduceDeduction) || 0));
@@ -1404,7 +1489,8 @@
           : (sourceRow.scheduledOvertime !== undefined
             ? Number(sourceRow.scheduledOvertime) || 0
             : (Number(sourceRow.weeklyOvertime) || 0) * weeks);
-        if ((config.key === 'overtime' || config.key === 'adjunct') && scheduledOvertime <= 0) return;
+        if ((config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport')
+            && scheduledOvertime <= 0) return;
         var grossHours = noAwayDeduction && allocation && allocation.rawHours !== undefined
           ? Number(allocation.rawHours) || 0
           : allocation && allocation.grossHours !== undefined
@@ -1435,6 +1521,8 @@
           : summaryNote(opts, sourceRow, period, leave, publicUsed, schoolSwapIndex);
         var row = {
           expensePlan: sourcePlan,
+          _rowKind: 'summary',
+          _teacherKey: teacherSortKey(t) || teacherSortKey(sourceRow),
           serial: rows.length + 1,
           title: title,
           name: teacherName(t, sourceRow.name),
@@ -1451,19 +1539,20 @@
         };
         // 合班回原即使實得為零，仍須在超鐘點表呈現原教師的扣鐘點。
         var hasCombinedReturn = chargedCombinedRecords.length > 0;
-        if ((config.key !== 'overtime' && config.key !== 'adjunct') || actualHours !== 0 || hasCombinedReturn) rows.push(row);
+        if ((config.key !== 'overtime' && config.key !== 'adjunct' && config.key !== 'teachingSupport')
+            || actualHours !== 0 || hasCombinedReturn) rows.push(row);
         var substitutionItems = config.key === 'overtime' && chargedItems
           ? chargedItems.filter(function (item) { return !item.routeToSubstituteSheet; })
-          : config.key === 'adjunct' && sourceItems
+          : (config.key === 'adjunct' || config.key === 'teachingSupport') && sourceItems
             ? sourceItems.filter(function (item) { return item.routeToAdjunctSheet; })
             : [];
         substitutionItems.forEach(function (item) {
-          rows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, rows.length + 1));
+          substitutionRows.push(buildOvertimeSubstitutionRow(opts, sourceRow, teacherMap, item, substitutionRows.length + 1));
         });
       });
     });
-    return config.key === 'overtime' || config.key === 'adjunct'
-      ? mergeOvertimeSubstitutionRows(rows, opts)
+    return config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport'
+      ? mergeOvertimeSubstitutionRows(rows, substitutionRows, opts)
       : rows;
   }
 
@@ -1800,6 +1889,7 @@
       periods: periods,
       sheets: {},
       overtimePlans: [],
+      teachingSupportPlans: [],
       substituteAttributePlans: [],
       summary: [],
       warnings: [],
@@ -1878,6 +1968,40 @@
       var outputPlan = planLabel(plan);
       data.overtimePlans.push({ plan: outputPlan, rows: rows });
       summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
+    });
+
+    var teachingSupportConfig = SHEET_CONFIG.teachingSupport;
+    var teachingSupportPeriod = getPeriod(periods, 'adjunct', opts.reportMonth);
+    var teachingSupportChargedMap = chargedMapFor(teachingSupportPeriod);
+    var teachingSupportPlanKeys = [];
+    reportSourceRows(opts).forEach(function (source) {
+      var sourceTeacher = (opts.teachers || []).find(function (teacher) { return sameTeacher(teacher, source); }) || source;
+      if (!isTeachingSupportTeacher(sourceTeacher)) return;
+      expensePlanSourcesForRow(source).forEach(function (value) {
+        var plan = normalizeExpensePlan(value);
+        if (plan && teachingSupportPlanKeys.indexOf(plan) < 0) teachingSupportPlanKeys.push(plan);
+      });
+    });
+    teachingSupportPlanKeys.sort(function (a, b) {
+      if (a === '預設') return -1;
+      if (b === '預設') return 1;
+      return a.localeCompare(b, 'zh-Hant', { numeric: true });
+    });
+    data.sheets.teachingSupport = [];
+    teachingSupportPlanKeys.forEach(function (plan) {
+      var rows = buildSummaryRows(
+        teachingSupportConfig,
+        opts,
+        teachingSupportPeriod,
+        plan,
+        teachingSupportChargedMap,
+        schoolSwapIndex
+      );
+      if (!rows.length) return;
+      var outputPlan = planLabel(plan);
+      data.teachingSupportPlans.push({ plan: outputPlan, rows: rows });
+      data.sheets.teachingSupport = data.sheets.teachingSupport.concat(rows);
+      summaryFor('teachingSupport:' + outputPlan, '教支人員-' + outputPlan, rows);
     });
 
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
@@ -1970,7 +2094,7 @@
   function noteColumnFor(config) {
     if (!config) return 0;
     if (config.key === 'overtime' || config.key === 'substituteAttribute') return 15;
-    if (config.key === 'adjunct') return 14;
+    if (config.key === 'adjunct' || config.key === 'teachingSupport') return 14;
     if (config.key === 'publicSub' || config.key === 'publicSubAdjustment') return 9;
     if (config.key === 'selfSub' || config.key === 'mentor') return 9;
     return 0;
@@ -2191,9 +2315,12 @@
   function populateWorkbook(workbook, opts, data) {
     var usedNames = {};
     var overtimeConfig = SHEET_CONFIG.overtime;
+    var teachingSupportConfig = SHEET_CONFIG.teachingSupport;
     var substituteAttributeConfig = SHEET_CONFIG.substituteAttribute;
     var overtimeTemplate = workbook.worksheets[overtimeConfig.index];
     if (!overtimeTemplate) throw new Error('範本缺少工作表：' + overtimeConfig.label);
+    var adjunctTemplate = workbook.worksheets[SHEET_CONFIG.adjunct.index];
+    if (!adjunctTemplate) throw new Error('範本缺少工作表：' + SHEET_CONFIG.adjunct.label);
     var publicSubTemplate = workbook.worksheets[SHEET_CONFIG.publicSub.index];
     if (!publicSubTemplate) throw new Error('範本缺少工作表：' + SHEET_CONFIG.publicSub.label);
     var baseSheetRefs = [];
@@ -2205,6 +2332,12 @@
           ? overtimeTemplate
           : cloneWorksheet(overtimeTemplate, workbook, '__overtime_plan_' + index, overtimeConfig.columns)
       });
+    });
+    var teachingSupportSheets = (data.teachingSupportPlans || []).map(function (group, index) {
+      return {
+        group: group,
+        sheet: cloneWorksheet(adjunctTemplate, workbook, '__teaching_support_' + index, teachingSupportConfig.columns)
+      };
     });
     var substituteAttributeSheets = (data.substituteAttributePlans || []).map(function (group, index) {
       return {
@@ -2251,6 +2384,23 @@
       sheet.name = name;
       writeSummarySheet(sheet, overtimeConfig, group.rows);
     });
+    teachingSupportSheets.forEach(function (entry) {
+      var group = entry.group;
+      var sheet = entry.sheet;
+      var period = getPeriod(data.periods, 'adjunct', opts.reportMonth);
+      var titleCell = firstTitleCell(sheet, teachingSupportConfig.columns);
+      titleCell.value = titleFor(teachingSupportConfig, opts.reportMonth, period, group.plan);
+      var name = sheetName(teachingSupportConfig, opts.reportMonth, period, group.plan);
+      var base = name;
+      var suffix = 2;
+      while (usedNames[name]) {
+        name = (base.slice(0, 28) + '_' + suffix).slice(0, 31);
+        suffix += 1;
+      }
+      usedNames[name] = true;
+      sheet.name = name;
+      writeSummarySheet(sheet, teachingSupportConfig, group.rows);
+    });
     substituteAttributeSheets.forEach(function (entry) {
       var group = entry.group;
       var sheet = entry.sheet;
@@ -2276,8 +2426,9 @@
       return planSheets.every(function (entry) { return entry.sheet !== sheet; })
         && substituteAttributeSheets.every(function (entry) { return entry.sheet !== sheet; });
     });
-    if (planSheets.length || substituteAttributeSheets.length || baseSheets.length) {
+    if (planSheets.length || teachingSupportSheets.length || substituteAttributeSheets.length || baseSheets.length) {
       var orderedSheets = planSheets.map(function (entry) { return entry.sheet; })
+        .concat(teachingSupportSheets.map(function (entry) { return entry.sheet; }))
         .concat(substituteAttributeSheets.map(function (entry) { return entry.sheet; }))
         .concat(baseSheets);
       orderedSheets.forEach(function (sheet, index) {
