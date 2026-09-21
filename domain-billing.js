@@ -1914,9 +1914,7 @@ window.DomainBilling = (function () {
       // 只從符合規則的代課紀錄扣除，扣除明細會寫入 Excel 備註。
       var reduceDeduction = 0;
       var selfPaidDeduction = leaveRecords.filter(function (r) {
-        return isSelfPaidFee(r)
-          && (!(fixedSetting.configured && fixedSetting.valid)
-            || isConcurrentLeaveSlot(r, allSchedules, schoolSwapIndex, t));
+        return isSelfPaidFee(r);
       }).length;
       // 全部公費請假（學校仍付代課費）
       var pubLeaveRecords = leaveRecords.filter(function (r) {
@@ -1945,9 +1943,7 @@ window.DomainBilling = (function () {
         expenseSourceConflicts.push(conflict);
       }
       leaveRecords.filter(function (record) {
-        return (isSelfPaidFee(record)
-          && (!(fixedSetting.configured && fixedSetting.valid)
-            || isConcurrentLeaveSlot(record, allSchedules, schoolSwapIndex, t)))
+        return isSelfPaidFee(record)
           || pubConcurrentLeaveRecords.indexOf(record) >= 0;
       }).forEach(function (record) {
         var sourceResolution = overtimeExpenseResolutionForRecord(record, [t], allSchedules, schoolSwapIndex);

@@ -257,7 +257,7 @@ assert.deepEqual([
   fixedSnapshotRow.actualOvertime,
   fixedSnapshotRow.expensePlanAllocations[0].rawHours,
   fixedSnapshotRow.expensePlanAllocations[0].deduction
-], [2, 4, 1, 1, 2, 4, 2], '學期固定節數應優先於臨時課表，且只扣固定節次代課');
+], [2, 4, 1, 2, 1, 4, 3], '學期固定節數應優先於臨時課表，但自費代課仍應列入超鐘點扣款');
 
 const mixedSelfPaidRows = window.DomainBilling.buildMonthlyReportRows({
   teachers: [
@@ -288,7 +288,7 @@ const mixedSelfPaidRows = window.DomainBilling.buildMonthlyReportRows({
 const mixedSelfOwner = mixedSelfPaidRows.find(row => row.email === 'mixed-self-owner@x');
 const mixedSelfRegularCover = mixedSelfPaidRows.find(row => row.email === 'mixed-self-regular-cover@x');
 const mixedSelfOvertimeCover = mixedSelfPaidRows.find(row => row.email === 'mixed-self-overtime-cover@x');
-assert.equal(mixedSelfOwner.selfPaidDeduction, 1, '自費只有原課為超鐘點時才扣原教師超鐘點');
+assert.equal(mixedSelfOwner.selfPaidDeduction, 2, '自費代課不論原課是否超鐘點，均應扣原教師超鐘點');
 assert.equal(mixedSelfRegularCover.selfSubCount, 1, '非超鐘點自費仍應計入代課教師自費節數');
 assert.equal(mixedSelfRegularCover.selfSubFee, 455, '非超鐘點自費仍應計入代課教師自費費用');
 assert.equal(mixedSelfOvertimeCover.selfSubCount, 1, '超鐘點自費仍應保留代課教師自費節數摘要');

@@ -915,7 +915,7 @@ assert.deepEqual(nonOvertimeSelfExport.sheets.selfSub.map(row => [row.actualName
   ['一般自費代課人', '六', '自費原教師']
 ], '非超鐘點自費應列入自付代課明細表');
 assert.equal(nonOvertimeSelfExport.sheets.selfSub[0].amount, 455);
-assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 1, '超鐘點自費仍應扣原教師超鐘點');
+assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '非超鐘點自費也應在超鐘點列扣原教師');
 assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘自費代課人'),
   '超鐘點自費代課仍應列入原計畫超鐘點代課列');
 assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,

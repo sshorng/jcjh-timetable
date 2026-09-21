@@ -1389,7 +1389,7 @@
     var publicRecords = eligible.filter(function (record) {
       return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
     });
-    // 固定設定時，自費與公費都只扣固定節次；舊資料未設定時保留原本自費全扣口徑。
+    // 公費依固定超鐘點節次判定；自費一律扣原教師，非超鐘點自費另列自付代課表。
     var selected = selfRecords.concat(publicRecords.slice().sort(function (a, b) {
       return String(a.date || '').localeCompare(String(b.date || ''))
         || Number(a.period || 0) - Number(b.period || 0)
@@ -1660,12 +1660,7 @@
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
           return planLabel(expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex)) === expectedPlan;
         });
-        var selfCount = allocation
-          ? chargedRecordsForSource.filter(isSelfPaidRecord).length
-          : leave.filter(function (record) {
-            return isSelfPaidRecord(record)
-              && isOvertimeSubstitution(record, opts.allSchedules || [], schoolSwapIndex, sourceRow);
-          }).length;
+        var selfCount = leave.filter(isSelfPaidRecord).length;
         var publicUsed = allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
@@ -1708,10 +1703,15 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
+        var deductionRecordsForSource = leave.filter(isSelfPaidRecord).concat(
+          chargedRecordsForSource.filter(isPublicOvertimeRecord)
+        );
         var overtimeNotes = leaveNoteParts(
-          chargedRecordsForSource,
+          deductionRecordsForSource,
           publicUsed,
-          chargedCombinedRecords
+          chargedCombinedRecords.concat(leave.filter(function (record) {
+            return isSelfPaidRecord(record) && isCombinedReturnRecord(record);
+          }))
         );
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
