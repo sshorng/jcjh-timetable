@@ -41,6 +41,32 @@ assert.match(exportAccountingSource, /sumFormula\('M', config\.dataStart, end, s
   '兼課與教支合計列應加總實際金額');
 
 const period = { start: '2026-07-01', end: '2026-07-31' };
+const crossMonthAccountingPeriod = { start: '2026-08-31', end: '2026-10-02' };
+assert.equal(
+  window.ExportAccounting.reportMonthForPeriod('2026-08', crossMonthAccountingPeriod),
+  '2026-09',
+  '跨月結算區間應以主要月份（9月）作為報表月份'
+);
+assert.equal(
+  window.ExportAccounting.monthLabelForPeriod('2026-08', crossMonthAccountingPeriod),
+  '8-9',
+  '起始日落在前一月時，標題應顯示起始月與主要月份'
+);
+assert.equal(
+  window.ExportAccounting.monthLabelForPeriod('2026-09', { start: '2026-09-01', end: '2026-10-02' }),
+  '9',
+  '主要月份單獨結算時，標題應只顯示主要月份'
+);
+assert.equal(
+  window.ExportAccounting.titleFromTemplate(
+    '臺北市立建成國民中學[[年]]年[[月]]月([[日期]])公付代課-身心調適假鐘點費印領清冊',
+    '2026-08',
+    crossMonthAccountingPeriod,
+    '國教'
+  ),
+  '臺北市立建成國民中學115年8-9月公付代課-身心調適假鐘點費印領清冊',
+  '匯出應沿用範本的身心調適假標題文字'
+);
 assert.equal(
   window.ExportAccounting.dateRangeFileLabel({ start: '2026-09-01', end: '2026-09-30' }, '2026-09'),
   '0901-0930',
@@ -58,7 +84,7 @@ assert.equal(
     { start: '2026-08-31', end: '2026-10-02' },
     '國教'
   ),
-  '臺北市立建成國中115年8月代課鐘點費（國教）印領清冊',
+  '臺北市立建成國中115年8-9月代課鐘點費（國教）印領清冊',
   '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
 );
 [
@@ -79,7 +105,7 @@ assert.equal(
       { start: '2026-08-31', end: '2026-10-02' },
       plan
     ),
-    '臺北市立建成國中115年8月' + suffix,
+    '臺北市立建成國中115年8-9月' + suffix,
     plan + '超鐘點工作表應使用正式標題'
   );
 });
