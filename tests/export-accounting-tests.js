@@ -105,6 +105,8 @@ const jsonPlanPreview = window.ExportAccounting.buildExportData({
 });
 assert.equal(jsonPlanPreview.summary.some(item => item.label === '超鐘點-英資'), true,
   '會計預覽應以計畫簡稱建立摘要');
+assert.equal(jsonPlanPreview.overtimePlans[0].fullPlan, '英文資優',
+  '超鐘點分表應保留計畫全稱供 Excel 標頭使用');
 assert.equal(jsonPlanPreview.summary.some(item => item.label.includes('{"day"')), false,
   '會計預覽不可把課格 JSON 當成計畫名稱');
 assert.equal(
@@ -134,7 +136,7 @@ assert.equal(
     { start: '2026-08-31', end: '2026-10-02' },
     '[小鐘]課表代課鐘點費'
   ),
-  '臺北市立建成國中115年8-9月代課鐘點費（課表代課鐘點費）印領清冊',
+  '臺北市立建成國中115年8-9月代課鐘點費（小鐘）印領清冊',
   '小鐘點工作表標題應包含代課鐘點費與計畫名稱'
 );
 assert.equal(

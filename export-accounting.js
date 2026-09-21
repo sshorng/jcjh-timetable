@@ -408,6 +408,22 @@
     return sources;
   }
 
+  function expensePlanFullNamesForRow(row) {
+    var names = {};
+    function add(source) {
+      var short = outputExpensePlan(source);
+      if (short && !names[short]) names[short] = planFullLabel(source);
+    }
+    (row && row.expensePlanAllocations || []).forEach(function (allocation) {
+      add(allocation && allocation.source);
+    });
+    var parsed = parseExpensePlan(row && row.expensePlan);
+    if (parsed.mode === 'legacy') add(parsed.legacySource);
+    if (parsed.mode === 'slots') (parsed.slots || []).forEach(function (slot) { add(slot.source); });
+    if (parsed.mode === 'empty') add('預設');
+    return names;
+  }
+
   function addUniqueMessage(list, message) {
     if (message && list.indexOf(message) < 0) list.push(message);
   }
@@ -432,7 +448,7 @@
       suffix = overtimeTitleSuffix(expensePlan);
     }
     if (config.key === 'substituteAttribute') {
-      suffix = '代課鐘點費（' + planFullLabel(expensePlan) + '）印領清冊';
+      suffix = '代課鐘點費（' + planLabel(expensePlan) + '）印領清冊';
     }
     if (config.key === 'teachingSupport') {
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
@@ -1792,6 +1808,7 @@
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     var groups = {};
     var sourceRows = {};
+    var sourceFullNames = {};
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
     (opts.monthlyReportRows || []).forEach(function (sourceRow) {
       var sourceEmail = teacherEmail(sourceRow.email || sourceRow.teacherEmail);
@@ -1806,6 +1823,7 @@
       if (!email) return;
       details.forEach(function (detail) {
         var source = planLabel(detail.source);
+        if (!sourceFullNames[source]) sourceFullNames[source] = planFullLabel(detail.source);
         var key = source + '|' + email;
         if (!groups[key]) {
           groups[key] = {
@@ -1899,7 +1917,7 @@
           note: noteParts.join('；')
         };
       });
-      return { plan: source, rows: rows };
+      return { plan: source, fullPlan: sourceFullNames[source] || planFullLabel(source), rows: rows };
     });
   }
 
@@ -2020,6 +2038,7 @@
     data.sheets.overtime = buildSummaryRows(overtimeConfig, opts, overtimePeriod, '', chargedMap, schoolSwapIndex);
 
     var planKeys = [];
+    var planFullNames = {};
     reportSourceRows(opts).forEach(function (source) {
       var parsed = parseExpensePlan(source.expensePlan);
       var addPlan = function (value) {
@@ -2027,6 +2046,9 @@
         if (plan && planKeys.indexOf(plan) < 0) planKeys.push(plan);
       };
       expensePlanSourcesForRow(source).forEach(addPlan);
+      Object.keys(expensePlanFullNamesForRow(source)).forEach(function (plan) {
+        if (!planFullNames[plan]) planFullNames[plan] = expensePlanFullNamesForRow(source)[plan];
+      });
       if (parsed.invalid) {
         var invalidMessage = '教師「' + teacherName(source, source.email) + '」的超鐘點經費配置格式有誤。';
         addUniqueMessage(data.warnings, invalidMessage);
@@ -2063,7 +2085,11 @@
       var rows = buildSummaryRows(overtimeConfig, opts, overtimePeriod, plan, chargedMap, schoolSwapIndex);
       if (!rows.length) return;
       var outputPlan = planLabel(plan);
-      data.overtimePlans.push({ plan: outputPlan, rows: rows });
+      data.overtimePlans.push({
+        plan: outputPlan,
+        fullPlan: planFullNames[outputPlan] || planFullLabel(plan),
+        rows: rows
+      });
       summaryFor('overtime:' + outputPlan, '超鐘點-' + outputPlan, rows);
     });
 
@@ -2071,12 +2097,18 @@
     var teachingSupportPeriod = getPeriod(periods, 'adjunct', opts.reportMonth);
     var teachingSupportChargedMap = chargedMapFor(teachingSupportPeriod);
     var teachingSupportPlanKeys = [];
+    var teachingSupportPlanFullNames = {};
     reportSourceRows(opts).forEach(function (source) {
       var sourceTeacher = (opts.teachers || []).find(function (teacher) { return sameTeacher(teacher, source); }) || source;
       if (!isTeachingSupportTeacher(sourceTeacher)) return;
       expensePlanSourcesForRow(source).forEach(function (value) {
         var plan = planLabel(value);
         if (plan && teachingSupportPlanKeys.indexOf(plan) < 0) teachingSupportPlanKeys.push(plan);
+      });
+      Object.keys(expensePlanFullNamesForRow(source)).forEach(function (plan) {
+        if (!teachingSupportPlanFullNames[plan]) {
+          teachingSupportPlanFullNames[plan] = expensePlanFullNamesForRow(source)[plan];
+        }
       });
     });
     teachingSupportPlanKeys.sort(function (a, b) {
@@ -2096,7 +2128,11 @@
       );
       if (!rows.length) return;
       var outputPlan = planLabel(plan);
-      data.teachingSupportPlans.push({ plan: outputPlan, rows: rows });
+      data.teachingSupportPlans.push({
+        plan: outputPlan,
+        fullPlan: teachingSupportPlanFullNames[outputPlan] || planFullLabel(plan),
+        rows: rows
+      });
       data.sheets.teachingSupport = data.sheets.teachingSupport.concat(rows);
       summaryFor('teachingSupport:' + outputPlan, '教支人員-' + outputPlan, rows);
     });
@@ -2505,7 +2541,7 @@
       var sheet = entry.sheet;
       var period = getPeriod(data.periods, 'overtime', opts.reportMonth);
       var titleCell = firstTitleCell(sheet, overtimeConfig.columns);
-      titleCell.value = titleForSheet(sheet, overtimeConfig, opts.reportMonth, period, group.plan);
+      titleCell.value = titleForSheet(sheet, overtimeConfig, opts.reportMonth, period, group.fullPlan || group.plan);
       var name = sheetName(overtimeConfig, opts.reportMonth, period, group.plan);
       var base = name;
       var suffix = 2;
@@ -2522,7 +2558,7 @@
       var sheet = entry.sheet;
       var period = getPeriod(data.periods, 'adjunct', opts.reportMonth);
       var titleCell = firstTitleCell(sheet, teachingSupportConfig.columns);
-      titleCell.value = titleForSheet(sheet, teachingSupportConfig, opts.reportMonth, period, group.plan);
+      titleCell.value = titleForSheet(sheet, teachingSupportConfig, opts.reportMonth, period, group.fullPlan || group.plan);
       var name = sheetName(teachingSupportConfig, opts.reportMonth, period, group.plan);
       var base = name;
       var suffix = 2;
