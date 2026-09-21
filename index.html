@@ -1707,12 +1707,12 @@
                <div v-else class="period8-table-wrap">
                  <div class="period8-grid">
                    <div class="period8-grid-header period8-class-header">班級</div>
-                   <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="'p8-head-' + dateStr" class="period8-grid-header">
+                    <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="'p8-head-' + dateStr" :class="['period8-grid-header', 'period8-day-' + dateIndex]">
                      {{ formatDateMMDD(dateStr) }}<br><span>{{ ['一','二','三','四','五'][dateIndex] }}</span>
                    </div>
                    <template v-for="row in period8RosterRows" :key="'p8-row-' + row.className">
                      <div class="period8-class-label">{{ row.className }}</div>
-                     <div v-for="dateStr in period8WeekDates" :key="row.className + '-' + dateStr" class="period8-grid-cell">
+                      <div v-for="(dateStr, dateIndex) in period8WeekDates" :key="row.className + '-' + dateStr" :class="['period8-grid-cell', 'period8-day-' + dateIndex]">
                        <template v-if="period8CellsFor(row, dateStr).length">
                          <button
                            v-for="cell in period8CellsFor(row, dateStr)"
