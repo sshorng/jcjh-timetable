@@ -14,11 +14,13 @@ vm.runInContext(source, context, { filename: 'export-invigilation-recovered.js' 
 
 const linkMasterRange = context.window.ExportInvigilation.linkMasterRange;
 const buildTeacherMatrix = context.window.ExportInvigilation.buildTeacherMatrix;
+const validateClassCoverage = context.window.ExportInvigilation.validateClassCoverage;
 const isSpecialEducationTeacher = context.window.ExportInvigilation.isSpecialEducationTeacher;
 const applySpecialEducationRows = context.window.ExportInvigilation.applySpecialEducationRows;
 const highlightRecipientRow = context.window.ExportInvigilation.highlightRecipientRow;
 assert.equal(typeof linkMasterRange, 'function');
 assert.equal(typeof buildTeacherMatrix, 'function');
+assert.equal(typeof validateClassCoverage, 'function');
 assert.equal(typeof isSpecialEducationTeacher, 'function');
 assert.equal(typeof applySpecialEducationRows, 'function');
 assert.equal(typeof highlightRecipientRow, 'function');
@@ -192,5 +194,49 @@ assert.deepEqual(
   ['有課老師'],
   '完全沒有課務的教師不應出現在監考表'
 );
+
+const endedCourseMatrix = buildTeacherMatrix(
+  [{ email: 'ended@example.com', name: '已終止課程教師' }],
+  context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),
+  () => ({ className: '901', subject: '國文', activeTo: '2026-09-20' }),
+  38,
+  null,
+  []
+);
+assert.equal(endedCourseMatrix.total, 0, '選取區段外已終止的課程不可出現在監考表');
+
+const endedPatrolMatrix = buildTeacherMatrix(
+  [{ email: 'ended-patrol@example.com', name: '已終止巡堂教師' }],
+  context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),
+  () => null,
+  38,
+  null,
+  [{ teacherEmail: 'ended-patrol@example.com', dayOfWeek: 1, period: 1, attr: '巡堂', activeTo: '2026-09-20' }]
+);
+assert.equal(endedPatrolMatrix.total, 0, '選取區段外已終止的巡堂不可透過備援出現在監考表');
+
+function coverageTeacher(name, text) {
+  return {
+    name,
+    slots: new Array(11).fill(null).map(() => ({ text, changed: false }))
+  };
+}
+
+const examPeriodSpec = context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']);
+const validCoverage = validateClassCoverage(
+  { left: [coverageTeacher('甲', '701、702')], right: [] },
+  examPeriodSpec,
+  ['701', '702']
+);
+assert.equal(validCoverage.ok, true, '併班文字拆成實體班級後應視為完整且不重複');
+
+const invalidCoverage = validateClassCoverage(
+  { left: [coverageTeacher('甲', '701')], right: [coverageTeacher('乙', '701')] },
+  examPeriodSpec,
+  ['701', '702']
+);
+assert.equal(invalidCoverage.ok, false, '缺班或重複班級應阻止監考表匯出');
+assert.equal(invalidCoverage.missing[0].classNames.includes('702'), true);
+assert.equal(invalidCoverage.duplicates[0].classes[0].className, '701');
 
 console.log('invigilation export contract tests PASS');

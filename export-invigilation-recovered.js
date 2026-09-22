@@ -35,6 +35,54 @@ window.ExportInvigilation = (function () {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
+  function normalizeScheduleDate(value) {
+    if (value === undefined || value === null || value === '') return '';
+    if (Object.prototype.toString.call(value) === '[object Date]' && !Number.isNaN(value.getTime())) {
+      return value.getFullYear() + '-' + pad2(value.getMonth() + 1) + '-' + pad2(value.getDate());
+    }
+    var raw = String(value).trim().split(/[T ]/)[0].replace(/\//g, '-');
+    var match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!match) return '';
+    var year = parseInt(match[1], 10);
+    var month = parseInt(match[2], 10);
+    var day = parseInt(match[3], 10);
+    var date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return '';
+    return year + '-' + pad2(month) + '-' + pad2(day);
+  }
+
+  function scheduleDateField(schedule, names) {
+    var source = schedule || {};
+    for (var i = 0; i < names.length; i++) {
+      if (source[names[i]] !== undefined && source[names[i]] !== null && source[names[i]] !== '') {
+        return source[names[i]];
+      }
+    }
+    return '';
+  }
+
+  function isScheduleActiveOnDate(schedule, dateStr) {
+    if (!dateStr) return true;
+    if (window.DomainSchedule && typeof window.DomainSchedule.isActiveOnDate === 'function') {
+      try { return window.DomainSchedule.isActiveOnDate(schedule, dateStr); } catch (e) { /* use fallback */ }
+    }
+    var date = normalizeScheduleDate(dateStr);
+    if (!date) return false;
+    var rawFrom = scheduleDateField(schedule, [
+      '啟用起日', '啟用開始日', 'activeFrom', 'activationStartDate', 'effectiveStartDate'
+    ]);
+    var rawTo = scheduleDateField(schedule, [
+      '啟用迄日', '啟用結束日', 'activeTo', 'activationEndDate', 'effectiveEndDate'
+    ]);
+    var from = normalizeScheduleDate(rawFrom);
+    var to = normalizeScheduleDate(rawTo);
+    if (rawFrom && !from) return false;
+    if (rawTo && !to) return false;
+    if (from && date < from) return false;
+    if (to && date > to) return false;
+    return !from || !to || from <= to;
+  }
+
   function formatDayHeader(dateStr) {
     var d = parseDate(dateStr);
     if (!d) return String(dateStr || '');
@@ -563,33 +611,44 @@ window.ExportInvigilation = (function () {
     var cache = Object.create(null);
     var baseList = allSchedules || [];
 
-    // 基礎課表索引：email|dow|period → 是否巡堂
+    // 基礎課表索引：email|dow|period → 巡堂課表列；查詢時再依日期判斷有效性。
     var basePatrolMap = Object.create(null);
     baseList.forEach(function (s) {
-      if (!s || !s.teacherEmail) return;
+      if (!s) return;
+      var teacherEmail = s.teacherEmail || s['教師Email'] || s.teacherName || s['教師姓名'];
+      if (!teacherEmail) return;
       var a = String(s.attr || '').trim();
       var cn = String(s.className || '').trim();
       var sub = String(s.subject || '').trim();
       var isP = a === '巡堂' || a.indexOf('巡堂') >= 0 || cn === '巡堂' || sub === '巡堂'
         || a.indexOf('巡') === 0 || cn.indexOf('巡') === 0 || sub.indexOf('巡') === 0;
       if (!isP) return;
-      var key = String(s.teacherEmail).toLowerCase()
-        + '|' + parseInt(s.dayOfWeek, 10)
-        + '|' + parseInt(s.period, 10);
-      basePatrolMap[key] = true;
+      var key = String(teacherEmail).toLowerCase()
+        + '|' + parseInt(s.dayOfWeek != null ? s.dayOfWeek : s['星期'], 10)
+        + '|' + parseInt(s.period != null ? s.period : s['節次'], 10);
+      if (!basePatrolMap[key]) basePatrolMap[key] = [];
+      basePatrolMap[key].push(s);
     });
+
+    function hasBasePatrolAt(em, dateStr, period, day) {
+      var key = String(em || '').toLowerCase() + '|' + parseInt(day, 10) + '|' + parseInt(period, 10);
+      return (basePatrolMap[key] || []).some(function (schedule) {
+        return isScheduleActiveOnDate(schedule, dateStr);
+      });
+    }
 
     function getCached(em, d, p, day) {
       if (!getCell) return null;
       var k = String(em || '').toLowerCase() + '|' + d + '|' + p;
       if (Object.prototype.hasOwnProperty.call(cache, k)) return cache[k];
       var cell = getCell(em, d, p, day);
+      // A stale getter result must not bring a terminated course into the selected exam range.
+      if (cell && !isScheduleActiveOnDate(cell, d)) cell = null;
       // 備援：getCell 漏掉巡堂時，用基礎課表補
       if (!cell || (!cell.isPatrol && !isPatrolWord(cell.attr)
           && !isPatrolWord(cell.className) && !isPatrolWord(cell.subject)
           && !cell.isSubstitutionDuty && !isEmptySlotAssignCell(cell))) {
-        var bk = String(em || '').toLowerCase() + '|' + parseInt(day, 10) + '|' + parseInt(p, 10);
-        if (basePatrolMap[bk] && (!cell || !cell.isSubstituted)) {
+        if (hasBasePatrolAt(em, d, p, day) && (!cell || !cell.isSubstituted)) {
           cell = Object.assign({}, cell || {}, {
             isPatrol: true,
             attr: '巡堂',
@@ -631,9 +690,7 @@ window.ExportInvigilation = (function () {
         var slot = cellTextFromSchedule(raw);
         // 雙重保險：基礎巡堂一定寫「巡堂」
         if (!slot || (!slot.changed && (!slot.text || !String(slot.text).trim()))) {
-          var bk2 = String(t.email || '').toLowerCase()
-            + '|' + day + '|' + parseInt(sp.period, 10);
-          if (basePatrolMap[bk2]
+          if (hasBasePatrolAt(t.email, sp.date, sp.period, day)
               || (raw && (raw.isPatrol || isPatrolWord(raw.attr)
                 || isPatrolWord(raw.className) || isPatrolWord(raw.subject)))) {
             slot = { text: '巡堂', changed: false };
@@ -670,6 +727,135 @@ window.ExportInvigilation = (function () {
       patrolCount: patrolCount,
       changedCount: changedCount
     };
+  }
+
+  function splitCoverageClassNames(raw) {
+    if (window.DateUtils && typeof window.DateUtils.parseCombinedClasses === 'function') {
+      return window.DateUtils.parseCombinedClasses(raw);
+    }
+    if (Array.isArray(raw)) {
+      return raw.map(function (value) { return String(value || '').trim(); }).filter(Boolean);
+    }
+    return String(raw == null ? '' : raw)
+      .split(/[、,，/／|｜\s]+/)
+      .map(function (value) { return value.trim(); })
+      .filter(Boolean);
+  }
+
+  function isPhysicalClassName(value) {
+    var name = String(value || '').trim();
+    if (!name) return false;
+    return !/^(巡堂|巡[一二三四五六七八九0-9]+|特殊考場|請假|公假|空堂任務|專題探究|專題|走讀|閱讀|閱讀素養|彈性|彈性課程|校訂|校訂課程|班會|週會|班週會|社團|社團活動|自主學習|自習|早自習|午休|導師時間)$/.test(name);
+  }
+
+  function collectCoverageClassNames(values, baseSchedules, periodSpec) {
+    var result = [];
+    var seen = Object.create(null);
+
+    function add(raw) {
+      splitCoverageClassNames(raw).forEach(function (value) {
+        var name = String(value || '').trim();
+        if (!isPhysicalClassName(name) || seen[name]) return;
+        seen[name] = true;
+        result.push(name);
+      });
+    }
+
+    (values || []).forEach(add);
+    if (result.length) return result;
+
+    // When no class directory is available, derive the expected physical classes
+    // from courses that are active on at least one selected exam slot.
+    (baseSchedules || []).forEach(function (schedule) {
+      if (!schedule || isBasePatrol(schedule)) return;
+      var day = parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
+      var period = parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10);
+      var selected = (periodSpec || []).some(function (spec) {
+        return day === dayOfWeekMon1(spec.date)
+          && period === parseInt(spec.period, 10)
+          && isScheduleActiveOnDate(schedule, spec.date);
+      });
+      if (selected) add(schedule.className != null ? schedule.className : schedule['班級']);
+    });
+    return result;
+  }
+
+  /** 每一個考試日／節次，每個實體班級必須恰好出現一次。 */
+  function validateClassCoverage(matrix, periodSpec, classNames, baseSchedules) {
+    var expected = collectCoverageClassNames(classNames, baseSchedules, periodSpec);
+    if (!expected.length) {
+      return { ok: true, skipped: true, expected: [], missing: [], duplicates: [] };
+    }
+    var expectedSet = Object.create(null);
+    expected.forEach(function (name) { expectedSet[name] = true; });
+    var missing = [];
+    var duplicates = [];
+    var sides = [matrix && matrix.left || [], matrix && matrix.right || []];
+    var slots = periodSpec || [];
+
+    slots.forEach(function (spec, slotIndex) {
+      var counts = Object.create(null);
+      var assignedTo = Object.create(null);
+      sides.forEach(function (side) {
+        (side || []).forEach(function (teacher) {
+          var slot = teacher && teacher.slots ? teacher.slots[slotIndex] : null;
+          var text = slot && typeof slot === 'object' ? slot.text : slot;
+          splitCoverageClassNames(text).forEach(function (name) {
+            if (!expectedSet[name]) return;
+            counts[name] = (counts[name] || 0) + 1;
+            if (!assignedTo[name]) assignedTo[name] = [];
+            var teacherName = teacher.name || teacher.email || '';
+            if (teacherName && assignedTo[name].indexOf(teacherName) < 0) {
+              assignedTo[name].push(teacherName);
+            }
+          });
+        });
+      });
+
+      var missingHere = expected.filter(function (name) { return !counts[name]; });
+      if (missingHere.length) {
+        missing.push({ date: spec.date, period: spec.period, classNames: missingHere });
+      }
+      var duplicateHere = expected.filter(function (name) { return counts[name] > 1; }).map(function (name) {
+        return {
+          className: name,
+          count: counts[name],
+          teachers: assignedTo[name] || []
+        };
+      });
+      if (duplicateHere.length) {
+        duplicates.push({ date: spec.date, period: spec.period, classes: duplicateHere });
+      }
+    });
+
+    return {
+      ok: missing.length === 0 && duplicates.length === 0,
+      skipped: false,
+      expected: expected,
+      missing: missing,
+      duplicates: duplicates
+    };
+  }
+
+  function formatCoverageError(coverage) {
+    var lines = ['監考表班級檢查未通過，已停止匯出。'];
+    var maxItems = 8;
+    if (coverage && coverage.missing && coverage.missing.length) {
+      lines.push('缺少：' + coverage.missing.slice(0, maxItems).map(function (item) {
+        return formatDayHeader(item.date) + '第' + item.period + '節 ' + item.classNames.join('、');
+      }).join('；'));
+      if (coverage.missing.length > maxItems) lines.push('缺少項目另有 ' + (coverage.missing.length - maxItems) + ' 組');
+    }
+    if (coverage && coverage.duplicates && coverage.duplicates.length) {
+      lines.push('重複：' + coverage.duplicates.slice(0, maxItems).map(function (item) {
+        return formatDayHeader(item.date) + '第' + item.period + '節 '
+          + item.classes.map(function (entry) {
+            return entry.className + '（' + entry.count + ' 人）';
+          }).join('、');
+      }).join('；'));
+      if (coverage.duplicates.length > maxItems) lines.push('重複項目另有 ' + (coverage.duplicates.length - maxItems) + ' 組');
+    }
+    return lines.join('　');
   }
 
   function fillMasterValues(ws, opts) {
@@ -902,6 +1088,15 @@ window.ExportInvigilation = (function () {
       function (c, t) { progress('讀取課表 ' + c + '／' + t + '…', c, t); },
       opts.allSchedules || []
     );
+    var coverage = validateClassCoverage(
+      matrix,
+      periodSpec,
+      opts.classNames || [],
+      opts.allSchedules || []
+    );
+    if (!coverage.ok) {
+      return { ok: false, error: formatCoverageError(coverage), coverage: coverage };
+    }
     var includedTeachers = matrix.includedTeachers || [];
     recipients = recipients.filter(function (recipient) {
       return includedTeachers.some(function (teacher) { return teachersMatch(recipient, teacher); });
@@ -1026,6 +1221,7 @@ window.ExportInvigilation = (function () {
       sheetCount: total + 1,
       changedMarked: lastMarked,
       patrolCount: matrix.patrolCount || 0,
+      coverage: coverage,
       warning: warn,
       dates: range.dates
     };
@@ -1039,6 +1235,7 @@ window.ExportInvigilation = (function () {
     countEmptySlotQuotaUsed: countEmptySlotQuotaUsed,
     buildExamQuotaStats: buildExamQuotaStats,
     buildTeacherMatrix: buildTeacherMatrix,
+    validateClassCoverage: validateClassCoverage,
     isSpecialEducationTeacher: isSpecialEducationTeacher,
     applySpecialEducationRows: applySpecialEducationRows,
     ensureBlankGridCells: ensureBlankGridCells,

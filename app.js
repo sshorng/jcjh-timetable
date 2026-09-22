@@ -8156,7 +8156,8 @@ createApp({
            ledgerRows: ledgerRows,
            ledgerHistoryComplete: true,
            allSchedules: allSchedules.value || [],
-          onProgress: (p) => {
+           classNames: classList.value || [],
+           onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
           }
         });
