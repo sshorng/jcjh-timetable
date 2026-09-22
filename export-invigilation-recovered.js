@@ -745,6 +745,8 @@ window.ExportInvigilation = (function () {
   function isPhysicalClassName(value) {
     var name = String(value || '').trim();
     if (!name) return false;
+    // 英資、數資、特教等是課務上的虛擬分組，不是段考監考的實體班級。
+    if (/英資|英語資優|數資|數理資優|資優|特教|抽離/.test(name)) return false;
     return !/^(巡堂|巡[一二三四五六七八九0-9]+|特殊考場|請假|公假|空堂任務|專題探究|專題|走讀|閱讀|閱讀素養|彈性|彈性課程|校訂|校訂課程|班會|週會|班週會|社團|社團活動|自主學習|自習|早自習|午休|導師時間)$/.test(name);
   }
 

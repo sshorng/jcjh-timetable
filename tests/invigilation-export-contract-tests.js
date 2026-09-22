@@ -239,4 +239,13 @@ assert.equal(invalidCoverage.ok, false, '缺班或重複班級應阻止監考表
 assert.equal(invalidCoverage.missing[0].classNames.includes('702'), true);
 assert.equal(invalidCoverage.duplicates[0].classes[0].className, '701');
 
+const virtualClassCoverage = validateClassCoverage(
+  { left: [coverageTeacher('甲', '701')], right: [] },
+  examPeriodSpec,
+  ['701', '8英資A', '8英資B', '9英資A', '9英資B', '數資A', '特教'],
+  []
+);
+assert.equal(virtualClassCoverage.ok, true, '英資、數資與特教虛擬班不應列入監考檢查');
+assert.equal(Array.from(virtualClassCoverage.expected).join('|'), '701');
+
 console.log('invigilation export contract tests PASS');
