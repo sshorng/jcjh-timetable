@@ -2023,16 +2023,25 @@
         var noteGroups = {};
         group.details.forEach(function (detail) {
           var target = String(detail.substituteForName || '').trim();
-          var key = target || '__default__';
-          if (!noteGroups[key]) noteGroups[key] = [];
-          noteGroups[key].push(detail);
+          var leaveReason = target
+            ? String(detail.reason || detail['請假事由'] || '').trim()
+            : '';
+          var key = JSON.stringify([target, leaveReason]);
+          if (!noteGroups[key]) {
+            noteGroups[key] = { target: target, leaveReason: leaveReason, details: [] };
+          }
+          noteGroups[key].details.push(detail);
         });
         var noteParts = Object.keys(noteGroups).sort(function (left, right) {
-          if (left === '__default__') return 1;
-          if (right === '__default__') return -1;
-          return left.localeCompare(right, 'zh-Hant', { numeric: true });
+          var leftGroup = noteGroups[left];
+          var rightGroup = noteGroups[right];
+          if (!leftGroup.target && rightGroup.target) return 1;
+          if (leftGroup.target && !rightGroup.target) return -1;
+          return leftGroup.target.localeCompare(rightGroup.target, 'zh-Hant', { numeric: true })
+            || leftGroup.leaveReason.localeCompare(rightGroup.leaveReason, 'zh-Hant');
         }).map(function (key) {
-          var noteDetails = noteGroups[key];
+          var noteGroup = noteGroups[key];
+          var noteDetails = noteGroup.details;
           var noteDates = noteDetails.map(function (detail) {
             return {
               key: String(detail.date || '').slice(0, 10),
@@ -2045,8 +2054,9 @@
           }).map(function (item, dateIndex, all) {
             return dateIndex === 0 || item.key !== all[dateIndex - 1].key ? item.label : '';
           }).filter(Boolean);
-          if (key === '__default__') return noteDates.join('、');
-          return '代' + key + displayCount(noteDetails.length) + '節（' + noteDates.join('、') + '）';
+          if (!noteGroup.target) return noteDates.join('、');
+          return noteDates.join('、') + '代' + noteGroup.target + noteGroup.leaveReason
+            + displayCount(noteDetails.length) + '節';
         });
         return {
           serial: index + 1,

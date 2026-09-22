@@ -617,7 +617,7 @@ const substituteAttributeCoverage = window.ExportAccounting.buildExportData({
   substitutionRecords: [{
     date: '2026-07-06', period: 1, className: '701', type: 'substitution',
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
-    subFee: '公費代課', status: 'approved'
+    subFee: '公費代課', reason: '公假', status: 'approved'
   }]
 });
 assert.equal(substituteAttributeCoverage.sheets.overtime.length, 0, '小鐘點被代課不應列入超鐘點工作表');
@@ -626,7 +626,7 @@ assert.equal(substituteAttributeCoverage.sheets.selfSub.length, 0, '小鐘點被
 const substituteCoverageRow = substituteAttributeCoverage.substituteAttributePlans[0].rows
   .find(row => row.name === 'Cover');
 assert.ok(substituteCoverageRow, '小鐘點被代課應由實際授課人列入小鐘點表');
-assert.equal(substituteCoverageRow.note, '代Billing1節（7/6）', '小鐘點備註應標出被代的原任教師');
+assert.equal(substituteCoverageRow.note, '7/6代Billing公假1節', '小鐘點備註應沿用日期、原任教師、假別與節數格式');
 assert.equal(substituteCoverageRow.isSubstituteHelper, true, '協助代課者應標記為黃底欄位免填');
 assert.deepEqual([
   substituteCoverageRow.weeklyOvertime,

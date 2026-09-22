@@ -1566,20 +1566,21 @@ window.DomainBilling = (function () {
         record.originalTeacherName || record.originalTeacherEmail,
         opts.teachers
       );
-       var detailResolution = smallCourseDetailResolution(record, schedules, opts.teachers, opts.schoolSwapIndex);
-       var detail = {
-         date: dateStr,
-         period: period,
-         className: String(record.className || record['班級'] || '').trim(),
-         subject: String(record.subject || record['科目'] || '').trim(),
-         source: detailResolution && detailResolution.canAutoAllocate
-           ? normalizeExpenseSource(detailResolution.source || DEFAULT_EXPENSE_SOURCE) : ''
-       };
-       rememberConflict(detailResolution, {
-         dayOfWeek: resolveBillingSlot(record, opts.schoolSwapIndex).dayOfWeek,
-         period: period,
-         className: record.className || record['班級']
-       }, '小鐘點實際授課');
+      var detailResolution = smallCourseDetailResolution(record, schedules, opts.teachers, opts.schoolSwapIndex);
+      var detail = {
+        date: dateStr,
+        period: period,
+        className: String(record.className || record['班級'] || '').trim(),
+        subject: String(record.subject || record['科目'] || '').trim(),
+        reason: String(record && (record.reason || record['請假事由']) || '').trim(),
+        source: detailResolution && detailResolution.canAutoAllocate
+          ? normalizeExpenseSource(detailResolution.source || DEFAULT_EXPENSE_SOURCE) : ''
+      };
+      rememberConflict(detailResolution, {
+        dayOfWeek: resolveBillingSlot(record, opts.schoolSwapIndex).dayOfWeek,
+        period: period,
+        className: record.className || record['班級']
+      }, '小鐘點實際授課');
       if (substituteForName) detail.substituteForName = substituteForName;
       result.paidDetails.push(detail);
     });
