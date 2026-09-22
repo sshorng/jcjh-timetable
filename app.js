@@ -4219,6 +4219,34 @@ createApp({
      * 不是一鍵全開所有行政，也不是一般教師。
      */
     const canStaffProxySubmit = computed(() => isStaff.value && isProxySubmitGranted.value);
+    /** ??????????????????????????????????????????????*/
+    const canStartSecondSubFromDetail = computed(() => {
+      const record = detailSubRecord.value;
+      const currentUser = user.value;
+      if (!record || !currentUser) return false;
+      if (isAdmin.value) return true;
+
+      const normalize = (value) => String(value || '').trim().toLowerCase();
+      const currentEmail = normalize(currentUser.email);
+      if (!currentEmail) return false;
+      const profile = (teachersList.value || []).find((teacher) =>
+        [teacher && teacher.loginEmail, teacher && teacher.email, teacher && teacher.teacherEmail,
+          teacher && teacher.teacherName, teacher && teacher.name]
+          .some(value => normalize(value) === currentEmail)
+      );
+      const currentKeys = [
+        currentUser.email,
+        currentUser.displayName,
+        profile && profile.loginEmail,
+        profile && profile.email,
+        profile && profile.teacherEmail,
+        profile && profile.teacherName,
+        profile && profile.name
+      ].map(normalize).filter(Boolean);
+      const ownerKeys = [record.actualTeacherEmail, record.actualTeacherName]
+        .map(normalize).filter(Boolean);
+      return ownerKeys.some(key => currentKeys.includes(key));
+    });
     /** 後台狀態：至少授權一位行政時為「部分開放」 */
     const proxySubmitEnabled = computed(() => (proxySubmitEmails.value || []).length > 0);
     /** 目前是否處於「代別人申請」模式（代理對象 ≠ 自己） */
@@ -7379,6 +7407,10 @@ createApp({
 
     // 當前異動需再次轉移（二次調代課）— ui-timetable
     const startSecondSub = () => {
+      if (!canStartSecondSubFromDetail.value) {
+        showToast('????????????????????, 'warning');
+        return;
+      }
       const a = getTimetableApi();
       if (!a) return;
       a.startSecondSub({
@@ -12365,7 +12397,7 @@ createApp({
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
       isSubFeeLockedToSelf, isPeriod8FeeLocked, quotaDeductPreview, quotaDeductInsufficient, switchQuotaDeductToSelfPay, hasSubTeacherConflict,
-      isAdmin, isStaff, canViewAllTimetables, canStaffProxySubmit, isProxySubmitActive, isProxySubmitGranted,
+      isAdmin, isStaff, canViewAllTimetables, canStaffProxySubmit, canStartSecondSubFromDetail, isProxySubmitActive, isProxySubmitGranted,
       proxySubmitEnabled, proxySubmitEnabledBy, proxySubmitEnabledAt, setProxySubmitEnabled,
       proxySubmitEmails, proxyGrantQuery, proxyGrantCandidateTeachers, proxyGrantedTeachers,
       isProxySubmitEmailGranted, toggleProxySubmitEmail, clearAllProxySubmitEmails, persistProxySubmitEmails,

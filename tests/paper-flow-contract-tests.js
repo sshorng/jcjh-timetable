@@ -1046,6 +1046,9 @@ function runApplicationFormContractTest() {
      assert.equal(isMutualRec({ subFee: '活動公費' }), true, '活動公費仍應顯示為互代');
      assert.match(appSource, /const paperFlow = computed\(\(\) =>\s*!isMutualCover\.value\s*&&\s*notificationsSuppressed\.value\s*&&\s*!isProxySubmitActive\.value\s*\);/, '關閉線上申請時應優先走紙本流程');
     assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
+    assert.match(appSource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
+    assert.match(appSource, /const ownerKeys = \[record\.actualTeacherEmail, record\.actualTeacherName\]/, '本人判定應以實際授課教師為準');
+    assert.match(appSource, /if \(!canStartSecondSubFromDetail\.value\) \{/, '再辦操作入口應再次驗證本人權限');
     assert.equal((html.match(/getBatchGroupTeacherSummary\(row\)/g) || []).length, 3, '三個批次主列都應顯示全部代課教師');
     const batchTeacherStart = appSource.indexOf('const getBatchGroupTeacherSummary =');
     const batchTeacherEnd = appSource.indexOf('const getBatchGroupStatusValues =', batchTeacherStart);
