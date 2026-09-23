@@ -6,9 +6,9 @@
   <title>建成國中線上課表系統</title>
   <meta name="application-name" content="JCJH Timetable">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
-  <link rel="stylesheet" href="style.css?v=20260917-quota-ledger3">
+  <link rel="stylesheet" href="style.css?v=20260917-quota-ledger4">
   <!-- 手機版獨立樣式：不影響桌機 -->
-  <link rel="stylesheet" href="mobile.css?v=20260917-quota-ledger3" media="(max-width: 768px)">
+  <link rel="stylesheet" href="mobile.css?v=20260917-quota-ledger4" media="(max-width: 768px)">
   
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
@@ -991,23 +991,23 @@
             </div>
           </div>
 
-          <!-- 0. 待教學組核准的單據 (僅限管理員，置頂) -->
-          <div class="card" v-if="isAdmin" data-tour="pending-admin">
-            <div class="card-title" style="flex-wrap: wrap; gap: 8px;">
-                <span>📝 待核准發放（共 {{ pendingSearchQuery ? (filteredAdminPendingRequests.length + '／篩選') : (adminPendingRequests.length + ' 筆') }}）</span>
-              <div class="batch-bar" v-if="adminPendingRequests.length > 0">
-                <button type="button" class="btn btn-secondary pad-6-10-78"  @click="toggleSelectAllAdminPending">
-                  {{ isAdminPendingPageFullySelected() ? '取消本頁全選' : '本頁全選' }}
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="openBatchPendingPrintPreview">
-                  🖨️ 批次預覽列印 ({{ selectedAdminPendingIds.length }})
-                </button>
-                <button type="button" class="btn btn-success btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="batchAdminApprove">
-                  ✔ 批次核准 ({{ selectedAdminPendingIds.length }})
-                </button>
-                <button type="button" class="btn btn-danger btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="batchAdminReject">
-                  ✘ 批次駁回 ({{ selectedAdminPendingIds.length }})
-                </button>
+           <!-- 0. 全校待處理單據；staff 只讀，管理員可簽核 -->
+           <div class="card" v-if="isAdmin || isStaff" data-tour="pending-admin">
+             <div class="card-title" style="flex-wrap: wrap; gap: 8px;">
+                 <span>📝 {{ isAdmin ? '待核准發放' : '全校待處理申請' }}（共 {{ pendingSearchQuery ? (filteredAdminPendingRequests.length + '／篩選') : (adminPendingRequests.length + ' 筆') }}）</span>
+               <div class="batch-bar" v-if="adminPendingRequests.length > 0">
+                 <button type="button" class="btn btn-secondary pad-6-10-78"  @click="toggleSelectAllAdminPending">
+                   {{ isAdminPendingPageFullySelected() ? '取消本頁全選' : '本頁全選' }}
+                 </button>
+                 <button type="button" class="btn btn-secondary btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="openBatchPendingPrintPreview">
+                   🖨️ 批次預覽列印 ({{ selectedAdminPendingIds.length }})
+                 </button>
+                 <button v-if="isAdmin" type="button" class="btn btn-success btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="batchAdminApprove">
+                   ✔ 批次核准 ({{ selectedAdminPendingIds.length }})
+                 </button>
+                 <button v-if="isAdmin" type="button" class="btn btn-danger btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="batchAdminReject">
+                   ✘ 批次駁回 ({{ selectedAdminPendingIds.length }})
+                 </button>
               </div>
             </div>
 
@@ -1126,8 +1126,8 @@
                         <div class="action-buttons action-buttons-row">
                           <button v-if="isAdmin" class="btn btn-secondary btn-md-nowrap" title="編輯申請" aria-label="編輯申請" @click="openHistoryEditModal(row)">編輯</button>
                           <button v-if="row.type !== 'triangle' || isPaperFlowRequest(row)" class="btn btn-secondary btn-md-nowrap" title="列印通知" aria-label="列印通知" @click="openPaperPrintForRequest(row)">🖨️</button>
-                          <button class="btn btn-success btn-md-nowrap" title="核准並出單" aria-label="核准並出單" @click="adminApprove(row.id)">✓</button>
-                          <button class="btn btn-danger btn-md-nowrap" title="退回申請" aria-label="退回申請" @click="adminReject(row.id)">❌</button>
+                           <button v-if="isAdmin" class="btn btn-success btn-md-nowrap" title="核准並出單" aria-label="核准並出單" @click="adminApprove(row.id)">✓</button>
+                           <button v-if="isAdmin" class="btn btn-danger btn-md-nowrap" title="退回申請" aria-label="退回申請" @click="adminReject(row.id)">❌</button>
                         </div>
                       </td>
                     </tr>
@@ -1495,7 +1495,7 @@
                   <col class="hist-col-slot">
                   <col class="hist-col-slot">
                   <col class="hist-col-status">
-                  <col v-if="isAdmin" class="hist-col-actions">
+                  <col v-if="isAdmin || isStaff" class="hist-col-actions">
                 </colgroup>
                 <thead>
                   <tr>
@@ -1512,7 +1512,7 @@
                     <th>請假課堂</th>
                     <th>對調課堂</th>
                     <th>狀態</th>
-                    <th v-if="isAdmin">操作</th>
+                    <th v-if="isAdmin || isStaff">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1554,7 +1554,7 @@
                           <span class="badge-print badge-unprinted">批次</span>
                         </div>
                       </td>
-                      <td v-if="isAdmin">
+                      <td v-if="isAdmin || isStaff">
                         <button type="button" class="btn btn-secondary btn-md-nowrap batch-group-action-button" @click.stop="toggleBatchGroup('history', row.batchId)">{{ isBatchGroupExpanded('history', row.batchId) ? '收合' : '展開' }}</button>
                       </td>
                     </tr>
@@ -1600,17 +1600,19 @@
                           </span>
                         </div>
                       </td>
-                        <td v-if="isAdmin" @click.stop>
+                        <td v-if="isAdmin || isStaff" @click.stop>
                           <div class="hist-actions">
-                             <button type="button" class="btn btn-secondary" title="列印此筆通知單" aria-label="列印此筆通知單" @click="printSingleRequest({ recordId: row.id }, 'Notice')">🖨️</button>
-                            <button type="button" class="btn btn-secondary" @click="openHistoryEditModal(row)">編輯</button>
-                            <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: rgba(220, 38, 38, 0.18);" @click="deleteSubstitutionRecord(row.id, row.requestId)">撤銷</button>
+                            <button type="button" class="btn btn-secondary" title="列印此筆通知單" aria-label="列印此筆通知單" @click="printSingleRequest({ recordId: row.id }, 'Notice')">🖨️</button>
+                            <template v-if="isAdmin">
+                              <button type="button" class="btn btn-secondary" @click="openHistoryEditModal(row)">編輯</button>
+                              <button type="button" class="btn btn-secondary" style="color: var(--color-danger); border-color: rgba(220, 38, 38, 0.18);" @click="deleteSubstitutionRecord(row.id, row.requestId)">撤銷</button>
+                            </template>
                           </div>
-                      </td>
+                        </td>
                     </tr>
                   </template>
                   <tr v-if="dateFilteredHistoryRecords.length === 0">
-                    <td :colspan="isAdmin ? 9 : 8" class="table-empty">
+                    <td :colspan="isAdmin || isStaff ? 9 : 8" class="table-empty">
                       <span class="empty-state-title">沒有符合條件的紀錄</span>
                       <span class="empty-state-hint">可調整日期範圍或搜尋條件</span>
                     </td>
@@ -4382,7 +4384,7 @@
               </button>
               
               <!-- 二次轉移/再次調代課 -->
-               <button v-if="detailSubRecord && detailRequest.specialFlow !== 'combined_return'"
+               <button v-if="detailSubRecord && detailRequest.specialFlow !== 'combined_return' && canStartSecondSubFromDetail"
                 class="btn btn-success" 
                 style="padding: 6px 12px; font-size: 0.8rem; margin: 0;"
                 @click="startSecondSub"
@@ -4685,24 +4687,24 @@
   <!-- App Main JS Logic -->
 
   <!-- 模組：defer 依文件順序執行，不擋 HTML 解析；billing/print/export 另延後 -->
-      <script defer src="name-key-contract.js?v=20260917-quota-ledger3"></script>
-        <script defer src="field-map.js?v=20260917-quota-ledger3"></script>
-      <script defer src="date-utils.js?v=20260917-quota-ledger3"></script>
-     <script defer src="gas-api.js?v=20260917-quota-ledger3"></script>
-      <script defer src="domain-school-swap.js?v=20260917-quota-ledger3"></script>
-       <script defer src="domain-schedule.js?v=20260917-quota-ledger3"></script>
-      <script defer src="domain-triangle.js?v=20260917-quota-ledger3"></script>
-       <script defer src="domain-match.js?v=20260917-quota-ledger3"></script>
+      <script defer src="name-key-contract.js?v=20260917-quota-ledger4"></script>
+        <script defer src="field-map.js?v=20260917-quota-ledger4"></script>
+      <script defer src="date-utils.js?v=20260917-quota-ledger4"></script>
+     <script defer src="gas-api.js?v=20260917-quota-ledger4"></script>
+      <script defer src="domain-school-swap.js?v=20260917-quota-ledger4"></script>
+       <script defer src="domain-schedule.js?v=20260917-quota-ledger4"></script>
+      <script defer src="domain-triangle.js?v=20260917-quota-ledger4"></script>
+       <script defer src="domain-match.js?v=20260917-quota-ledger4"></script>
   <!-- domain-activity-cover：活動互代／空堂任務時 ensureDomainActivityCover -->
-      <script defer src="domain-class-away.js?v=20260917-quota-ledger3"></script>
-      <script defer src="fee-utils.js?v=20260917-quota-ledger3"></script>
-        <script defer src="ui-activity.js?v=20260917-quota-ledger3"></script>
-        <script defer src="ui-request.js?v=20260917-quota-ledger3"></script>
-      <script defer src="ui-timetable.js?v=20260917-quota-ledger3"></script>
-        <script defer src="ui-approval.js?v=20260917-quota-ledger3"></script>
+      <script defer src="domain-class-away.js?v=20260917-quota-ledger4"></script>
+      <script defer src="fee-utils.js?v=20260917-quota-ledger4"></script>
+        <script defer src="ui-activity.js?v=20260917-quota-ledger4"></script>
+        <script defer src="ui-request.js?v=20260917-quota-ledger4"></script>
+      <script defer src="ui-timetable.js?v=20260917-quota-ledger4"></script>
+        <script defer src="ui-approval.js?v=20260917-quota-ledger4"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
-        <script defer src="app-shell-utils.js?v=20260917-quota-ledger3"></script>
-       <script defer src="app.js?v=20260917-quota-ledger3"></script>
+        <script defer src="app-shell-utils.js?v=20260917-quota-ledger4"></script>
+       <script defer src="app.js?v=20260917-quota-ledger4"></script>
   <script>
     (function () {
       function loadScript(src) {

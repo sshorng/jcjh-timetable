@@ -102,6 +102,8 @@ assert.strictEqual(
   'admin',
   '儲存教師資料時應保留教學組最高權限'
 );
+const realSanitizeTeacherRowsForReader = sanitizeTeacherRowsForReader_;
+const realSanitizeSettingsForReader = sanitizeSettingsForReader_;
 
 // Replace external services and data access with deterministic fixtures.
 resetRequestContext_ = function () {};
@@ -270,7 +272,7 @@ const adminOnlyActions = [
   'earnMutualQuotaFromActivity', 'saveScheduleCell', 'clearScheduleCell',
   'importSchedulesBatch', 'adminApprove', 'adminReject', 'adminApproveBatch',
   'adminRejectBatch', 'saveHomeroomCoverTeacher', 'deleteSubstitutionRecord',
-  'saveHistoryEdit', 'batchMarkPrinted', 'saveMailSettings', 'sendBatchNotices',
+  'saveHistoryEdit', 'saveMailSettings', 'sendBatchNotices',
   'migrateNameKeySchema', 'renameTeacherNameKey'
 ];
 
@@ -295,6 +297,23 @@ assert.strictEqual(adminSave.success, true);
 assert.strictEqual(mutationCalls, 1, 'admin action did not reach its write path');
 assert.ok(lockAcquires > 0, 'authorized admin action did not acquire the write lock');
 
+resetMutationState();
+const staffMarkPrinted = invoke({
+  email: STAFF_EMAIL,
+  action: 'batchMarkPrinted',
+  data: { ids: [] }
+});
+assert.strictEqual(staffMarkPrinted.success, true, 'staff should be allowed to persist print markers');
+assert.ok(lockAcquires > 0, 'staff print marker did not pass through the authorized write path');
+resetMutationState();
+const teacherMarkPrinted = invoke({
+  email: TEACHER_EMAIL,
+  action: 'batchMarkPrinted',
+  data: { ids: [] }
+});
+assert.strictEqual(teacherMarkPrinted.success, false, 'teacher should not persist school-wide print markers');
+assert.strictEqual(lockAcquires, 0);
+
 const outsiderRead = invoke({ email: OUTSIDER_EMAIL, action: 'getMetaData' });
 assert.strictEqual(outsiderRead.success, false);
 assert.match(outsiderRead.error, /不在目前學期教師名單/);
@@ -304,7 +323,85 @@ const publicRead = invoke({ email: OUTSIDER_EMAIL, action: 'getPublicClassData',
 assert.strictEqual(publicRead.success, true);
 assert.strictEqual(publicRead.public, true);
 
+const staffSharedPayload = personalizeSharedPayload_({
+  requests: [
+    { '申請單ID': 'req-staff-view-1', '申請人Email': STAFF_EMAIL, '受邀人Email': TEACHER_EMAIL },
+    { '申請單ID': 'req-staff-view-2', '申請人Email': OWNER_EMAIL, '受邀人Email': INVITEE_EMAIL }
+  ],
+  schedules: [{ '教師Email': STAFF_EMAIL, '教師姓名': '行政' }],
+  homeroomRecords: [{ '代導紀錄ID': 'homeroom-private' }]
+}, STAFF_EMAIL, false, { isStaff: true, canViewAllTimetables: true });
+assert.strictEqual(staffSharedPayload.scope, 'staff');
+assert.strictEqual(staffSharedPayload.scheduleScope, 'full');
+assert.strictEqual(staffSharedPayload.requests.length, 2, 'staff should receive all visible school requests');
+assert.strictEqual(Object.prototype.hasOwnProperty.call(staffSharedPayload, 'homeroomRecords'), false, 'staff should not receive homeroom administration records');
+
+const sanitizedStaffTeachers = realSanitizeTeacherRowsForReader([{
+  '教師Email': STAFF_EMAIL,
+  '教師姓名': '行政',
+  '授課科目': '國文',
+  '鐘點支出計畫': '內部計畫',
+  '基本鐘點': 17,
+  '折抵額度': 3
+}], STAFF_EMAIL, false, true);
+assert.strictEqual(sanitizedStaffTeachers.length, 1);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(sanitizedStaffTeachers[0], '折抵額度'), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(sanitizedStaffTeachers[0], '鐘點支出計畫'), false);
+const sanitizedStaffSettings = realSanitizeSettingsForReader({
+  allowedHd: 'school.example',
+  superAdminEmails: 'admin@school.example',
+  proxySubmitEmails: STAFF_EMAIL
+}, STAFF_EMAIL, false, true, teachers);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(sanitizedStaffSettings, 'superAdminEmails'), false);
+assert.strictEqual(sanitizedStaffSettings.proxySubmitEmails, '');
+
+const realHistoryMonthRowsCached = getHistoryMonthRowsCached_;
+const staffHistoryRows = [
+  { '申請單ID': 'req-staff-history-1', '申請人Email': STAFF_EMAIL, '受邀人Email': TEACHER_EMAIL },
+  { '申請單ID': 'req-staff-history-2', '申請人Email': OWNER_EMAIL, '受邀人Email': INVITEE_EMAIL }
+];
+getHistoryMonthRowsCached_ = function () { return staffHistoryRows; };
+const staffHistory = invoke({ email: STAFF_EMAIL, action: 'getHistoryMonth', data: { month: '2026-09' } });
+assert.strictEqual(staffHistory.success, true);
+assert.strictEqual(staffHistory.count, 2, 'staff month history should not be filtered to self');
+const teacherHistory = invoke({ email: TEACHER_EMAIL, action: 'getHistoryMonth', data: { month: '2026-09' } });
+assert.strictEqual(teacherHistory.count, 1, 'teacher month history should remain personal');
+getHistoryMonthRowsCached_ = realHistoryMonthRowsCached;
+
+const realPendingRowsFromSheet = getPendingRequestsFromSheet_;
+getPendingRequestsFromSheet_ = function () { return staffHistoryRows; };
+const staffPending = invoke({ email: STAFF_EMAIL, action: 'getPendingOnly' });
+assert.strictEqual(staffPending.success, true);
+assert.strictEqual(staffPending.count, 2, 'staff pending data should not be filtered to self');
+const teacherPending = invoke({ email: TEACHER_EMAIL, action: 'getPendingOnly' });
+assert.strictEqual(teacherPending.count, 1, 'teacher pending data should remain personal');
+getPendingRequestsFromSheet_ = realPendingRowsFromSheet;
+
+const realSemesterRequestsCached = getSemesterRequestsCached_;
+getSemesterRequestsCached_ = function () { return { rows: staffHistoryRows, allCount: staffHistoryRows.length }; };
+const staffDelta = buildRequestsDelta_(semesterId, STAFF_EMAIL, false, '2026-09-01 00:00:00', true);
+assert.strictEqual(staffDelta.scope, 'staff');
+assert.strictEqual(staffDelta.count, 2, 'staff request delta should include school-wide changes');
+const teacherDelta = buildRequestsDelta_(semesterId, TEACHER_EMAIL, false, '2026-09-01 00:00:00', false);
+assert.strictEqual(teacherDelta.count, 1, 'teacher request delta should remain personal');
+getSemesterRequestsCached_ = realSemesterRequestsCached;
+
 proxyAllowed = false;
+resetMutationState();
+const staffSelfRequest = invoke({
+  email: STAFF_EMAIL,
+  action: 'submitRequest',
+  data: {
+    request: makeRequest({
+      '申請單ID': 'req-staff-self',
+      '申請人Email': STAFF_EMAIL,
+      '申請人姓名': '行政'
+    })
+  }
+});
+assert.strictEqual(staffSelfRequest.success, true, 'staff should retain self-submission');
+assert.strictEqual(persistedRows[0]['狀態'], 'pending_teacher');
+
 resetMutationState();
 const unauthorizedStaffProxy = invoke({
   email: STAFF_EMAIL,

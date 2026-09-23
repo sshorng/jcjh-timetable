@@ -4219,7 +4219,7 @@ createApp({
      * 不是一鍵全開所有行政，也不是一般教師。
      */
     const canStaffProxySubmit = computed(() => isStaff.value && isProxySubmitGranted.value);
-    /** ??????????????????????????????????????????????*/
+    /** 管理員可協助他人再辦；其他身分只限自己的實際授課／代課時段。 */
     const canStartSecondSubFromDetail = computed(() => {
       const record = detailSubRecord.value;
       const currentUser = user.value;
@@ -4640,11 +4640,11 @@ createApp({
 
     const pendingCount = computed(() => {
       let count = myPendingRequests.value.length;
-      if (isAdmin.value) count += adminPendingRequests.value.length;
+      if (isAdmin.value || isStaff.value) count += adminPendingRequests.value.length;
       return count;
     });
     const myInviteCount = computed(() => myPendingRequests.value.length);
-    const adminTodoCount = computed(() => isAdmin.value ? adminPendingRequests.value.length : 0);
+    const adminTodoCount = computed(() => (isAdmin.value || isStaff.value) ? adminPendingRequests.value.length : 0);
     // 快速待辦：避免模板每次 filter
     const quickTodoSentOpen = computed(() =>
       (mySentRequests.value || []).filter(r =>
@@ -5053,8 +5053,8 @@ createApp({
       const teacherName = user.value ? String(getTeacherNameByEmail(user.value.email) || '').toLowerCase() : '';
       let filteredRecords = substitutionRecords.value;
       
-      // 非教學組：預設只看自己相關；行政另含「我代送」的單
-      if (!isAdmin.value && teacherName) {
+      // 一般教師只看自己相關；行政可看全校，另保留「我代送」的單
+      if (!isAdmin.value && !isStaff.value && teacherName) {
         filteredRecords = substitutionRecords.value.filter(r => {
           const related =
             (r.originalTeacherName && r.originalTeacherName.toLowerCase() === teacherName) ||
@@ -7408,7 +7408,7 @@ createApp({
     // 當前異動需再次轉移（二次調代課）— ui-timetable
     const startSecondSub = () => {
       if (!canStartSecondSubFromDetail.value) {
-        showToast('????????????????????, 'warning');
+        showToast('只有自己的實際課時可以再辦', 'warning');
         return;
       }
       const a = getTimetableApi();
@@ -9445,13 +9445,17 @@ createApp({
            const name = String(getTeacherNameByEmail(email) || '').toLowerCase();
            mySentRequests.value = sortedAll.filter(r => isMySentRequest(r, email));
            myPendingRequests.value = sortedAll.filter(r => r.targetTeacherName && r.targetTeacherName.toLowerCase() === name && r.status === 'pending_teacher');
-          // 待核准僅教學組；模擬成行政／教師時清空，避免誤以為「我的送出」
-          const stOf = (r) => (window.FieldMap && window.FieldMap.normalizeRequestStatus)
-            ? window.FieldMap.normalizeRequestStatus(r && r.status)
-            : String((r && r.status) || '').toLowerCase();
-           adminPendingRequests.value = (userRole.value === 'admin')
-             ? collapseTriangleRows(sortedAll.filter(r => stOf(r) === 'pending_admin'))
-             : [];
+           // 教學組可核准；行政只讀全校待辦，不提供核准／駁回操作。
+           const stOf = (r) => (window.FieldMap && window.FieldMap.normalizeRequestStatus)
+             ? window.FieldMap.normalizeRequestStatus(r && r.status)
+             : String((r && r.status) || '').toLowerCase();
+            const schoolPendingRows = sortedAll.filter(r => {
+              const s = stOf(r);
+              return s === 'pending_teacher' || s === 'pending_admin';
+            });
+            adminPendingRequests.value = userRole.value === 'admin'
+              ? collapseTriangleRows(schoolPendingRows.filter(r => stOf(r) === 'pending_admin'))
+              : (userRole.value === 'staff' ? collapseTriangleRows(schoolPendingRows) : []);
           allPendingRequests.value = sortedAll.filter(r => {
             const s = stOf(r);
             return s === 'pending_teacher' || s === 'pending_admin';
@@ -9621,9 +9625,13 @@ createApp({
         r.targetTeacherName && String(r.targetTeacherName).toLowerCase() === name
         && stOf(r) === 'pending_teacher'
       );
-      adminPendingRequests.value = (userRole.value === 'admin')
-        ? collapseTriangleRows(all.filter(r => stOf(r) === 'pending_admin'))
-        : [];
+      const schoolPendingRows = all.filter(r => {
+        const s = stOf(r);
+        return s === 'pending_teacher' || s === 'pending_admin';
+      });
+      adminPendingRequests.value = userRole.value === 'admin'
+        ? collapseTriangleRows(schoolPendingRows.filter(r => stOf(r) === 'pending_admin'))
+        : (userRole.value === 'staff' ? collapseTriangleRows(schoolPendingRows) : []);
       allPendingRequests.value = all.filter(r => {
         const s = stOf(r);
         return s === 'pending_teacher' || s === 'pending_admin';
@@ -12397,7 +12405,7 @@ createApp({
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
       isSubFeeLockedToSelf, isPeriod8FeeLocked, quotaDeductPreview, quotaDeductInsufficient, switchQuotaDeductToSelfPay, hasSubTeacherConflict,
-      isAdmin, isStaff, canViewAllTimetables, canStaffProxySubmit, canStartSecondSubFromDetail, isProxySubmitActive, isProxySubmitGranted,
+       isAdmin, isStaff, canViewAllTimetables, canStaffProxySubmit, canStartSecondSubFromDetail, isProxySubmitActive, isProxySubmitGranted,
       proxySubmitEnabled, proxySubmitEnabledBy, proxySubmitEnabledAt, setProxySubmitEnabled,
       proxySubmitEmails, proxyGrantQuery, proxyGrantCandidateTeachers, proxyGrantedTeachers,
       isProxySubmitEmailGranted, toggleProxySubmitEmail, clearAllProxySubmitEmails, persistProxySubmitEmails,

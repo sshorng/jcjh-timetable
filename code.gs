@@ -4472,7 +4472,7 @@ function slimSchedulesForTeacher_(schedules, teacherEmail) {
 /**
  * 個人化 payload。
  * opts.canViewAllTimetables：教學組或行政 → 全校課表
- * opts.isStaff：行政（申請可見範圍含代送）
+ * opts.isStaff：行政（可查看全校申請；代申請仍由白名單控制）
  */
 function personalizeSharedPayload_(shared, readerEmail, readerIsAdmin, opts) {
   if (!shared) return shared;
@@ -4484,7 +4484,7 @@ function personalizeSharedPayload_(shared, readerEmail, readerIsAdmin, opts) {
   }
   var rows = shared.requests || [];
   var em = String(readerEmail || "").toLowerCase();
-  if (!readerIsAdmin) {
+  if (!readerIsAdmin && !opts.isStaff) {
     rows = rows.filter(function (req) {
       return requestVisibleToReader_(req, em, false);
     });
@@ -4514,7 +4514,7 @@ function personalizeSharedPayload_(shared, readerEmail, readerIsAdmin, opts) {
   if (Object.prototype.hasOwnProperty.call(shared, "settings")) {
     out.settings = sanitizeSettingsForReader_(shared.settings || {}, readerEmail, readerIsAdmin, !!opts.isStaff, shared.teachers || []);
   }
-  if (!readerIsAdmin && !opts.isStaff) {
+  if (!readerIsAdmin) {
     delete out.homeroomRecords;
   }
   if (out.requestWindow) {
@@ -4945,7 +4945,7 @@ function buildMatchCandidates_(semesterId, opts) {
  * 申請增量：updatedSince 之後有變的列（更新時間／建立時間）。
  * 舊列無「更新時間」時以建立時間近似；水位線過舊（>2 天）由前端改走全窗。
  */
-function buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw) {
+function buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw, readerIsStaff) {
   var sinceMs = parseUpdatedSinceMs_(updatedSinceRaw);
   var pack = getSemesterRequestsCached_(semesterId, false, 14);
   var all = pack.rows || [];
@@ -4955,7 +4955,7 @@ function buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinc
     if (!ms) return true;
     return ms > sinceMs;
   });
-  if (!readerIsAdmin) {
+  if (!readerIsAdmin && !readerIsStaff) {
     var em = String(readerEmail || "").toLowerCase();
     changed = changed.filter(function (req) {
       return requestVisibleToReader_(req, em, false);
@@ -4980,7 +4980,7 @@ function buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinc
     count: changed.length,
     updatedSince: String(updatedSinceRaw || ""),
     serverTime: serverTime,
-    scope: readerIsAdmin ? "admin" : "teacher"
+    scope: readerIsAdmin ? "admin" : (readerIsStaff ? "staff" : "teacher")
   };
 }
 
@@ -4994,6 +4994,7 @@ function buildFullSemesterPayload_(semesterId, opts) {
   opts = opts || {};
   const userEmail = String(opts.userEmail || "").toLowerCase();
   const isAdmin = !!opts.isAdmin;
+  const isStaff = !!opts.isStaff;
   // historyAll=true：不裁時間窗（歷史頁「載入完整學期」）
   const historyAll = opts.historyAll === true || opts.historyAll === "true" || opts.historyAll === 1;
   // 預設近 14 天已結案；未結案不受限
@@ -5006,9 +5007,9 @@ function buildFullSemesterPayload_(semesterId, opts) {
     return {
       success: true,
       kind: "teachersOnly",
-      teachers: sanitizeTeacherRowsForReader_(teachersOnlyRows, userEmail, isAdmin, !!opts.isStaff),
-      scope: isAdmin ? "admin" : "teacher",
-      userRole: isAdmin ? "admin" : (opts.isStaff ? "staff" : "teacher"),
+      teachers: sanitizeTeacherRowsForReader_(teachersOnlyRows, userEmail, isAdmin, isStaff),
+      scope: isAdmin ? "admin" : (isStaff ? "staff" : "teacher"),
+      userRole: isAdmin ? "admin" : (isStaff ? "staff" : "teacher"),
       serverTime: toLocalTimeStr(new Date())
     };
   }
@@ -5020,7 +5021,7 @@ function buildFullSemesterPayload_(semesterId, opts) {
 
   // 角色分流：一般教師只拿與自己相關的申請（申請人／受邀人）
   // 注意：快取存的是「時間窗後」全校列；教師再 filter 不寫回快取
-  if (userEmail && !isAdmin) {
+  if (userEmail && !isAdmin && !isStaff) {
     requests = requests.filter(function (req) {
       var a = String(req["申請人Email"] || "").toLowerCase();
       var b = String(req["受邀人Email"] || "").toLowerCase();
@@ -5036,7 +5037,7 @@ function buildFullSemesterPayload_(semesterId, opts) {
       kind: "requestsOnly",
       requests: requests,
       classAwayEvents: classAwayEvents,
-      scope: isAdmin ? "admin" : "teacher",
+      scope: isAdmin ? "admin" : (isStaff ? "staff" : "teacher"),
       serverTime: toLocalTimeStr(new Date()),
       requestWindow: {
         historyAll: !!historyAll,
@@ -5056,7 +5057,7 @@ function buildFullSemesterPayload_(semesterId, opts) {
 
   return {
     success: true,
-    userRole: isAdmin ? "admin" : (opts.isStaff ? "staff" : "teacher"),
+    userRole: isAdmin ? "admin" : (isStaff ? "staff" : "teacher"),
     semesters: semesters,
     teachers: allTeachers,
     schedules: allSchedules,
@@ -5066,7 +5067,7 @@ function buildFullSemesterPayload_(semesterId, opts) {
     homeroomRecords: isAdmin ? getSemesterHomeroomRecords_(semesterId) : [],
     requests: requests,
     classAwayEvents: classAwayEvents,
-    scope: isAdmin ? "admin" : "teacher",
+    scope: isAdmin ? "admin" : (isStaff ? "staff" : "teacher"),
     serverTime: toLocalTimeStr(new Date()),
     requestWindow: {
       historyAll: !!historyAll,
@@ -5440,7 +5441,8 @@ function handleReadAction_(postData) {
         putCacheChunked(pendingKey, JSON.stringify(pending || []), pTtl);
       } catch (pPut) {}
     }
-    if (!isAdminP) {
+    var isStaffP = resolveIsStaff_(readerEmail, teachersP);
+    if (!isAdminP && !isStaffP) {
       pending = (pending || []).filter(function (req) {
         return requestVisibleToReader_(req, readerEmail, false);
       });
@@ -5466,7 +5468,8 @@ function handleReadAction_(postData) {
     }
     // 共用未個人化月份列；命中後仍須依讀取者權限過濾並移除內部欄位。
     var monthRows = getHistoryMonthRowsCached_(semesterId, monthStr, scope === "fresh");
-    if (!isAdminH) {
+    var isStaffH = resolveIsStaff_(readerEmail, teachersH);
+    if (!isAdminH && !isStaffH) {
       monthRows = monthRows.filter(function (req) {
         return requestVisibleToReader_(req, readerEmail, false);
       });
@@ -5654,7 +5657,7 @@ function handleReadAction_(postData) {
     if ((reqData.requestsDelta === true || reqData.requestsDelta === "true" || reqData.requestsDelta === 1
         || postData.requestsDelta === true || postData.requestsDelta === "true")
         && String(updatedSinceRaw || "").trim()) {
-      var deltaOut = buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw);
+      var deltaOut = buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw, readerIsStaff);
       if (readerIsStaff) deltaOut.scope = "staff";
       return ContentService.createTextOutput(JSON.stringify(deltaOut))
         .setMimeType(ContentService.MimeType.JSON);
@@ -6610,11 +6613,14 @@ function doPost(e) {
       adminApprove: 1, adminReject: 1, adminApproveBatch: 1, adminRejectBatch: 1,
       saveHomeroomCoverTeacher: 1,
       deleteSubstitutionRecord: 1,
-      saveHistoryEdit: 1, batchMarkPrinted: 1, saveMailSettings: 1, sendBatchNotices: 1,
+      saveHistoryEdit: 1, saveMailSettings: 1, sendBatchNotices: 1,
       migrateNameKeySchema: 1, renameTeacherNameKey: 1
     };
     if (ADMIN_ONLY_ACTIONS[action] && !isAdmin) {
       throw new Error("權限不足：此操作僅限教學組管理員！");
+    }
+    if (action === "batchMarkPrinted" && !isAdmin && !isStaff) {
+      throw new Error("權限不足：列印標記僅限教學組管理員或行政！");
     }
     if (!isAdmin && !currentTeacher) {
       throw new Error("您的帳號不在本校教師名單中，無法操作！");
@@ -6632,7 +6638,8 @@ function doPost(e) {
     // ADMIN: saveSemester, deleteSemester, setDefaultSemester, saveTeacher, deleteTeacher,
     //        importTeachersBatch, saveScheduleCell, clearScheduleCell, importSchedulesBatch,
     //        adminApprove, adminReject, deleteSubstitutionRecord, saveHistoryEdit,
-    //        saveMailSettings, batchMarkPrinted
+    //        saveMailSettings
+    // STAFF: batchMarkPrinted（列印後僅更新已印標記）
     // TEACHER: submitRequest, respondToRequest, cancelRequest, withdrawRequest
 
     
@@ -7715,7 +7722,7 @@ function doPost(e) {
       invalidateSemesterCaches_(semesterId);
       
     } else if (action === "batchMarkPrinted") {
-      if (!isAdmin) throw new Error("無管理員權限！");
+      if (!isAdmin && !isStaff) throw new Error("僅管理員或行政可標記列印！");
       var printIds = (reqData.ids || []).map(function (id) {
         return String(id || "").replace(/_[12]$/, "");
       });
