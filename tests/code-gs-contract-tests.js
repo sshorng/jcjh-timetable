@@ -96,6 +96,31 @@ const adminApproveStart = source.indexOf('} else if (action === "adminApprove")'
 const adminApproveEnd = source.indexOf('} else if (action === "adminApproveBatch")', adminApproveStart);
 assert.ok(adminApproveStart >= 0 && adminApproveEnd > adminApproveStart, '單筆核准 action 必須存在');
 assert.match(source.slice(adminApproveStart, adminApproveEnd), /persistRequestRowsWithQuota_\(\[targetReq\], userEmail\)/, '單筆核准應冪等補寫額度帳本');
+const requestLookupStart = source.indexOf('function findRowByKey_');
+const requestLookupEnd = source.indexOf('function findRowsByColumnValue_', requestLookupStart);
+assert.ok(requestLookupStart >= 0 && requestLookupEnd > requestLookupStart, '申請單查詢 helper 必須存在');
+const requestRows = [['tri_20260929_ab12_1', '115-1']];
+const requestSheet = {
+  getLastRow: () => requestRows.length + 1,
+  getRange: (row, column, rowCount, columnCount) => ({
+    getValues: () => columnCount === 1
+      ? requestRows.map(item => [item[0]])
+      : requestRows.slice(row - 2, row - 2 + rowCount)
+  })
+};
+const requestLookupContext = {
+  String, Object, Array,
+  getSpreadsheet: () => ({ getSheetByName: () => requestSheet }),
+  getHeadersForSheet: () => ['申請單ID', '學期代號'],
+  rowArrayToObject_: (sheetName, headers, row) => ({
+    '申請單ID': row[0],
+    '學期代號': row[1]
+  })
+};
+vm.createContext(requestLookupContext);
+vm.runInContext(source.slice(requestLookupStart, requestLookupEnd), requestLookupContext, { filename: 'code.gs.request-lookup' });
+const triangleRequest = requestLookupContext.findRowByKey_('申請單', '申請單ID', 'tri_20260929_ab12_1', '115-1');
+assert.equal(triangleRequest['申請單ID'], 'tri_20260929_ab12_1', '單筆查詢不可截掉三角調 ID 的腳次尾碼');
 const adminApproveBatchStart = source.indexOf('} else if (action === "adminApproveBatch")');
 const adminApproveBatchEnd = source.indexOf('} else if (action === "adminReject")', adminApproveBatchStart);
 assert.ok(adminApproveBatchStart >= 0 && adminApproveBatchEnd > adminApproveBatchStart, '批次核准 action 必須存在');

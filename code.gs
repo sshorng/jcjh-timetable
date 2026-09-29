@@ -1547,21 +1547,24 @@ function deleteRowsBySemester_(sheetName, semesterId) {
  * @returns {Object|null}
  */
 function findRowByKey_(sheetName, keyName, keyValue, semesterId) {
-  var map = findRowsByKeys_(sheetName, keyName, [keyValue], semesterId);
+  // 單筆操作必須保留完整 ID；三角調的申請單 ID 本身會以 _1／_2／_3 結尾。
+  var map = findRowsByKeys_(sheetName, keyName, [keyValue], semesterId, true);
   var k = String(keyValue == null ? "" : keyValue);
   return map[k] || null;
 }
 
 /**
  * 依 key 一次取多列；只掃 key 欄＋讀命中列
+ * @param {boolean} preserveSuffix 單筆精確查詢時保留 ID 尾碼；批次相容模式預設會去除 _1／_2
  * @returns {Object} keyString -> rowObject
  */
-function findRowsByKeys_(sheetName, keyName, keyValues, semesterId) {
+function findRowsByKeys_(sheetName, keyName, keyValues, semesterId, preserveSuffix) {
   var out = {};
   var want = {};
   var nWant = 0;
   (keyValues || []).forEach(function (kv) {
     var k = String(kv == null ? "" : kv).replace(/_[12]$/, "");
+    if (preserveSuffix) k = String(kv == null ? "" : kv);
     if (!k || want[k]) return;
     want[k] = 1;
     nWant++;
