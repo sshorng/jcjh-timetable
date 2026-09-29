@@ -11019,9 +11019,9 @@ createApp({
       (paginatedAdminPending.value || []).forEach(row => {
         if (row && row.displayKind === 'batch') {
           (row.items || []).forEach(item => {
-            if (item && item.type !== 'triangle' && item.id != null) ids.push(item.id);
+            if (item && item.id != null) ids.push(item.id);
           });
-        } else if (row && row.displayKind === 'item' && row.type !== 'triangle' && row.id != null) {
+        } else if (row && row.displayKind === 'item' && row.id != null) {
           ids.push(row.id);
         }
       });

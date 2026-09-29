@@ -134,7 +134,7 @@ window.UiApproval = (function () {
         ? paginatedAdminPending.value
         : [];
       var add = function (row) {
-        if (!row || row.type === 'triangle' || row.id == null) return;
+        if (!row || row.id == null) return;
         var id = String(row.id);
         if (!seen[id]) {
           seen[id] = true;
@@ -188,7 +188,7 @@ window.UiApproval = (function () {
 
     function isAdminBatchGroupSelected(group) {
       var ids = (group && group.items || []).filter(function (row) {
-        return row && row.type !== 'triangle' && row.id != null;
+        return row && row.id != null;
       }).map(function (row) { return String(row.id); });
       if (!ids.length) return false;
       var selected = new Set((selectedAdminPendingIds.value || []).map(function (id) { return String(id); }));
@@ -197,7 +197,7 @@ window.UiApproval = (function () {
 
     function toggleAdminBatchGroupSelection(group, evt) {
       var ids = (group && group.items || []).filter(function (row) {
-        return row && row.type !== 'triangle' && row.id != null;
+        return row && row.id != null;
       }).map(function (row) { return String(row.id); });
       if (!ids.length) return;
       setAdminPendingSelection(ids, !!(evt && evt.target && evt.target.checked));
@@ -210,6 +210,24 @@ window.UiApproval = (function () {
         });
       } catch (e) { /* ignore */ }
       selectedAdminPendingIds.value = [];
+    }
+
+    function splitAdminPendingIds(ids) {
+      var regularIds = [];
+      var triangleIds = [];
+      var seenTriangles = Object.create(null);
+      (ids || []).forEach(function (id) {
+        var request = findRequestById(id);
+        if (!request || !isTriangleRequest(request)) {
+          regularIds.push(id);
+          return;
+        }
+        var groupKey = String(request.triangleId || request.batchId || request.id || id);
+        if (seenTriangles[groupKey]) return;
+        seenTriangles[groupKey] = true;
+        triangleIds.push(id);
+      });
+      return { regularIds: regularIds, triangleIds: triangleIds };
     }
 
     // 單勾：原生已亮；延後同步 ref（按鈕 disabled 用）
@@ -489,7 +507,7 @@ window.UiApproval = (function () {
          var isTriangle = isTriangleRequest(req);
          await callGasApi('adminReject', { requestId: id });
          bustQuotaLedgerCache();
-         showToast('已駁回此申請單。', 'info');
+          if (!silent) showToast('已駁回此申請單。', 'info');
          restoreMutualQuotaForRows(req);
          if (isTriangle) optimisticPatchTriangleGroup(req, 'admin_rejected');
          else optimisticPatchRequestStatus(id, 'admin_rejected');
@@ -514,6 +532,9 @@ window.UiApproval = (function () {
         showToast('請先勾選要核准的申請單', 'warning');
         return;
       }
+      var selectedGroups = splitAdminPendingIds(ids);
+      var regularIds = selectedGroups.regularIds;
+      var triangleIds = selectedGroups.triangleIds;
       var preview = ids.slice(0, 8).map(function (id) {
         var r = findRequestById(id);
         if (!r) return '• ' + id;
@@ -537,37 +558,39 @@ window.UiApproval = (function () {
       var printIds = [];
       try {
         // 後端一次讀表 + 一次 saveRows；失敗則回退逐筆
-        var res = await callGasApiWithProgress(
-          'adminApproveBatch',
-          { requestIds: ids },
-          '批次核准 ' + ids.length + ' 筆'
-        );
-        bustQuotaLedgerCache();
-        var doneIds = (res && res.ids) || ids;
-        ok = (res && res.count) || doneIds.length;
-        var doneReqById = Object.create(null);
-        (requestsList.value || []).forEach(function (r) {
-          if (r && r.id != null) doneReqById[String(r.id)] = r;
-        });
-        optimisticPatchRequestStatuses(doneIds.map(function (id) {
-          return { id: id, status: 'approved' };
-        }));
-        doneIds.forEach(function (id) {
-          var r = doneReqById[String(id)] || findRequestById(id);
-          if (r && (r.type === 'exchange' || r.type === '對調')) {
-            printIds.push(id + '_1');
-            printIds.push(id + '_2');
-          } else {
-            printIds.push(id);
-          }
-        });
-        if (res && res.missing) fail = res.missing;
+        if (regularIds.length) {
+          var res = await callGasApiWithProgress(
+            'adminApproveBatch',
+            { requestIds: regularIds },
+            '批次核准 ' + regularIds.length + ' 筆'
+          );
+          bustQuotaLedgerCache();
+          var doneIds = (res && res.ids) || regularIds;
+          ok += (res && res.count) || doneIds.length;
+          var doneReqById = Object.create(null);
+          (requestsList.value || []).forEach(function (r) {
+            if (r && r.id != null) doneReqById[String(r.id)] = r;
+          });
+          optimisticPatchRequestStatuses(doneIds.map(function (id) {
+            return { id: id, status: 'approved' };
+          }));
+          doneIds.forEach(function (id) {
+            var r = doneReqById[String(id)] || findRequestById(id);
+            if (r && (r.type === 'exchange' || r.type === '對調')) {
+              printIds.push(id + '_1');
+              printIds.push(id + '_2');
+            } else {
+              printIds.push(id);
+            }
+          });
+          if (res && res.missing) fail += res.missing;
+        }
       } catch (batchE) {
         console.warn('adminApproveBatch 失敗，回退逐筆：', batchE);
-        for (var i = 0; i < ids.length; i++) {
-          loadingMessage.value = '批次核准中 ' + (i + 1) + '/' + ids.length + '...';
+        for (var i = 0; i < regularIds.length; i++) {
+          loadingMessage.value = '批次核准中 ' + (i + 1) + '/' + regularIds.length + '...';
           try {
-            await adminApprove(ids[i], {
+            await adminApprove(regularIds[i], {
               skipConfirm: true,
               collectPrintIds: printIds,
               skipSoftRefresh: true
@@ -577,6 +600,20 @@ window.UiApproval = (function () {
             fail++;
             console.error(e);
           }
+        }
+      }
+      for (var ti = 0; ti < triangleIds.length; ti++) {
+        loadingMessage.value = '整組三角調核准中 ' + (ti + 1) + '/' + triangleIds.length + '...';
+        try {
+          await adminApprove(triangleIds[ti], {
+            skipConfirm: true,
+            collectPrintIds: printIds,
+            skipSoftRefresh: true
+          });
+          ok++;
+        } catch (triangleError) {
+          fail++;
+          console.error(triangleError);
         }
       }
       clearAdminPendingSelection();
@@ -615,37 +652,52 @@ window.UiApproval = (function () {
         showToast('請先勾選要駁回的申請單', 'warning');
         return;
       }
+      var selectedGroups = splitAdminPendingIds(ids);
+      var regularIds = selectedGroups.regularIds;
+      var triangleIds = selectedGroups.triangleIds;
       if (!await showConfirm('即將批次駁回 ' + ids.length + ' 筆申請，確定？', '批次駁回')) return;
       loading.value = true;
       var ok = 0;
       var fail = 0;
       try {
-        var res = await callGasApi('adminRejectBatch', { requestIds: ids });
-        bustQuotaLedgerCache();
-        var doneIds = (res && res.ids) || ids;
-        ok = (res && res.count) || doneIds.length;
-        var doneReqById = Object.create(null);
-        (requestsList.value || []).forEach(function (r) {
-          if (r && r.id != null) doneReqById[String(r.id)] = r;
-        });
-        doneIds.forEach(function (id) {
-          var r = doneReqById[String(id)] || findRequestById(id);
-          if (r) restoreMutualQuotaForRows(r);
-        });
-        optimisticPatchRequestStatuses(doneIds.map(function (id) {
-          return { id: id, status: 'admin_rejected' };
-        }));
-        if (res && res.missing) fail = res.missing;
+        if (regularIds.length) {
+          var res = await callGasApi('adminRejectBatch', { requestIds: regularIds });
+          bustQuotaLedgerCache();
+          var doneIds = (res && res.ids) || regularIds;
+          ok += (res && res.count) || doneIds.length;
+          var doneReqById = Object.create(null);
+          (requestsList.value || []).forEach(function (r) {
+            if (r && r.id != null) doneReqById[String(r.id)] = r;
+          });
+          doneIds.forEach(function (id) {
+            var r = doneReqById[String(id)] || findRequestById(id);
+            if (r) restoreMutualQuotaForRows(r);
+          });
+          optimisticPatchRequestStatuses(doneIds.map(function (id) {
+            return { id: id, status: 'admin_rejected' };
+          }));
+          if (res && res.missing) fail += res.missing;
+        }
       } catch (batchE) {
         console.warn('adminRejectBatch 失敗，回退逐筆：', batchE);
-        for (var i = 0; i < ids.length; i++) {
-          loadingMessage.value = '批次駁回中 ' + (i + 1) + '/' + ids.length + '...';
+        for (var i = 0; i < regularIds.length; i++) {
+          loadingMessage.value = '批次駁回中 ' + (i + 1) + '/' + regularIds.length + '...';
           try {
-            await adminReject(ids[i], { skipConfirm: true, skipSoftRefresh: true });
+            await adminReject(regularIds[i], { skipConfirm: true, skipSoftRefresh: true });
             ok++;
           } catch (e) {
             fail++;
           }
+        }
+      }
+      for (var tj = 0; tj < triangleIds.length; tj++) {
+        loadingMessage.value = '整組三角調駁回中 ' + (tj + 1) + '/' + triangleIds.length + '...';
+        try {
+          await adminReject(triangleIds[tj], { skipConfirm: true, skipSoftRefresh: true });
+          ok++;
+        } catch (triangleError) {
+          fail++;
+          console.error(triangleError);
         }
       }
       clearAdminPendingSelection();

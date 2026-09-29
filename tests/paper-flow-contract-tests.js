@@ -1550,6 +1550,78 @@ async function runApprovalLedgerCacheBustTest() {
   assert.equal(busts, 1, '核准成功後應清除額度帳本畫面快取');
 }
 
+async function runTriangleAdminBatchSelectionTest() {
+  const source = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.doesNotMatch(
+    source,
+    /class="admin-select-cb[^"]*"[^>]*:disabled="row\.type === 'triangle'/,
+    '三角調待核准列不可再被 disabled'
+  );
+
+  const api = load('ui-approval.js').UiApproval;
+  const requests = [
+    { id: 'tri_20260929_ab12_1', triangleId: 'tri_20260929_ab12', type: 'triangle', status: 'pending_admin' },
+    { id: 'request-1', type: 'substitution', status: 'pending_admin' }
+  ];
+  const calls = [];
+  const approval = api.create({
+    ref,
+    callGasApi: async (action, payload) => {
+      calls.push({ action, payload });
+      return { success: true };
+    },
+    callGasApiWithProgress: async (action, payload) => {
+      calls.push({ action, payload });
+      return { success: true, count: 1, ids: payload.requestIds };
+    },
+    showToast: () => {},
+    showConfirm: async () => ({ ok: true, note: '' }),
+    loading: ref(false),
+    loadingMessage: ref(''),
+    getStatusText: () => '',
+    getTeacherNameByEmail: value => value,
+    isTriangleRequest: request => !!(request && (request.type === 'triangle' || request.triangleId)),
+    restoreMutualQuotaForRows: () => {},
+    bustQuotaLedgerCache: () => {},
+    optimisticPatchRequestStatus: () => {},
+    optimisticPatchRequestStatuses: () => {},
+    optimisticPatchTriangleGroup: () => {},
+    softRefreshInBackground: () => {},
+    formatRequestSummary: () => '',
+    formatApproveBatchRiskSummary: () => '',
+    getApproveRiskFlags: () => [],
+    requestsList: ref(requests),
+    mySentRequests: ref([]),
+    myPendingRequests: ref([]),
+    adminPendingRequests: ref(requests),
+    allPendingRequests: ref(requests),
+    paginatedAdminPending: ref(requests.map(request => Object.assign({ displayKind: 'item' }, request))),
+    selectedRecordIds: ref([]),
+    activeTab: ref('pending'),
+    showDetailModal: ref(false),
+    detailRequest: ref(null),
+    detailSubRecord: ref(null)
+  });
+
+  approval.toggleSelectAllAdminPending();
+  assert.deepEqual(
+    new Set(approval.selectedAdminPendingIds.value),
+    new Set(['tri_20260929_ab12_1', 'request-1']),
+    '本頁全選應包含三角調列'
+  );
+  await approval.batchAdminApprove();
+  assert.deepEqual(calls.map(call => call.action), ['adminApproveBatch', 'adminApprove']);
+  assert.equal(Array.from(calls[0].payload.requestIds).join(','), 'request-1');
+  assert.equal(calls[1].payload.requestId, 'tri_20260929_ab12_1');
+
+  calls.length = 0;
+  approval.selectedAdminPendingIds.value = ['tri_20260929_ab12_1', 'request-1'];
+  await approval.batchAdminReject();
+  assert.deepEqual(calls.map(call => call.action), ['adminRejectBatch', 'adminReject']);
+  assert.equal(Array.from(calls[0].payload.requestIds).join(','), 'request-1');
+  assert.equal(calls[1].payload.requestId, 'tri_20260929_ab12_1');
+}
+
 async function runLineHandledSlotTest() {
   const api = load('ui-request.js').UiSubmitHelpers;
   const linePayloads = [];
@@ -1926,6 +1998,7 @@ Promise.resolve()
   .then(runConsecutiveWarningTest)
   .then(runSingleTest)
   .then(runApprovalLedgerCacheBustTest)
+  .then(runTriangleAdminBatchSelectionTest)
   .then(runLineHandledSlotTest)
   .then(runCourseAdjustmentTest)
   .then(runRechangeLabelTest)

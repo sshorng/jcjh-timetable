@@ -1076,7 +1076,7 @@
                     <tr v-else :class="['cursor-pointer', { 'batch-child-row': row.batchGroupKey }]" @click="detailRequest = row; detailSubRecord = null; showDetailModal = true">
                       <td>
                         <div class="flex-row-gap-6">
-                          <input type="checkbox" class="admin-select-cb chk-sm" :value="row.id" :data-req-id="row.id" :checked="isAdminPendingSelected(row.id)" :disabled="row.type === 'triangle'" :title="row.type === 'triangle' ? '三角調請使用單筆整組核准或駁回' : ''" @click.stop>
+                          <input type="checkbox" class="admin-select-cb chk-sm" :value="row.id" :data-req-id="row.id" :checked="isAdminPendingSelected(row.id)" :title="row.type === 'triangle' ? '選取整組三角調申請' : ''" @click.stop>
                           <strong>{{ row.serial || '---' }}</strong>
                         </div>
                         <div v-if="row.note" class="req-note-cell" :title="row.note">{{ row.note }}</div>
