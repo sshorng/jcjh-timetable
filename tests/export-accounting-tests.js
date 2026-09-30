@@ -1423,4 +1423,90 @@ assert.equal(groupedCoverRows[0].actualHours, 1, '代課教師主列應保留自
 assert.equal(groupedCoverRows[1].actualHours, 1, '代課明細應保留實際代課時數');
 assert.match(groupedCoverRows[1].note, /代原超鐘教師/, '代課明細備註應保留原授課教師');
 
+// 測試：專案超鐘點教師（slots 模式）非超鐘節次自費請假，優先扣專案超鐘且代課納入該專案清冊
+const projectSlotsExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-08-31', end: '2026-10-02' }, selfSub: { start: '2026-08-31', end: '2026-10-02' } },
+  teachers: [
+    {
+      email: 'tang@x',
+      name: '唐子超',
+      jobTitle: '專任教師',
+      baseHours: 2,
+      expensePlan: '[{"day":5,"period":5,"className":"706","source":"[英資]補助調整授課特教教師鐘點費（英資班）"}]',
+      weeklyOvertime: 1
+    },
+    {
+      email: 'lin@x',
+      name: '林凰淨',
+      jobTitle: '專任教師',
+      baseHours: 0,
+      expensePlan: '[{"day":4,"period":3,"className":"707","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"},{"day":4,"period":7,"className":"807","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"},{"day":5,"period":1,"className":"807","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"}]',
+      weeklyOvertime: 3
+    },
+    { email: 'huang@x', name: '黃怡君', jobTitle: '代理教師', baseHours: 0 },
+    { email: 'chou@x', name: '周光君', jobTitle: '兼任教師', baseHours: 0 },
+    { email: 'chen@x', name: '陳映瑄', jobTitle: '代理教師', baseHours: 0 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 4, className: '706', attr: '一般' },
+    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 5, className: '706', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 6, className: '706', attr: '一般' },
+    { teacherEmail: 'lin@x', dayOfWeek: 3, period: 1, className: '707', attr: '一般' },
+    { teacherEmail: 'lin@x', dayOfWeek: 4, period: 3, className: '707', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'lin@x', dayOfWeek: 4, period: 7, className: '807', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'lin@x', dayOfWeek: 5, period: 1, className: '807', attr: '一般', specialTags: '超鐘點' }
+  ],
+  substitutionRecords: [
+    {
+      date: '2026-09-18', period: 4, className: '706', type: 'substitution',
+      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'huang@x',
+      subFee: '自費代課', reason: '病假', status: 'approved'
+    },
+    {
+      date: '2026-09-18', period: 5, className: '706', type: 'substitution',
+      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'chou@x',
+      subFee: '自費代課', reason: '病假', status: 'approved'
+    },
+    {
+      date: '2026-09-18', period: 6, className: '706', type: 'substitution',
+      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'huang@x',
+      subFee: '自費代課', reason: '病假', status: 'approved'
+    },
+    {
+      date: '2026-09-23', period: 1, className: '707', type: 'substitution',
+      originalTeacherEmail: 'lin@x', actualTeacherEmail: 'chen@x',
+      subFee: '自費代課', reason: '課務調整', status: 'approved'
+    }
+  ]
+});
+
+const giftedPlan = projectSlotsExport.overtimePlans.find(p => p.plan === '英資');
+assert.ok(giftedPlan, '應產出英資超鐘點工作表');
+const tangRow = giftedPlan.rows.find(r => r.name === '唐子超' && r.weeklyOvertime === 1);
+assert.ok(tangRow, '英資工作表應有唐子超主列');
+assert.equal(tangRow.grossHours, 5, '唐子超應發 5 節');
+assert.equal(tangRow.deduction, 3, '唐子超應扣除 3 節自費代課（非 slot 節次亦應扣除）');
+assert.equal(tangRow.actualHours, 2, '唐子超實發應為 2 節');
+assert.match(tangRow.note, /扣 3 節|扣3節/, '唐子超備註應註記扣 3 節');
+
+const subRows = giftedPlan.rows.filter(r => r.weeklyOvertime === '');
+assert.equal(subRows.length, 2, '英資工作表代課列依教師合併為 2 列（周師 1 節、黃師 2 節）');
+assert.equal(subRows.reduce((sum, r) => sum + r.actualHours, 0), 3, '英資工作表代課總節數應為 3 節');
+
+const artPlan = projectSlotsExport.overtimePlans.find(p => p.plan === '藝才');
+assert.ok(artPlan, '應產出藝才超鐘點工作表');
+const linRow = artPlan.rows.find(r => r.name === '林凰淨' && r.weeklyOvertime === 3);
+assert.ok(linRow, '藝才工作表應有林凰淨主列');
+assert.equal(linRow.grossHours, 15, '林凰淨應發 15 節');
+assert.equal(linRow.deduction, 1, '林凰淨應扣除 1 節自費代課（非 slot 節次課務調整亦扣除）');
+assert.equal(linRow.actualHours, 14, '林凰淨實發應為 14 節');
+assert.match(linRow.note, /扣 1 節|扣1節/, '林凰淨備註應註記扣 1 節');
+
+const linSubRows = artPlan.rows.filter(r => r.weeklyOvertime === '');
+assert.equal(linSubRows.length, 1, '藝才工作表應包含 1 筆代課紀錄');
+assert.equal(projectSlotsExport.sheets.selfSub.length, 0, '自費代課全數扣超鐘後，自付代課表應為 0 筆');
+
 console.log('export accounting tests PASS');
+

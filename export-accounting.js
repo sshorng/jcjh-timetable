@@ -1358,17 +1358,34 @@
   }
 
   function expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex) {
+    var resolved = '';
     if (root.DomainBilling && typeof root.DomainBilling.overtimeExpenseSourceForRecord === 'function') {
-      var resolved = root.DomainBilling.overtimeExpenseSourceForRecord(
+      resolved = root.DomainBilling.overtimeExpenseSourceForRecord(
         record,
         opts.teachers || [],
         opts.allSchedules || [],
         schoolSwapIndex
       );
-      if (resolved) return resolved;
     }
     var parsed = parseExpensePlan(source && source.expensePlan);
+    var slotSources = [];
+    if (parsed.mode === 'slots' && parsed.slots && parsed.slots.length) {
+      parsed.slots.forEach(function (slot) {
+        var s = outputExpensePlan(slot.source);
+        if (s && slotSources.indexOf(s) < 0) slotSources.push(s);
+      });
+    }
+    var isImplicitDefault = !resolved || resolved === '預設' || resolved === '國教';
+    if (isImplicitDefault && slotSources.length && slotSources.indexOf('國教') < 0) {
+      return slotSources[0];
+    }
+    if (resolved && (!isImplicitDefault || slotSources.indexOf('國教') >= 0)) {
+      return resolved;
+    }
     if (parsed.mode === 'legacy' && parsed.legacySource) return parsed.legacySource;
+    if (slotSources.length) return slotSources[0];
+    var teacherSources = expensePlanSourcesForRow(source);
+    if (teacherSources.length) return teacherSources[0];
     if (parsed.mode === 'empty') return '預設';
     return '';
   }
@@ -1755,7 +1772,7 @@
             ? Number(allocation.grossHours) || 0
             : Math.max(0, scheduledOvertime - reduce);
         var deduction = allocation && allocation.deduction !== undefined
-          ? Number(allocation.deduction) || 0
+          ? Math.max(Number(allocation.deduction) || 0, selfCount + publicUsed)
           : selfCount + publicUsed;
         var actualHours = allocation && allocation.actualHours !== undefined && !noAwayDeduction
           ? Number(allocation.actualHours) || 0
