@@ -1508,5 +1508,82 @@ const linSubRows = artPlan.rows.filter(r => r.weeklyOvertime === '');
 assert.equal(linSubRows.length, 1, '藝才工作表應包含 1 筆代課紀錄');
 assert.equal(projectSlotsExport.sheets.selfSub.length, 0, '自費代課全數扣超鐘後，自付代課表應為 0 筆');
 
+// 測試：混合型超鐘點教師（兼具專案超鐘點與國教超鐘點）
+// 陳師在四5、四6、五6、五7為無人機超鐘點，三3、三4為國教超鐘點
+const hybridExport = window.ExportAccounting.buildExportData({
+  reportMonth: '2026-09',
+  reportWeeksCount: 5,
+  periods: { overtime: { start: '2026-08-31', end: '2026-10-02' }, selfSub: { start: '2026-08-31', end: '2026-10-02' } },
+  teachers: [
+    {
+      email: 'chen@test.edu', name: '陳柏宏', jobTitle: '資訊組長', baseHours: 0,
+      scheduledOvertime: 6, weeklyOvertime: 6,
+      expensePlan: JSON.stringify([
+        { day: 4, period: 5, className: '703', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
+        { day: 4, period: 6, className: '706', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
+        { day: 5, period: 6, className: '802', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
+        { day: 5, period: 7, className: '702', source: '[無人機]無人機教育中心種子教師減授鐘點費' }
+      ])
+    },
+    { email: 'liu@test.edu', name: '劉佳忠', jobTitle: '導師', baseHours: 0 },
+    { email: 'chen_jh@test.edu', name: '陳軍翰', jobTitle: '專任教師', baseHours: 0 },
+    { email: 'chung@test.edu', name: '鍾筱萍', jobTitle: '導師', baseHours: 0 }
+  ],
+  allSchedules: [
+    { dayOfWeek: 3, period: 3, className: '707', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
+    { dayOfWeek: 3, period: 4, className: '704', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
+    { dayOfWeek: 4, period: 5, className: '703', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
+    { dayOfWeek: 4, period: 6, className: '706', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
+    { dayOfWeek: 5, period: 6, className: '802', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
+    { dayOfWeek: 5, period: 7, className: '702', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' }
+  ],
+  substitutionRecords: [
+    // 9/11 公假 2 節（無人機五6、五7）
+    {
+      id: 'sub_uav_1', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
+      actualTeacherEmail: 'liu@test.edu', actualTeacherName: '劉佳忠',
+      date: '2026-09-11', period: 6, className: '802', subFee: '公費代課', reason: '公假', status: 'approved'
+    },
+    {
+      id: 'sub_uav_2', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
+      actualTeacherEmail: 'chen_jh@test.edu', actualTeacherName: '陳軍翰',
+      date: '2026-09-11', period: 7, className: '702', subFee: '公費代課', reason: '公假', status: 'approved'
+    },
+    // 9/16 病假 2 節（國教三3、三4）
+    {
+      id: 'sub_gj_1', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
+      actualTeacherEmail: 'chen_jh@test.edu', actualTeacherName: '陳軍翰',
+      date: '2026-09-16', period: 3, className: '707', subFee: '自費代課', reason: '病假', status: 'approved'
+    },
+    {
+      id: 'sub_gj_2', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
+      actualTeacherEmail: 'chung@test.edu', actualTeacherName: '鍾筱萍',
+      date: '2026-09-16', period: 4, className: '704', subFee: '自費代課', reason: '病假', status: 'approved'
+    }
+  ]
+});
+
+const uavPlan = hybridExport.overtimePlans.find(p => p.plan.includes('無人機'));
+assert.ok(uavPlan, '應產出無人機超鐘點工作表');
+const cbhUavRow = uavPlan.rows.find(r => r.name === '陳柏宏' && r.weeklyOvertime === 4);
+assert.ok(cbhUavRow, '無人機工作表應有陳柏宏主列');
+assert.equal(cbhUavRow.grossHours, 20, '陳柏宏無人機應發 20 節');
+assert.equal(cbhUavRow.deduction, 2, '陳柏宏無人機只應扣除 9/11 公假 2 節（不應多扣 9/16 國教病假）');
+assert.equal(cbhUavRow.actualHours, 18, '陳柏宏無人機實發應為 18 節');
+
+const gjPlan = hybridExport.overtimePlans.find(p => p.plan === '國教' || p.plan === '補助調整教師授課鐘點費（國教）');
+assert.ok(gjPlan, '應產出國教超鐘點工作表');
+const cbhGjRow = gjPlan.rows.find(r => r.name === '陳柏宏' && r.weeklyOvertime === 2);
+assert.ok(cbhGjRow, '國教工作表應有陳柏宏主列');
+assert.equal(cbhGjRow.grossHours, 10, '陳柏宏國教應發 10 節');
+assert.equal(cbhGjRow.deduction, 2, '陳柏宏國教應扣除 9/16 病假 2 節');
+assert.equal(cbhGjRow.actualHours, 8, '陳柏宏國教實發應為 8 節');
+assert.match(cbhGjRow.note, /9\/16.*扣.*2.*節|9\/16.*病假/, '陳柏宏國教列應有9/16病假備註');
+
+const gjSubRows = gjPlan.rows.filter(r => r.weeklyOvertime === '');
+assert.equal(gjSubRows.length, 2, '國教工作表應有 2 筆代課列（陳軍翰 1 節、鍾筱萍 1 節）');
+assert.equal(gjSubRows.reduce((sum, r) => sum + r.actualHours, 0), 2, '國教工作表代課總節數應為 2 節');
+
 console.log('export accounting tests PASS');
+
 

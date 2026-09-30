@@ -1376,8 +1376,20 @@
       });
     }
     var isImplicitDefault = !resolved || resolved === '預設' || resolved === '國教';
-    if (isImplicitDefault && slotSources.length && slotSources.indexOf('國教') < 0) {
-      return slotSources[0];
+    if (isImplicitDefault) {
+      var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
+      var isDirectOvertimeSlot = (opts.allSchedules || []).some(function (schedule) {
+        return sameTeacher(schedule, source)
+          && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
+          && Number(schedule.period) === sourceSlot.period
+          && isOvertimeSchedule(schedule);
+      });
+      if (isDirectOvertimeSlot) {
+        return '國教';
+      }
+      if (slotSources.length && slotSources.indexOf('國教') < 0) {
+        return slotSources[0];
+      }
     }
     if (resolved && (!isImplicitDefault || slotSources.indexOf('國教') >= 0)) {
       return resolved;
