@@ -887,9 +887,8 @@ assert.equal(mixed.sheets.overtime[0].name, 'Billing');
 assert.equal(mixed.sheets.overtime[0].deduction, 3);
 assert.equal(mixed.sheets.overtime[0].actualHours, -1);
 assert.equal(mixed.sheets.overtime[1].name, 'cover@x');
-assert.equal(mixed.sheets.overtime[1].actualHours, 2);
-assert.equal(mixed.sheets.selfSub.length, 1, '非超鐘點自費應保留在自付代課表');
-assert.equal(mixed.sheets.selfSub[0].course, '703');
+assert.equal(mixed.sheets.overtime[1].actualHours, 3);
+assert.equal(mixed.sheets.selfSub.length, 0, '自費代課一律優先扣超鐘點，不分流至自付代課表');
 assert.equal(mixed.sheets.overtime[0].note.includes('\u8b8a\u52d5'), false, '超鐘點備註不應顯示變動字眼');
 
 const nonOvertimeSelfPeriod = { start: '2026-09-01', end: '2026-09-30' };
@@ -926,15 +925,12 @@ const nonOvertimeSelfExport = window.ExportAccounting.buildExportData({
       subFee: '自費代課', reason: '補休', status: 'approved' }
   ]
 });
-assert.deepEqual(nonOvertimeSelfExport.sheets.selfSub.map(row => [row.actualName, row.period, row.originalName]), [
-  ['一般自費代課人', '六', '自費原教師']
-], '非超鐘點自費應列入自付代課明細表');
-assert.equal(nonOvertimeSelfExport.sheets.selfSub[0].amount, 455);
-assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '非超鐘點自費也應在超鐘點列扣原教師');
+assert.equal(nonOvertimeSelfExport.sheets.selfSub.length, 0, '自費代課一律先扣原教師超鐘，不應分流到自付代課表');
+assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '自費代課應在超鐘點列扣原教師');
 assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘自費代課人'),
   '超鐘點自費代課仍應列入原計畫超鐘點代課列');
-assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,
-  '非超鐘點自費代課不可誤列入超鐘點代課列');
+assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'),
+  '非超鐘點自費代課亦應列入超鐘點代課列（由超鐘經費支付代課教師）');
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
@@ -1082,7 +1078,7 @@ const courseAdjustmentSelfExport = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
   originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
   subFee: '自費代課', reason: '課務調整', leaveTime: '08:00-16:00', status: 'approved'
-}], 1, mixedSchedules);
+}], 3, mixedSchedules);
 const courseAdjustmentSelfRow = courseAdjustmentSelfExport.sheets.selfSub.find(row => row.actualName === 'cover@x');
 assert.equal(courseAdjustmentSelfRow.date, '115.07.13(一)', '課務調整自付明細仍應保留代課日期');
 assert.equal(courseAdjustmentSelfRow.time, '', '課務調整自付明細不應填入請假時間');
