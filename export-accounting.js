@@ -303,7 +303,12 @@
     var a = dateObj(period.start);
     var b = dateObj(period.end);
     if (!a || !b) return '';
-    return (a.getMonth() + 1) + '/' + a.getDate() + '-' + (b.getMonth() + 1) + '/' + b.getDate();
+    return (a.getMonth() + 1) + '/' + a.getDate() + '~' + (b.getMonth() + 1) + '/' + b.getDate();
+  }
+
+  function titleDateRange(period) {
+    var range = rangeLabel(period);
+    return range ? '（' + range + '）' : '';
   }
 
   function monthLabelForPeriod(reportMonth, period) {
@@ -320,11 +325,15 @@
     var title = String(templateValue == null ? '' : templateValue).trim();
     if (!title || title.indexOf('[[') < 0) return '';
     var parts = reportPartsForPeriod(reportMonth, period);
+    var dateRange = titleDateRange(period);
+    if (dateRange && title.indexOf('[[日期]]') < 0) {
+      title = title.replace(/(\[\[月\]\]月(?:份)?)/g, '$1' + dateRange);
+    }
     return title
       .replace(/\[\[年\]\]/g, String(rocYear(parts.year)))
       .replace(/\[\[月\]\]/g, monthLabelForPeriod(reportMonth, period))
-      .replace(/\s*[（(]\s*\[\[日期\]\]\s*[）)]/g, '')
-      .replace(/\[\[日期\]\]/g, '')
+      .replace(/\s*[（(]\s*\[\[日期\]\]\s*[）)]/g, dateRange)
+      .replace(/\[\[日期\]\]/g, dateRange)
       .replace(/\[\[計畫\]\]/g, planFullLabel(expensePlan))
       .trim();
   }
@@ -478,6 +487,7 @@
   function titleFor(config, reportMonth, period, expensePlan) {
     var parts = reportPartsForPeriod(reportMonth, period);
     var monthLabel = monthLabelForPeriod(reportMonth, period);
+    var dateRange = titleDateRange(period);
     var suffix = config.titleSuffix;
     if (config.key === 'overtime') {
       suffix = overtimeTitleSuffix(expensePlan);
@@ -489,9 +499,9 @@
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
     }
     if (config.key === 'overtime' || config.key === 'selfSub' || config.key === 'mentor') {
-      return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
+      return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + monthLabel + '月' + dateRange + suffix;
     }
-    return '臺北市立建成國中' + rocYear(parts.year) + '年' + monthLabel + '月' + suffix;
+    return '臺北市立建成國中' + rocYear(parts.year) + '年' + monthLabel + '月' + dateRange + suffix;
   }
 
   function safeSheetPart(value) {
