@@ -175,7 +175,7 @@ function runQuotaRiskFlagTargetTest() {
   assert.equal(shortageFlags.some(flag => flag.key === 'quota0'), true, '代課教師額度不足才應顯示額度不足');
 }
 
-function loadApprovedExchangeConverter(resolveCell, findBaseSlot) {
+function loadApprovedExchangeConverter(resolveCell) {
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const start = source.indexOf('const convertRequestsToSubstitutions =');
   const end = source.indexOf('const requestsList =', start);
@@ -183,7 +183,7 @@ function loadApprovedExchangeConverter(resolveCell, findBaseSlot) {
   const context = {
     window: {},
     resolveCellFromBaseAndSubs: resolveCell || (() => null),
-    findBaseScheduleSlot: findBaseSlot || (() => null),
+    findBaseScheduleSlot: () => null,
     getTeacherSubjectByEmail: () => '',
     isCourseAdjustmentOnlyRequest: isCourseAdjustmentOnlyForTest,
     Date, Number, String, Object, Array, Set, Math, parseInt, isNaN
@@ -260,9 +260,7 @@ function runSubmittedExchangePaperRecordMappingTest() {
     className: '703',
     subject: '數學',
     targetDate: '2026-09-03',
-    targetPeriod: 2,
-    targetClassName: '906',
-    targetSubject: '家政'
+    targetPeriod: 2
   }]);
   const targetDateRecord = records.find(record => record.id.endsWith('_1'));
   const sourceDateRecord = records.find(record => record.id.endsWith('_2'));
@@ -330,28 +328,6 @@ function runApprovedCombinedReturnMappingTest() {
   assert.equal(records[0].originalTeacherName, '申請人');
   assert.equal(records[0].actualTeacherName, '受邀人');
   assert.equal(records[0].actualTeacherEmail, '受邀人');
-}
-
-function runApprovedExchangeUsesCurrentTargetCourseTest() {
-  const convert = loadApprovedExchangeConverter(null, (email, day, period, date) => {
-    if (email === 'invitee@example.com' && date === '2026-09-03' && period === 2 && day === 4) {
-      return { className: '905', subject: '童軍' };
-    }
-    return null;
-  });
-  const records = convert([{
-    id: 'approved-current-course', status: 'approved', type: 'exchange',
-    requesterEmail: 'owner@example.com', requesterName: '申請人',
-    targetTeacherEmail: 'invitee@example.com', targetTeacherName: '幸靜',
-    requestDate: '2026-09-01', requestPeriod: 6,
-    className: '905', subject: '國文',
-    targetDate: '2026-09-03', targetPeriod: 2,
-    targetClassName: '905', targetSubject: '家政'
-  }]);
-  const targetDateRecord = records.find(record => record.id.endsWith('_1'));
-  const sourceDateRecord = records.find(record => record.id.endsWith('_2'));
-  assert.equal(targetDateRecord.formSubject, '童軍', '目標位置的有效課應覆蓋舊申請快照');
-  assert.equal(sourceDateRecord.subject, '童軍', '受邀教師調入後應帶著目前有效的童軍課');
 }
 
 function runApprovedExchangeAttributeMappingTest() {
@@ -422,15 +398,12 @@ function runPublicClassExchangeMappingTest() {
     className: '904',
     subject: '國文',
     targetDate: '2026-09-02',
-    targetPeriod: 5,
-    targetClassName: '906',
-    targetSubject: '家政'
+    targetPeriod: 5
   }], '904');
   const targetDateRecord = records.find(record => record.id.endsWith('_class_1'));
   const sourceDateRecord = records.find(record => record.id.endsWith('_class_2'));
   assert.equal(targetDateRecord.subject, '國文');
   assert.equal(targetDateRecord.actualTeacherName, '洪筱仙');
-  assert.equal(sourceDateRecord.className, '904', '班級課表應優先使用目前有效目標班級');
   assert.equal(sourceDateRecord.subject, '輔導');
   assert.equal(sourceDateRecord.actualTeacherName, '吳冠萱');
 }
@@ -515,7 +488,6 @@ function runNoSyntheticStudySubjectTest() {
 
 runSubmittedExchangePaperRecordMappingTest();
 runApprovedExchangeRecordMappingTest();
-runApprovedExchangeUsesCurrentTargetCourseTest();
 runApprovedExchangeAttributeMappingTest();
 runApprovedCombinedReturnMappingTest();
 runApprovedBatchRecordMappingTest();

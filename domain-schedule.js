@@ -798,11 +798,9 @@ window.DomainSchedule = (function () {
     }
     if (email !== target) return { className: '', subject: '' };
 
-    var requestedClassName = String(request && request.targetClassName || '').trim();
-    var requestedSubject = String(request && request.targetSubject || '').trim();
-    var className = requestedClassName;
-    var subject = requestedSubject;
-    if (request && request.targetDate && request.targetPeriod != null) {
+    var className = String(request && request.targetClassName || '').trim();
+    var subject = String(request && request.targetSubject || '').trim();
+    if ((!className || !subject) && request && request.targetDate && request.targetPeriod != null) {
       var day = parseInt(request.targetDayOfWeek, 10);
       if (!(day >= 1 && day <= 7)) {
         var date = new Date(String(request.targetDate).replace(/-/g, '/'));
@@ -821,8 +819,8 @@ window.DomainSchedule = (function () {
       );
       var base = candidates[0] || null;
       if (base) {
-        className = String(base.className || '').trim() || requestedClassName;
-        subject = String(base.subject || '').trim() || requestedSubject;
+        if (!className) className = String(base.className || '').trim();
+        if (!subject) subject = String(base.subject || '').trim();
       }
     }
     return { className: className, subject: subject };
