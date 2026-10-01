@@ -887,8 +887,9 @@ assert.equal(mixed.sheets.overtime[0].name, 'Billing');
 assert.equal(mixed.sheets.overtime[0].deduction, 3);
 assert.equal(mixed.sheets.overtime[0].actualHours, -1);
 assert.equal(mixed.sheets.overtime[1].name, 'cover@x');
-assert.equal(mixed.sheets.overtime[1].actualHours, 3);
-assert.equal(mixed.sheets.selfSub.length, 0, '自費代課一律優先扣超鐘點，不分流至自付代課表');
+assert.equal(mixed.sheets.overtime[1].actualHours, 2);
+assert.equal(mixed.sheets.selfSub.length, 1, '非超鐘點自費應保留在自付代課表');
+assert.equal(mixed.sheets.selfSub[0].course, '703');
 assert.equal(mixed.sheets.overtime[0].note.includes('\u8b8a\u52d5'), false, '超鐘點備註不應顯示變動字眼');
 
 const nonOvertimeSelfPeriod = { start: '2026-09-01', end: '2026-09-30' };
@@ -925,12 +926,15 @@ const nonOvertimeSelfExport = window.ExportAccounting.buildExportData({
       subFee: '自費代課', reason: '補休', status: 'approved' }
   ]
 });
-assert.equal(nonOvertimeSelfExport.sheets.selfSub.length, 0, '自費代課一律先扣原教師超鐘，不應分流到自付代課表');
-assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '自費代課應在超鐘點列扣原教師');
+assert.deepEqual(nonOvertimeSelfExport.sheets.selfSub.map(row => [row.actualName, row.period, row.originalName]), [
+  ['一般自費代課人', '六', '自費原教師']
+], '非超鐘點自費應列入自付代課明細表');
+assert.equal(nonOvertimeSelfExport.sheets.selfSub[0].amount, 455);
+assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '非超鐘點自費也應在超鐘點列扣原教師');
 assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘自費代課人'),
   '超鐘點自費代課仍應列入原計畫超鐘點代課列');
-assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'),
-  '非超鐘點自費代課亦應列入超鐘點代課列（由超鐘經費支付代課教師）');
+assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,
+  '非超鐘點自費代課不可誤列入超鐘點代課列');
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
@@ -1078,7 +1082,7 @@ const courseAdjustmentSelfExport = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',
   originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x',
   subFee: '自費代課', reason: '課務調整', leaveTime: '08:00-16:00', status: 'approved'
-}], 3, mixedSchedules);
+}], 1, mixedSchedules);
 const courseAdjustmentSelfRow = courseAdjustmentSelfExport.sheets.selfSub.find(row => row.actualName === 'cover@x');
 assert.equal(courseAdjustmentSelfRow.date, '115.07.13(一)', '課務調整自付明細仍應保留代課日期');
 assert.equal(courseAdjustmentSelfRow.time, '', '課務調整自付明細不應填入請假時間');
@@ -1423,167 +1427,4 @@ assert.equal(groupedCoverRows[0].actualHours, 1, '代課教師主列應保留自
 assert.equal(groupedCoverRows[1].actualHours, 1, '代課明細應保留實際代課時數');
 assert.match(groupedCoverRows[1].note, /代原超鐘教師/, '代課明細備註應保留原授課教師');
 
-// 測試：專案超鐘點教師（slots 模式）非超鐘節次自費請假，優先扣專案超鐘且代課納入該專案清冊
-const projectSlotsExport = window.ExportAccounting.buildExportData({
-  reportMonth: '2026-09',
-  reportWeeksCount: 5,
-  periods: { overtime: { start: '2026-08-31', end: '2026-10-02' }, selfSub: { start: '2026-08-31', end: '2026-10-02' } },
-  teachers: [
-    {
-      email: 'tang@x',
-      name: '唐子超',
-      jobTitle: '專任教師',
-      baseHours: 2,
-      expensePlan: '[{"day":5,"period":5,"className":"706","source":"[英資]補助調整授課特教教師鐘點費（英資班）"}]',
-      weeklyOvertime: 1
-    },
-    {
-      email: 'lin@x',
-      name: '林凰淨',
-      jobTitle: '專任教師',
-      baseHours: 0,
-      expensePlan: '[{"day":4,"period":3,"className":"707","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"},{"day":4,"period":7,"className":"807","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"},{"day":5,"period":1,"className":"807","source":"[藝才]補助調整授課特教教師鐘點費（藝才班）"}]',
-      weeklyOvertime: 3
-    },
-    { email: 'huang@x', name: '黃怡君', jobTitle: '代理教師', baseHours: 0 },
-    { email: 'chou@x', name: '周光君', jobTitle: '兼任教師', baseHours: 0 },
-    { email: 'chen@x', name: '陳映瑄', jobTitle: '代理教師', baseHours: 0 }
-  ],
-  allSchedules: [
-    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 4, className: '706', attr: '一般' },
-    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 5, className: '706', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'tang@x', dayOfWeek: 5, period: 6, className: '706', attr: '一般' },
-    { teacherEmail: 'lin@x', dayOfWeek: 3, period: 1, className: '707', attr: '一般' },
-    { teacherEmail: 'lin@x', dayOfWeek: 4, period: 3, className: '707', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'lin@x', dayOfWeek: 4, period: 7, className: '807', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'lin@x', dayOfWeek: 5, period: 1, className: '807', attr: '一般', specialTags: '超鐘點' }
-  ],
-  substitutionRecords: [
-    {
-      date: '2026-09-18', period: 4, className: '706', type: 'substitution',
-      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'huang@x',
-      subFee: '自費代課', reason: '病假', status: 'approved'
-    },
-    {
-      date: '2026-09-18', period: 5, className: '706', type: 'substitution',
-      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'chou@x',
-      subFee: '自費代課', reason: '病假', status: 'approved'
-    },
-    {
-      date: '2026-09-18', period: 6, className: '706', type: 'substitution',
-      originalTeacherEmail: 'tang@x', actualTeacherEmail: 'huang@x',
-      subFee: '自費代課', reason: '病假', status: 'approved'
-    },
-    {
-      date: '2026-09-23', period: 1, className: '707', type: 'substitution',
-      originalTeacherEmail: 'lin@x', actualTeacherEmail: 'chen@x',
-      subFee: '自費代課', reason: '課務調整', status: 'approved'
-    }
-  ]
-});
-
-const giftedPlan = projectSlotsExport.overtimePlans.find(p => p.plan === '英資');
-assert.ok(giftedPlan, '應產出英資超鐘點工作表');
-const tangRow = giftedPlan.rows.find(r => r.name === '唐子超' && r.weeklyOvertime === 1);
-assert.ok(tangRow, '英資工作表應有唐子超主列');
-assert.equal(tangRow.grossHours, 5, '唐子超應發 5 節');
-assert.equal(tangRow.deduction, 3, '唐子超應扣除 3 節自費代課（非 slot 節次亦應扣除）');
-assert.equal(tangRow.actualHours, 2, '唐子超實發應為 2 節');
-assert.match(tangRow.note, /扣 3 節|扣3節/, '唐子超備註應註記扣 3 節');
-
-const subRows = giftedPlan.rows.filter(r => r.weeklyOvertime === '');
-assert.equal(subRows.length, 2, '英資工作表代課列依教師合併為 2 列（周師 1 節、黃師 2 節）');
-assert.equal(subRows.reduce((sum, r) => sum + r.actualHours, 0), 3, '英資工作表代課總節數應為 3 節');
-
-const artPlan = projectSlotsExport.overtimePlans.find(p => p.plan === '藝才');
-assert.ok(artPlan, '應產出藝才超鐘點工作表');
-const linRow = artPlan.rows.find(r => r.name === '林凰淨' && r.weeklyOvertime === 3);
-assert.ok(linRow, '藝才工作表應有林凰淨主列');
-assert.equal(linRow.grossHours, 15, '林凰淨應發 15 節');
-assert.equal(linRow.deduction, 1, '林凰淨應扣除 1 節自費代課（非 slot 節次課務調整亦扣除）');
-assert.equal(linRow.actualHours, 14, '林凰淨實發應為 14 節');
-assert.match(linRow.note, /扣 1 節|扣1節/, '林凰淨備註應註記扣 1 節');
-
-const linSubRows = artPlan.rows.filter(r => r.weeklyOvertime === '');
-assert.equal(linSubRows.length, 1, '藝才工作表應包含 1 筆代課紀錄');
-assert.equal(projectSlotsExport.sheets.selfSub.length, 0, '自費代課全數扣超鐘後，自付代課表應為 0 筆');
-
-// 測試：混合型超鐘點教師（兼具專案超鐘點與國教超鐘點）
-// 陳師在四5、四6、五6、五7為無人機超鐘點，三3、三4為國教超鐘點
-const hybridExport = window.ExportAccounting.buildExportData({
-  reportMonth: '2026-09',
-  reportWeeksCount: 5,
-  periods: { overtime: { start: '2026-08-31', end: '2026-10-02' }, selfSub: { start: '2026-08-31', end: '2026-10-02' } },
-  teachers: [
-    {
-      email: 'chen@test.edu', name: '陳柏宏', jobTitle: '資訊組長', baseHours: 0,
-      scheduledOvertime: 6, weeklyOvertime: 6,
-      expensePlan: JSON.stringify([
-        { day: 4, period: 5, className: '703', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
-        { day: 4, period: 6, className: '706', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
-        { day: 5, period: 6, className: '802', source: '[無人機]無人機教育中心種子教師減授鐘點費' },
-        { day: 5, period: 7, className: '702', source: '[無人機]無人機教育中心種子教師減授鐘點費' }
-      ])
-    },
-    { email: 'liu@test.edu', name: '劉佳忠', jobTitle: '導師', baseHours: 0 },
-    { email: 'chen_jh@test.edu', name: '陳軍翰', jobTitle: '專任教師', baseHours: 0 },
-    { email: 'chung@test.edu', name: '鍾筱萍', jobTitle: '導師', baseHours: 0 }
-  ],
-  allSchedules: [
-    { dayOfWeek: 3, period: 3, className: '707', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
-    { dayOfWeek: 3, period: 4, className: '704', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
-    { dayOfWeek: 4, period: 5, className: '703', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
-    { dayOfWeek: 4, period: 6, className: '706', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
-    { dayOfWeek: 5, period: 6, className: '802', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' },
-    { dayOfWeek: 5, period: 7, className: '702', specialTags: '超鐘點', attr: '一般', teacherEmail: 'chen@test.edu', teacherName: '陳柏宏' }
-  ],
-  substitutionRecords: [
-    // 9/11 公假 2 節（無人機五6、五7）
-    {
-      id: 'sub_uav_1', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
-      actualTeacherEmail: 'liu@test.edu', actualTeacherName: '劉佳忠',
-      date: '2026-09-11', period: 6, className: '802', subFee: '公費代課', reason: '公假', status: 'approved'
-    },
-    {
-      id: 'sub_uav_2', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
-      actualTeacherEmail: 'chen_jh@test.edu', actualTeacherName: '陳軍翰',
-      date: '2026-09-11', period: 7, className: '702', subFee: '公費代課', reason: '公假', status: 'approved'
-    },
-    // 9/16 病假 2 節（國教三3、三4）
-    {
-      id: 'sub_gj_1', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
-      actualTeacherEmail: 'chen_jh@test.edu', actualTeacherName: '陳軍翰',
-      date: '2026-09-16', period: 3, className: '707', subFee: '自費代課', reason: '病假', status: 'approved'
-    },
-    {
-      id: 'sub_gj_2', originalTeacherEmail: 'chen@test.edu', originalTeacherName: '陳柏宏',
-      actualTeacherEmail: 'chung@test.edu', actualTeacherName: '鍾筱萍',
-      date: '2026-09-16', period: 4, className: '704', subFee: '自費代課', reason: '病假', status: 'approved'
-    }
-  ]
-});
-
-const uavPlan = hybridExport.overtimePlans.find(p => p.plan.includes('無人機'));
-assert.ok(uavPlan, '應產出無人機超鐘點工作表');
-const cbhUavRow = uavPlan.rows.find(r => r.name === '陳柏宏' && r.weeklyOvertime === 4);
-assert.ok(cbhUavRow, '無人機工作表應有陳柏宏主列');
-assert.equal(cbhUavRow.grossHours, 20, '陳柏宏無人機應發 20 節');
-assert.equal(cbhUavRow.deduction, 2, '陳柏宏無人機只應扣除 9/11 公假 2 節（不應多扣 9/16 國教病假）');
-assert.equal(cbhUavRow.actualHours, 18, '陳柏宏無人機實發應為 18 節');
-
-const gjPlan = hybridExport.overtimePlans.find(p => p.plan === '國教' || p.plan === '補助調整教師授課鐘點費（國教）');
-assert.ok(gjPlan, '應產出國教超鐘點工作表');
-const cbhGjRow = gjPlan.rows.find(r => r.name === '陳柏宏' && r.weeklyOvertime === 2);
-assert.ok(cbhGjRow, '國教工作表應有陳柏宏主列');
-assert.equal(cbhGjRow.grossHours, 10, '陳柏宏國教應發 10 節');
-assert.equal(cbhGjRow.deduction, 2, '陳柏宏國教應扣除 9/16 病假 2 節');
-assert.equal(cbhGjRow.actualHours, 8, '陳柏宏國教實發應為 8 節');
-assert.match(cbhGjRow.note, /9\/16.*扣.*2.*節|9\/16.*病假/, '陳柏宏國教列應有9/16病假備註');
-
-const gjSubRows = gjPlan.rows.filter(r => r.weeklyOvertime === '');
-assert.equal(gjSubRows.length, 2, '國教工作表應有 2 筆代課列（陳軍翰 1 節、鍾筱萍 1 節）');
-assert.equal(gjSubRows.reduce((sum, r) => sum + r.actualHours, 0), 2, '國教工作表代課總節數應為 2 節');
-
 console.log('export accounting tests PASS');
-
-

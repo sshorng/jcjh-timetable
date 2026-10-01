@@ -724,19 +724,9 @@ window.DomainBilling = (function () {
 
   function overtimeDeductionSourceForRecord(record, teacher, schedules, schoolSwapIndex) {
     var result = overtimeExpenseResolutionForRecord(record, [teacher], schedules, schoolSwapIndex);
+    if (result && result.canAutoAllocate && result.source) return normalizeExpenseSource(result.source);
     var parsed = parseTeacherExpensePlan(teacher);
-    var slotsSources = (parsed.mode === 'slots' && parsed.slots && parsed.slots.length)
-      ? parsed.slots.map(function (s) { return normalizeExpenseSource(s.source); })
-      : [];
-    if (result && result.canAutoAllocate && result.source) {
-      var src = normalizeExpenseSource(result.source);
-      if ((src === DEFAULT_EXPENSE_SOURCE || src === '國教') && slotsSources.length && slotsSources.indexOf(DEFAULT_EXPENSE_SOURCE) < 0 && slotsSources.indexOf('國教') < 0) {
-        return slotsSources[0];
-      }
-      return src;
-    }
     if (parsed.mode === 'legacy' && parsed.legacySource) return normalizeExpenseSource(parsed.legacySource);
-    if (slotsSources.length) return slotsSources[0];
     if (parsed.mode === 'empty') return DEFAULT_EXPENSE_SOURCE;
     return '';
   }

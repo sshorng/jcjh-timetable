@@ -1358,46 +1358,17 @@
   }
 
   function expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex) {
-    var resolved = '';
     if (root.DomainBilling && typeof root.DomainBilling.overtimeExpenseSourceForRecord === 'function') {
-      resolved = root.DomainBilling.overtimeExpenseSourceForRecord(
+      var resolved = root.DomainBilling.overtimeExpenseSourceForRecord(
         record,
         opts.teachers || [],
         opts.allSchedules || [],
         schoolSwapIndex
       );
+      if (resolved) return resolved;
     }
     var parsed = parseExpensePlan(source && source.expensePlan);
-    var slotSources = [];
-    if (parsed.mode === 'slots' && parsed.slots && parsed.slots.length) {
-      parsed.slots.forEach(function (slot) {
-        var s = outputExpensePlan(slot.source);
-        if (s && slotSources.indexOf(s) < 0) slotSources.push(s);
-      });
-    }
-    var isImplicitDefault = !resolved || resolved === '預設' || resolved === '國教';
-    if (isImplicitDefault) {
-      var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
-      var isDirectOvertimeSlot = (opts.allSchedules || []).some(function (schedule) {
-        return sameTeacher(schedule, source)
-          && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
-          && Number(schedule.period) === sourceSlot.period
-          && isOvertimeSchedule(schedule);
-      });
-      if (isDirectOvertimeSlot) {
-        return '國教';
-      }
-      if (slotSources.length && slotSources.indexOf('國教') < 0) {
-        return slotSources[0];
-      }
-    }
-    if (resolved && (!isImplicitDefault || slotSources.indexOf('國教') >= 0)) {
-      return resolved;
-    }
     if (parsed.mode === 'legacy' && parsed.legacySource) return parsed.legacySource;
-    if (slotSources.length) return slotSources[0];
-    var teacherSources = expensePlanSourcesForRow(source);
-    if (teacherSources.length) return teacherSources[0];
     if (parsed.mode === 'empty') return '預設';
     return '';
   }
@@ -1455,27 +1426,15 @@
          && teacherEmail(record.actualTeacherEmail)
          && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
-    // 自費代課：若原教師有超鐘點額度，一律優先扣原教師超鐘點（不限節次是否為超鐘點排課）；
-    // 若原教師完全沒有超鐘點額度（0節），則不納入超鐘沖減，自動流向「自付代課」表。
-    var hasOt = false;
-    if (teacher) {
-      var otVal = Number(teacher.scheduledOvertime !== undefined ? teacher.scheduledOvertime : teacher.weeklyOvertime);
-      if (otVal > 0) {
-        hasOt = true;
-      } else {
-        var repRow = fallbackReportRow(teacher, schedules, period);
-        if (repRow && (Number(repRow.scheduledOvertime) > 0 || Number(repRow.weeklyOvertime) > 0)) {
-          hasOt = true;
-        }
-      }
-    }
-    var selfRecords = hasOt
-      ? eligible.filter(function (record) { return isSelfPaidRecord(record); })
-      : [];
+    // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
+    var selfRecords = eligible.filter(function (record) {
+      return isSelfPaidRecord(record)
+        && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
+    });
     var publicRecords = eligible.filter(function (record) {
       return isPublicOvertimeRecord(record) && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
     });
-    // 公費依固定超鐘點節次判定；自費一律扣原教師超鐘點，超額由 buildChargedRecordMap 溢出。
+    // 公費依固定超鐘點節次判定；自費一律扣原教師，非超鐘點自費另列自付代課表。
     var selected = selfRecords.concat(publicRecords.slice().sort(function (a, b) {
       return String(a.date || '').localeCompare(String(b.date || ''))
         || Number(a.period || 0) - Number(b.period || 0)
@@ -1751,11 +1710,7 @@
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
           return matchesExpectedPlan(record);
         });
-        // 自費代課扣減數：有 chargedMap 時，只計算實際歸入超鐘點的筆數
-        // （溢出部分 charged=false 已流向自付代課表，不重複扣減）。
-        var selfCount = chargedItems
-          ? chargedItems.filter(function (item) { return isSelfPaidRecord(item.record); }).length
-          : planLeave.filter(isSelfPaidRecord).length;
+        var selfCount = planLeave.filter(isSelfPaidRecord).length;
         var publicUsed = expectedPlan || allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
@@ -1784,17 +1739,12 @@
             ? Number(allocation.grossHours) || 0
             : Math.max(0, scheduledOvertime - reduce);
         var deduction = allocation && allocation.deduction !== undefined
-          ? Math.max(Number(allocation.deduction) || 0, selfCount + publicUsed)
+          ? Number(allocation.deduction) || 0
           : selfCount + publicUsed;
         var actualHours = allocation && allocation.actualHours !== undefined && !noAwayDeduction
           ? Number(allocation.actualHours) || 0
           : grossHours - deduction;
-        // 自費扣減節數（用於超扣判定與備註），僅計歸入超鐘點的部分
-        var chargedSelfPaidRecords = chargedItems
-          ? chargedItems.filter(function (item) { return isSelfPaidRecord(item.record); })
-            .map(function (item) { return item.record; })
-          : planLeave.filter(isSelfPaidRecord);
-        var selfPaidDeduction = notePeriodCount(chargedSelfPaidRecords);
+        var selfPaidDeduction = notePeriodCount(planLeave.filter(isSelfPaidRecord));
         var selfPaidAvailableHours = Math.max(0, Number(grossHours) || 0);
         var selfPaidOverdrawn = selfPaidDeduction > selfPaidAvailableHours;
         var weeklyOvertime = allocation
@@ -1806,7 +1756,7 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
-        var deductionRecordsForSource = chargedSelfPaidRecords.concat(
+        var deductionRecordsForSource = planLeave.filter(isSelfPaidRecord).concat(
           chargedRecordsForSource.filter(isPublicOvertimeRecord)
         );
         var overtimeNotes = leaveNoteParts(
