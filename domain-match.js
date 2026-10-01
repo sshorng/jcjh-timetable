@@ -186,10 +186,13 @@ window.DomainMatch = (function () {
       return { free: false, released: false, cell: cell };
     }
 
-    // P2：先只查目標節（1 次／人），空堂候選再掃 1～8 算當日負荷
+    // P2：先只查目標節（1 次／人），空堂候選再掃完整課表節次算當日負荷
     const freeAtTarget = [];
     const todayCountMap = {};
     const releasedMap = {};
+    const workloadPeriods = window.DateUtils && typeof window.DateUtils.getTimetablePeriods === 'function'
+      ? window.DateUtils.getTimetablePeriods()
+      : [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
     var leaveKey = String(leaveEmail || '').toLowerCase().trim();
     var targetP = parseInt(targetPeriod, 10);
     teachers.forEach(function (t) {
@@ -201,8 +204,9 @@ window.DomainMatch = (function () {
     });
     freeAtTarget.forEach(function (t) {
       var periodsBusy = 0;
-      // 負荷只算 1–8（午休抽離不計入當日節數）
-      for (var p = 1; p <= 8; p++) {
+      // 當日負荷包含早自習（0）、一般節次（1–8）與午休（45）。
+      for (var pi = 0; pi < workloadPeriods.length; pi++) {
+        var p = workloadPeriods[pi];
         var cell = getScheduleForDate(t.email, dateStr, p, targetDay);
         var awayRel = isCellAwayReleased(cell);
         var patrol = isPatrolSlot(cell);

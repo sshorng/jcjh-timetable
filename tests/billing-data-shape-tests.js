@@ -79,6 +79,14 @@ assert.equal(window.DomainBilling.isBillableHomeroomRecord({
 }, [{ requestId: 'req-staff-full', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00' }], [
   { email: '行政導師', name: '行政導師', role: 'staff' }
 ]), false, '行政／職員整日應依 17:00 結束');
+assert.equal(window.DomainBilling.isBillableHomeroomRecord({
+  sourceRequestId: 'req-empty-slot',
+  leaveTimeType: '全天',
+  leaveTime: '08:00~16:00'
+}, [{
+  requestId: 'req-empty-slot', reason: '空堂排班', isEmptySlotAssign: true,
+  leaveTimeType: '', leaveTime: ''
+}]), false, '空堂排班即使誤帶全天時段也不可列入代導鐘點');
 
 const mentorWorkbook = window.DomainBilling.buildSubFeeExcelWorkbook({
   reportMonth: '2026-07',
@@ -86,16 +94,19 @@ const mentorWorkbook = window.DomainBilling.buildSubFeeExcelWorkbook({
     { requestId: 'req-course-only', date: '2026-07-13', reason: '課務調整', status: 'approved' },
     { requestId: 'req-normal', date: '2026-07-14', reason: '事假', status: 'approved' },
     { requestId: 'req-partial', date: '2026-07-15', reason: '事假', leaveTimeType: '下午', leaveTime: '12:00~16:00', status: 'approved' },
-    { requestId: 'req-full-custom', date: '2026-07-16', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00', status: 'approved' }
+    { requestId: 'req-full-custom', date: '2026-07-16', reason: '事假', leaveTimeType: '自訂', leaveTime: '08:00~16:00', status: 'approved' },
+    { requestId: 'req-empty-slot', date: '2026-07-17', reason: '空堂排班', isEmptySlotAssign: true, status: 'approved' }
   ],
   homeroomRecords: [
     { sourceRequestId: 'req-course-only', date: '2026-07-13', actualTeacherEmail: 'Cover', actualTeacherName: 'Cover', originalTeacherName: '701導師', className: '701', status: 'assigned' },
     { sourceRequestId: 'req-normal', date: '2026-07-14', actualTeacherEmail: 'Cover2', actualTeacherName: 'Cover2', originalTeacherName: '702導師', className: '702', status: 'assigned' },
     { sourceRequestId: 'req-partial', date: '2026-07-15', actualTeacherEmail: 'Cover3', actualTeacherName: 'Cover3', originalTeacherName: '703導師', className: '703', status: 'assigned' },
-    { sourceRequestId: 'req-full-custom', date: '2026-07-16', actualTeacherEmail: 'Cover4', actualTeacherName: 'Cover4', originalTeacherName: '704導師', className: '704', status: 'assigned' }
+    { sourceRequestId: 'req-full-custom', date: '2026-07-16', actualTeacherEmail: 'Cover4', actualTeacherName: 'Cover4', originalTeacherName: '704導師', className: '704', status: 'assigned' },
+    { sourceRequestId: 'req-empty-slot', date: '2026-07-17', actualTeacherEmail: 'Cover', actualTeacherName: 'Cover',
+      originalTeacherName: '706導師', className: '706', leaveTimeType: '全天', leaveTime: '08:00~16:00', status: 'assigned' }
   ]
 });
-assert.equal(mentorWorkbook.mentorAoa.length, 4, '月度代導清冊應排除僅課務調整與非整日請假');
+assert.equal(mentorWorkbook.mentorAoa.length, 4, '月度代導清冊應排除僅課務調整、非整日請假與空堂任務');
 assert.equal(mentorWorkbook.mentorAoa[2][6], 'Cover2', '月度代導清冊仍應保留一般代導教師');
 assert.equal(mentorWorkbook.mentorAoa[3][6], 'Cover4', '月度代導清冊仍應保留完整自訂全天');
 

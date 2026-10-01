@@ -628,6 +628,13 @@ createApp({
         || normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes'
         || String(record && (record.reason || record['請假事由']) || '').trim() === '課務調整';
     };
+    const isEmptySlotAssignmentRequest = (record) => {
+      if (!record) return false;
+      if (record.isEmptySlotAssign === true) return true;
+      const reason = String(record.reason || record['請假事由'] || '').trim();
+      const note = String(record.note || record['備註'] || '');
+      return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
+    };
     const homeroomTimeRangeBounds = (raw) => {
       const normalized = String(raw == null ? '' : raw).trim()
         .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
@@ -672,12 +679,15 @@ createApp({
         const requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
         return requestId && ids.includes(requestId);
       });
+      const hasEmptySlotAssignment = matched.some(isEmptySlotAssignmentRequest);
+      const billableMatches = matched.filter(request => !isEmptySlotAssignmentRequest(request));
+      if (matched.length && !billableMatches.length) return false;
       if (!matched.length) return isFullDayHomeroomLeave(record);
       const teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
         || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
-      if (matched.some(request => !isCourseAdjustmentOnlyRequest(request) && isFullDayHomeroomLeave(request, teacherKey))) return true;
+      if (billableMatches.some(request => !isCourseAdjustmentOnlyRequest(request) && isFullDayHomeroomLeave(request, teacherKey))) return true;
       // Requests are time-windowed; keep the persisted full-day record when older source IDs are not loaded.
-      return matched.length < ids.length && isFullDayHomeroomLeave(record, teacherKey);
+      return !hasEmptySlotAssignment && billableMatches.length < ids.length && isFullDayHomeroomLeave(record, teacherKey);
     };
     /**
      * 從「已組裝的 substitution 列 + 基礎課表」解析教師在該日該節的有效班科
@@ -6105,6 +6115,62 @@ createApp({
       return !!(cell && !cell.isSubstituted);
     };
 
+    const exchangeIncomingConflict = computed(() => {
+      const pending = pendingRequestData.value || {};
+      if (pending.mode !== 'exchange') return null;
+      const sourceTime = (window.DateUtils && window.DateUtils.decodeTimeKey)
+        ? window.DateUtils.decodeTimeKey(pending.timeKey)
+        : { period: parseInt(String(pending.timeKey || '').split('-').pop(), 10) };
+      const targetTime = (window.DateUtils && window.DateUtils.decodeTimeKey)
+        ? window.DateUtils.decodeTimeKey(pending.timeB)
+        : {
+            period: parseInt(String(pending.timeB || '').split('-').pop(), 10)
+          };
+      const dateKey = (value) => String(value || '').slice(0, 10).replace(/\//g, '-');
+      const teacherKey = (value) => String(getTeacherNameByEmail(value) || value || '').trim().toLowerCase();
+      const slotKey = (teacher, date, period) => [
+        teacherKey(teacher), dateKey(date), parseInt(period, 10)
+      ].join('|');
+      const incoming = [
+        { teacher: pending.leaveTeacher, date: pending.dateB, period: targetTime.period },
+        { teacher: pending.subTeacher, date: pending.date, period: sourceTime.period }
+      ];
+      const existing = [];
+      const currentRequestId = String(pending.submitRequestId || pending.requestId || '').trim();
+      const addExisting = (requestId, teacher, date, period) => {
+        const id = String(requestId || '').trim();
+        if (currentRequestId && id && currentRequestId === id) return;
+        const key = slotKey(teacher, date, period);
+        if (key.split('|')[0] && dateKey(date) && Number.isFinite(parseInt(period, 10))) {
+          existing.push({ key: key, teacher: String(teacher || '').trim(), date: dateKey(date), period: parseInt(period, 10) });
+        }
+      };
+
+      (substitutionRecords.value || []).forEach((record) => {
+        if (!record || (record.type !== 'exchange' && record.type !== '對調')) return;
+        addExisting(record.requestId, record.actualTeacherEmail || record.actualTeacherName, record.date, record.period);
+      });
+      (allPendingRequests.value || []).forEach((request) => {
+        if (!request || (request.type !== 'exchange' && request.type !== '對調')) return;
+        const status = String(request.status || '').toLowerCase();
+        if (status && status !== 'pending_teacher' && status !== 'pending_admin') return;
+        const sourcePeriod = request.requestPeriod != null ? request.requestPeriod : request['異動節次'];
+        const targetPeriod = request.targetPeriod != null ? request.targetPeriod : request['對調目標節次'];
+        addExisting(request.id || request['申請單ID'], request.targetTeacherEmail || request['受邀人Email'],
+          request.requestDate || request['異動日期'], sourcePeriod);
+        addExisting(request.id || request['申請單ID'], request.requesterEmail || request['申請人Email'],
+          request.targetDate || request['對調目標日期'], targetPeriod);
+      });
+
+      for (let i = 0; i < incoming.length; i++) {
+        const slot = incoming[i];
+        const key = slotKey(slot.teacher, slot.date, slot.period);
+        const conflict = existing.find((item) => item.key === key);
+        if (conflict) return conflict;
+      }
+      return null;
+    });
+
     /** 代課／調入落在對方「巡堂」節：提醒但不擋（私下代巡） */
     const confirmIfTargetPatrol = async (targetEmail, dateStr, period, dayOfWeek) => {
       if (!targetEmail || !dateStr || period == null) return true;
@@ -6180,8 +6246,8 @@ createApp({
         return false;
       }
       return window.UiSubmitHelpers.validateSubmitRequest({
-         pendingRequestData, showToast, showConfirm, isAdmin, getTeacherNameByEmail,
-         hasSubTeacherConflict, assertQuotaDeductAllowed,
+        pendingRequestData, showToast, showConfirm, isAdmin, getTeacherNameByEmail,
+          hasSubTeacherConflict, exchangeIncomingConflict, assertQuotaDeductAllowed,
          activeCell, allSchedules, getScheduleForDate, isSingleWeek,
         isProxySubmitActive: function () { return isProxySubmitActive.value; },
         assertCanSubmitAsLeaveTeacher: assertCanSubmitAsLeaveTeacher

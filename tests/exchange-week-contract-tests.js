@@ -117,6 +117,62 @@ const releasedCandidates = listHolidayCandidates('2026-09-28', false, true);
 assert.equal(releasedCandidates.length, 1, '其他班級外出釋出的空堂仍可互調');
 assert.equal(releasedCandidates[0].freeByAway, true);
 
+async function runPrepCompareUsesEffectiveTargetCourseTest() {
+  const pendingRequestData = ref({});
+  const activeCell = ref({
+    teacherEmail: 'leave@example.com',
+    dayOfWeek: 5,
+    period: 4,
+    classData: { className: '905', subject: '國文' }
+  });
+  const result = await UiSubmitHelpers.prepCompare({
+    activeCell,
+    inputRequestDate: ref('2026-10-02'),
+    allSchedules: ref([]),
+    showConfirm: async () => true,
+    getScheduleForDate(email, dateStr, period) {
+      if (email === 'invitee@example.com' && dateStr === '2026-10-02' && Number(period) === 5) {
+        return { className: '905', subject: '童軍' };
+      }
+      return null;
+    },
+    formatDateMMDD: dateStr => String(dateStr).slice(5).replace('-', '/'),
+    getWeekDayText: day => ({ 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' })[day] || '',
+    exchangePeriodId: ref(''),
+    exchangeWeekOffset: ref(0),
+    exchangeTargetDate: ref(''),
+    consecAlertsA: ref([]),
+    consecAlertsB: ref([]),
+    isMutualCover: ref(false),
+    assignMutualDraftFromMatch: () => {},
+    PERIOD8_FEE: '第8節代課',
+    pendingRequestData,
+    showMatchModal: ref(true),
+    showCompareModal: ref(false),
+    getLeaveTimeDefaults: () => ({ type: '', start: '', end: '', range: '' }),
+    isSingleWeek: () => false,
+    getTeacherNameByEmail: email => email
+  }, 'exchange', 'invitee@example.com', '5-5', '家政', '905');
+
+  assert.equal(result, 'opened');
+  assert.equal(pendingRequestData.value.subB, '童軍', '調課申請應保存目標日期的有效科目，而非候選列快照');
+  assert.equal(pendingRequestData.value.subBClass, '905');
+
+  const built = UiSubmitHelpers.buildSubmitPayload({
+    pendingRequestData,
+    currentSemester: ref('115-1'),
+    getTeacherNameByEmail: email => email === 'leave@example.com' ? '申請教師' : '受邀教師',
+    isAdmin: ref(false),
+    directApproveMode: ref(false),
+    paperFlow: ref(false),
+    isMutualCover: ref(false),
+    PERIOD8_FEE: '第8節代課',
+    activeCell
+  }, 'req-effective-course', 'SWP1001');
+  assert.equal(built.newRequest['對調目標科目'], '童軍', '送往後端的申請欄位也應是目標日期有效科目');
+  assert.equal(built.newRequest['對調目標班級'], '905');
+}
+
 async function runDateAwareValidationTest() {
   const pendingRequestData = ref({
     mode: 'exchange',
@@ -200,6 +256,7 @@ assert.deepEqual(batchWeeks.map(week => week[0]), [
 assert.equal(batchWeeks.every(week => week.length === 5), true, '每個批次瀏覽週應包含週一至週五');
 
 runDateAwareValidationTest()
+  .then(runPrepCompareUsesEffectiveTargetCourseTest)
   .then(() => console.log('exchange week contract tests PASS'))
   .catch(error => {
     console.error(error);

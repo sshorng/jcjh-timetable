@@ -2846,6 +2846,7 @@ function syncHomeroomRecordForRequest_(requestRow, operatorEmail) {
   var eligible = status === "approved"
     && type === "substitution"
     && !!sid && !!rid && !!leaveEmail && !!dateStr
+    && !isEmptySlotAssignmentRequest_(requestRow)
     && !homeroomRequestIsCourseAdjustmentOnly_(requestRow)
     && !isTimetableOnlyFee_(requestRow["經費來源"] || requestRow.subFee)
     && homeroomRequestIsFullDay_(requestRow, teacher)
@@ -5847,6 +5848,56 @@ function isEmptySlotAssignmentRequest_(row) {
   return reason === "空堂排班" || note.indexOf("[空堂排班]") >= 0;
 }
 
+function exchangeRequestIncomingSlots_(row) {
+  if (!row) return [];
+  var rawType = row["異動類型"] != null ? row["異動類型"] : row.type;
+  if (String(translateTypeToEn(rawType) || "").trim().toLowerCase() !== "exchange") return [];
+
+  var sourceDate = String(row["異動日期"] || row.requestDate || row.date || "").trim().slice(0, 10).replace(/\//g, "-");
+  var targetDate = String(row["對調目標日期"] || row.targetDate || "").trim().slice(0, 10).replace(/\//g, "-");
+  var sourcePeriodRaw = row["異動節次"] != null ? row["異動節次"] : row.requestPeriod;
+  var targetPeriodRaw = row["對調目標節次"] != null ? row["對調目標節次"] : row.targetPeriod;
+  var sourcePeriod = parseInt(sourcePeriodRaw, 10);
+  var targetPeriod = parseInt(targetPeriodRaw, 10);
+  var requester = String(row["申請人Email"] || row.requesterEmail || "").trim().toLowerCase();
+  var target = String(row["受邀人Email"] || row.targetTeacherEmail || "").trim().toLowerCase();
+  if (!requester || !target || !sourceDate || !targetDate || isNaN(sourcePeriod) || isNaN(targetPeriod)) return [];
+
+  // 調課兩端的實際調入：申請人到受邀人的目標節次，受邀人到申請人的原節次。
+  return [
+    { teacher: requester, date: targetDate, period: targetPeriod },
+    { teacher: target, date: sourceDate, period: sourcePeriod }
+  ];
+}
+
+/** 同一教師的同一日期／節次只能有一筆調課調入。核准與送出時都必須重新驗證。 */
+function assertNoExchangeIncomingConflict_(requestRow, existingRows) {
+  var candidateId = String(requestRow && (requestRow["申請單ID"] || requestRow.id) || "").trim();
+  var candidateSlots = exchangeRequestIncomingSlots_(requestRow);
+  if (!candidateSlots.length) return true;
+
+  var occupied = {};
+  (existingRows || []).forEach(function (row) {
+    if (!row || String(row["申請單ID"] || row.id || "").trim() === candidateId) return;
+    var status = String(translateStatusToEn(row["狀態"] || row.status || "") || "").trim().toLowerCase();
+    if (status !== "approved" && status !== "pending_teacher" && status !== "pending_admin") return;
+    exchangeRequestIncomingSlots_(row).forEach(function (slot) {
+      occupied[slot.teacher + "|" + slot.date + "|" + slot.period] = true;
+    });
+  });
+
+  var seen = {};
+  candidateSlots.forEach(function (slot) {
+    var key = slot.teacher + "|" + slot.date + "|" + slot.period;
+    if (seen[key] || occupied[key]) {
+      throw new Error("調課衝堂：教師「" + slot.teacher + "」在 " + slot.date
+        + " 第" + slot.period + "節已有另一堂調課排入，請改選其他時段。");
+    }
+    seen[key] = true;
+  });
+  return true;
+}
+
 function validateRequestRow_(row, semesterId) {
   var dateStr = String(row && (row["異動日期"] || row.requestDate || "") || "").trim().slice(0, 10);
   var period = parseInt(row && (row["異動節次"] || row.requestPeriod || 0), 10);
@@ -7372,11 +7423,12 @@ function doPost(e) {
           approveTriangleRequest_(targetReq, semesterId, userEmail, currentUrl, reqData.note || "");
         } else {
          if (isCombinedReturnRequest_(targetReq)) {
-            validateCombinedReturnRequest_(targetReq, semesterId);
-           targetReq["特殊流程"] = SPECIAL_FLOW_COMBINED_RETURN_LABEL_;
-         }
+             validateCombinedReturnRequest_(targetReq, semesterId);
+            targetReq["特殊流程"] = SPECIAL_FLOW_COMBINED_RETURN_LABEL_;
+          }
+         assertNoExchangeIncomingConflict_(targetReq, (getSemesterRequestsCached_(semesterId, true).rows || []));
 
-        targetReq["狀態"] = "approved";
+         targetReq["狀態"] = "approved";
        if (reqData.note) targetReq["備註"] = reqData.note;
          // 額度扣用以申請單 ID 冪等補寫：舊申請已在送出時扣過不重複，漏寫則在核准時補上。
          persistRequestRowsWithQuota_([targetReq], userEmail);
@@ -7413,10 +7465,11 @@ function doPost(e) {
        if (!apToSave.length) throw new Error("找不到可核准的申請單");
         apToSave.forEach(function (r) {
           if (isCombinedReturnRequest_(r)) {
-             validateCombinedReturnRequest_(r, semesterId);
-            r["特殊流程"] = SPECIAL_FLOW_COMBINED_RETURN_LABEL_;
-          }
-        });
+              validateCombinedReturnRequest_(r, semesterId);
+             r["特殊流程"] = SPECIAL_FLOW_COMBINED_RETURN_LABEL_;
+           }
+           assertNoExchangeIncomingConflict_(r, (getSemesterRequestsCached_(semesterId, true).rows || []));
+         });
        // 批次核准同樣以申請單 ID 冪等補寫額度帳本，避免漏扣或重複扣款。
        persistRequestRowsWithQuota_(apToSave, userEmail);
        apToSave.forEach(function (r) {
@@ -7524,7 +7577,7 @@ function doPost(e) {
              try { restoreMutualQuotaForRequests_(targetReq); } catch (qE) { logError_("restoreMutualQuota_deleteSub", qE); throw qE; }
            targetReq["狀態"] = "cancelled";
            saveRows("申請單", [targetReq], "申請單ID");
-            syncHomeroomRecordForRequest_(targetReq, userEmail);
+             syncHomeroomRecordForRequest_(targetReq, userEmail);
             deletedSubRequest = true;
             }
          }
@@ -7647,10 +7700,11 @@ function doPost(e) {
           targetReq["紙本流程"] = "FALSE";
           targetReq["經費來源"] = combinedReturnExpectedFee_(targetReq);
            validateCombinedReturnRequest_(targetReq, semesterId);
-        }
+         }
 
-       saveRows("申請單", [targetReq], "申請單ID");
-      syncHomeroomRecordForRequest_(targetReq, userEmail);
+        assertNoExchangeIncomingConflict_(targetReq, (getSemesterRequestsCached_(semesterId, true).rows || []));
+        saveRows("申請單", [targetReq], "申請單ID");
+       syncHomeroomRecordForRequest_(targetReq, userEmail);
       invalidateSemesterCaches_(semesterId);
       
     } else if (action === "saveMailSettings") {
@@ -7933,7 +7987,8 @@ function doPost(e) {
       }
       if (!reqData.request["批次ID"]) reqData.request["批次ID"] = "";
       
-       persistRequestRowsWithQuota_([reqData.request], userEmail);
+        assertNoExchangeIncomingConflict_(reqData.request, (getSemesterRequestsCached_(semesterId, true).rows || []));
+        persistRequestRowsWithQuota_([reqData.request], userEmail);
        if (String(reqData.request["狀態"] || "") === "approved") {
          syncHomeroomRecordForRequest_(reqData.request, userEmail);
        }
@@ -8043,7 +8098,7 @@ function doPost(e) {
         if (!row["建立時間"]) row["建立時間"] = toLocalTimeStr(new Date());
         rows.push(row);
       }
-      if (existingBatchRows.length) {
+       if (existingBatchRows.length) {
         if (existingBatchRows.length !== rows.length) {
           throw new Error("批次中部分申請單 ID 已存在，為避免重複寫入請重新整理後再試！");
         }
@@ -8054,8 +8109,12 @@ function doPost(e) {
           count: existingBatchRows.length,
           ids: existingBatchRows.map(function (r) { return r["申請單ID"]; })
         })).setMimeType(ContentService.MimeType.JSON);
-      }
-      persistRequestRowsWithQuota_(rows, userEmail);
+       }
+       var existingRequestsForExchange = (getSemesterRequestsCached_(semesterId, true).rows || []);
+       rows.forEach(function (row) {
+         assertNoExchangeIncomingConflict_(row, existingRequestsForExchange.concat(rows));
+       });
+       persistRequestRowsWithQuota_(rows, userEmail);
       if (finalStatus === "approved") {
         rows.forEach(function (r) { syncHomeroomRecordForRequest_(r, userEmail); });
       }

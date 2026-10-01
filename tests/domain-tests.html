@@ -100,6 +100,39 @@
       assert('主要科目優先：己與戊皆同科主科，排序由負荷決定', f && e && f.isSameSubject && e.isSameSubject);
       assert('請假人自己不在名單', !ranked.find(function (t) { return t.email === 'a@x'; }));
 
+      var workloadTeachers = [
+        { email: 'leave-load@x', name: '請假者', subject: '國文' },
+        { email: 'busy-load@x', name: '早午都有課', subject: '國文' }
+      ];
+      var workloadSchedules = [
+        { teacherEmail: 'leave-load@x', dayOfWeek: 3, period: 1, className: '701', subject: '國文' },
+        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 0, className: '8英資B', subject: '英語' },
+        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 2, className: '801', subject: '國文' },
+        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 3, className: '802', subject: '國文' },
+        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 4, className: '803', subject: '國文' },
+        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 45, className: '9英資B', subject: '英語' }
+      ];
+      var workloadRanked = window.DomainMatch.rankSubstitutionCandidates({
+        teachers: workloadTeachers,
+        allSchedules: workloadSchedules,
+        leaveEmail: 'leave-load@x',
+        dateStr: '2026-10-21',
+        targetDay: 3,
+        targetPeriod: 1,
+        myCourse: '國文',
+        myDomain: '國文',
+        myClass: '701',
+        getScheduleForDate: function (email, dateStr, period, day) {
+          return workloadSchedules.find(function (schedule) {
+            return schedule.teacherEmail === email
+              && parseInt(schedule.dayOfWeek, 10) === parseInt(day, 10)
+              && parseInt(schedule.period, 10) === parseInt(period, 10);
+          }) || null;
+        }
+      });
+      var busyLoadCandidate = workloadRanked.find(function (teacher) { return teacher.email === 'busy-load@x'; });
+      assert('當日已排節數包含早自習與午休', busyLoadCandidate && busyLoadCandidate.todayPeriodCount === 5);
+
       // 走讀：leaveDomains=['國文','輔導']；甲（國文）、丁（輔導）皆命中，都算同科
       var ranked2 = window.DomainMatch.rankSubstitutionCandidates({
         teachers: teachers,

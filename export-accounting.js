@@ -954,6 +954,13 @@
     return String(record && (record.reason || record['請假事由']) || '').trim();
   }
 
+  function isEmptySlotAssignmentRecord(record) {
+    if (!record) return false;
+    if (record.isEmptySlotAssign === true) return true;
+    var note = String(record.note || record['備註'] || '');
+    return reason(record) === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
+  }
+
   function isCourseAdjustmentOnlyRecord(record) {
     if (root.FieldMap && typeof root.FieldMap.isCourseAdjustmentOnly === 'function') {
       return root.FieldMap.isCourseAdjustmentOnly(record);
@@ -1036,15 +1043,18 @@
       var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
       return requestId && ids.indexOf(requestId) >= 0;
     });
-    matched = matched.filter(function (request) { return !isTimetableOnlyRecord(request); });
-    if (!matched.length && ids.length) return false;
-    if (!matched.length) return homeroomIsFullDayLeave(record, teachers);
+    var hasEmptySlotAssignment = matched.some(isEmptySlotAssignmentRecord);
+    var billableMatches = matched.filter(function (request) {
+      return !isEmptySlotAssignmentRecord(request) && !isTimetableOnlyRecord(request);
+    });
+    if (!billableMatches.length && (ids.length || hasEmptySlotAssignment)) return false;
+    if (!billableMatches.length) return homeroomIsFullDayLeave(record, teachers);
     var teacherKey = record && (record.leaveEmail || record.originalTeacherEmail
       || record['原導師Email'] || record.originalTeacherName || record['原導師姓名'] || '');
-    if (matched.some(function (request) {
+    if (billableMatches.some(function (request) {
       return !isCourseAdjustmentOnlyRecord(request) && homeroomIsFullDayLeave(request, teachers, teacherKey);
     })) return true;
-    return matched.length < ids.length && homeroomIsFullDayLeave(record, teachers);
+    return !hasEmptySlotAssignment && billableMatches.length < ids.length && homeroomIsFullDayLeave(record, teachers);
   }
 
   function isCombinedReturnRecord(record) {

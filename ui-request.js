@@ -121,6 +121,19 @@ window.UiSubmitHelpers = (function () {
       showToast('請選擇請假原因/假別！', 'info');
       return false;
     }
+    var exchangeIncomingConflict = pending.mode === 'exchange'
+      && deps.exchangeIncomingConflict
+      ? deps.exchangeIncomingConflict.value : null;
+    if (exchangeIncomingConflict) {
+      var conflictTeacherName = getTeacherNameByEmail(exchangeIncomingConflict.teacher)
+        || exchangeIncomingConflict.teacher || '該教師';
+      showToast(
+        '⚠️ 調課衝堂：' + conflictTeacherName + ' 在 ' + exchangeIncomingConflict.date
+          + ' 第' + exchangeIncomingConflict.period + '節已有另一堂調課排入，請改選其他時段。',
+        'warning'
+      );
+      return false;
+    }
     if (!combinedReturn && hasSubTeacherConflict.value) {
       var subName = pending.subTeacher
         ? getTeacherNameByEmail(pending.subTeacher) : '該教師';
@@ -590,8 +603,9 @@ window.UiSubmitHelpers = (function () {
       timeBVal = (window.DateUtils && window.DateUtils.encodeTimeKey)
         ? window.DateUtils.encodeTimeKey(dp[0], dp[1])
         : (String(dp[0]) + '-' + String(dp[1]));
-      subBVal = subjectVal;
-      classBVal = classVal || '';
+       // 候選列可能是基礎課表快照；若目標日期已有有效調入課，應保存當日實際班科。
+       subBVal = (targetSched && targetSched.subject) || subjectVal;
+       classBVal = (targetSched && targetSched.className) || classVal || '';
     }
 
     consecAlertsA.value = [];

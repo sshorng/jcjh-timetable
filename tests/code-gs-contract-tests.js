@@ -8,6 +8,7 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
+const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
 assert.match(source, /clearStaleCacheChunksBeforePut_\(cache, key, 1\)/, '單值快取改寫時應清理舊分片');
@@ -254,10 +255,106 @@ const normalizedCourseRequest = homeroomCourseContext.normalizeCourseAdjustmentR
 assert.equal(normalizedCourseRequest['僅課務調整'], '是');
 assert.equal(normalizedCourseRequest['請假時間類型'], '');
 assert.equal(normalizedCourseRequest['請假時間'], '');
+const exchangeGuardStart = source.indexOf('function exchangeRequestIncomingSlots_');
+const exchangeGuardEnd = source.indexOf('function validateRequestRow_', exchangeGuardStart);
+assert.ok(exchangeGuardStart >= 0 && exchangeGuardEnd > exchangeGuardStart, '調課調入衝堂驗證 helper 必須存在');
+const exchangeGuardContext = {
+  String, parseInt,
+  translateTypeToEn: value => value === '對調' ? 'exchange' : value,
+  translateStatusToEn: value => ({ '待受邀人簽核': 'pending_teacher', '待行政審核': 'pending_admin', '已核准': 'approved' }[value] || value)
+};
+vm.createContext(exchangeGuardContext);
+vm.runInContext(source.slice(exchangeGuardStart, exchangeGuardEnd), exchangeGuardContext, { filename: 'code.gs.exchange-conflict' });
+const exchangeCandidate = {
+  '申請單ID': 'exchange-candidate', '異動類型': 'exchange', '狀態': 'pending_admin',
+  '申請人Email': 'alice@school.example', '受邀人Email': 'bob@school.example',
+  '異動日期': '2026-10-12', '異動節次': 1,
+  '對調目標日期': '2026-10-12', '對調目標節次': 4
+};
+const sameIncomingSlot = {
+  '申請單ID': 'exchange-existing', '異動類型': 'exchange', '狀態': 'approved',
+  '申請人Email': 'alice@school.example', '受邀人Email': 'carol@school.example',
+  '異動日期': '2026-10-09', '異動節次': 2,
+  '對調目標日期': '2026-10-12', '對調目標節次': 4
+};
+assert.throws(
+  () => exchangeGuardContext.assertNoExchangeIncomingConflict_(exchangeCandidate, [sameIncomingSlot]),
+  /調課衝堂.*alice@school\.example.*2026-10-12.*第4節/,
+  '相同教師同日同節已有一筆調課調入時，送出或核准必須阻擋'
+);
+assert.equal(exchangeGuardContext.assertNoExchangeIncomingConflict_(exchangeCandidate, [
+  Object.assign({}, sameIncomingSlot, { '申請單ID': 'cancelled-exchange', '狀態': 'cancelled' }),
+  Object.assign({}, sameIncomingSlot, { '申請單ID': 'other-teacher', '申請人Email': 'dave@school.example' })
+]), true, '撤銷紀錄或不同實際調入教師不可誤判為衝堂');
+assert.equal(exchangeGuardContext.assertNoExchangeIncomingConflict_(exchangeCandidate, [exchangeCandidate]), true,
+  '核准既有申請時不得將該申請本身算成衝堂');
+assert.match(source, /assertNoExchangeIncomingConflict_\(targetReq, \(getSemesterRequestsCached_\(semesterId, true\)\.rows \|\| \[\]\)\)/,
+  '單筆行政核准必須重新驗證調課衝堂');
+assert.match(source, /assertNoExchangeIncomingConflict_\(reqData\.request, \(getSemesterRequestsCached_\(semesterId, true\)\.rows \|\| \[\]\)\)/,
+  '單筆直接送出必須重新驗證調課衝堂');
+const appExchangeConflictStart = appSource.indexOf('const exchangeIncomingConflict = computed(() =>');
+const appExchangeConflictEnd = appSource.indexOf('const confirmIfTargetPatrol', appExchangeConflictStart);
+assert.ok(appExchangeConflictStart >= 0 && appExchangeConflictEnd > appExchangeConflictStart,
+  '前端調課衝堂提醒必須存在');
+assert.match(appSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /substitutionRecords\.value/);
+assert.match(appSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /allPendingRequests\.value/);
 const homeroomSyncStart = source.indexOf('function syncHomeroomRecordForRequest_');
 const homeroomSyncEnd = source.indexOf('function getSemesterTeachersCached_', homeroomSyncStart);
 assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /!homeroomRequestIsCourseAdjustmentOnly_\(requestRow\)/, '代導同步不得建立僅課務調整紀錄');
+assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /!isEmptySlotAssignmentRequest_\(requestRow\)/, '代導同步不得把空堂任務當請假建立代導');
 assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /homeroomRequestIsFullDay_\(requestRow, teacher\)/, '代導同步只建立整日請假紀錄');
+let homeroomRows = [{
+  '學期代號': '115-1', '代導紀錄ID': 'mentor-empty-duty', '來源申請單ID': 'empty-duty',
+  '原導師Email': 'mentor@school.example', '班級': '901', '代導日期': '2026-10-14',
+  '啟用': 'TRUE', '狀態': 'pending'
+}];
+const homeroomSyncContext = {
+  String, Number, Math, Date, Array, Object, parseInt,
+  normalizeTeacherRole_: () => 'teacher',
+  getSemesterTeachersCached_: () => [{ '教師Email': 'mentor@school.example', '教師姓名': '導師', '職務': '901導師' }],
+  translateTypeToEn: value => value,
+  translateStatusToEn: value => value,
+  isCombinedReturnRequest_: () => false,
+  isTimetableOnlyFee_: () => false,
+  toLocalTimeStr: () => '2026-10-01 12:00:00',
+  getTableData: () => homeroomRows,
+  saveRows: (sheet, rows) => {
+    rows.forEach(row => {
+      const index = homeroomRows.findIndex(item => item['代導紀錄ID'] === row['代導紀錄ID']);
+      if (index >= 0) homeroomRows[index] = row;
+      else homeroomRows.push(row);
+    });
+  }
+};
+vm.createContext(homeroomSyncContext);
+const homeroomHelpersStart = source.indexOf('var HOMEROOM_SHEET_ = "代導紀錄";');
+assert.ok(homeroomHelpersStart >= 0 && homeroomSyncEnd > homeroomHelpersStart, '代導同步 helper 區塊必須存在');
+vm.runInContext(source.slice(homeroomHelpersStart, homeroomSyncEnd), homeroomSyncContext, { filename: 'code.gs.homeroom-sync' });
+const emptySlotHelperStart = source.indexOf('function isEmptySlotAssignmentRequest_');
+const emptySlotHelperEnd = source.indexOf('function validateRequestRow_', emptySlotHelperStart);
+assert.ok(emptySlotHelperStart >= 0 && emptySlotHelperEnd > emptySlotHelperStart, '空堂排班判定 helper 必須存在');
+vm.runInContext(source.slice(emptySlotHelperStart, emptySlotHelperEnd), homeroomSyncContext, { filename: 'code.gs.empty-slot-request' });
+const emptySlotRequest = {
+  '學期代號': '115-1', '申請單ID': 'empty-duty', '申請人Email': 'mentor@school.example',
+  '申請人姓名': '導師', '班級': '901', '異動日期': '2026-10-14', '異動類型': 'substitution',
+  '狀態': 'approved', '請假事由': '空堂排班', '備註': '[空堂排班] 空堂輪值'
+};
+assert.equal(homeroomSyncContext.syncHomeroomRecordForRequest_(emptySlotRequest, 'admin@school.example'), null,
+  '已核准的空堂任務不得建立代導');
+assert.equal(homeroomRows[0]['啟用'], 'FALSE', '重新同步時應停用已誤建的空堂代導紀錄');
+assert.equal(homeroomRows[0]['狀態'], 'cancelled', '已誤建的空堂代導紀錄應標記撤銷');
+homeroomRows = [];
+const fullDayLeaveRequest = Object.assign({}, emptySlotRequest, {
+  '申請單ID': 'full-day-leave', '請假事由': '事假', '備註': '',
+  '請假時間類型': '全天', '請假時間': '08:00~16:00'
+});
+const fullDayMentorRecord = homeroomSyncContext.syncHomeroomRecordForRequest_(fullDayLeaveRequest, 'admin@school.example');
+assert.ok(fullDayMentorRecord && fullDayMentorRecord['啟用'] === 'TRUE', '一般導師整日請假仍應建立代導');
+const appHomeroomStart = appSource.indexOf('const isBillableHomeroomRecord = (record) =>');
+const appHomeroomEnd = appSource.indexOf('\n    };', appHomeroomStart);
+assert.ok(appHomeroomStart >= 0 && appHomeroomEnd > appHomeroomStart, '代導畫面計費判斷必須存在');
+assert.match(appSource.slice(appHomeroomStart, appHomeroomEnd), /matched\.some\(isEmptySlotAssignmentRequest\)/,
+  '代導待指定清單與月度統計必須排除空堂任務');
 const manualHomeroomStart = source.indexOf('} else if (action === "saveManualHomeroomRecord")');
 const manualHomeroomEnd = source.indexOf('} else if (action === "deleteHomeroomRecord")', manualHomeroomStart);
 assert.ok(manualHomeroomStart >= 0 && manualHomeroomEnd > manualHomeroomStart, '手動代導 action 必須存在');

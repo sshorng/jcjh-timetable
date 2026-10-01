@@ -1757,6 +1757,13 @@ async function runCourseAdjustmentTest() {
     allSchedules: ref([])
   });
   assert.equal(await api.validateSubmitRequest(exchangeDeps), true, '調課課務調整不需填請假時間');
+  let exchangeConflictWarning = '';
+  exchangeDeps.exchangeIncomingConflict = ref({
+    teacher: 'sheng@example.com', date: '2026-09-03', period: 2
+  });
+  exchangeDeps.showToast = message => { exchangeConflictWarning = String(message || ''); };
+  assert.equal(await api.validateSubmitRequest(exchangeDeps), false, '同教師同日同節已有另一堂調課時應阻擋送出');
+  assert.match(exchangeConflictWarning, /調課衝堂.*2026-09-03.*第2節/);
 
   const directDeps = singleDeps();
   directDeps.isAdmin.value = true;
@@ -1768,6 +1775,66 @@ async function runCourseAdjustmentTest() {
   assert.equal(direct.newRequest['直接核准'], '是');
   assert.equal(direct.newRequest.directApprove, true);
   assert.doesNotMatch(direct.newRequest['備註'], /直接核准/);
+}
+
+function runExchangeIncomingConflictDetectionTest() {
+  const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  const start = appSource.indexOf('const exchangeIncomingConflict = computed(() =>');
+  const end = appSource.indexOf('const confirmIfTargetPatrol', start);
+  assert.ok(start >= 0 && end > start, 'exchange incoming conflict detector must remain discoverable');
+  const makeConflict = (substitutions, pendingRequests) => {
+    const context = {
+      window: {
+        DateUtils: {
+          decodeTimeKey(value) {
+            const parts = String(value || '').split('-');
+            return { day: Number(parts[0]), period: Number(parts[1]) };
+          }
+        }
+      },
+      pendingRequestData: ref({
+        mode: 'exchange', leaveTeacher: 'alice@example.edu', subTeacher: 'bob@example.edu',
+        date: '2026-10-12', timeKey: '1-1', dateB: '2026-10-12', timeB: '1-4',
+        submitRequestId: 'new-exchange'
+      }),
+      substitutionRecords: ref(substitutions),
+      allPendingRequests: ref(pendingRequests),
+      getTeacherNameByEmail(value) {
+        return ({
+          'alice@example.edu': 'Alice',
+          'bob@example.edu': 'Bob',
+          'carol@example.edu': 'Carol',
+          alice: 'Alice'
+        })[String(value || '').trim().toLowerCase()] || String(value || '');
+      },
+      computed: fn => ({ value: fn() }),
+      String, Number, Array, parseInt
+    };
+    vm.createContext(context);
+    return vm.runInContext(`(() => {
+      ${appSource.slice(start, end)}
+      return exchangeIncomingConflict;
+    })()`, context).value;
+  };
+
+  const approvedConflict = makeConflict([{
+    requestId: 'old-approved', type: 'exchange', actualTeacherEmail: 'Alice',
+    date: '2026-10-12', period: 4
+  }], []);
+  assert.deepEqual(
+    { teacher: approvedConflict.teacher, date: approvedConflict.date, period: approvedConflict.period },
+    { teacher: 'Alice', date: '2026-10-12', period: 4 },
+    '前端應辨識已核准調課以教師姓名或 Email 指向同一人的調入衝堂'
+  );
+
+  const pendingConflict = makeConflict([], [{
+    id: 'old-pending', type: 'exchange', status: 'pending_admin',
+    requesterEmail: 'alice@example.edu', targetTeacherEmail: 'carol@example.edu',
+    requestDate: '2026-10-09', requestPeriod: 2,
+    targetDate: '2026-10-12', targetPeriod: 4
+  }]);
+  assert.equal(pendingConflict.date, '2026-10-12', '尚待簽核的調課也應保留時段避免重複調入');
+  assert.equal(makeConflict([], []), null, '沒有既有調入的節次不可誤報衝堂');
 }
 
 async function runBatchTest(courseAdjustmentOnly = false, adminPaperMode = false, reasonOnly = false) {
@@ -2001,6 +2068,7 @@ Promise.resolve()
   .then(runTriangleAdminBatchSelectionTest)
   .then(runLineHandledSlotTest)
   .then(runCourseAdjustmentTest)
+  .then(runExchangeIncomingConflictDetectionTest)
   .then(runRechangeLabelTest)
   .then(runBatchTest)
    .then(() => runBatchTest(true))
