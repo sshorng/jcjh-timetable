@@ -925,6 +925,26 @@
         ]);
         assert('pending 代出索引', !!(pIdx['a@x|2026-07-13|2'] && pIdx['a@x|2026-07-13|2'].outReq));
         assert('pending 代入索引', !!(pIdx['d@x|2026-07-13|2'] && pIdx['d@x|2026-07-13|2'].subIn));
+        var staleTargetRequest = {
+          type: 'exchange', requesterEmail: 'owner@x', targetTeacherEmail: 'invitee@x',
+          requesterName: '申請人', targetTeacherName: '幸靜',
+          requestDate: '2026-09-01', requestPeriod: 6,
+          targetDate: '2026-09-03', targetDayOfWeek: 4, targetPeriod: 2,
+          targetClassName: '905', targetSubject: '家政'
+        };
+        var currentTargetSchedule = [{
+          teacherEmail: 'invitee@x', dayOfWeek: 4, period: 2, className: '905', subject: '童軍'
+        }];
+        var staleTargetPreview = window.DomainSchedule.applyPendingOverlay({
+          cell: null, teacherEmail: 'invitee@x', dateStr: '2026-09-01', period: 6,
+          pendingRequests: [staleTargetRequest],
+          allSchedules: currentTargetSchedule,
+          scheduleIndex: window.DomainSchedule.buildScheduleIndex(currentTargetSchedule),
+          getWeekDayText: function () { return '二'; }
+        });
+        assert('pending 調課使用目標課表目前科目而非舊快照',
+          staleTargetPreview && staleTargetPreview.subject === '童軍',
+          staleTargetPreview && staleTargetPreview.subject);
         var ov = window.DomainSchedule.applyPendingOverlay({
           cell: { className: '701', subject: '國文' },
           teacherEmail: 'a@x', dateStr: '2026-07-13', period: 2,

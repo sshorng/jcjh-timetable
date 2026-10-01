@@ -1028,6 +1028,9 @@ createApp({
           const targetEff = resolveAt(
             req.targetTeacherEmail, req.targetDate, req.targetPeriod, dayNum
           );
+          const targetBase = typeof findBaseScheduleSlot === 'function'
+            ? findBaseScheduleSlot(req.targetTeacherEmail, dayNum, req.targetPeriod, req.targetDate)
+            : null;
           // 網頁課表顯示調課後的實際安排：教師帶著自己的班級／科目換到對方時段。
           // 僅「代課義務」再調課：優先使用有效的義務班科。
           const leaveSubDuty = !!(leaveEff && leaveEff.fromSub && (
@@ -1045,13 +1048,18 @@ createApp({
           const targetSubDuty = !!(targetEff && targetEff.fromSub && (
             targetEff.dutyType === 'substitution' || targetEff.dutyType === '代課'
           ));
-          const targetCls = targetSubDuty
-            ? ((targetEff && targetEff.className) || req.targetClassName || '')
-            : (req.targetClassName || (targetEff && targetEff.className) || '');
+          const targetCls = (targetEff && targetEff.className)
+            || (targetBase && targetBase.className)
+            || req.targetClassName
+            || '';
           const targetSubj = targetSubDuty
-            ? ((targetEff && targetEff.subject) || req.targetSubject || '')
-            : (req.targetSubject
-              || (targetEff && targetEff.subject)
+            ? ((targetEff && targetEff.subject)
+              || (targetBase && targetBase.subject)
+              || req.targetSubject
+              || '')
+            : ((targetEff && targetEff.subject)
+              || (targetBase && targetBase.subject)
+              || req.targetSubject
               || ownSubject(req.targetTeacherEmail, req.targetDate, req.targetPeriod, dayNum)
               || '');
 
@@ -2612,18 +2620,21 @@ createApp({
       }
       const explicitClass = String(req.targetClassName || '').trim();
       const explicitSubject = String(req.targetSubject || '').trim();
-      if (explicitClass || explicitSubject) {
-        return { className: explicitClass, subject: explicitSubject };
-      }
       let dayNum = req.targetDayOfWeek;
       if ((dayNum == null || dayNum === '') && req.targetDate) {
         const d = new Date(String(req.targetDate).replace(/-/g, '/'));
         if (!Number.isNaN(d.getTime())) dayNum = d.getDay() === 0 ? 7 : d.getDay();
       }
       const cell = resolveExchangeTargetCell(req.targetTeacherEmail, req.targetDate, req.targetPeriod, dayNum);
+      if (cell && (cell.className || cell.subject)) {
+        return {
+          className: cell.className || explicitClass,
+          subject: cell.subject || explicitSubject
+        };
+      }
       return {
-        className: cell ? (cell.className || '') : (req.targetClassName || ''),
-        subject: cell ? (cell.subject || '') : (req.targetSubject || '')
+        className: explicitClass,
+        subject: explicitSubject
       };
     };
     const getOriginalRequestSubject = (req) => {
@@ -8865,8 +8876,8 @@ createApp({
           const targetDate = getValue(source, ['對調目標日期', 'targetDate']);
           const targetPeriod = getValue(source, ['對調目標節次', 'targetPeriod']);
           const targetCourse = resolveSubmittedTargetCourse(source, targetDate, targetPeriod);
-          const targetClass = getValue(source, ['對調目標班級', 'targetClassName'], targetCourse.className || getValue(source, ['班級', 'className']));
-          const targetSubject = getValue(source, ['對調目標科目', 'targetSubject'], targetCourse.subject || getValue(source, ['科目', 'subject']));
+          const targetClass = targetCourse.className || getValue(source, ['對調目標班級', 'targetClassName'], getValue(source, ['班級', 'className']));
+          const targetSubject = targetCourse.subject || getValue(source, ['對調目標科目', 'targetSubject'], getValue(source, ['科目', 'subject']));
           records.push(Object.assign({}, base, {
             id: requestId + '_1',
             type: 'exchange',
@@ -9982,8 +9993,8 @@ createApp({
           && (typeof window === 'undefined' || !window.DomainSchedule || !window.DomainSchedule.isActiveOnDate
             || window.DomainSchedule.isActiveOnDate(schedule, targetDateValue))
         );
-        const targetClassValue = String(req.targetClassName || req['對調目標班級'] || (targetSchedule && targetSchedule.className) || classValue).trim();
-        const targetSubjectValue = req.targetSubject || req['對調目標科目'] || (targetSchedule && targetSchedule.subject) || '';
+        const targetClassValue = String((targetSchedule && targetSchedule.className) || req.targetClassName || req['對調目標班級'] || classValue).trim();
+        const targetSubjectValue = (targetSchedule && targetSchedule.subject) || req.targetSubject || req['對調目標科目'] || '';
         const type = req.type || req['異動類型'] || 'substitution';
         const requestDate = req.requestDate || req['異動日期'] || '';
         const requestPeriod = req.requestPeriod != null ? req.requestPeriod : req['異動節次'];
@@ -10680,14 +10691,27 @@ createApp({
       let targetPeriod = rec.targetPeriod;
       let clsName = String(rec.targetClassName || '').trim();
       let subj = String(rec.targetSubject || '').trim();
+      let targetDayNum = rec.targetDayOfWeek;
+      if ((targetDayNum == null || targetDayNum === '') && targetDate) {
+        const targetDateObj = new Date(String(targetDate).replace(/-/g, '/'));
+        if (!Number.isNaN(targetDateObj.getTime())) targetDayNum = targetDateObj.getDay() === 0 ? 7 : targetDateObj.getDay();
+      }
+      const liveTargetTeacher = rec.targetTeacherEmail || rec.actualTeacherEmail
+        || rec.targetTeacherName || rec.actualTeacherName;
+      if (liveTargetTeacher && targetDate && targetPeriod != null) {
+        const liveTargetCell = resolveExchangeTargetCell(
+          liveTargetTeacher, targetDate, targetPeriod, targetDayNum
+        );
+        if (liveTargetCell) {
+          if (liveTargetCell.className) clsName = liveTargetCell.className;
+          if (liveTargetCell.subject) subj = liveTargetCell.subject;
+        }
+      }
       // 有完整 target 班科（mapped 已對齊）直接顯示
       if (targetDate && targetDate !== '---' && targetDate !== '—' && (clsName || subj)) {
-        let dayNum = null;
-        const d = new Date(String(targetDate).replace(/-/g, '/'));
-        if (!Number.isNaN(d.getTime())) dayNum = d.getDay() === 0 ? 7 : d.getDay();
-        const day = dayNum != null ? getWeekDayText(dayNum) : '—';
-         const cls = formatCourseDisplayText(clsName, subj);
-         return _fmtSlot(targetDate, day, targetPeriod, cls || '');
+        const day = targetDayNum != null ? getWeekDayText(targetDayNum) : '—';
+        const cls = formatCourseDisplayText(clsName, subj);
+        return _fmtSlot(targetDate, day, targetPeriod, cls || '');
       }
       // 備援：目標日 edge _1 的班科就是目標位置原本的課堂。
       let peerTargetEdge = null;
