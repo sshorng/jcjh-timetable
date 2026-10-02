@@ -2057,11 +2057,17 @@ window.UiBatchPanel = (function () {
     };
 
     function setBatchAssignMode(mode) {
+      if (batchSlots.value.some(s => s.exchangeSubmissionUnknown)) {
+        showToast('有調課組送出結果不明，請先重新整理確認歷程', 'warning');
+        return;
+      }
       batchAssignMode.value = mode === 'perSlot' ? 'perSlot' : 'same';
       batchActiveSlotKey.value = '';
       // 切換模式時清空已指定代課人，避免混用
-      batchSlots.value = batchSlots.value.map(s => s.exchangeSubmitted ? s : ({
-          ...s,
+      batchSlots.value = batchSlots.value.map(s => {
+        if (s.exchangeSubmitted) return s;
+        const renewExchangeIdentity = !!(s.exchangeSubmitError && !s.exchangeSubmissionUnknown);
+        return Object.assign({}, s, {
           subTeacherEmail: '',
           subTeacherName: '',
           targetDate: '',
@@ -2070,12 +2076,22 @@ window.UiBatchPanel = (function () {
           targetClassName: '',
           targetSubject: '',
           exchangeWeekOffset: 0,
+          exchangeRequestId: renewExchangeIdentity
+            ? 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7)
+            : s.exchangeRequestId,
+          exchangeSerial: renewExchangeIdentity
+            ? 'SWP' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)
+            : s.exchangeSerial,
           exchangeValidationError: '',
           exchangeSubmitError: ''
-        }));
+        });
+      });
       batchSubTeacher.value = '';
       if (showMatchModal.value && isBatchMatchFlow.value) {
-        if (batchAssignMode.value === 'same') {
+        if (batchFlowMode && batchFlowMode.value === 'exchange') {
+          const nextExchangeSlot = batchSlots.value.find(s => !s.exchangeSubmitted) || batchSlots.value[0];
+          if (nextExchangeSlot) selectBatchSlotForMatch(nextExchangeSlot.key);
+        } else if (batchAssignMode.value === 'same') {
           fetchBatchRecommendations();
         } else {
           recommendedTeachers.value = [];
@@ -2449,6 +2465,7 @@ window.UiBatchPanel = (function () {
         showToast('此組送出結果不明，請重新整理確認歷程後再處理', 'warning');
         return;
       }
+      const renewExchangeIdentity = !!(current && current.exchangeSubmitError && !current.exchangeSubmitted);
       batchSlots.value = batchSlots.value.map(s =>
         s.key === slotKey ? {
           ...s,
@@ -2460,6 +2477,12 @@ window.UiBatchPanel = (function () {
           targetClassName: '',
           targetSubject: '',
           exchangeWeekOffset: 0,
+          exchangeRequestId: renewExchangeIdentity
+            ? 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7)
+            : s.exchangeRequestId,
+          exchangeSerial: renewExchangeIdentity
+            ? 'SWP' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)
+            : s.exchangeSerial,
           exchangeValidationError: '',
           exchangeSubmitError: '',
           exchangeSubmitted: false

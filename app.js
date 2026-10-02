@@ -6048,6 +6048,10 @@ createApp({
         showToast('請先選擇要配對的調課組別', 'warning');
         return 'cancelled';
       }
+      if (activeSlot.exchangeSubmissionUnknown) {
+        showToast('此組送出結果不明，請重新整理確認歷程後再處理', 'warning');
+        return 'cancelled';
+      }
       if (batchAssignMode.value === 'same') {
         const assignedTeacher = (batchSlots.value || []).find(slot =>
           slot.key !== activeSlot.key && slot.subTeacherEmail && !slot.exchangeSubmitted
@@ -6069,6 +6073,7 @@ createApp({
           day: parseInt(String(draft.timeB || '').split('-')[0], 10),
           period: parseInt(String(draft.timeB || '').split('-')[1], 10)
         };
+      const retryWithNewId = !!activeSlot.exchangeSubmitError;
       batchSlots.value = (batchSlots.value || []).map(slot => slot.key === activeSlot.key
         ? Object.assign({}, slot, {
           subTeacherEmail: draft.subTeacher || targetEmail,
@@ -6079,8 +6084,15 @@ createApp({
           targetClassName: draft.subBClass || classVal || '',
           targetSubject: draft.subB || subjectVal || '',
           exchangeWeekOffset: parseInt(exchangeWeekOffset.value, 10) || 0,
+          exchangeRequestId: retryWithNewId
+            ? 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7)
+            : slot.exchangeRequestId,
+          exchangeSerial: retryWithNewId
+            ? 'SWP' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)
+            : slot.exchangeSerial,
           exchangeValidationError: '',
           exchangeSubmitError: '',
+          exchangeSubmissionUnknown: false,
           exchangeSubmitted: false
         })
         : slot);

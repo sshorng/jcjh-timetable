@@ -2035,6 +2035,42 @@ async function runBatchExchangeTest() {
   assert.equal(batchSlots.value[1].exchangeSubmitError, '調課衝堂測試', '失敗組需保留逐組錯誤');
   assert.equal(cleared, 0, '部分成功時保留批次草稿，讓使用者可以修正失敗組');
   assert.match(deps.successModalTitle.value, /部分送出/);
+
+  const retrySlots = ref([{
+    key: 'retry-slot', exchangeRequestId: 'req-failed-original', exchangeSerial: 'SWP-failed-original',
+    exchangeSubmitError: '調課衝堂測試', exchangeSubmitted: false,
+    subTeacherEmail: 'invitee@school.example', targetDate: '2026-08-18', targetPeriod: 2
+  }]);
+  const retryPanel = load('ui-activity.js').UiBatchPanel.create({
+    computed: getter => ({ get value() { return getter(); } }),
+    showToast: () => {},
+    batchSlots: retrySlots,
+    batchActiveSlotKey: ref(''),
+    batchFlowMode: ref('exchange'),
+    batchAssignMode: ref('same'),
+    batchSubTeacher: ref(''),
+    showMatchModal: ref(false)
+  });
+  retryPanel.clearBatchSlotSub('retry-slot');
+  assert.notEqual(retrySlots.value[0].exchangeRequestId, 'req-failed-original', '重配失敗組需換新的申請 ID');
+  assert.notEqual(retrySlots.value[0].exchangeSerial, 'SWP-failed-original', '重配失敗組需換新的單號');
+
+  const unknownSlots = ref([{
+    key: 'unknown-slot', exchangeRequestId: 'req-unknown', exchangeSerial: 'SWP-unknown',
+    exchangeSubmitError: '連線逾時', exchangeSubmissionUnknown: true, exchangeSubmitted: false
+  }]);
+  const unknownPanel = load('ui-activity.js').UiBatchPanel.create({
+    computed: getter => ({ get value() { return getter(); } }),
+    showToast: () => {},
+    batchSlots: unknownSlots,
+    batchActiveSlotKey: ref(''),
+    batchFlowMode: ref('exchange'),
+    batchAssignMode: ref('same'),
+    batchSubTeacher: ref(''),
+    showMatchModal: ref(false)
+  });
+  unknownPanel.clearBatchSlotSub('unknown-slot');
+  assert.equal(unknownSlots.value[0].exchangeRequestId, 'req-unknown', '送出結果不明時不可更新申請 ID');
 }
 
 function runRechangeLabelTest() {
