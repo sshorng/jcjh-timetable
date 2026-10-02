@@ -3648,7 +3648,43 @@ createApp({
     // 基礎課表編輯模式
     const isScheduleEditMode = ref(false);
     // 月底報表統計：日期區間是唯一設定，週數由區間自動計算。
-    const reportMonth = ref(new Date().toISOString().slice(0, 7));
+    const REPORT_PERIOD_STORAGE_KEY = 'school-substitution-report-period-v1';
+    const isValidReportPeriod = (period) => {
+      const start = String(period && period.start || '').trim();
+      const end = String(period && period.end || '').trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(start)
+        && /^\d{4}-\d{2}-\d{2}$/.test(end)
+        && start <= end
+        && !!(window.DateUtils && window.DateUtils.countWeeksInRange(start, end));
+    };
+    const readStoredReportPeriod = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(REPORT_PERIOD_STORAGE_KEY) || 'null');
+        if (stored && isValidReportPeriod(stored)) {
+          return {
+            month: /^\d{4}-\d{2}$/.test(String(stored.month || '')) ? stored.month : stored.start.slice(0, 7),
+            start: stored.start,
+            end: stored.end
+          };
+        }
+
+        // 舊版匯出流程已按月份保存過區間，首次升級時沿用最近一次設定。
+        const legacy = JSON.parse(localStorage.getItem('school-substitution-accounting-periods-v1') || '{}');
+        const months = Object.keys(legacy).filter(month => /^\d{4}-\d{2}$/.test(month)).sort();
+        for (let i = months.length - 1; i >= 0; i -= 1) {
+          const saved = legacy[months[i]] || {};
+          const period = saved.period || saved;
+          if (isValidReportPeriod(period)) {
+            return { month: months[i], start: period.start, end: period.end };
+          }
+        }
+      } catch (e) { /* 無法讀取瀏覽器儲存時使用預設日期 */ }
+      return null;
+    };
+    const storedReportPeriod = readStoredReportPeriod();
+    const todayForReport = window.DateUtils && typeof window.DateUtils.getTodayString === 'function'
+      ? window.DateUtils.getTodayString() : new Date().toISOString().slice(0, 10);
+    const reportMonth = ref(storedReportPeriod ? storedReportPeriod.month : todayForReport.slice(0, 7));
     const accountingPeriodMonth = ref(reportMonth.value);
     const monthEndDate = (month) => {
       const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
@@ -3659,8 +3695,8 @@ createApp({
     const defaultReportPeriod = window.DateUtils && typeof window.DateUtils.getAccountingPeriodForMonth === 'function'
       ? window.DateUtils.getAccountingPeriodForMonth(reportMonth.value)
       : { start: `${reportMonth.value}-01`, end: monthEndDate(reportMonth.value) };
-    const reportStartDate = ref(defaultReportPeriod.start);
-    const reportEndDate = ref(defaultReportPeriod.end);
+    const reportStartDate = ref(storedReportPeriod ? storedReportPeriod.start : defaultReportPeriod.start);
+    const reportEndDate = ref(storedReportPeriod ? storedReportPeriod.end : defaultReportPeriod.end);
     let accountingPeriodNavigation = false;
     const accountingPeriod = computed(() => ({
       start: reportStartDate.value,
@@ -3737,9 +3773,18 @@ createApp({
         reportMonth.value = String(start).slice(0, 7);
         accountingPeriodMonth.value = reportMonth.value;
       }
-      if (window.ExportAccounting && typeof window.ExportAccounting.savePeriodSettings === 'function'
-          && reportWeeksCount.value > 0) {
-        window.ExportAccounting.savePeriodSettings(reportMonth.value, { start: start, end: end });
+      const period = { start: String(start || ''), end: String(end || '') };
+      if (isValidReportPeriod(period)) {
+        try {
+          localStorage.setItem(REPORT_PERIOD_STORAGE_KEY, JSON.stringify({
+            month: reportMonth.value,
+            start: period.start,
+            end: period.end
+          }));
+        } catch (e) { /* 瀏覽器封鎖儲存時不影響頁面操作 */ }
+        if (window.ExportAccounting && typeof window.ExportAccounting.savePeriodSettings === 'function') {
+          window.ExportAccounting.savePeriodSettings(reportMonth.value, period);
+        }
       }
     });
     const shiftReportPeriod = (direction) => {
