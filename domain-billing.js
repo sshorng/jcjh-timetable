@@ -1946,6 +1946,12 @@ window.DomainBilling = (function () {
         return isSelfPaidFee(r)
           && isConcurrentLeaveSlot(r, allSchedules, schoolSwapIndex, t);
       });
+      var selfPaidSelfSubRecords = leaveRecords.filter(function (r) {
+        return !isCombinedReturnRecord(r)
+          && isSelfPaidFee(r)
+          && !!String(r.actualTeacherEmail || '').trim()
+          && !isConcurrentLeaveSlot(r, allSchedules, schoolSwapIndex, t);
+      });
       // 全部公費請假（學校仍付代課費）
       var pubLeaveRecords = leaveRecords.filter(function (r) {
         return isPublicLeaveFee(r);
@@ -2092,6 +2098,7 @@ window.DomainBilling = (function () {
          scheduledOvertime: scheduledOvertime,
         reduceDeduction: reduceDeduction,
         selfPaidDeduction: selfPaidOvertimeRecords.length,
+        selfSubDeduction: selfPaidSelfSubRecords.length,
          publicOvertimeUsed: publicOvertimeUsed,
          substituteScheduledCount: substitutePayout.scheduled,
          substitutePaidCount: substitutePayout.paid,
@@ -2161,7 +2168,7 @@ window.DomainBilling = (function () {
   function sumMonthlyReportRows(reportRows) {
     var fields = [
       'weeklyPeriods', 'baseHours', 'weeklyOvertime', 'reduceDeduction',
-      'selfPaidDeduction', 'publicOvertimeUsed', 'substituteAdditionalDeduction',
+      'selfPaidDeduction', 'publicOvertimeUsed', 'selfSubDeduction', 'substituteAdditionalDeduction',
       'actualOvertime', 'overtimeFee', 'pubSubCount', 'pubSubFee',
       'selfSubCount', 'selfSubFee', 'period8SubCount', 'period8Fee'
     ];

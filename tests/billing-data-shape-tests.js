@@ -210,6 +210,8 @@ const strictRangeOwner = strictRangeRows.find(item => item.email === 'range-owne
 const strictRangeCover = strictRangeRows.find(item => item.email === 'range-cover@x');
 const strictRangeP8Cover = strictRangeRows.find(item => item.email === 'range-p8-cover@x');
 assert.equal(strictRangeOwner.publicOvertimeUsed, 1, '公費扣只計起迄日內紀錄');
+assert.equal(strictRangeOwner.selfPaidDeduction, 0, '未進超鐘點表的自費紀錄不可計入超鐘扣');
+assert.equal(strictRangeOwner.selfSubDeduction, 1, '列入自付表的自費紀錄應計入自費扣');
 assert.equal(strictRangeCover.pubSubCount, 1, '公代節只計起迄日內紀錄');
 assert.equal(strictRangeCover.selfSubCount, 1, '自代節只計起迄日內紀錄');
 assert.equal(strictRangeP8Cover.period8SubCount, 1, '第八節節數只計起迄日內紀錄');
@@ -341,9 +343,10 @@ const mixedSelfRegularCover = mixedSelfPaidRows.find(row => row.email === 'mixed
 const mixedSelfOvertimeCover = mixedSelfPaidRows.find(row => row.email === 'mixed-self-overtime-cover@x');
 assert.deepEqual([
   mixedSelfOwner.selfPaidDeduction,
+  mixedSelfOwner.selfSubDeduction,
   mixedSelfOwner.actualOvertime,
   mixedSelfOwner.expensePlanAllocations[0].deduction
-], [1, 4, 1], '只有原課屬超鐘點的自費代課才扣超鐘點；一般課自費仍列自付');
+], [1, 1, 4, 1], '超鐘扣對應超鐘點表，一般課自費扣對應自付表');
 assert.equal(mixedSelfRegularCover.selfSubCount, 1, '非超鐘點自費仍應計入代課教師自費節數');
 assert.equal(mixedSelfRegularCover.selfSubFee, 455, '非超鐘點自費仍應計入代課教師自費費用');
 assert.equal(mixedSelfOvertimeCover.selfSubCount, 1, '超鐘點自費仍應保留代課教師自費節數摘要');
@@ -735,13 +738,13 @@ assert.equal(reusedPeriod8Export[0]['金額'], 600);
 const reportTotals = window.DomainBilling.sumMonthlyReportRows([
   {
     weeklyPeriods: 20, baseHours: 16, weeklyOvertime: 4, reduceDeduction: 1,
-    selfPaidDeduction: 2, publicOvertimeUsed: 3, substituteAdditionalDeduction: 1,
+    selfPaidDeduction: 2, publicOvertimeUsed: 3, selfSubDeduction: 4, substituteAdditionalDeduction: 1,
     actualOvertime: -2, overtimeFee: -910, pubSubCount: 4, pubSubFee: 1820,
     selfSubCount: 1, selfSubFee: 455, period8SubCount: 2, period8Fee: 1200
   },
   {
     weeklyPeriods: 18, baseHours: 16, weeklyOvertime: 2, reduceDeduction: 0,
-    selfPaidDeduction: 1, publicOvertimeUsed: 0, substituteAdditionalDeduction: 2,
+    selfPaidDeduction: 1, publicOvertimeUsed: 0, selfSubDeduction: 2, substituteAdditionalDeduction: 2,
     actualOvertime: 1, overtimeFee: 455, pubSubCount: 0, pubSubFee: 0,
     selfSubCount: 2, selfSubFee: 910, period8SubCount: 1, period8Fee: 600
   }
@@ -753,6 +756,7 @@ assert.deepEqual(reportTotals, {
   reduceDeduction: 1,
   selfPaidDeduction: 3,
   publicOvertimeUsed: 3,
+  selfSubDeduction: 6,
   substituteAdditionalDeduction: 3,
   actualOvertime: -1,
   overtimeFee: -455,

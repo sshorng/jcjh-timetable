@@ -956,6 +956,45 @@ assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘
   '超鐘點自費代課仍應列入原計畫超鐘點代課列');
 assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,
   '非超鐘點自費代課不可誤列入超鐘點代課列');
+const nonOvertimeSelfMonthlyRows = window.DomainBilling.buildMonthlyReportRows({
+  reportMonth: '2026-09',
+  reportStartDate: nonOvertimeSelfPeriod.start,
+  reportEndDate: nonOvertimeSelfPeriod.end,
+  reportWeeksCount: 5,
+  teachers: [
+    { email: 'self-owner@x', name: '自費原教師', baseHours: 0,
+      fixedOvertimeHours: 1, fixedOvertimeSlots: '二1' },
+    { email: 'self-regular-cover@x', name: '一般自費代課人', baseHours: 16 },
+    { email: 'self-overtime-cover@x', name: '超鐘自費代課人', baseHours: 16 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'self-owner@x', dayOfWeek: 2, period: 1,
+      className: '901', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'self-owner@x', dayOfWeek: 2, period: 6,
+      className: '903', attr: '一般' }
+  ],
+  substitutionRecords: [
+    { date: '2026-09-01', period: 6, className: '903', type: 'substitution',
+      originalTeacherEmail: 'self-owner@x', actualTeacherEmail: 'self-regular-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' },
+    { date: '2026-09-08', period: 1, className: '901', type: 'substitution',
+      originalTeacherEmail: 'self-owner@x', actualTeacherEmail: 'self-overtime-cover@x',
+      subFee: '自費代課', reason: '補休', status: 'approved' }
+  ]
+});
+const nonOvertimeSelfOwnerMonthlyRow = nonOvertimeSelfMonthlyRows.find(row => row.email === 'self-owner@x');
+const nonOvertimeSelfOwnerOvertimeRow = nonOvertimeSelfExport.sheets.overtime
+  .find(row => row.name === '自費原教師');
+assert.equal(
+  nonOvertimeSelfOwnerMonthlyRow.selfPaidDeduction + nonOvertimeSelfOwnerMonthlyRow.publicOvertimeUsed,
+  nonOvertimeSelfOwnerOvertimeRow.deduction,
+  '月報「超鐘扣」應與超鐘點表扣節數一致'
+);
+assert.equal(
+  nonOvertimeSelfOwnerMonthlyRow.selfSubDeduction,
+  nonOvertimeSelfExport.sheets.selfSub.filter(row => row.originalName === '自費原教師').length,
+  '月報「自費扣」應與自付表中該原教師的自費列數一致'
+);
 
 const publicRegular = build([{
   date: '2026-07-13', period: 3, className: '703', type: 'substitution',

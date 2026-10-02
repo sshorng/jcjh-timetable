@@ -1921,8 +1921,8 @@
                       <th title="教師基本授課鐘點">基鐘</th>
                        <th title="已設定固定超鐘點時採學期設定；未設定才使用排課 − 基鐘">超鐘點/週</th>
                       <th title="超鐘點固定為每週超鐘點 × 結算週數；放假／空堂不扣">空堂扣減</th>
-                         <th title="只扣原課屬超鐘點的自費代課；一般課自費列入自付代課清冊">自費扣</th>
-                        <th title="自己請假且公費代課；正式課程原堂為超鐘點才扣，代課屬性另列代課另扣，含早自習、1～7、午休">公費扣</th>
+                          <th title="超鐘點表的扣節合計（自費超鐘點＋公費超鐘點）">超鐘扣</th>
+                         <th title="自付表中的自費代課節數（原課非超鐘點）">自費扣</th>
                        <th title="小鐘點課程請假或放假未授課的另扣">代課另扣</th>
                       <th title="本月實得超時節數" class="billing-th-result">實得超時</th>
                       <th title="實得超時 × 455" class="billing-th-result">超鐘點費</th>
@@ -1943,8 +1943,8 @@
                       <td class="num">{{ row.baseHours }}</td>
                       <td class="num">{{ row.weeklyOvertime }}</td>
                        <td class="num muted">{{ row.reduceDeduction ? ('−' + row.reduceDeduction) : '無' }}</td>
-                       <td class="num danger">{{ row.selfPaidDeduction ? ('−' + row.selfPaidDeduction) : '無' }}</td>
-                       <td class="num warn">{{ row.publicOvertimeUsed ? ('−' + row.publicOvertimeUsed) : '無' }}</td>
+                        <td class="num warn">{{ ((row.selfPaidDeduction || 0) + (row.publicOvertimeUsed || 0)) ? ('−' + ((row.selfPaidDeduction || 0) + (row.publicOvertimeUsed || 0))) : '無' }}</td>
+                         <td class="num danger">{{ row.selfSubDeduction ? ('−' + row.selfSubDeduction) : '無' }}</td>
                        <td class="num warn">{{ row.substituteAdditionalDeduction ? ('−' + row.substituteAdditionalDeduction) : '無' }}</td>
                       <td class="num result" :class="{ danger: row.actualOvertime < 0 }" :title="row.actualOvertime < 0 ? '超鐘不足，自費請假請自行付代課費' : ''">{{ row.actualOvertime }}</td>
                         <td class="num result" :class="{ danger: row.overtimeFee < 0 }" :title="row.overtimeFee < 0 ? '負數＝應自付代課費約此金額' : ''">{{ row.overtimeFee ? ('$' + formatMoney(row.overtimeFee)) : (row.overtimeFee === 0 ? '$0' : '無') }}</td>
@@ -1961,8 +1961,8 @@
                        <td class="num">{{ monthlyReportTotals.baseHours }}</td>
                        <td class="num">{{ monthlyReportTotals.weeklyOvertime }}</td>
                        <td class="num muted">{{ monthlyReportTotals.reduceDeduction }}</td>
-                       <td class="num danger">{{ monthlyReportTotals.selfPaidDeduction }}</td>
-                       <td class="num warn">{{ monthlyReportTotals.publicOvertimeUsed }}</td>
+                        <td class="num warn">{{ (monthlyReportTotals.selfPaidDeduction || 0) + (monthlyReportTotals.publicOvertimeUsed || 0) }}</td>
+                         <td class="num danger">{{ monthlyReportTotals.selfSubDeduction }}</td>
                        <td class="num warn">{{ monthlyReportTotals.substituteAdditionalDeduction }}</td>
                        <td class="num result">{{ monthlyReportTotals.actualOvertime }}</td>
                         <td class="num result">${{ formatMoney(monthlyReportTotals.overtimeFee) }}</td>
@@ -4727,7 +4727,7 @@
       var _uiAdminP = null;
       window.ensureDomainBilling = function () {
         if (window.DomainBilling) return Promise.resolve();
-             if (!_billingP) _billingP = loadScript('domain-billing.js?v=20261002-report-range-strict1');
+              if (!_billingP) _billingP = loadScript('domain-billing.js?v=20261002-excel-routing-deduction1');
         return _billingP;
       };
       window.ensureExportAccounting = function () {
