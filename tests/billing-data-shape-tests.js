@@ -183,6 +183,46 @@ const rangedReport = window.DomainBilling.buildMonthlyReportRows({
 assert.equal(rangedReport.weeklyPeriods, 1, '日期區間月報應保留每週課表節數');
 assert.equal(rangedReport.scheduledOvertime, 2, '日期區間涵蓋兩週時應自動計兩週超鐘');
 
+const strictRangeRows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [
+    { email: 'range-owner@x', name: '區間原教師', baseHours: 0 },
+    { email: 'range-cover@x', name: '區間代課教師', baseHours: 0 },
+    { email: 'range-p8-cover@x', name: '區間第八節代課教師', baseHours: 0 }
+  ],
+  allSchedules: [
+    { teacherEmail: 'range-owner@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'range-owner@x', dayOfWeek: 1, period: 8, className: '701', attr: '一般' }
+  ],
+  substitutionRecords: [
+    { date: '2026-07-12', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-13', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-17', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '自費代課', status: 'approved' },
+    { date: '2026-07-18', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-12', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-13', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-18', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' }
+  ],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-13',
+  reportEndDate: '2026-07-17'
+});
+const strictRangeOwner = strictRangeRows.find(item => item.email === 'range-owner@x');
+const strictRangeCover = strictRangeRows.find(item => item.email === 'range-cover@x');
+const strictRangeP8Cover = strictRangeRows.find(item => item.email === 'range-p8-cover@x');
+assert.equal(strictRangeOwner.publicOvertimeUsed, 1, '公費扣只計起迄日內紀錄');
+assert.equal(strictRangeCover.pubSubCount, 1, '公代節只計起迄日內紀錄');
+assert.equal(strictRangeCover.selfSubCount, 1, '自代節只計起迄日內紀錄');
+assert.equal(strictRangeP8Cover.period8SubCount, 1, '第八節節數只計起迄日內紀錄');
+
+const invalidExplicitRangeRows = window.DomainBilling.buildMonthlyReportRows({
+  teachers: [{ email: 'invalid-range@x', name: '區間錯誤教師', baseHours: 0 }],
+  substitutionRecords: [],
+  reportMonth: '2026-07',
+  reportStartDate: '2026-07-20',
+  reportEndDate: '2026-07-10'
+});
+assert.deepEqual(invalidExplicitRangeRows, [], '明確日期區間無效時不可退回整月計算');
+
 const fixedSchedules = [];
 for (let i = 0; i < 13; i += 1) {
   fixedSchedules.push({

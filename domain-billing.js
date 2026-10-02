@@ -146,11 +146,24 @@ window.DomainBilling = (function () {
     return out;
   }
 
+  function hasExplicitReportRange(opts) {
+    if (!opts) return false;
+    return ['reportStartDate', 'reportEndDate', 'startDate', 'endDate'].some(function (key) {
+      return Object.prototype.hasOwnProperty.call(opts, key);
+    });
+  }
+
   function reportRange(opts) {
     opts = opts || {};
-    var start = normalizeDateKey(opts.reportStartDate || opts.startDate);
-    var end = normalizeDateKey(opts.reportEndDate || opts.endDate);
-    if (start && end && start <= end) return { start: start, end: end };
+    var startValue = opts.reportStartDate !== undefined ? opts.reportStartDate : opts.startDate;
+    var endValue = opts.reportEndDate !== undefined ? opts.reportEndDate : opts.endDate;
+    var start = normalizeDateKey(startValue);
+    var end = normalizeDateKey(endValue);
+    if (hasExplicitReportRange(opts)) {
+      return start && end && start <= end
+        ? { start: start, end: end }
+        : { start: '', end: '' };
+    }
     var month = String(opts.reportMonth || '').slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) return { start: '', end: '' };
     var parts = month.split('-').map(Number);
@@ -1610,6 +1623,7 @@ window.DomainBilling = (function () {
     opts = opts || {};
     var reportMonth = opts.reportMonth;
     var range = reportRange(opts);
+    var hasExplicitRange = hasExplicitReportRange(opts);
     var allSchedules = opts.allSchedules || [];
     var substitutionRecords = opts.substitutionRecords || [];
     var classAwayEvents = opts.classAwayEvents || [];
@@ -1624,7 +1638,7 @@ window.DomainBilling = (function () {
 
     var startDay = range.start;
     var endDay = range.end;
-    var weekdays = (opts.reportStartDate || opts.reportEndDate)
+    var weekdays = hasExplicitRange
       ? listWeekdaysInRange(startDay, endDay)
       : listWeekdaysInMonth(reportMonth);
 
@@ -1852,6 +1866,7 @@ window.DomainBilling = (function () {
     var reportMonth = opts.reportMonth;
     var reportWeeksCount = opts.reportWeeksCount || 4;
     var range = reportRange(opts);
+    var hasExplicitRange = hasExplicitReportRange(opts);
     var getTeacherNameByEmail = opts.getTeacherNameByEmail || function (e) { return e; };
     var classAwayEvents = opts.classAwayEvents || [];
     var semesterEndDate = opts.semesterEndDate || '';
@@ -1860,11 +1875,12 @@ window.DomainBilling = (function () {
       ? window.DomainSchoolSwap.buildIndex(opts.schoolSwaps || [])
       : null;
 
-    if ((!reportMonth && (!range.start || !range.end)) || teachers.length === 0) return [];
+    if ((hasExplicitRange && (!range.start || !range.end))
+        || (!hasExplicitRange && !reportMonth) || teachers.length === 0) return [];
 
     var startDay = range.start;
     var endDay = range.end;
-    var weekdays = (opts.reportStartDate || opts.reportEndDate)
+    var weekdays = hasExplicitRange
       ? listWeekdaysInRange(startDay, endDay)
       : listWeekdaysInMonth(reportMonth);
     var monthlyRecords = (opts.substitutionRecords || []).filter(function (r) {
@@ -1887,7 +1903,7 @@ window.DomainBilling = (function () {
     });
 
     // 所有教師共用同一組結算日期，避免在教師迴圈內重建。
-    var weeklyGroups = (opts.reportStartDate || opts.reportEndDate)
+    var weeklyGroups = hasExplicitRange
       ? reportWeekGroupsForRange(startDay, endDay)
       : reportWeekGroups(reportMonth, reportWeeksCount);
 
@@ -2188,6 +2204,7 @@ window.DomainBilling = (function () {
     opts = opts || {};
     var reportMonth = opts.reportMonth || '';
     var range = reportRange(opts);
+    var hasExplicitRange = hasExplicitReportRange(opts);
     var substitutionRecords = opts.substitutionRecords || [];
     var homeroomRecords = opts.homeroomRecords || [];
     var teachers = opts.teachers || [];
@@ -2212,8 +2229,10 @@ window.DomainBilling = (function () {
     var sheetNameMentor = rocYear + '.' + monthStr + ' 代導公付';
 
     var monthPrefix = year + '-' + monthStr;
-    var filterStart = range.start || monthPrefix + '-01';
-    var filterEnd = range.end || monthPrefix + '-' + String(new Date(year, month, 0).getDate()).padStart(2, '0');
+    var filterStart = hasExplicitRange ? range.start : (range.start || monthPrefix + '-01');
+    var filterEnd = hasExplicitRange
+      ? range.end
+      : (range.end || monthPrefix + '-' + String(new Date(year, month, 0).getDate()).padStart(2, '0'));
     var monthRecords = (substitutionRecords || []).filter(function (r) {
       if (!r || !r.date) return false;
       if (!isActiveSubstitutionRecord(r)) return false;

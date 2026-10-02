@@ -7555,6 +7555,61 @@ createApp({
       }
       if (!window.DomainBilling) throw new Error('大鐘點模組未載入');
     };
+    const BILLING_REQUEST_DEFAULT_WINDOW_DAYS = 14;
+    const BILLING_REQUEST_MAX_WINDOW_DAYS = 120;
+    let billingPeriodRequestsPromise = null;
+    const getBillingRequestWindow = () => {
+      if (!isValidReportPeriod({ start: reportStartDate.value, end: reportEndDate.value })) return null;
+      const today = window.DateUtils && typeof window.DateUtils.getTodayString === 'function'
+        ? window.DateUtils.getTodayString() : new Date().toISOString().slice(0, 10);
+      const startParts = reportStartDate.value.split('-').map(Number);
+      const todayParts = today.split('-').map(Number);
+      const startUtc = Date.UTC(startParts[0], startParts[1] - 1, startParts[2]);
+      const todayUtc = Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2]);
+      const elapsedDays = Math.max(0, Math.floor((todayUtc - startUtc) / 86400000));
+      if (elapsedDays > BILLING_REQUEST_MAX_WINDOW_DAYS) {
+        return { historyAll: true, windowDays: 0 };
+      }
+      return {
+        historyAll: false,
+        windowDays: Math.max(BILLING_REQUEST_DEFAULT_WINDOW_DAYS, elapsedDays)
+      };
+    };
+    const billingRequestWindowIsLoaded = (required) => {
+      const loaded = requestWindowInfo.value || {};
+      if (loaded.historyAll) return true;
+      return !required.historyAll && Number(loaded.windowDays || 0) >= required.windowDays;
+    };
+    const ensureBillingRequestsForPeriod = async () => {
+      if (!user.value || !isAdmin.value) return;
+      const required = getBillingRequestWindow();
+      if (!required || billingRequestWindowIsLoaded(required)) return;
+      if (billingPeriodRequestsPromise) {
+        await billingPeriodRequestsPromise;
+        return ensureBillingRequestsForPeriod();
+      }
+      const options = {
+        semesterId: currentSemester.value,
+        force: true,
+        requestsOnly: true,
+        historyAll: required.historyAll,
+        windowDays: required.windowDays || BILLING_REQUEST_DEFAULT_WINDOW_DAYS
+      };
+      const request = fetchInitialData(options).then((res) => {
+        if (!res || res.success === false) throw new Error('結算期間申請紀錄載入失敗');
+        applyInitialPayload(res);
+      });
+      billingPeriodRequestsPromise = request;
+      try {
+        await request;
+      } finally {
+        if (billingPeriodRequestsPromise === request) billingPeriodRequestsPromise = null;
+      }
+      if (!billingRequestWindowIsLoaded(required)) {
+        throw new Error('伺服器回傳的申請資料未涵蓋完整結算區間');
+      }
+      return ensureBillingRequestsForPeriod();
+    };
     let period8ReadyPromise = null;
     const ensurePeriod8Ready = async () => {
       if (period8Ready.value && window.DomainBilling) return;
@@ -7591,6 +7646,7 @@ createApp({
       }
       try {
         await ensureBillingReady();
+        await ensureBillingRequestsForPeriod();
         if (calculationId !== monthlyReportCalculationId) return;
       } catch (e) {
         if (calculationId === monthlyReportCalculationId) {
