@@ -688,6 +688,18 @@ window.ExportInvigilation = (function () {
         var day = dayOfWeekMon1(sp.date);
         var raw = getCached(t.email, sp.date, sp.period, day);
         var slot = cellTextFromSchedule(raw);
+        // 段考時虛擬分組回原班上課；基礎虛擬班課不列監考，明確排入的勤務仍保留。
+        if (raw && !slot.changed && !isBasePatrol(raw)) {
+          var scheduleClassName = raw.className || raw['班級'] || '';
+          var classNames = splitCoverageClassNames(scheduleClassName);
+          var hasVirtualClass = classNames.some(isVirtualClassName);
+          if (hasVirtualClass) {
+            var physicalClasses = classNames.filter(function (name) { return !isVirtualClassName(name); });
+            slot = physicalClasses.length
+              ? cellTextFromSchedule(Object.assign({}, raw, { className: physicalClasses.join('、') }))
+              : { text: '', changed: false };
+          }
+        }
         // 雙重保險：基礎巡堂一定寫「巡堂」
         if (!slot || (!slot.changed && (!slot.text || !String(slot.text).trim()))) {
           if (hasBasePatrolAt(t.email, sp.date, sp.period, day)
@@ -746,8 +758,12 @@ window.ExportInvigilation = (function () {
     var name = String(value || '').trim();
     if (!name) return false;
     // 英資、數資、特教等是課務上的虛擬分組，不是段考監考的實體班級。
-    if (/英資|英語資優|數資|數理資優|資優|特教|抽離/.test(name)) return false;
+    if (isVirtualClassName(name)) return false;
     return !/^(巡堂|巡[一二三四五六七八九0-9]+|特殊考場|請假|公假|空堂任務|專題探究|專題|走讀|閱讀|閱讀素養|彈性|彈性課程|校訂|校訂課程|班會|週會|班週會|社團|社團活動|自主學習|自習|早自習|午休|導師時間)$/.test(name);
+  }
+
+  function isVirtualClassName(value) {
+    return /英資|英語資優|數資|數理資優|資優|特教|抽離/.test(normText(value));
   }
 
   function collectCoverageClassNames(values, baseSchedules, periodSpec) {

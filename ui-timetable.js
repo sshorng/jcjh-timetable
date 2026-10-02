@@ -502,6 +502,7 @@ window.UiTimetable = (function () {
       var showMatchModal = clickDeps.showMatchModal;
       var fetchRecommendationsFn = clickDeps.fetchRecommendations;
       var batchSelectMode = clickDeps.batchSelectMode;
+      var batchFlowMode = clickDeps.batchFlowMode;
       var isAdmin = clickDeps.isAdmin;
       var user = clickDeps.user;
       var toggleBatchSlot = clickDeps.toggleBatchSlot;
@@ -590,7 +591,9 @@ window.UiTimetable = (function () {
 
       if (batchSelectMode.value) {
         if (cell.isPatrol || cell.attr === '巡堂') {
-          showToast('巡堂節不需批次代課；若要請人代巡，請私下安排', 'info');
+          showToast(batchFlowMode && batchFlowMode.value === 'exchange'
+            ? '巡堂節不可批次調課'
+            : '巡堂節不需批次代課；若要請人代巡，請私下安排', 'info');
           return;
         }
         if (cell.isSubstituted) {
@@ -622,6 +625,8 @@ window.UiTimetable = (function () {
           className: cell.className,
           subject: cell.subject,
           restriction: cell.restriction || '',
+          attr: cell.attr || '',
+          isPullOut: !!(cell.isPullOut || cell.attr === '抽離'),
           isDuty: !!cell.isSubstitutionDuty,
           dutyType: cell.subType || ''
         });

@@ -10,6 +10,11 @@ window.DomainClassAway = (function () {
   var SCOPE_ALL = 'all';
   var SCOPE_CLASSES = 'classes';
   var PERIOD_ALL = 'all';
+  var PERIOD_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8'];
+  var PERIOD_LABELS = {
+    '0': '早自習', '1': '第1節', '2': '第2節', '3': '第3節', '4': '第4節',
+    '5': '第5節', '6': '第6節', '7': '第7節', '8': '第8節'
+  };
 
   function normDate(d) {
     return String(d || '').trim().slice(0, 10);
@@ -78,16 +83,57 @@ window.DomainClassAway = (function () {
     return SCOPE_CLASSES;
   }
 
-  /** 節次欄只支援「全部」或「第8節」，內部統一成 all 或 8。 */
-  function normalizePeriod(raw) {
-    if (Array.isArray(raw)) raw = raw.length ? raw[0] : '';
-    var s = String(raw == null ? '' : raw).trim().toLowerCase();
-    if (!s || s === PERIOD_ALL || s === 'all' || s === '*' || s === '全部'
-        || s === '全部節次' || s === '全天' || s === '全日') {
-      return PERIOD_ALL;
-    }
+  function isAllPeriodValue(value) {
+    var s = String(value == null ? '' : value).trim().toLowerCase();
+    return !s || s === PERIOD_ALL || s === '*' || s === '全部'
+      || s === '全部節次' || s === '全天' || s === '全日';
+  }
+
+  function normalizePeriodKey(value) {
+    var s = String(value == null ? '' : value).trim().replace(/^'+/, '').toLowerCase();
+    if (s === '早自習' || s === '早讀' || s === '晨讀') return '0';
     var match = s.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
-    return match && parseInt(match[1], 10) === 8 ? '8' : PERIOD_ALL;
+    if (!match) return '';
+    var n = parseInt(match[1], 10);
+    if (n === 45) return '45';
+    return n >= 0 && n <= 8 ? String(n) : '';
+  }
+
+  /** 節次可用「全部」或早自習 0 至第 8 節多選；舊資料仍可直接正規化。 */
+  function normalizePeriods(raw) {
+    if (Array.isArray(raw)) {
+      if (!raw.length) return [];
+      if (raw.some(isAllPeriodValue)) return [PERIOD_ALL];
+    } else {
+      var whole = String(raw == null ? '' : raw).trim();
+      if (isAllPeriodValue(whole)) return [PERIOD_ALL];
+      raw = whole.split(/[,，、;；|｜/／]+/);
+    }
+
+    var selected = {};
+    (raw || []).forEach(function (item) {
+      if (isAllPeriodValue(item)) {
+        selected[PERIOD_ALL] = true;
+        return;
+      }
+      var value = normalizePeriodKey(item);
+      if (PERIOD_VALUES.indexOf(value) >= 0) selected[value] = true;
+    });
+    if (selected[PERIOD_ALL]) return [PERIOD_ALL];
+    return PERIOD_VALUES.filter(function (value) { return selected[value]; });
+  }
+
+  /** 事件節次的儲存格式：all 或以逗號連接的 0 至 8。 */
+  function normalizePeriod(raw) {
+    var periods = normalizePeriods(raw);
+    if (!periods.length || periods[0] === PERIOD_ALL) return PERIOD_ALL;
+    return periods.join(',');
+  }
+
+  function periodLabel(raw) {
+    var periods = normalizePeriods(raw);
+    if (!periods.length || periods[0] === PERIOD_ALL) return '全部節次';
+    return periods.map(function (value) { return PERIOD_LABELS[value]; }).join('、');
   }
 
   function classListToStore(list) {
@@ -131,14 +177,24 @@ window.DomainClassAway = (function () {
     return normalizeScope(pickEventValue(ev, ['scope', '適用範圍', 'awayScope']));
   }
 
+  function eventPeriods(ev) {
+    var raw = ev && ev.periods;
+    if (raw !== undefined && raw !== null && (!Array.isArray(raw) || raw.length)) {
+      return normalizePeriods(raw);
+    }
+    return normalizePeriods(pickEventValue(ev, ['period', '停課節次', 'awayPeriod']));
+  }
+
   function eventPeriod(ev) {
-    return normalizePeriod(pickEventValue(ev, ['period', '停課節次', 'awayPeriod']));
+    return normalizePeriod(eventPeriods(ev));
   }
 
   function eventAppliesToPeriod(ev, period) {
     if (period === undefined || period === null || String(period).trim() === '') return true;
-    var eventP = eventPeriod(ev);
-    return eventP === PERIOD_ALL || eventP === normalizePeriod(period);
+    var eventP = eventPeriods(ev);
+    if (!eventP.length || eventP[0] === PERIOD_ALL) return true;
+    var requestedPeriod = normalizePeriodKey(period);
+    return !!requestedPeriod && eventP.indexOf(requestedPeriod) >= 0;
   }
 
   function eventAppliesToClass(ev, className) {
@@ -345,16 +401,19 @@ window.DomainClassAway = (function () {
     // 舊呼叫端若傳 1／true，代表所有節次。
     if (value === true || value === 1 || value === '1') return true;
     if (value.all) return true;
-    return !!value[normalizePeriod(period)];
+    return !!value[normalizePeriodKey(period)];
   }
 
   function addEventToReduceSet(awayClassSet, ev) {
     var targets = eventScope(ev) === SCOPE_ALL ? ['*'] : eventClasses(ev);
-    var p = eventPeriod(ev);
+    var periods = eventPeriods(ev);
     targets.forEach(function (target) {
       if (!awayClassSet[target]) awayClassSet[target] = {};
-      if (p === PERIOD_ALL) awayClassSet[target].all = true;
-      else awayClassSet[target][p] = true;
+      if (!periods.length || periods[0] === PERIOD_ALL) {
+        awayClassSet[target].all = true;
+      } else {
+        periods.forEach(function (period) { awayClassSet[target][period] = true; });
+      }
     });
   }
 
@@ -488,7 +547,9 @@ window.DomainClassAway = (function () {
     normClass: normClass,
     parseClassList: parseClassList,
     normalizeScope: normalizeScope,
+    normalizePeriods: normalizePeriods,
     normalizePeriod: normalizePeriod,
+    periodLabel: periodLabel,
     classListToStore: classListToStore,
     isPlausibleClassName: isPlausibleClassName,
     isEnabled: isEnabled,
@@ -496,6 +557,7 @@ window.DomainClassAway = (function () {
     canMutual: canMutual,
     eventClasses: eventClasses,
     eventScope: eventScope,
+    eventPeriods: eventPeriods,
     eventPeriod: eventPeriod,
     eventAppliesToClass: eventAppliesToClass,
     eventAppliesToPeriod: eventAppliesToPeriod,

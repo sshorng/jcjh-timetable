@@ -68,6 +68,14 @@ assert.match(source, /function normalizeTimetableOnlyFee_\(fee\)/, '僅課表費
 assert.match(source, /!isTimetableOnlyFee_\(requestRow\["經費來源"\] \|\| requestRow\.subFee\)/, '代導同步不得處理僅課表申請');
 assert.match(source, /isTimetableOnlyFee_\(feeOne\)/, '單筆申請應限制僅課表費用權限');
 assert.match(source, /isTimetableOnlyFee_\(feeRow\)/, '批次申請應限制僅課表費用權限');
+const exchangeBatchStart = source.indexOf('} else if (action === "submitExchangeBatch")');
+const exchangeBatchEnd = source.indexOf('} else if (action === "submitRequestBatch")', exchangeBatchStart);
+assert.ok(exchangeBatchStart >= 0 && exchangeBatchEnd > exchangeBatchStart, '批次調課應有獨立送出 action');
+const exchangeBatchSource = source.slice(exchangeBatchStart, exchangeBatchEnd);
+assert.match(exchangeBatchSource, /exchangeBatchFailures\.push/, '批次調課需逐組回傳失敗原因');
+assert.match(exchangeBatchSource, /assertNoExchangeIncomingConflict_\(row, exchangeBatchExistingRows\.concat\(exchangeBatchRows\)\)/, '每組調課需與既有及本批成功組別重新檢查調入衝堂');
+assert.match(exchangeBatchSource, /sendSubInviteEmail_\(row, currentUrl\)/, '批次調課應使用逐筆同意連結，避免同一受邀人整批綁定');
+assert.doesNotMatch(exchangeBatchSource, /respondToBatch/, '批次調課的各組不能共用整批同意／拒絕動作');
 assert.match(source, /function normalizeFixedOvertimeFields_\(row\)/, '教師固定超鐘點欄位應由後端正規化');
 const fixedOvertimeStart = source.indexOf('function normalizeFixedOvertimeFields_');
 const fixedOvertimeEnd = source.indexOf('function resolveTeacherRole_', fixedOvertimeStart);
@@ -92,7 +100,9 @@ vm.runInContext(source.slice(awayNormStart, awayNormEnd), awayNormContext, { fil
 assert.equal(awayNormContext.normalizeClassAwayScope_('全校'), '全校');
 assert.equal(awayNormContext.normalizeClassAwayScope_('901'), '指定班級');
 assert.equal(awayNormContext.normalizeClassAwayPeriod_('第8節'), '第8節');
-assert.equal(awayNormContext.normalizeClassAwayPeriod_('第7節'), '全部');
+assert.equal(awayNormContext.normalizeClassAwayPeriod_('第7節'), '第7節');
+assert.equal(awayNormContext.normalizeClassAwayPeriod_('早自習、第1節、第8節'), '早自習、第1節、第8節');
+assert.equal(awayNormContext.normalizeClassAwayPeriod_('0,2,8'), '早自習、第2節、第8節');
 const adminApproveStart = source.indexOf('} else if (action === "adminApprove")');
 const adminApproveEnd = source.indexOf('} else if (action === "adminApproveBatch")', adminApproveStart);
 assert.ok(adminApproveStart >= 0 && adminApproveEnd > adminApproveStart, '單筆核准 action 必須存在');

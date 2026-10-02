@@ -195,6 +195,41 @@ assert.deepEqual(
   '完全沒有課務的教師不應出現在監考表'
 );
 
+const virtualCourseMatrix = buildTeacherMatrix(
+  [
+    { email: 'gifted-only@example.com', name: '只教資優班教師' },
+    { email: 'mixed-class@example.com', name: '資優班兼原班教師' }
+  ],
+  context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),
+  email => email === 'gifted-only@example.com'
+    ? { className: '8英資A', subject: '英文', attr: '一般' }
+    : { className: '701、8英資A', subject: '國文', attr: '一般' },
+  38,
+  null,
+  []
+);
+const virtualCourseTeachers = virtualCourseMatrix.left.concat(virtualCourseMatrix.right);
+assert.deepEqual(
+  virtualCourseTeachers.map(teacher => teacher.name),
+  ['資優班兼原班教師'],
+  '段考時只教資優虛擬班的教師視為空堂，不列入監考表'
+);
+assert.equal(virtualCourseTeachers[0].slots[0].text, '701', '併班中的虛擬班應清除並保留實體班級');
+
+const virtualDutyMatrix = buildTeacherMatrix(
+  [{ email: 'duty@example.com', name: '資優班勤務教師' }],
+  context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),
+  () => ({ className: '8英資A', subject: '段考巡堂', isEmptySlotAssign: true }),
+  38,
+  null,
+  []
+);
+assert.equal(
+  virtualDutyMatrix.left[0].slots[0].text,
+  '段考巡堂',
+  '明確排入虛擬班時段的監考勤務仍應保留'
+);
+
 const endedCourseMatrix = buildTeacherMatrix(
   [{ email: 'ended@example.com', name: '已終止課程教師' }],
   context.window.ExportInvigilation.buildPeriodSpec(['2026-09-21']),

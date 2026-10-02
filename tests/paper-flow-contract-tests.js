@@ -1102,7 +1102,7 @@ function runApplicationFormContractTest() {
    assert.match(appSource, /mode: notificationsSuppressed\.value \? 'paper' : 'online'/, 'onboarding should follow the global paper mode');
    assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
     assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
-       assert.match(html, /ui-activity\.js\?v=20260917-[^"]+/);
+       assert.match(html, /ui-activity\.js\?v=\d{8}-[^"]+/);
            assert.match(html, /app\.js\?v=\d{8}-[^"]+/);
       assert.match(activitySource, /email: r\.loginEmail \|\| r\.email/,
         '活動額度發放應傳送登入 Email，不得把姓名鍵 email 當作登入 Email');
@@ -1935,6 +1935,108 @@ async function runBatchTest(courseAdjustmentOnly = false, adminPaperMode = false
   assert.equal(batchSlots.value.length, 0);
 }
 
+async function runBatchExchangeTest() {
+  const api = load('ui-activity.js').UiBatchSubmit;
+  const batchSlots = ref([{
+    key: 'owner@school.example|2026-08-17|1', batchId: 'bat-exchange-test',
+    exchangeRequestId: 'req-exchange-1', exchangeSerial: 'SWP-1',
+    teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-17', dayOfWeek: 1,
+    period: 1, className: '701', subject: '國文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人',
+    targetDate: '2026-08-18', targetDayOfWeek: 2, targetPeriod: 2, targetClassName: '701', targetSubject: '國文'
+  }, {
+    key: 'owner@school.example|2026-08-17|2', batchId: 'bat-exchange-test',
+    exchangeRequestId: 'req-exchange-2', exchangeSerial: 'SWP-2',
+    teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-17', dayOfWeek: 1,
+    period: 2, className: '702', subject: '英文', subTeacherEmail: 'third@school.example', subTeacherName: '另一受邀人',
+    targetDate: '2026-08-18', targetDayOfWeek: 2, targetPeriod: 3, targetClassName: '702', targetSubject: '英文'
+  }]);
+  const pendingRequestData = ref({
+    mode: 'exchange', isBatch: true, isExchangeBatch: true, batchCount: 2,
+    submitBatchId: 'bat-exchange-test', reason: '課務調整', courseAdjustmentOnly: true, note: ''
+  });
+  const sent = [];
+  const optimistic = [];
+  let cleared = 0;
+  const deps = {
+    batchSlots,
+    pendingRequestData,
+    batchFlowMode: ref('exchange'),
+    batchAssignMode: ref('perSlot'),
+    isSubmitting: ref(false),
+    loading: ref(false),
+    loadingMessage: ref(''),
+    showToast: () => {},
+    buildSubmitPayload: (requestId, serial) => {
+      const pending = pendingRequestData.value;
+      const request = {
+        '申請單ID': requestId,
+        '單號': serial,
+        '異動類型': pending.mode,
+        '申請人Email': pending.leaveTeacher,
+        '申請人姓名': teacherName(pending.leaveTeacher),
+        '受邀人Email': pending.subTeacher,
+        '受邀人姓名': teacherName(pending.subTeacher),
+        '異動日期': pending.date,
+        '異動節次': parseInt(String(pending.timeKey).split('-')[1], 10),
+        '異動星期': parseInt(String(pending.timeKey).split('-')[0], 10),
+        '班級': pending.cls,
+        '科目': pending.subject,
+        '對調目標日期': pending.dateB,
+        '對調目標節次': parseInt(String(pending.timeB).split('-')[1], 10),
+        '對調目標星期': parseInt(String(pending.timeB).split('-')[0], 10),
+        '對調目標班級': pending.subBClass,
+        '對調目標科目': pending.subB,
+        '請假事由': pending.reason,
+        '經費來源': '無',
+        '紙本流程': 'FALSE',
+        '狀態': 'pending_teacher',
+        paperFlow: false
+      };
+      return { newRequest: request, payload: { request, directApprove: false, paperFlow: false } };
+    },
+    callGasApi: async (action, payload) => {
+      assert.equal(action, 'submitExchangeBatch');
+      sent.push(payload);
+      return {
+        success: true,
+        count: 1,
+        successes: [{ requestId: 'req-exchange-1', status: 'pending_teacher' }],
+        failures: [{ requestId: 'req-exchange-2', error: '調課衝堂測試' }]
+      };
+    },
+    sheetRequestToFront: row => row,
+    optimisticUpsertRequest: row => optimistic.push(row),
+    softRefreshInBackground: () => {},
+    successActionRequests: ref([]),
+    successModalTitle: ref(''),
+    successModalMessage: ref(''),
+    successFlowMode: ref(''),
+    showCompareModal: ref(true),
+    showMatchModal: ref(false),
+    showSuccessModal: ref(false),
+    batchSelectMode: ref(true),
+    clearBatchSlots: () => { cleared++; batchSlots.value = []; },
+    directApproveMode: ref(false),
+    directApproveSkipNotify: ref(false),
+    isAdmin: ref(false),
+    notificationsSuppressed: ref(false),
+    hasLineTemplate: ref(false),
+    lineBatchParts: ref([]),
+    lineCopyText: ref('')
+  };
+
+  await api.executeBatchSubmit(deps);
+  assert.equal(sent.length, 1, '批次調課以單一 API 逐組回傳結果');
+  assert.equal(sent[0].batchId, 'bat-exchange-test');
+  assert.equal(sent[0].requests.length, 2, '每組互調都應建立獨立申請列');
+  assert.ok(sent[0].requests.every(row => row['異動類型'] === 'exchange'));
+  assert.deepEqual(Array.from(optimistic, row => row['申請單ID']), ['req-exchange-1'], '只有成功組應更新本地資料');
+  assert.equal(batchSlots.value[0].exchangeSubmitted, true, '成功組需標記已送出');
+  assert.equal(batchSlots.value[1].exchangeSubmitError, '調課衝堂測試', '失敗組需保留逐組錯誤');
+  assert.equal(cleared, 0, '部分成功時保留批次草稿，讓使用者可以修正失敗組');
+  assert.match(deps.successModalTitle.value, /部分送出/);
+}
+
 function runRechangeLabelTest() {
   const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
   const start = source.indexOf('const findPriorDutyAtSlot =');
@@ -2071,10 +2173,11 @@ Promise.resolve()
   .then(runExchangeIncomingConflictDetectionTest)
   .then(runRechangeLabelTest)
   .then(runBatchTest)
-   .then(() => runBatchTest(true))
-   .then(() => runBatchTest(false, true))
-   .then(() => runBatchTest(false, false, true))
-  .then(() => console.log('paper flow contract tests PASS'))
+    .then(() => runBatchTest(true))
+    .then(() => runBatchTest(false, true))
+    .then(() => runBatchTest(false, false, true))
+   .then(() => runBatchExchangeTest())
+   .then(() => console.log('paper flow contract tests PASS'))
   .catch(error => {
     console.error(error);
     process.exitCode = 1;

@@ -1809,6 +1809,7 @@ createApp({
     const triangleSubmitting = ref(false);
     // 批次調代課（方案 A：多筆申請＋同一 batchId；可同一人全代或每節不同人）
     const batchSelectMode = ref(false);
+    const batchFlowMode = ref('substitution'); // 'substitution' | 'exchange'
     const batchSlots = ref([]); // [{ key, teacherEmail, teacherName, dateStr, dayOfWeek, period, className, subject, restriction, subTeacherEmail?, subTeacherName? }]
     const showBatchConfirmModal = ref(false);
     const batchSubTeacher = ref('');
@@ -6025,7 +6026,7 @@ createApp({
     });
 
     // 準備模擬對比 Modal（ui-request.js → UiSubmitHelpers.prepCompare）
-    const prepCompare = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
+    const runComparePreparation = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
       if (!window.UiSubmitHelpers || !window.UiSubmitHelpers.prepCompare) {
         showToast('申請模組未載入', 'error');
         return;
@@ -6036,6 +6037,65 @@ createApp({
         consecAlertsA, consecAlertsB, isMutualCover, assignMutualDraftFromMatch, PERIOD8_FEE,
         pendingRequestData, showMatchModal, showCompareModal, getLeaveTimeDefaults
       }, mode, targetEmail, periodIdVal, subjectVal, classVal);
+    };
+    const prepCompare = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
+      if (!(isBatchExchangeFlow.value && mode === 'exchange')) {
+        return runComparePreparation(mode, targetEmail, periodIdVal, subjectVal, classVal);
+      }
+      const slotKey = String(batchActiveSlotKey.value || '');
+      const activeSlot = (batchSlots.value || []).find(slot => String(slot.key) === slotKey);
+      if (!activeSlot) {
+        showToast('請先選擇要配對的調課組別', 'warning');
+        return 'cancelled';
+      }
+      if (batchAssignMode.value === 'same') {
+        const assignedTeacher = (batchSlots.value || []).find(slot =>
+          slot.key !== activeSlot.key && slot.subTeacherEmail && !slot.exchangeSubmitted
+        );
+        if (assignedTeacher
+            && String(assignedTeacher.subTeacherEmail).toLowerCase() !== String(targetEmail || '').toLowerCase()) {
+          showToast('目前是「同一人全調」，請維持同一位對調教師；要更換請重新選媒合模式', 'warning');
+          return 'cancelled';
+        }
+      }
+
+      const result = await runComparePreparation('exchange', targetEmail, periodIdVal, subjectVal, classVal);
+      if (result !== 'opened') return result;
+
+      const draft = pendingRequestData.value || {};
+      const targetTime = window.DateUtils && window.DateUtils.decodeTimeKey
+        ? window.DateUtils.decodeTimeKey(draft.timeB)
+        : {
+          day: parseInt(String(draft.timeB || '').split('-')[0], 10),
+          period: parseInt(String(draft.timeB || '').split('-')[1], 10)
+        };
+      batchSlots.value = (batchSlots.value || []).map(slot => slot.key === activeSlot.key
+        ? Object.assign({}, slot, {
+          subTeacherEmail: draft.subTeacher || targetEmail,
+          subTeacherName: getTeacherNameByEmail(draft.subTeacher || targetEmail),
+          targetDate: draft.dateB || '',
+          targetDayOfWeek: parseInt(targetTime.day, 10),
+          targetPeriod: parseInt(targetTime.period, 10),
+          targetClassName: draft.subBClass || classVal || '',
+          targetSubject: draft.subB || subjectVal || '',
+          exchangeWeekOffset: parseInt(exchangeWeekOffset.value, 10) || 0,
+          exchangeValidationError: '',
+          exchangeSubmitError: '',
+          exchangeSubmitted: false
+        })
+        : slot);
+      pendingRequestData.value = null;
+      showCompareModal.value = false;
+      showMatchModal.value = true;
+      const next = batchSlots.value.find(slot => !slot.exchangeSubmitted
+        && (!slot.subTeacherEmail || !slot.targetDate || slot.targetPeriod == null));
+      if (next) {
+        selectBatchSlotForMatch(next.key);
+      } else {
+        batchActiveSlotKey.value = '';
+        showToast('全部組別已配對，可按「預覽批次」檢視交換結果', 'success');
+      }
+      return 'drafted';
     };
 
     const startCombinedReturn = () => {
@@ -6315,6 +6375,54 @@ createApp({
       }, requestId, serial);
     };
 
+    const validateBatchExchangeSlot = (slot) => {
+      if (!slot || !slot.teacherEmail || !slot.subTeacherEmail || !slot.targetDate
+          || slot.targetPeriod == null || slot.targetPeriod === '') {
+        return { valid: false, reason: '尚未完成雙方課堂配對' };
+      }
+      if (!window.DomainMatch || typeof window.DomainMatch.listExchangeCandidates !== 'function') {
+        return { valid: false, reason: '調課候選驗證模組尚未載入' };
+      }
+      const offset = parseInt(slot.exchangeWeekOffset, 10) || 0;
+      const targetWeekDates = getWeekDatesForCompare(slot.dateStr).map(dateStr => {
+        if (!dateStr || !offset) return dateStr;
+        const date = new Date(String(dateStr).replace(/-/g, '/'));
+        if (Number.isNaN(date.getTime())) return dateStr;
+        date.setDate(date.getDate() + offset * 7);
+        return toLocalDateStr(date);
+      });
+      const candidates = window.DomainMatch.listExchangeCandidates({
+        allSchedules: allSchedules.value || [],
+        className: slot.className || '',
+        leaveEmail: slot.teacherEmail,
+        leaveDate: slot.dateStr,
+        leavePeriod: slot.period,
+        leaveDay: slot.dayOfWeek,
+        leaveCell: {
+          className: slot.className || '',
+          subject: slot.subject || '',
+          attr: slot.attr || '',
+          isPullOut: !!slot.isPullOut
+        },
+        weekDates: targetWeekDates,
+        isSingleWeek,
+        getScheduleForDate,
+        getTeacherNameByEmail,
+        awayClasses: []
+      });
+      const targetEmail = String(slot.subTeacherEmail || '').toLowerCase();
+      const match = candidates.find(candidate => {
+        if (String(candidate.teacherEmail || '').toLowerCase() !== targetEmail) return false;
+        if (parseInt(candidate.dayOfWeek, 10) !== parseInt(slot.targetDayOfWeek, 10)) return false;
+        if (parseInt(candidate.period, 10) !== parseInt(slot.targetPeriod, 10)) return false;
+        return String(targetWeekDates[parseInt(candidate.dayOfWeek, 10) - 1] || '')
+          === String(slot.targetDate || '').slice(0, 10);
+      });
+      return match
+        ? { valid: true }
+        : { valid: false, reason: '對調課堂已不符合目前課表或調課規則，請重新選擇' };
+    };
+
 
     // ════════════════════════════════════════
     // §4 提交申請 / 課表渲染 / 簽核
@@ -6322,11 +6430,12 @@ createApp({
     // ── 批次選節／媒合（ui-activity.js → UiBatchPanel）──
     const {
       batchSlotKey, isBatchSlotSelected, clearBatchSlots,
-      isBatchMatchFlow, isBatchPerSlotMode, batchAssignedCount, batchAllSlotsAssigned, batchActiveSlot,
+      isBatchMatchFlow, isBatchExchangeFlow, isBatchPerSlotMode, batchAssignedCount, batchAllSlotsAssigned, batchActiveSlot,
       groupBatchSlotsBySub, setBatchAssignMode, toggleBatchSelectMode, toggleBatchSlot,
+      setBatchFlowMode,
       fetchSingleSlotRecommendations, fetchBatchRecommendations, selectBatchSlotForMatch,
       openBatchMatch, prepBatchCompare, assignBatchSlotSub, clearBatchSlotSub,
-      prepBatchPerSlotCompare, setBatchCompareViewEmail, executeBatchSubmit
+      prepBatchPerSlotCompare, prepBatchExchangeCompare, setBatchCompareViewEmail, executeBatchSubmit
     } = window.UiBatchPanel.create({
       computed: computed,
       showToast: showToast,
@@ -6352,6 +6461,9 @@ createApp({
       mutualAwayClasses: mutualAwayClasses,
       batchSlots: batchSlots,
       batchSelectMode: batchSelectMode,
+      batchFlowMode: batchFlowMode,
+      exchangeWeekOffset: exchangeWeekOffset,
+      exchangeWeekdayFilter: exchangeWeekdayFilter,
       batchAssignMode: batchAssignMode,
       batchActiveSlotKey: batchActiveSlotKey,
       batchSubTeacher: batchSubTeacher,
@@ -6398,6 +6510,8 @@ createApp({
       loadingMessage: loadingMessage,
       isSubmitting: isSubmitting,
       currentSemester: currentSemester,
+      buildSubmitPayload: buildSubmitPayload,
+      validateBatchExchangeSlot: validateBatchExchangeSlot,
       directApproveSkipNotify: directApproveSkipNotify,
       callGasApi: callGasApi,
       deductMutualQuotaForRows: deductMutualQuotaForRows,
@@ -6408,7 +6522,8 @@ createApp({
       lineCopyText: lineCopyText,
       showSuccessModal: showSuccessModal,
       successActionRequests: successActionRequests,
-      buildLineBatchInviteText: buildLineBatchInviteText,
+       buildLineBatchInviteText: buildLineBatchInviteText,
+       buildLineInviteText: buildLineInviteText,
       successFlowMode: successFlowMode
     });
 
@@ -6465,10 +6580,10 @@ createApp({
          computed,
          allSchedules, schoolSwaps, substitutionRecords, substitutionsLookup, allPendingRequests,
         // 只用目前可見頁的教師建 grid，全校模式才真正省算力
-        displayTimetableTeachers: visibleTimetableTeachers, currentWeekDates,
-        getTeacherNameByEmail, getTeacherSubjectByEmail, formatDateMMDD, isSingleWeek,
+         displayTimetableTeachers: visibleTimetableTeachers, currentWeekDates,
+         getTeacherNameByEmail, getTeacherSubjectByEmail, formatDateMMDD, isSingleWeek,
         isClassAwayOnDate, getWeekDayText,
-        batchSelectMode, isBatchSlotSelected, isMutualCover, getMutualDraftAt,
+         batchSelectMode, batchFlowMode, isBatchSlotSelected, isMutualCover, getMutualDraftAt,
         mutualDrafts, mutualAwayClasses, mutualActivityStart, mutualActivityEnd, DAC
       });
       return _timetableApi;
@@ -7507,7 +7622,7 @@ createApp({
         isScheduleEditMode, openScheduleEditModal, showToast, showConfirm,
         isMutualLead, getMutualDraftAt, removeMutualDraft, activeCell, inputRequestDate,
         matchMode, matchPreview, showCompareModal, showMatchModal,
-        fetchRecommendations, batchSelectMode, isAdmin, user, toggleBatchSlot,
+        fetchRecommendations, batchSelectMode, batchFlowMode, isAdmin, user, toggleBatchSlot,
         detailRequest, detailSubRecord, showDetailModal, resolveDetailRequest,
         getTeacherNameByEmail, exchangeTargetDate, exchangeWeekOffset, exchangePeriodId, exchangeTeacherEmail,
         canOperateOnTeacherEmail: canOperateOnTeacherEmail,
@@ -10467,9 +10582,12 @@ createApp({
 
     // ── 空堂事件管理（ui-activity.js → UiClassAwayAdmin）──
     const {
-      showClassAwayModal, classAwayModalMode, classAwayForm,
+      showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm,
       openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
-      isClassAwayFormClassSelected, selectClassAwayGrade, saveClassAwayEvent, deleteClassAwayEvent
+      isClassAwayFormClassSelected, selectClassAwayGrade,
+      toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange,
+      clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel,
+      saveClassAwayEvent, deleteClassAwayEvent
     } = window.UiClassAwayAdmin.create({
       ref,
       callGasApi,
@@ -12583,7 +12701,7 @@ createApp({
        matchMode, activeCell, inputRequestDate, recommendedTeachers, recommendationLoading,
        trianglePickB, trianglePickC, triangleNote, triangleSubmitting, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC,
         triangleParticipants, triangleLegs, trianglePreviewRows, trianglePreviewWeekDates, triangleTimetablePreview, triangleValidation, triangleReady, formatTriangleSlot, openTriangleTimetablePreview, submitTriangleRequest,
-      batchSelectMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote,
+       batchSelectMode, batchFlowMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote,
        isMutualCover, toggleMutualCover, setMutualCover, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, QUOTA_DEDUCT_FEE, PERIOD8_FEE, TIMETABLE_ONLY_FEE,
       mutualAwayClasses, mutualActivityStart, mutualActivityEnd, setMutualActivityThisWeek,
       toggleMutualAwayClass, selectAwayGrade, mutualCoverStats,
@@ -12591,9 +12709,9 @@ createApp({
       mutualSkipNotify, directApproveSkipNotify, mutualNote, mutualDrafts, getMutualDraftAt, removeMutualDraft, clearMutualDrafts,
       clearMutualPanel, assignMutualDraftFromMatch, previewMutualDraft, submitAllMutualDrafts, recalculateMutualQuotasFromActivity,
       persistMutualPanelDraft, isAwayClassCell,
-      batchAssignMode, batchActiveSlotKey, isBatchMatchFlow, isBatchPerSlotMode, batchAssignedCount, batchAllSlotsAssigned, batchActiveSlot,
+       batchAssignMode, batchActiveSlotKey, isBatchMatchFlow, isBatchExchangeFlow, isBatchPerSlotMode, batchAssignedCount, batchAllSlotsAssigned, batchActiveSlot,
       batchCompareViewEmail, batchCompareSubGroups, setBatchCompareViewEmail, resolveCompareBEmail,
-      setBatchAssignMode, selectBatchSlotForMatch, assignBatchSlotSub, clearBatchSlotSub, prepBatchPerSlotCompare,
+       setBatchAssignMode, setBatchFlowMode, selectBatchSlotForMatch, assignBatchSlotSub, clearBatchSlotSub, prepBatchPerSlotCompare, prepBatchExchangeCompare,
       toggleBatchSelectMode, clearBatchSlots, isBatchSlotSelected,
       openBatchMatch, prepBatchCompare, executeBatchSubmit,
       matchSearchQuery, matchDisplayCount, matchShowNoTeacherWarning, matchEmptyReasons,
@@ -12681,9 +12799,12 @@ createApp({
       isSingleWeek, semesterStartDate,
        // 空堂事件
         classAwayEvents, semesterEndDate, activeAwayBanner, isClassAwayOnDate, getClassAwayEventName,
-       showClassAwayModal, classAwayModalMode, classAwayForm,
-       openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
-       isClassAwayFormClassSelected, selectClassAwayGrade, saveClassAwayEvent, deleteClassAwayEvent,
+        showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm,
+        openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
+        isClassAwayFormClassSelected, selectClassAwayGrade,
+        toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange,
+        clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel,
+        saveClassAwayEvent, deleteClassAwayEvent,
        // 全校日期節次對調
        schoolSwapRows, showSchoolSwapModal, schoolSwapModalMode, schoolSwapSaving, schoolSwapForm,
        schoolSwapWeekdayText, openAddSchoolSwapModal, openEditSchoolSwapModal, saveSchoolSwap, deleteSchoolSwap,

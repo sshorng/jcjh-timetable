@@ -241,13 +241,27 @@ window.FieldMap = (function () {
     }
     const dca = window.DomainClassAway;
     const scopeRaw = pick(e, ['適用範圍', 'scope', 'awayScope']);
-    const periodRaw = pick(e, ['停課節次', 'period', 'awayPeriod']);
+    const periodRaw = pick(e, ['停課節次', 'periods', 'period', 'awayPeriod']);
     const scope = dca && dca.normalizeScope
       ? dca.normalizeScope(scopeRaw)
       : (/^(all|school|全校)/i.test(String(scopeRaw == null ? '' : scopeRaw).trim()) ? 'all' : 'classes');
+    const normalizedPeriods = dca && dca.normalizePeriods
+      ? dca.normalizePeriods(periodRaw)
+      : (function () {
+        const raw = String(periodRaw == null ? '' : periodRaw).trim();
+        if (!raw || /^(all|\*|全部|全部節次|全天|全日)$/i.test(raw)) return ['all'];
+        return raw.split(/[,，、;；|｜/／]+/).map(function (part) {
+          const text = String(part || '').trim();
+          if (text === '早自習' || text === '早讀' || text === '晨讀') return '0';
+          const match = text.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+          const n = match ? parseInt(match[1], 10) : NaN;
+          return Number.isInteger(n) && n >= 0 && n <= 8 ? String(n) : '';
+        }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
+      })();
+    const periods = normalizedPeriods.length ? normalizedPeriods : ['all'];
     const period = dca && dca.normalizePeriod
       ? dca.normalizePeriod(periodRaw)
-      : (/^(?:第\s*)?8\s*(?:節)?$/.test(String(periodRaw == null ? '' : periodRaw).trim()) ? '8' : 'all');
+      : (periods.indexOf('all') >= 0 || !periods.length ? 'all' : periods.join(','));
     let rule = String(pick(e, ['鐘點規則', 'billingRule']) || 'keep').toLowerCase();
     if (rule === '調降' || rule === 'reduce') rule = 'reduce';
     else rule = 'keep';
@@ -271,6 +285,7 @@ window.FieldMap = (function () {
       classes: classes,
       scope: scope,
       period: period,
+      periods: periods,
       billingRule: rule,
       forMutual: asBool(pick(e, ['可進互代', 'forMutual'])),
       enabled: pick(e, ['啟用', 'enabled']) === undefined || pick(e, ['啟用', 'enabled']) === null || pick(e, ['啟用', 'enabled']) === ''

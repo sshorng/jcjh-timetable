@@ -582,14 +582,37 @@
         }) === 0);
        assert('班級淨化 000', DCA.parseClassList('0,701,000,902').join() === '701,902');
        assert('數字 901', DCA.parseClassList(901).join() === '901');
-       assert('非第8節值回到全部節次', DCA.normalizePeriod('第7節') === 'all');
-       assert('第8節格式正規化', DCA.normalizePeriod('第 8 節') === '8');
-       var mappedExam = window.FieldMap.mapClassAwayEvent({
-         '事件名稱': '段考', '適用範圍': '全校', '停課節次': '第8節', '班級清單': ''
-       });
-       assert('事件欄位映射全校第8節', mappedExam.scope === 'all' && mappedExam.period === '8' && mappedExam.classes.length === 0);
-       var mappedLegacy = window.FieldMap.mapClassAwayEvent({ '班級清單': '901' });
-       assert('舊事件映射為指定班級全部節次', mappedLegacy.scope === 'classes' && mappedLegacy.period === 'all' && mappedLegacy.classes.join() === '901');
+        assert('早自習正規化為第0節', DCA.normalizePeriod('早自習') === '0');
+        assert('第7節可單獨設定', DCA.normalizePeriod('第7節') === '7');
+        assert('第8節格式正規化', DCA.normalizePeriod('第 8 節') === '8');
+        assert('多選節次正規化', DCA.normalizePeriods('早自習、第2節、第8節').join() === '0,2,8');
+        var multiPeriodAway = {
+          name: '多節次事件', startDate: '2026-06-01', endDate: '2026-06-30',
+          scope: 'all', period: '早自習、第1節、第3節', billingRule: 'reduce', enabled: true
+        };
+        assert('多選事件只套用勾選節次', DCA.eventAppliesToPeriod(multiPeriodAway, 1)
+          && DCA.eventAppliesToPeriod(multiPeriodAway, 3)
+          && !DCA.eventAppliesToPeriod(multiPeriodAway, 2));
+        assert('多選事件 reduce 只扣勾選節次', DCA.computeReduceDeduction({
+          teacherEmail: 'multi-period@x',
+          allSchedules: [
+            { teacherEmail: 'multi-period@x', dayOfWeek: 1, period: 1, className: '901', attr: '基本' },
+            { teacherEmail: 'multi-period@x', dayOfWeek: 1, period: 2, className: '902', attr: '基本' },
+            { teacherEmail: 'multi-period@x', dayOfWeek: 1, period: 3, className: '903', attr: '基本' }
+          ],
+          events: [multiPeriodAway], semesterEndDate: '2026-06-30',
+          reportMonth: '2026-06', reportWeeksCount: 1
+        }) === 2);
+        var mappedExam = window.FieldMap.mapClassAwayEvent({
+          '事件名稱': '段考', '適用範圍': '全校', '停課節次': '第8節', '班級清單': ''
+        });
+        assert('事件欄位映射全校第8節', mappedExam.scope === 'all' && mappedExam.period === '8'
+          && mappedExam.periods.join() === '8' && mappedExam.classes.length === 0);
+        var mappedMultiPeriod = window.FieldMap.mapClassAwayEvent({ '停課節次': '早自習、第1節、第8節' });
+        assert('事件欄位映射多選節次', mappedMultiPeriod.period === '0,1,8' && mappedMultiPeriod.periods.join() === '0,1,8');
+        var mappedLegacy = window.FieldMap.mapClassAwayEvent({ '班級清單': '901' });
+        assert('舊事件映射為指定班級全部節次', mappedLegacy.scope === 'classes' && mappedLegacy.period === 'all'
+          && mappedLegacy.periods.join() === 'all' && mappedLegacy.classes.join() === '901');
        assert('結算週數：週一至週五為一週', window.DateUtils.countWeeksInRange('2026-09-07', '2026-09-11') === 1);
        assert('結算週數：跨週日期算兩週', window.DateUtils.countWeeksInRange('2026-09-09', '2026-09-15') === 2);
        assert('結算週數：單日也算一週', window.DateUtils.countWeeksInRange('2026-09-11', '2026-09-11') === 1);

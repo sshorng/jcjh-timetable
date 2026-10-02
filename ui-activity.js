@@ -22,9 +22,33 @@ window.UiClassAwayAdmin = (function () {
 
     var showClassAwayModal = ref(false);
     var classAwayModalMode = ref('add');
+    var classAwayPeriodOptions = [
+      { value: '0', label: '早自習' },
+      { value: '1', label: '第1節' }, { value: '2', label: '第2節' },
+      { value: '3', label: '第3節' }, { value: '4', label: '第4節' },
+      { value: '5', label: '第5節' }, { value: '6', label: '第6節' },
+      { value: '7', label: '第7節' }, { value: '8', label: '第8節' }
+    ];
+
+    function normalizeClassAwayPeriods(raw) {
+      if (window.DomainClassAway && window.DomainClassAway.normalizePeriods) {
+        return window.DomainClassAway.normalizePeriods(raw);
+      }
+      if (Array.isArray(raw)) return raw.map(String);
+      var text = String(raw == null ? '' : raw).trim();
+      if (!text || text === 'all' || text === '全部') return ['all'];
+      return text.split(/[,，、;；|｜/／]+/).map(function (value) {
+        value = String(value || '').trim();
+        if (value === '早自習') return '0';
+        var match = value.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+        var n = match ? parseInt(match[1], 10) : NaN;
+        return Number.isInteger(n) && n >= 0 && n <= 8 ? String(n) : '';
+      }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
+    }
+
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
-      scope: 'classes', classes: [], period: 'all',
+      scope: 'classes', classes: [], periods: ['all'],
       billingRule: 'keep', forMutual: true, enabled: true, note: ''
     });
 
@@ -40,7 +64,7 @@ window.UiClassAwayAdmin = (function () {
       classAwayModalMode.value = 'add';
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
-        scope: 'classes', classes: [], period: 'all',
+        scope: 'classes', classes: [], periods: ['all'],
         billingRule: 'keep', forMutual: true, enabled: true, note: ''
       };
       showClassAwayModal.value = true;
@@ -49,6 +73,8 @@ window.UiClassAwayAdmin = (function () {
     function openEditClassAwayModal(ev) {
       classAwayModalMode.value = 'edit';
       var clean = sanitizeClassNames(ev.classes || []);
+      var periods = normalizeClassAwayPeriods(ev.periods !== undefined ? ev.periods : ev.period);
+      var wholeDay = periods.indexOf('all') >= 0;
       classAwayForm.value = {
         id: ev.id,
         name: ev.name || '',
@@ -56,13 +82,68 @@ window.UiClassAwayAdmin = (function () {
         endDate: ev.endDate || '',
         scope: ev.scope === 'all' ? 'all' : 'classes',
         classes: clean,
-        period: ev.period === '8' ? '8' : 'all',
+        periods: periods,
         billingRule: ev.billingRule === 'reduce' ? 'reduce' : 'keep',
-        forMutual: ev.period === '8' ? false : !!ev.forMutual,
+        forMutual: wholeDay && !!ev.forMutual,
         enabled: ev.enabled !== false,
         note: ev.note || ''
       };
       showClassAwayModal.value = true;
+    }
+
+    function setClassAwayPeriods(periods) {
+      var clean = normalizeClassAwayPeriods(periods);
+      var wholeDay = clean.indexOf('all') >= 0;
+      classAwayForm.value = Object.assign({}, classAwayForm.value, {
+        periods: clean,
+        forMutual: wholeDay ? !!classAwayForm.value.forMutual : false
+      });
+    }
+
+    function toggleClassAwayPeriod(period) {
+      var value = String(period || '');
+      if (value === 'all') {
+        var current = normalizeClassAwayPeriods(classAwayForm.value.periods || []);
+        setClassAwayPeriods(current.indexOf('all') >= 0 ? [] : ['all']);
+        return;
+      }
+      var selected = normalizeClassAwayPeriods(classAwayForm.value.periods || []);
+      if (selected.indexOf('all') >= 0) selected = [];
+      var index = selected.indexOf(value);
+      if (index >= 0) selected.splice(index, 1);
+      else selected.push(value);
+      selected.sort(function (a, b) { return Number(a) - Number(b); });
+      setClassAwayPeriods(selected);
+    }
+
+    function isClassAwayPeriodSelected(period) {
+      var selected = normalizeClassAwayPeriods(classAwayForm.value.periods || []);
+      return selected.indexOf('all') >= 0 || selected.indexOf(String(period || '')) >= 0;
+    }
+
+    function selectClassAwayPeriodRange() {
+      setClassAwayPeriods(classAwayPeriodOptions.map(function (option) { return option.value; }));
+    }
+
+    function clearClassAwayPeriods() {
+      setClassAwayPeriods([]);
+    }
+
+    function isClassAwayFullDaySelected() {
+      return normalizeClassAwayPeriods(classAwayForm.value.periods || []).indexOf('all') >= 0;
+    }
+
+    function classAwayPeriodLabel(ev) {
+      var periods = ev && ev.periods !== undefined ? ev.periods : (ev && ev.period);
+      if (window.DomainClassAway && window.DomainClassAway.periodLabel) {
+        return window.DomainClassAway.periodLabel(periods);
+      }
+      var selected = normalizeClassAwayPeriods(periods);
+      if (!selected.length || selected[0] === 'all') return '全部節次';
+      return selected.map(function (period) {
+        var option = classAwayPeriodOptions.find(function (item) { return item.value === period; });
+        return option ? option.label : period;
+      }).join('、');
     }
 
     function toggleClassAwayFormClass(cls) {
@@ -103,8 +184,12 @@ window.UiClassAwayAdmin = (function () {
       if (!String(f.name || '').trim()) { showToast('請填事件名稱', 'info'); return; }
       if (!f.startDate) { showToast('請填起日', 'info'); return; }
       var scope = f.scope === 'all' ? 'all' : 'classes';
-      var period = f.period === '8' ? '8' : 'all';
-      var forMutual = period === '8' ? false : !!f.forMutual;
+      var selectedPeriods = normalizeClassAwayPeriods(f.periods || []);
+      if (!selectedPeriods.length) { showToast('請至少選擇一個節次', 'info'); return; }
+      var period = window.DomainClassAway && window.DomainClassAway.normalizePeriod
+        ? window.DomainClassAway.normalizePeriod(selectedPeriods)
+        : (selectedPeriods.indexOf('all') >= 0 ? 'all' : selectedPeriods.join(','));
+      var forMutual = period === 'all' && !!f.forMutual;
       var cleanClasses = sanitizeClassNames(f.classes || []);
       if (scope === 'classes' && !cleanClasses.length) {
         showToast('請至少勾選一個有效班級（勿含 000）', 'info');
@@ -123,7 +208,8 @@ window.UiClassAwayAdmin = (function () {
           "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
           "適用範圍": scope === 'all' ? '全校' : '指定班級',
           "班級清單": scope === 'all' ? '' : ("'" + classListStr),
-          "停課節次": period === '8' ? '第8節' : '全部',
+          "停課節次": window.DomainClassAway && window.DomainClassAway.periodLabel
+            ? window.DomainClassAway.periodLabel(period) : (period === 'all' ? '全部節次' : period),
           "鐘點規則": f.billingRule === 'reduce' ? 'reduce' : 'keep',
           "可進互代": forMutual ? 'TRUE' : 'FALSE',
           "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
@@ -134,6 +220,8 @@ window.UiClassAwayAdmin = (function () {
           Object.assign({}, sheetRow, { "班級清單": classListStr })
         );
         mapped.classes = cleanClasses.slice();
+        mapped.period = period;
+        mapped.periods = selectedPeriods.slice();
         var list = classAwayEvents.value.slice();
         var idx = list.findIndex(function (x) { return x.id === id; });
         if (idx >= 0) list[idx] = mapped;
@@ -142,7 +230,7 @@ window.UiClassAwayAdmin = (function () {
         showClassAwayModal.value = false;
         showToast(
           '空堂事件已儲存（' + (mapped.scope === 'all' ? '全校' : mapped.classes.length + ' 班')
-            + (mapped.period === '8' ? '／第8節' : '') + '）',
+            + '／' + classAwayPeriodLabel(mapped) + '）',
           'success'
         );
         clearScheduleCache();
@@ -174,9 +262,16 @@ window.UiClassAwayAdmin = (function () {
     return {
       showClassAwayModal: showClassAwayModal,
       classAwayModalMode: classAwayModalMode,
+      classAwayPeriodOptions: classAwayPeriodOptions,
       classAwayForm: classAwayForm,
       openAddClassAwayModal: openAddClassAwayModal,
       openEditClassAwayModal: openEditClassAwayModal,
+      toggleClassAwayPeriod: toggleClassAwayPeriod,
+      isClassAwayPeriodSelected: isClassAwayPeriodSelected,
+      selectClassAwayPeriodRange: selectClassAwayPeriodRange,
+      clearClassAwayPeriods: clearClassAwayPeriods,
+      isClassAwayFullDaySelected: isClassAwayFullDaySelected,
+      classAwayPeriodLabel: classAwayPeriodLabel,
       toggleClassAwayFormClass: toggleClassAwayFormClass,
       isClassAwayFormClassSelected: isClassAwayFormClassSelected,
       selectClassAwayGrade: selectClassAwayGrade,
@@ -1134,7 +1229,258 @@ window.UiMutualSubmit = (function () {
  * 一般／活動批次代課送出（executeBatchSubmit）
  */
 window.UiBatchSubmit = (function () {
+  async function executeBatchExchangeSubmit(deps) {
+    var batchSlots = deps.batchSlots;
+    var pendingRequestData = deps.pendingRequestData;
+    var showToast = deps.showToast;
+    var loading = deps.loading;
+    var loadingMessage = deps.loadingMessage;
+    var isSubmitting = deps.isSubmitting;
+    var slots = batchSlots.value || [];
+    var pending = pendingRequestData.value || {};
+    if (slots.length < 2) {
+      showToast('批次調課至少需要 2 組互調', 'info');
+      return;
+    }
+    if (isSubmitting && isSubmitting.value) {
+      showToast('申請送出中，請稍候…', 'info');
+      return;
+    }
+    if (loading && loading.value) return;
+
+    var batchId = String(pending.submitBatchId || (slots.find(s => s.batchId) || {}).batchId || '').trim();
+    if (!batchId) {
+      batchId = 'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    }
+    var pendingSnapshot = Object.assign({}, pending, { submitBatchId: batchId });
+    var localFailures = slots.filter(slot => !slot.exchangeSubmitted && !!slot.exchangeValidationError)
+      .map(slot => ({ requestId: slot.exchangeRequestId, key: slot.key, error: slot.exchangeValidationError }));
+    var eligible = slots.filter(slot => !slot.exchangeSubmitted && !slot.exchangeValidationError);
+    if (!eligible.length) {
+      showToast(localFailures.length
+        ? '目前沒有可送出的組別，請先修正總覽中的錯誤'
+        : '此批次的調課組別都已送出', localFailures.length ? 'warning' : 'info');
+      return;
+    }
+    if (eligible.some(slot => !slot.subTeacherEmail || !slot.targetDate || slot.targetPeriod == null)) {
+      showToast('仍有組別尚未完成對調配對', 'warning');
+      return;
+    }
+    if (isSubmitting) isSubmitting.value = true;
+    if (loading) loading.value = true;
+    if (loadingMessage) loadingMessage.value = '正在逐組檢查並送出批次調課…';
+
+    var encodeTime = function (day, period) {
+      return window.DateUtils && window.DateUtils.encodeTimeKey
+        ? window.DateUtils.encodeTimeKey(day, period)
+        : (String(day) + '-' + String(period));
+    };
+    var prepared = [];
+    var buildFailures = [];
+    try {
+      eligible.forEach(function (slot) {
+        var requestId = String(slot.exchangeRequestId || ('req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7)));
+        var serial = String(slot.exchangeSerial || ('SWP' + (1000 + Math.floor(Math.random() * 9000))));
+        slot.exchangeRequestId = requestId;
+        slot.exchangeSerial = serial;
+        var rowPending = Object.assign({}, pendingSnapshot, {
+          mode: 'exchange',
+          isBatch: false,
+          isExchangeBatch: false,
+          leaveTeacher: slot.teacherEmail,
+          subTeacher: slot.subTeacherEmail,
+          date: slot.dateStr,
+          timeKey: encodeTime(slot.dayOfWeek, slot.period),
+          cls: slot.className || '',
+          subject: slot.subject || '',
+          dateB: slot.targetDate,
+          timeB: encodeTime(slot.targetDayOfWeek, slot.targetPeriod),
+          subBClass: slot.targetClassName || '',
+          subB: slot.targetSubject || '',
+          reason: pendingSnapshot.reason || '課務調整',
+          note: pendingSnapshot.note || '',
+          submitRequestId: requestId,
+          submitSerial: serial
+        });
+        try {
+          pendingRequestData.value = rowPending;
+          if (typeof deps.buildSubmitPayload !== 'function') throw new Error('調課申請組裝模組未載入');
+          var built = deps.buildSubmitPayload(requestId, serial);
+          var request = built && built.newRequest;
+          if (!request) throw new Error('無法建立此組調課申請資料');
+          request['批次ID'] = batchId;
+          request.batchId = batchId;
+          prepared.push({ slot: slot, request: request });
+        } catch (buildError) {
+          buildFailures.push({ requestId: requestId, key: slot.key, error: String(buildError.message || buildError) });
+        }
+      });
+    } finally {
+      pendingRequestData.value = pendingSnapshot;
+    }
+
+    if (!prepared.length) {
+      var noBuildFailures = localFailures.concat(buildFailures);
+      batchSlots.value = (batchSlots.value || []).map(slot => {
+        var failure = noBuildFailures.find(item => String(item.key) === String(slot.key));
+        return failure ? Object.assign({}, slot, { exchangeSubmitError: failure.error }) : slot;
+      });
+      if (loading) loading.value = false;
+      if (isSubmitting) isSubmitting.value = false;
+      showToast('沒有成功組裝的調課組別，請檢查各組訊息', 'warning');
+      return;
+    }
+
+    var directApprove = !!(deps.isAdmin && deps.isAdmin.value
+      && deps.directApproveMode && deps.directApproveMode.value);
+    var skipNotify = !!(
+      (directApprove && deps.directApproveSkipNotify && deps.directApproveSkipNotify.value)
+      || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && deps.isAdmin && deps.isAdmin.value)
+    );
+    var response = null;
+    var requestFailure = '';
+    try {
+      if (loadingMessage) loadingMessage.value = '正在送出 ' + prepared.length + ' 組獨立調課申請…';
+      response = await deps.callGasApi('submitExchangeBatch', {
+        batchId: batchId,
+        directApprove: directApprove,
+        paperFlow: false,
+        skipNotify: skipNotify,
+        requests: prepared.map(item => item.request)
+      });
+      if (response && response.success === false) throw new Error(response.error || '批次調課送出失敗');
+    } catch (submitError) {
+      requestFailure = String(submitError && submitError.message || submitError);
+    } finally {
+      if (loading) loading.value = false;
+      if (isSubmitting) isSubmitting.value = false;
+    }
+
+    var serverSuccesses = new Map((response && response.successes || []).map(item => [String(item.requestId || ''), item]));
+    var serverFailures = new Map((response && response.failures || []).map(item => [String(item.requestId || ''), item]));
+    var successful = [];
+    var submitFailures = localFailures.concat(buildFailures);
+    prepared.forEach(function (item) {
+      var id = String(item.request['申請單ID'] || '');
+      var failure = serverFailures.get(id);
+      if (requestFailure || failure || !serverSuccesses.has(id)) {
+        submitFailures.push({
+          requestId: id,
+          key: item.slot.key,
+          error: requestFailure || String(failure && failure.error || '伺服器未回報此組送出成功'),
+          submissionUnknown: !!requestFailure
+        });
+        return;
+      }
+      var result = serverSuccesses.get(id) || {};
+      if (result.status) item.request['狀態'] = result.status;
+      if (result.paperFlow !== undefined) {
+        item.request.paperFlow = !!result.paperFlow;
+        item.request['紙本流程'] = result.paperFlow ? 'TRUE' : 'FALSE';
+      } else {
+        item.request.paperFlow = item.request.paperFlow === true
+          || String(item.request['紙本流程'] || '').toUpperCase() === 'TRUE';
+      }
+      successful.push(item.request);
+    });
+
+    var successIds = new Set(successful.map(row => String(row['申請單ID'] || '')));
+    var failureByKey = new Map(submitFailures.map(item => [String(item.key || ''), item]));
+    batchSlots.value = (batchSlots.value || []).map(slot => {
+      var id = String(slot.exchangeRequestId || '');
+      if (successIds.has(id)) {
+        return Object.assign({}, slot, {
+          exchangeSubmitted: true,
+          exchangeSubmitError: '',
+          exchangeValidationError: '',
+          exchangeSubmissionUnknown: false
+        });
+      }
+      var failure = failureByKey.get(String(slot.key || ''));
+      return failure ? Object.assign({}, slot, {
+        exchangeSubmitError: failure.error,
+        exchangeSubmissionUnknown: !!failure.submissionUnknown
+      }) : slot;
+    });
+
+    if (successful.length) {
+      successful.forEach(row => {
+        var front = typeof deps.sheetRequestToFront === 'function' ? deps.sheetRequestToFront(row) : row;
+        if (typeof deps.optimisticUpsertRequest === 'function') deps.optimisticUpsertRequest(front);
+      });
+      if (deps.successActionRequests) deps.successActionRequests.value = successful;
+      if (typeof deps.softRefreshInBackground === 'function') deps.softRefreshInBackground({ delay: 2000 });
+    }
+
+    var paperRows = successful.filter(row => row.paperFlow === true || String(row['紙本流程'] || '').toUpperCase() === 'TRUE');
+    var totalFailures = submitFailures.length;
+    var allDone = (batchSlots.value || []).every(slot => slot.exchangeSubmitted);
+    if (deps.successModalTitle) {
+      deps.successModalTitle.value = totalFailures ? '🎉 批次調課部分送出' : '🎉 批次調課已送出';
+    }
+    if (deps.successModalMessage) {
+      var details = submitFailures.slice(0, 5).map(item => item.error).join('；');
+      deps.successModalMessage.value = '成功送出 ' + successful.length + ' 組'
+        + (totalFailures ? '，' + totalFailures + ' 組未送出，錯誤已保留在各組供修正。' : '。')
+        + (details ? '\n' + details : '');
+    }
+    if (deps.successFlowMode) deps.successFlowMode.value = directApprove ? 'direct' : 'normal';
+
+    if (paperRows.length) {
+      if (deps.showSuccessModal) deps.showSuccessModal.value = false;
+      if (deps.showCompareModal) deps.showCompareModal.value = false;
+      if (allDone && deps.batchSelectMode) deps.batchSelectMode.value = false;
+      if (allDone && typeof deps.clearBatchSlots === 'function') deps.clearBatchSlots();
+      showToast('已送出 ' + paperRows.length + ' 組紙本調課；請列印並完成簽名。', 'success', 6000);
+      if (typeof deps.openPaperPrintDraft === 'function') deps.openPaperPrintDraft(paperRows);
+      return;
+    }
+
+    var manualLineParts = [];
+    if (skipNotify && successful.length && typeof deps.buildLineInviteText === 'function') {
+      var systemUrl = window.location.origin + window.location.pathname;
+      successful.forEach(function (row) {
+        var requestId = String(row['申請單ID'] || '');
+        var message = deps.buildLineInviteText({
+          targetName: row['受邀人姓名'],
+          requesterName: row.isProxySubmit ? row['申請人姓名'] : '',
+          courseTeacherA: row['申請人姓名'],
+          courseTeacherB: row['受邀人姓名'],
+          dateA: row['異動日期'], dayA: row['異動星期'], periodA: row['異動節次'],
+          classA: row['班級'], subjectA: row['科目'], isExchange: true,
+          dateB: row['對調目標日期'], dayB: row['對調目標星期'], periodB: row['對調目標節次'],
+          classB: row['對調目標班級'], subjectB: row['對調目標科目'],
+          agreeLink: systemUrl + '?action=respond&id=' + encodeURIComponent(requestId) + '&status=agree',
+          declineLink: systemUrl + '?action=respond&id=' + encodeURIComponent(requestId) + '&status=decline',
+          notificationOnly: String(row['狀態'] || '') === 'approved', systemUrl: systemUrl
+        });
+        manualLineParts.push({ name: row['受邀人姓名'] || '', count: 1, text: message });
+      });
+    }
+    if (deps.hasLineTemplate) deps.hasLineTemplate.value = manualLineParts.length > 0;
+    if (deps.lineBatchParts) deps.lineBatchParts.value = manualLineParts;
+    if (deps.lineCopyText) deps.lineCopyText.value = manualLineParts.length === 1 ? manualLineParts[0].text : '';
+
+    if (allDone && !totalFailures) {
+      if (deps.batchSelectMode) deps.batchSelectMode.value = false;
+      if (typeof deps.clearBatchSlots === 'function') deps.clearBatchSlots();
+      if (deps.showCompareModal) deps.showCompareModal.value = false;
+      if (deps.showSuccessModal) deps.showSuccessModal.value = true;
+    } else if (successful.length) {
+      if (deps.showCompareModal) deps.showCompareModal.value = false;
+      if (deps.showSuccessModal) deps.showSuccessModal.value = true;
+      if (deps.batchSelectMode) deps.batchSelectMode.value = true;
+    } else {
+      if (deps.showCompareModal) deps.showCompareModal.value = true;
+      showToast(totalFailures ? '沒有組別送出成功，請修正各組錯誤後再試' : '沒有可送出的調課組別', 'warning');
+    }
+  }
+
   async function executeBatchSubmit(deps) {
+    if (deps.pendingRequestData && deps.pendingRequestData.value
+        && deps.pendingRequestData.value.isExchangeBatch === true) {
+      return executeBatchExchangeSubmit(deps);
+    }
     var batchSlots = deps.batchSlots;
     var pendingRequestData = deps.pendingRequestData;
     var batchAssignMode = deps.batchAssignMode;
@@ -1538,8 +1884,12 @@ window.UiBatchPanel = (function () {
     var mutualAwayClasses = deps.mutualAwayClasses;
     var batchSlots = deps.batchSlots;
     var batchSelectMode = deps.batchSelectMode;
+    var batchFlowMode = deps.batchFlowMode;
+    var validateBatchExchangeSlot = deps.validateBatchExchangeSlot;
     var batchAssignMode = deps.batchAssignMode;
     var batchActiveSlotKey = deps.batchActiveSlotKey;
+    var exchangeWeekOffset = deps.exchangeWeekOffset;
+    var exchangeWeekdayFilter = deps.exchangeWeekdayFilter;
     var batchSubTeacher = deps.batchSubTeacher;
     var batchReason = deps.batchReason;
     var batchSubFee = deps.batchSubFee;
@@ -1640,20 +1990,48 @@ window.UiBatchPanel = (function () {
       clearBatchSlotDom();
     };
 
+    function setBatchFlowMode(mode) {
+      var nextMode = mode === 'exchange' ? 'exchange' : 'substitution';
+      if (batchFlowMode.value === nextMode) return;
+      if (nextMode === 'exchange' && isMutualCover.value) {
+        showToast('活動互代批次不支援調課，請先關閉活動互代模式', 'warning');
+        return;
+      }
+      clearBatchSlots();
+      batchFlowMode.value = nextMode;
+      batchAssignMode.value = 'same';
+      matchMode.value = nextMode;
+      if (exchangeWeekOffset) exchangeWeekOffset.value = 0;
+      if (exchangeWeekdayFilter) exchangeWeekdayFilter.value = 0;
+      showToast(nextMode === 'exchange'
+        ? '批次調課：先選調出課堂，再逐組指定對調教師與對方課堂'
+        : '批次代課：先選同一位教師的多節課', 'info');
+    }
+
     var isBatchMatchFlow = computed(() =>
       batchSelectMode.value && batchSlots.value.length >= 2
+    );
+
+    var isBatchExchangeFlow = computed(() =>
+      isBatchMatchFlow.value && batchFlowMode && batchFlowMode.value === 'exchange'
     );
 
     var isBatchPerSlotMode = computed(() =>
       isBatchMatchFlow.value && batchAssignMode.value === 'perSlot'
     );
 
-    var batchAssignedCount = computed(() =>
-      batchSlots.value.filter(s => s.subTeacherEmail).length
-    );
+    var batchAssignedCount = computed(() => batchSlots.value.filter(s =>
+      batchFlowMode && batchFlowMode.value === 'exchange'
+        ? (s.subTeacherEmail && s.targetDate && s.targetPeriod != null)
+        : s.subTeacherEmail
+    ).length);
 
     var batchAllSlotsAssigned = computed(() =>
-      batchSlots.value.length >= 2 && batchSlots.value.every(s => s.subTeacherEmail)
+      batchSlots.value.length >= 2 && batchSlots.value.every(s =>
+        batchFlowMode && batchFlowMode.value === 'exchange'
+          ? (s.subTeacherEmail && s.targetDate && s.targetPeriod != null)
+          : !!s.subTeacherEmail
+      )
     );
 
     var batchActiveSlot = computed(() =>
@@ -1682,11 +2060,19 @@ window.UiBatchPanel = (function () {
       batchAssignMode.value = mode === 'perSlot' ? 'perSlot' : 'same';
       batchActiveSlotKey.value = '';
       // 切換模式時清空已指定代課人，避免混用
-      batchSlots.value = batchSlots.value.map(s => ({
-        ...s,
-        subTeacherEmail: '',
-        subTeacherName: ''
-      }));
+      batchSlots.value = batchSlots.value.map(s => s.exchangeSubmitted ? s : ({
+          ...s,
+          subTeacherEmail: '',
+          subTeacherName: '',
+          targetDate: '',
+          targetDayOfWeek: null,
+          targetPeriod: null,
+          targetClassName: '',
+          targetSubject: '',
+          exchangeWeekOffset: 0,
+          exchangeValidationError: '',
+          exchangeSubmitError: ''
+        }));
       batchSubTeacher.value = '';
       if (showMatchModal.value && isBatchMatchFlow.value) {
         if (batchAssignMode.value === 'same') {
@@ -1703,12 +2089,16 @@ window.UiBatchPanel = (function () {
       batchSelectMode.value = !batchSelectMode.value;
       if (!batchSelectMode.value) {
         clearBatchSlots();
+        batchFlowMode.value = 'substitution';
+        matchMode.value = 'substitution';
         showMatchModal.value = false;
         showCompareModal.value = false;
       } else {
         showMatchModal.value = false;
         showCompareModal.value = false;
-        showToast('批次模式：點選同教師多節課，再選「同一人全代」或「每節不同人」', 'info');
+        showToast(batchFlowMode.value === 'exchange'
+          ? '批次調課模式：點選調出課堂，再選對調教師與對方課堂'
+          : '批次代課模式：點選同教師多節課，再選「同一人全代」或「每節不同人」', 'info');
       }
     };
 
@@ -1716,6 +2106,12 @@ window.UiBatchPanel = (function () {
       const key = slot.key || batchSlotKey(slot.teacherEmail, slot.dateStr, slot.period);
       const idx = batchSlots.value.findIndex(s => s.key === key);
       if (idx >= 0) {
+        if (batchSlots.value[idx].exchangeSubmitted || batchSlots.value[idx].exchangeSubmissionUnknown) {
+          showToast(batchSlots.value[idx].exchangeSubmitted
+            ? '此組調課已送出，不能從批次中移除'
+            : '此組送出結果不明，請重新整理確認歷程後再處理', 'info');
+          return;
+        }
         batchSlots.value = batchSlots.value.filter((_, i) => i !== idx);
         if (batchActiveSlotKey.value === key) batchActiveSlotKey.value = '';
         paintBatchSlotCell(slot.teacherEmail, slot.dateStr, slot.period, false);
@@ -1725,12 +2121,20 @@ window.UiBatchPanel = (function () {
         showToast('單次批次最多 20 節', 'warning');
         return;
       }
-      if (batchSlots.value.length && String(batchSlots.value[0].teacherEmail).toLowerCase() !== String(slot.teacherEmail).toLowerCase()) {
+      if ((!batchFlowMode || batchFlowMode.value !== 'exchange')
+          && batchSlots.value.length
+          && String(batchSlots.value[0].teacherEmail).toLowerCase() !== String(slot.teacherEmail).toLowerCase()) {
         showToast('批次僅能選同一位請假教師的課堂', 'warning');
         return;
       }
+      var batchId = batchSlots.value[0] && batchSlots.value[0].batchId
+        ? batchSlots.value[0].batchId
+        : (batchFlowMode && batchFlowMode.value === 'exchange'
+          ? 'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)
+          : '');
       batchSlots.value = batchSlots.value.concat([{
         key,
+        batchId: batchId,
         teacherEmail: slot.teacherEmail,
         teacherName: slot.teacherName || getTeacherNameByEmail(slot.teacherEmail),
         dateStr: slot.dateStr,
@@ -1739,8 +2143,26 @@ window.UiBatchPanel = (function () {
         className: slot.className || '',
         subject: slot.subject || '',
         restriction: slot.restriction || '',
+        attr: slot.attr || '',
+        isPullOut: !!slot.isPullOut,
         subTeacherEmail: '',
-        subTeacherName: ''
+        subTeacherName: '',
+        targetDate: '',
+        targetDayOfWeek: null,
+        targetPeriod: null,
+        targetClassName: '',
+        targetSubject: '',
+        exchangeWeekOffset: 0,
+        exchangeRequestId: batchFlowMode && batchFlowMode.value === 'exchange'
+          ? 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 7)
+          : '',
+        exchangeSerial: batchFlowMode && batchFlowMode.value === 'exchange'
+          ? 'SWP' + Date.now() + '-' + Math.random().toString(36).substr(2, 4)
+          : '',
+        exchangeValidationError: '',
+        exchangeSubmitError: '',
+        exchangeSubmissionUnknown: false,
+        exchangeSubmitted: false
       }]).sort((a, b) => {
         if (a.dateStr !== b.dateStr) return a.dateStr.localeCompare(b.dateStr);
         return a.period - b.period;
@@ -1781,7 +2203,14 @@ window.UiBatchPanel = (function () {
     function selectBatchSlotForMatch(slotKey) {
       const slot = batchSlots.value.find(s => s.key === slotKey);
       if (!slot) return;
+      if (slot.exchangeSubmitted || slot.exchangeSubmissionUnknown) {
+        showToast(slot.exchangeSubmitted
+          ? '此組調課已送出，不能再修改'
+          : '此組送出結果不明，請重新整理確認歷程後再處理', 'info');
+        return;
+      }
       batchActiveSlotKey.value = slotKey;
+      matchMode.value = batchFlowMode && batchFlowMode.value === 'exchange' ? 'exchange' : 'substitution';
       activeCell.value = {
         teacherEmail: slot.teacherEmail,
         teacherName: slot.teacherName,
@@ -1790,12 +2219,20 @@ window.UiBatchPanel = (function () {
         classData: {
           className: slot.className,
           subject: slot.subject,
-          restriction: slot.restriction || ''
+          restriction: slot.restriction || '',
+          attr: slot.attr || '',
+          isPullOut: !!slot.isPullOut
         }
       };
       inputRequestDate.value = slot.dateStr;
       matchPreview.value = null;
-      fetchSingleSlotRecommendations(slot);
+      if (batchFlowMode && batchFlowMode.value === 'exchange') {
+        recommendedTeachers.value = [];
+        matchShowNoTeacherWarning.value = false;
+        if (matchEmptyReasons) matchEmptyReasons.value = null;
+      } else {
+        fetchSingleSlotRecommendations(slot);
+      }
     };
 
     /** 選完節次 → 開智慧媒合抽屜 */
@@ -1804,7 +2241,9 @@ window.UiBatchPanel = (function () {
         showToast('請至少選 2 節再媒合（單節請直接點格子）', 'info');
         return;
       }
-      const first = batchSlots.value[0];
+      const first = batchFlowMode && batchFlowMode.value === 'exchange'
+        ? (batchSlots.value.find(s => !s.exchangeSubmitted) || batchSlots.value[0])
+        : batchSlots.value[0];
       activeCell.value = {
         teacherEmail: first.teacherEmail,
         teacherName: first.teacherName,
@@ -1813,11 +2252,13 @@ window.UiBatchPanel = (function () {
         classData: {
           className: first.className,
           subject: first.subject,
-          restriction: first.restriction || ''
+          restriction: first.restriction || '',
+          attr: first.attr || '',
+          isPullOut: !!first.isPullOut
         }
       };
       inputRequestDate.value = first.dateStr;
-      matchMode.value = 'substitution';
+      matchMode.value = batchFlowMode && batchFlowMode.value === 'exchange' ? 'exchange' : 'substitution';
       matchPreview.value = null;
       showCompareModal.value = false;
       showBatchConfirmModal.value = false;
@@ -1827,7 +2268,11 @@ window.UiBatchPanel = (function () {
         batchActiveSlotKey.value = '';
       }
       showMatchModal.value = true;
-      fetchBatchRecommendations();
+      if (batchFlowMode && batchFlowMode.value === 'exchange') {
+        selectBatchSlotForMatch(first.key);
+      } else {
+        fetchBatchRecommendations();
+      }
     };
 
     /** 同一人全代：從媒合名單選人 → 申請表單 */
@@ -1999,11 +2444,33 @@ window.UiBatchPanel = (function () {
     };
 
     function clearBatchSlotSub(slotKey) {
+      const current = batchSlots.value.find(s => s.key === slotKey);
+      if (current && current.exchangeSubmissionUnknown) {
+        showToast('此組送出結果不明，請重新整理確認歷程後再處理', 'warning');
+        return;
+      }
       batchSlots.value = batchSlots.value.map(s =>
-        s.key === slotKey ? { ...s, subTeacherEmail: '', subTeacherName: '' } : s
+        s.key === slotKey ? {
+          ...s,
+          subTeacherEmail: '',
+          subTeacherName: '',
+          targetDate: '',
+          targetDayOfWeek: null,
+          targetPeriod: null,
+          targetClassName: '',
+          targetSubject: '',
+          exchangeWeekOffset: 0,
+          exchangeValidationError: '',
+          exchangeSubmitError: '',
+          exchangeSubmitted: false
+        } : s
       );
       if (batchActiveSlotKey.value === slotKey) {
-        fetchSingleSlotRecommendations(batchSlots.value.find(s => s.key === slotKey));
+        if (batchFlowMode && batchFlowMode.value === 'exchange') {
+          selectBatchSlotForMatch(slotKey);
+        } else {
+          fetchSingleSlotRecommendations(batchSlots.value.find(s => s.key === slotKey));
+        }
       }
     };
 
@@ -2079,6 +2546,98 @@ window.UiBatchPanel = (function () {
       showCompareModal.value = true;
     };
 
+    function prepBatchExchangeCompare() {
+      if (!(batchFlowMode && batchFlowMode.value === 'exchange')) return false;
+      if (batchSlots.value.length < 2) {
+        showToast('批次調課至少需要 2 組互調', 'info');
+        return false;
+      }
+      const slots = batchSlots.value.map(slot => Object.assign({}, slot, {
+        exchangeValidationError: slot.exchangeSubmitted ? '' : '',
+        exchangeSubmitError: slot.exchangeSubmitted ? '' : (slot.exchangeSubmitError || '')
+      }));
+      const endpoints = Object.create(null);
+      slots.forEach((slot, index) => {
+        if (slot.exchangeSubmitted) return;
+        if (!slot.subTeacherEmail || !slot.targetDate || slot.targetPeriod == null) {
+          slot.exchangeValidationError = '尚未完成此組對調配對';
+          return;
+        }
+        if (typeof validateBatchExchangeSlot === 'function') {
+          const check = validateBatchExchangeSlot(slot) || {};
+          if (!check.valid) slot.exchangeValidationError = check.reason || '目前課表不符合此組調課條件';
+        }
+        const incoming = [
+          [slot.teacherEmail, slot.targetDate, slot.targetPeriod],
+          [slot.subTeacherEmail, slot.dateStr, slot.period]
+        ];
+        incoming.forEach(parts => {
+          const key = [String(parts[0] || '').toLowerCase(), parts[1], parseInt(parts[2], 10)].join('|');
+          if (endpoints[key] != null) {
+            const otherIndex = endpoints[key];
+            const reason = '與第 ' + (otherIndex + 1) + ' 組佔用相同的調入時段';
+            slot.exchangeValidationError = slot.exchangeValidationError || reason;
+            slots[otherIndex].exchangeValidationError = slots[otherIndex].exchangeValidationError || reason;
+          } else {
+            endpoints[key] = index;
+          }
+        });
+      });
+      batchSlots.value = slots;
+
+      const batchId = String((slots.find(slot => slot.batchId) || {}).batchId || (
+        'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)
+      ));
+      const withBatchId = slots.map(slot => Object.assign({}, slot, { batchId: batchId }));
+      batchSlots.value = withBatchId;
+      const first = withBatchId.find(slot => !slot.exchangeSubmitted) || withBatchId[0];
+      const encodeTime = (day, period) => (window.DateUtils && window.DateUtils.encodeTimeKey)
+        ? window.DateUtils.encodeTimeKey(day, period)
+        : (String(day) + '-' + String(period));
+      const validCount = withBatchId.filter(slot => !slot.exchangeSubmitted && !slot.exchangeValidationError).length;
+      const invalidCount = withBatchId.filter(slot => !slot.exchangeSubmitted && !!slot.exchangeValidationError).length;
+      const submittedCount = withBatchId.filter(slot => slot.exchangeSubmitted).length;
+      const reason = batchReason.value || '課務調整';
+      const firstTargetTime = encodeTime(first.targetDayOfWeek, first.targetPeriod);
+      pendingRequestData.value = {
+        mode: 'exchange',
+        isBatch: true,
+        isExchangeBatch: true,
+        isPerSlot: batchAssignMode.value === 'perSlot',
+        batchCount: withBatchId.length,
+        batchValidCount: validCount,
+        batchInvalidCount: invalidCount,
+        batchSubmittedCount: submittedCount,
+        batchSlots: withBatchId,
+        leaveTeacher: first.teacherEmail,
+        subTeacher: first.subTeacherEmail,
+        date: first.dateStr,
+        timeKey: encodeTime(first.dayOfWeek, first.period),
+        cls: first.className,
+        subject: first.subject,
+        dateB: first.targetDate,
+        timeB: firstTargetTime,
+        subBClass: first.targetClassName,
+        subB: first.targetSubject,
+        reason: reason,
+        courseAdjustmentOnly: reason === '課務調整',
+        note: batchNote.value || '',
+        submitBatchId: batchId,
+        submitSerial: 'SWP' + (1000 + Math.floor(Math.random() * 9000))
+      };
+      consecAlertsA.value = [];
+      consecAlertsB.value = [];
+      showMatchModal.value = false;
+      showBatchConfirmModal.value = false;
+      showCompareModal.value = true;
+      if (invalidCount) {
+        showToast(validCount
+          ? '總覽已開啟：' + invalidCount + ' 組需調整，其餘 ' + validCount + ' 組可個別送出'
+          : '總覽已開啟：目前沒有可送出的組別，請修正標示項目', validCount ? 'warning' : 'warning');
+      }
+      return true;
+    }
+
     function setBatchCompareViewEmail(email) {
       batchCompareViewEmail.value = email || '';
     };
@@ -2089,18 +2648,20 @@ window.UiBatchPanel = (function () {
         return;
       }
       await window.UiBatchSubmit.executeBatchSubmit({
-        batchSlots, pendingRequestData, batchAssignMode, batchReason, batchNote, batchSubTeacher, batchSubFee,
+        batchSlots, pendingRequestData, batchFlowMode, batchAssignMode, batchReason, batchNote, batchSubTeacher, batchSubFee,
         showToast, showConfirm, getScheduleForDate, getTeacherNameByEmail, getLeaveTimeDefaults,
         isMutualCover, mutualAwayClasses, mutualSkipNotify, isAdmin, isQuotaDeductFee,
         QUOTA_DEDUCT_FEE, ACTIVITY_PUBLIC_FEE, PERIOD8_FEE, defaultSubFeeForReason, assertQuotaDeductAllowed,
         loading, loadingMessage, isSubmitting: deps.isSubmitting, currentSemester, directApproveMode, directApproveSkipNotify,
         callGasApi, optimisticUpsertRequest, sheetRequestToFront, deductMutualQuotaForRows, softRefreshInBackground,
         activityBalanceCtx, successModalTitle, successModalMessage, hasLineTemplate, lineBatchParts, lineCopyText,
+        buildSubmitPayload, validateBatchExchangeSlot, buildLineInviteText: deps.buildLineInviteText,
           showSuccessModal, successActionRequests, showCompareModal, showMatchModal, batchSelectMode, clearBatchSlots, buildLineBatchInviteText, DAC,
           paperMode: deps.paperMode,
           paperFlow: deps.paperFlow,
           notificationsSuppressed: deps.notificationsSuppressed,
-         openPaperPrintDraft: deps.openPaperPrintDraft
+          openPaperPrintDraft: deps.openPaperPrintDraft,
+          successFlowMode: deps.successFlowMode
        });
     };
 
@@ -2109,12 +2670,14 @@ window.UiBatchPanel = (function () {
       isBatchSlotSelected: isBatchSlotSelected,
       clearBatchSlots: clearBatchSlots,
       isBatchMatchFlow: isBatchMatchFlow,
+      isBatchExchangeFlow: isBatchExchangeFlow,
       isBatchPerSlotMode: isBatchPerSlotMode,
       batchAssignedCount: batchAssignedCount,
       batchAllSlotsAssigned: batchAllSlotsAssigned,
       batchActiveSlot: batchActiveSlot,
       groupBatchSlotsBySub: groupBatchSlotsBySub,
       setBatchAssignMode: setBatchAssignMode,
+      setBatchFlowMode: setBatchFlowMode,
       toggleBatchSelectMode: toggleBatchSelectMode,
       toggleBatchSlot: toggleBatchSlot,
       fetchSingleSlotRecommendations: fetchSingleSlotRecommendations,
@@ -2125,6 +2688,7 @@ window.UiBatchPanel = (function () {
       assignBatchSlotSub: assignBatchSlotSub,
       clearBatchSlotSub: clearBatchSlotSub,
       prepBatchPerSlotCompare: prepBatchPerSlotCompare,
+      prepBatchExchangeCompare: prepBatchExchangeCompare,
       setBatchCompareViewEmail: setBatchCompareViewEmail,
       executeBatchSubmit: executeBatchSubmit
     };
