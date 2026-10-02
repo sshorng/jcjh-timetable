@@ -695,11 +695,12 @@ window.UiSubmitHelpers = (function () {
        leaveTimeType: mode === 'substitution' ? leaveTimeDefaults.type : '',
        leaveTimeStart: mode === 'substitution' ? leaveTimeDefaults.start : '',
        leaveTimeEnd: mode === 'substitution' ? leaveTimeDefaults.end : '',
-       leaveTime: mode === 'substitution' ? leaveTimeDefaults.range : '',
-       submitRequestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-       submitSerial: (mode === 'exchange' ? 'SWP' : 'SUB') + (1000 + Math.floor(Math.random() * 9000)),
-       mutualPreview: !!isMutualCover.value
-     };
+        leaveTime: mode === 'substitution' ? leaveTimeDefaults.range : '',
+        submitRequestId: 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        submitSerial: (mode === 'exchange' ? 'SWP' : 'SUB') + (1000 + Math.floor(Math.random() * 9000)),
+        mutualPreview: !!isMutualCover.value,
+        isBatchCandidatePreview: !!deps.isBatchCandidatePreview
+      };
 
     showMatchModal.value = false;
     showCompareModal.value = true;
@@ -895,7 +896,7 @@ window.UiSubmitHelpers = (function () {
           if (!email) return 'mini-cell-new';
           var currentCell = getScheduleForDate(email, dateStr, period, day);
            if (currentCell && !isCompareEmptySlot(currentCell, dateStr, isClassAwayOnDate, period)
-              && isSlotConflict(currentCell)) {
+               && isSlotConflict(currentCell, dateStr, period)) {
             return 'mini-cell-conflict';
           }
           return 'mini-cell-new';
@@ -924,7 +925,7 @@ window.UiSubmitHelpers = (function () {
       if (subEm === me) {
         var baseCell = getScheduleForDate(email, dateStr, period, day);
          if (baseCell && !isCompareEmptySlot(baseCell, dateStr, isClassAwayOnDate, period)
-            && isSlotConflict(baseCell)) {
+             && isSlotConflict(baseCell, dateStr, period)) {
           return 'mini-cell-conflict mini-cell-draft';
         }
         return 'mini-cell-new mini-cell-draft';

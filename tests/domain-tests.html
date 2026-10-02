@@ -521,6 +521,35 @@
         assert('全校事件套用任一班第8節', DCA.isClassAwayOnDate('701', '2026-05-05', [exam], '2026-06-30', 8) === true);
         assert('全校事件不影響其他節次', DCA.isClassAwayOnDate('701', '2026-05-05', [exam], '2026-06-30', 7) === false);
         assert('全校第8節事件不出現在第7節活動清單', DCA.eventsActiveOnDate('2026-05-05', [exam], '2026-06-30', 7).length === 0);
+        var oneAndHalfDay = {
+          name: '一天半活動', startDate: '2026-06-10', endDate: '2026-06-11',
+          startPeriod: '0', endPeriod: '4', scope: 'all', billingRule: 'keep', forMutual: true, enabled: true
+        };
+        assert('區間起點含早自習', DCA.isClassAwayOnDate('701', '2026-06-10', [oneAndHalfDay], '2026-06-30', 0));
+        assert('起日跨過午休後仍在區間內', DCA.isClassAwayOnDate('701', '2026-06-10', [oneAndHalfDay], '2026-06-30', 45));
+        assert('一天半事件迄日含第4節', DCA.isClassAwayOnDate('701', '2026-06-11', [oneAndHalfDay], '2026-06-30', 4));
+        assert('一天半事件迄日上午不含午休', !DCA.isClassAwayOnDate('701', '2026-06-11', [oneAndHalfDay], '2026-06-30', 45));
+        assert('一天半事件迄日不含第5節', !DCA.isClassAwayOnDate('701', '2026-06-11', [oneAndHalfDay], '2026-06-30', 5));
+        assert('指定時段事件可進活動互代', DCA.canMutual(oneAndHalfDay)
+          && DCA.getAwayClassesInRange('2026-06-10', '2026-06-11', [oneAndHalfDay], '2026-06-30', {
+            forMutualOnly: true, allClasses: ['701']
+          }).join() === '701');
+        var overnightRange = {
+          name: '跨日端點', startDate: '2026-06-10', endDate: '2026-06-11',
+          startPeriod: '8', endPeriod: '0', scope: 'all', enabled: true
+        };
+        assert('跨日區間起日只含第8節端點', DCA.isClassAwayOnDate('701', '2026-06-10', [overnightRange], '2026-06-30', 8)
+          && !DCA.isClassAwayOnDate('701', '2026-06-10', [overnightRange], '2026-06-30', 7));
+        assert('跨日區間迄日只含早自習端點', DCA.isClassAwayOnDate('701', '2026-06-11', [overnightRange], '2026-06-30', 0)
+          && !DCA.isClassAwayOnDate('701', '2026-06-11', [overnightRange], '2026-06-30', 1));
+        assert('跨日端點的總節次清單同時包含兩端', DCA.eventPeriods(overnightRange).join() === '0,8');
+        var lunchBoundary = {
+          name: '跨午休區間', startDate: '2026-06-10', endDate: '2026-06-10',
+          startPeriod: '4', endPeriod: '5', scope: 'all', enabled: true
+        };
+        assert('第4節到第5節的區間包含午休', DCA.isClassAwayOnDate('701', '2026-06-10', [lunchBoundary], '2026-06-30', 45));
+        assert('區間起點前一節不套用', !DCA.isClassAwayOnDate('701', '2026-06-10', [lunchBoundary], '2026-06-30', 3));
+        assert('區間終點節次有套用', DCA.isClassAwayOnDate('701', '2026-06-10', [lunchBoundary], '2026-06-30', 5));
         assert('全校事件可用全校班級清單展開', DCA.getActiveAwayClasses(
           '2026-05-05', [exam], '2026-06-30', { allClasses: ['701', '901'] }
         ).join() === '701,901');
@@ -603,6 +632,20 @@
           events: [multiPeriodAway], semesterEndDate: '2026-06-30',
           reportMonth: '2026-06', reportWeeksCount: 1
         }) === 2);
+        assert('起訖節次 reduce 依實際日期與節次扣除', DCA.computeReduceDeduction({
+          teacherEmail: 'range-reduce@x',
+          allSchedules: [
+            { teacherEmail: 'range-reduce@x', dayOfWeek: 3, period: 1, className: '901', attr: '基本' },
+            { teacherEmail: 'range-reduce@x', dayOfWeek: 3, period: 5, className: '901', attr: '基本' },
+            { teacherEmail: 'range-reduce@x', dayOfWeek: 4, period: 4, className: '901', attr: '基本' },
+            { teacherEmail: 'range-reduce@x', dayOfWeek: 4, period: 5, className: '901', attr: '基本' }
+          ],
+          events: [{
+            name: '一天半活動', startDate: '2026-06-10', endDate: '2026-06-11',
+            startPeriod: '0', endPeriod: '4', scope: 'all', billingRule: 'reduce', enabled: true
+          }],
+          semesterEndDate: '2026-06-30', reportStartDate: '2026-06-08', reportEndDate: '2026-06-12'
+        }) === 3);
         var mappedExam = window.FieldMap.mapClassAwayEvent({
           '事件名稱': '段考', '適用範圍': '全校', '停課節次': '第8節', '班級清單': ''
         });
@@ -610,6 +653,9 @@
           && mappedExam.periods.join() === '8' && mappedExam.classes.length === 0);
         var mappedMultiPeriod = window.FieldMap.mapClassAwayEvent({ '停課節次': '早自習、第1節、第8節' });
         assert('事件欄位映射多選節次', mappedMultiPeriod.period === '0,1,8' && mappedMultiPeriod.periods.join() === '0,1,8');
+        var mappedRange = window.FieldMap.mapClassAwayEvent({ '起始節次': 0, '結束節次': 45, '停課節次': '全部節次' });
+        assert('事件欄位映射保留早自習與午休端點', mappedRange.startPeriod === '0' && mappedRange.endPeriod === '45'
+          && DCA.eventPeriodRange(mappedRange).endPeriod === '45');
         var mappedLegacy = window.FieldMap.mapClassAwayEvent({ '班級清單': '901' });
         assert('舊事件映射為指定班級全部節次', mappedLegacy.scope === 'classes' && mappedLegacy.period === 'all'
           && mappedLegacy.periods.join() === 'all' && mappedLegacy.classes.join() === '901');
@@ -684,8 +730,32 @@
            teachers: [{ email: 'combined-away@x', name: '併班教師' }],
            getScheduleForDate: function () { return { className: '701、702', attr: '一般' }; }
          });
-         assert('併班外出釋出計入', combinedAwayStats.releasedSlots === 1 && combinedAwayStats.demand === 0,
-           'released=' + combinedAwayStats.releasedSlots + ' demand=' + combinedAwayStats.demand);
+          assert('併班外出釋出計入', combinedAwayStats.releasedSlots === 1 && combinedAwayStats.demand === 0,
+            'released=' + combinedAwayStats.releasedSlots + ' demand=' + combinedAwayStats.demand);
+          var partialActivityStats = DAC.buildStats({
+            active: true, awayClasses: ['702'], startDate: '2026-07-13', endDate: '2026-07-13',
+            startPeriod: '2', endPeriod: '2',
+            allSchedules: [
+              { teacherEmail: 'partial@x', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' },
+              { teacherEmail: 'partial@x', dayOfWeek: 1, period: 2, className: '701、702', attr: '一般' }
+            ],
+            weekDates: ['2026-07-13'],
+            leaderEmails: [{ email: 'partial@x', name: '部分時段教師' }],
+            teachers: [{ email: 'partial@x', name: '部分時段教師' }],
+            getScheduleForDate: function (email, date, period) {
+              return period === 1 || period === 2 ? { className: '701、702', attr: '一般' } : null;
+            }
+          });
+          assert('指定時段互代只計區間內釋出與區間外需求', partialActivityStats.releasedSlots === 1
+            && partialActivityStats.demand === 1,
+            'released=' + partialActivityStats.releasedSlots + ' demand=' + partialActivityStats.demand);
+          assert('指定時段互代衝堂只釋出區間內', DAC.isConflictCell({ className: '702' }, true, ['702'], {
+            dateStr: '2026-07-13', period: 1,
+            startDate: '2026-07-13', endDate: '2026-07-13', startPeriod: '2', endPeriod: '2'
+          }) && !DAC.isConflictCell({ className: '702' }, true, ['702'], {
+            dateStr: '2026-07-13', period: 2,
+            startDate: '2026-07-13', endDate: '2026-07-13', startPeriod: '2', endPeriod: '2'
+          }));
        }
 
       // ── 巡堂 ──
@@ -1042,6 +1112,18 @@
         assert('額度發放列保留登入Email', quotaRows.length === 1
           && quotaRows[0].loginEmail === 'wang@example.com'
           && quotaRows[0].released === 1);
+        var partialQuotaRows = DAC.buildQuotaRecalcRows({
+          mode: 'add',
+          teachers: [{ email: 'partial@example.com', name: '指定時段教師', mutualQuota: 0 }],
+          awayClasses: ['701'],
+          startDate: '2026-07-13', endDate: '2026-07-13', startPeriod: '2', endPeriod: '2',
+          allSchedules: [
+            { teacherEmail: 'partial@example.com', dayOfWeek: 1, period: 1, className: '701' },
+            { teacherEmail: 'partial@example.com', dayOfWeek: 1, period: 2, className: '701' }
+          ]
+        });
+        assert('活動互代額度只計指定時段', partialQuotaRows.length === 1
+          && partialQuotaRows[0].releasedSlots === 1 && partialQuotaRows[0].released === 1);
         var ep = DAC.buildEmptySlotPayload({
           date: '2026-07-23', period: 3, dayOfWeek: 4,
           teacherEmail: 't@x', teacherName: '測試',
@@ -1096,13 +1178,30 @@
           if (em === 'b@x' && p === 1) return null;
           return { className: '701' };
         }
-        var actRank = window.DomainMatch.rankSubstitutionCandidates({
+         var actRank = window.DomainMatch.rankSubstitutionCandidates({
           teachers: teachers2, allSchedules: [], leaveEmail: 'z@x', dateStr: '2026-07-13',
           targetDay: 1, targetPeriod: 1, myCourse: '國', myDomain: '數學', myClass: '701',
           getScheduleForDate: get2, awayClasses: [], activityMode: true, preferReleasedByAway: true
-        });
-        assert('活動互代釋出置頂', actRank[0] && actRank[0].email === 'a@x' && actRank[0].score >= 100);
-        var normRank = window.DomainMatch.rankSubstitutionCandidates({
+         });
+         assert('活動互代釋出置頂', actRank[0] && actRank[0].email === 'a@x' && actRank[0].score >= 100);
+         function getRangeCandidate(email) {
+           return email === 'a@x' ? { className: '901' } : null;
+         }
+         var outsideRangeRank = window.DomainMatch.rankSubstitutionCandidates({
+           teachers: teachers2, allSchedules: [], leaveEmail: 'z@x', dateStr: '2026-07-13',
+           targetDay: 1, targetPeriod: 1, myCourse: '國', myDomain: '數學', myClass: '701',
+           getScheduleForDate: getRangeCandidate, awayClasses: ['901'], activityMode: true,
+           awayStartDate: '2026-07-13', awayEndDate: '2026-07-13', awayStartPeriod: '2', awayEndPeriod: '2'
+         });
+         var withinRangeRank = window.DomainMatch.rankSubstitutionCandidates({
+           teachers: teachers2, allSchedules: [], leaveEmail: 'z@x', dateStr: '2026-07-13',
+           targetDay: 1, targetPeriod: 2, myCourse: '國', myDomain: '數學', myClass: '701',
+           getScheduleForDate: getRangeCandidate, awayClasses: ['901'], activityMode: true,
+           awayStartDate: '2026-07-13', awayEndDate: '2026-07-13', awayStartPeriod: '2', awayEndPeriod: '2'
+         });
+         assert('指定時段外的外出班不釋出候選人', !outsideRangeRank.some(function (candidate) { return candidate.email === 'a@x'; }));
+         assert('指定時段內的外出班才釋出候選人', withinRangeRank.some(function (candidate) { return candidate.email === 'a@x' && candidate.isReleasedByAway; }));
+         var normRank = window.DomainMatch.rankSubstitutionCandidates({
           teachers: teachers2, allSchedules: [], leaveEmail: 'z@x', dateStr: '2026-07-13',
           targetDay: 1, targetPeriod: 1, myCourse: '國', myDomain: '數學', myClass: '701',
           getScheduleForDate: get2, awayClasses: [], activityMode: false, preferReleasedByAway: false

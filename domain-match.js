@@ -165,12 +165,30 @@ window.DomainMatch = (function () {
     });
     var hasAway = Object.keys(awaySet).length > 0;
 
-    function isCellAwayReleased(cell) {
+    function isAwayPeriodAllowed(period) {
+      var awayStartDate = String(opts.awayStartDate || '').slice(0, 10);
+      var awayEndDate = String(opts.awayEndDate || '').slice(0, 10);
+      if (awayStartDate && dateStr < awayStartDate) return false;
+      if (awayEndDate && dateStr > awayEndDate) return false;
+      if (opts.awayStartPeriod == null || opts.awayStartPeriod === ''
+          || opts.awayEndPeriod == null || opts.awayEndPeriod === '') return true;
+      if (window.DomainClassAway && window.DomainClassAway.eventAppliesToPeriod) {
+        return window.DomainClassAway.eventAppliesToPeriod({
+          startDate: opts.awayStartDate || dateStr,
+          endDate: opts.awayEndDate || dateStr,
+          startPeriod: String(opts.awayStartPeriod),
+          endPeriod: String(opts.awayEndPeriod)
+        }, period, dateStr, opts.awayEndDate || opts.awayStartDate || dateStr);
+      }
+      return true;
+    }
+
+    function isCellAwayReleased(cell, period) {
       if (!cell || cell.isSubstituted) return false;
       // 空堂事件班：邏輯視同空堂（畫面淡化）
       if (cell.isClassAway) return true;
       var cn = String(cell.className || '').trim();
-      return !!(hasAway && cn && awaySet[cn]);
+      return !!(hasAway && cn && awaySet[cn] && isAwayPeriodAllowed(period));
     }
 
     function isPatrolSlot(cell) {
@@ -182,7 +200,7 @@ window.DomainMatch = (function () {
       if (cell === null || cell.isSubstituted) return { free: true, released: false, cell: cell };
       // 巡堂：可當空堂排入，但不算真衝堂
       if (isPatrolSlot(cell)) return { free: true, released: false, cell: cell, isPatrol: true };
-      if (isCellAwayReleased(cell)) return { free: true, released: true, cell: cell };
+      if (isCellAwayReleased(cell, period)) return { free: true, released: true, cell: cell };
       return { free: false, released: false, cell: cell };
     }
 
@@ -208,7 +226,7 @@ window.DomainMatch = (function () {
       for (var pi = 0; pi < workloadPeriods.length; pi++) {
         var p = workloadPeriods[pi];
         var cell = getScheduleForDate(t.email, dateStr, p, targetDay);
-        var awayRel = isCellAwayReleased(cell);
+        var awayRel = isCellAwayReleased(cell, p);
         var patrol = isPatrolSlot(cell);
         if (cell && !cell.isSubstituted && !awayRel && !patrol) periodsBusy++;
       }

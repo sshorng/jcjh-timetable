@@ -61,8 +61,33 @@ const mergedQuotaRows = quotaMergeContext.mergeQuotaLedgerBalancesIntoTeacherRow
 assert.equal(mergedQuotaRows[0]['折抵額度'], 2, '教師資料應以額度帳本加總覆蓋舊的 0');
 assert.match(source, /finalBal\[em\] = existingBalance/, '重複發放應修復教師名單餘額');
 assert.match(source, /"空堂事件": \[[^\]]*"適用範圍"[^\]]*"停課節次"/, '空堂事件 schema 應包含範圍與節次欄位');
+assert.match(source, /"空堂事件": \[[^\]]*"起始節次"[^\]]*"結束節次"/, '空堂事件 schema 應保存起訖節次');
 assert.match(source, /function normalizeClassAwayScope_\(value\)/, '空堂事件範圍應由後端正規化');
 assert.match(source, /function normalizeClassAwayPeriod_\(value\)/, '空堂事件節次應由後端正規化');
+const awayBoundaryStart = source.indexOf('function normalizeClassAwayBoundaryPeriod_');
+const awayBoundaryEnd = source.indexOf('/** 經費是否為「扣額度」', awayBoundaryStart);
+assert.ok(awayBoundaryStart >= 0 && awayBoundaryEnd > awayBoundaryStart, '空堂事件起訖節次正規化 helper 必須存在');
+const awayBoundaryContext = { String, parseInt, Error, isNaN };
+vm.createContext(awayBoundaryContext);
+vm.runInContext(source.slice(awayBoundaryStart, awayBoundaryEnd), awayBoundaryContext, { filename: 'code.gs.away-boundaries' });
+assert.equal(awayBoundaryContext.normalizeClassAwayBoundaryPeriod_('早自習', '起點'), '0');
+assert.equal(awayBoundaryContext.normalizeClassAwayBoundaryPeriod_('午休', '終點'), '45');
+assert.equal(awayBoundaryContext.classAwayBoundaryPeriodIndex_('45') < awayBoundaryContext.classAwayBoundaryPeriodIndex_('5'), true,
+  '午休順序應介於第4節與第5節之間');
+const awaySlotStart = source.indexOf('function samePeriodExchangePeriodInAwayEvent_');
+const awaySlotEnd = source.indexOf('function samePeriodExchangeScheduleForTeacher_', awaySlotStart);
+assert.ok(awaySlotStart >= 0 && awaySlotEnd > awaySlotStart, '後端空堂時段判斷 helper 必須存在');
+const awaySlotContext = {
+  String, parseInt,
+  classAwayBoundaryPeriodIndex_: awayBoundaryContext.classAwayBoundaryPeriodIndex_,
+  schoolSwapSemester_: () => ({ '結束日期': '2026-06-30' })
+};
+vm.createContext(awaySlotContext);
+vm.runInContext(source.slice(awaySlotStart, awaySlotEnd), awaySlotContext, { filename: 'code.gs.away-slot-range' });
+const partialAway = { '起日': '2026-06-10', '迄日': '2026-06-10', '起始節次': '0', '結束節次': '4' };
+assert.equal(awaySlotContext.samePeriodExchangeAwaySlot_(partialAway, '2026-06-10', 4, 'S1'), true);
+assert.equal(awaySlotContext.samePeriodExchangeAwaySlot_(partialAway, '2026-06-10', 45, 'S1'), false,
+  '後端需依指定時段排除午休以後的互換');
 assert.match(source, /function isTimetableOnlyFee_\(fee\)/, '僅課表費用判定 helper 必須存在');
 assert.match(source, /function normalizeTimetableOnlyFee_\(fee\)/, '僅課表費用寫入正規化 helper 必須存在');
 assert.match(source, /!isTimetableOnlyFee_\(requestRow\["經費來源"\] \|\| requestRow\.subFee\)/, '代導同步不得處理僅課表申請');
@@ -142,6 +167,17 @@ assert.ok(classAwaySaveStart >= 0 && classAwaySaveEnd > classAwaySaveStart, '空
 const classAwaySaveSource = source.slice(classAwaySaveStart, classAwaySaveEnd);
 assert.match(classAwaySaveSource, /cae\["適用範圍"\] = awayScope/, '儲存空堂事件應寫入適用範圍');
 assert.match(classAwaySaveSource, /cae\["停課節次"\] = normalizeClassAwayPeriod_/, '儲存空堂事件應寫入停課節次');
+assert.match(classAwaySaveSource, /cae\["起始節次"\] = normalizeClassAwayBoundaryPeriod_/, '儲存空堂事件應驗證起點節次');
+assert.match(classAwaySaveSource, /cae\["結束節次"\] = normalizeClassAwayBoundaryPeriod_/, '儲存空堂事件應驗證終點節次');
+const quotaAdjustStart = source.indexOf('} else if (action === "updateMutualQuotas")');
+const quotaAdjustEnd = source.indexOf('} else if (action === "earnMutualQuotaFromActivity")', quotaAdjustStart);
+assert.ok(quotaAdjustStart >= 0 && quotaAdjustEnd > quotaAdjustStart, '管理員額度手動調整 action 必須存在');
+const quotaAdjustSource = source.slice(quotaAdjustStart, quotaAdjustEnd);
+assert.match(quotaAdjustSource, /if \(!isAdmin\) throw new Error/, '手動額度調整必須限制管理員');
+assert.match(quotaAdjustSource, /appendQuotaLedgerRowsFast_\(ledgerRows\)/, '手動額度調整必須記入額度帳本');
+assert.match(quotaAdjustSource, /patchTeacherMutualQuotaColumn_\(sidAdj, finalBal\)/, '手動額度調整必須更新教師名單餘額');
+assert.match(appSource, /const saveManualQuotaAdjust = async/, '教師管理需提供手動增減額度操作');
+assert.match(appSource, /callGasApi\('updateMutualQuotas',\s*\{\s*list:/, '手動增減需呼叫額度帳本調整 API');
 const scheduleKeyStart = source.indexOf('function scheduleSlotKey_');
 const scheduleKeyEnd = source.indexOf('function scheduleClassTokens_', scheduleKeyStart);
 assert.ok(scheduleKeyStart >= 0 && scheduleKeyEnd > scheduleKeyStart, 'schedule version key helpers must remain discoverable');
@@ -430,5 +466,23 @@ assert.match(leaveCalendar.title, /703\s+數學/);
 assert.equal(leaveCalendar.startIso.slice(0, 8), '20260903');
 assert.match(coverCalendar.title, /704\s+國文/);
 assert.equal(coverCalendar.startIso.slice(0, 8), '20260901');
+
+assert.match(source, /adminCreateSamePeriodExchange:\s*1/, '同節互換 action 必須列入管理員專用權限');
+const samePeriodStart = source.indexOf('} else if (action === "adminCreateSamePeriodExchange")');
+const samePeriodEnd = source.indexOf('} else if (action === "deleteSchoolSwap")', samePeriodStart);
+assert.ok(samePeriodStart >= 0 && samePeriodEnd > samePeriodStart, '同節互換需有獨立管理員寫入 action');
+const samePeriodAction = source.slice(samePeriodStart, samePeriodEnd);
+assert.match(samePeriodAction, /if \(!isAdmin\)/, '同節互換 action 必須在後端拒絕非管理員');
+assert.match(samePeriodAction, /createAdminSamePeriodExchangeRequest_/, '同節互換 action 必須呼叫伺服器端驗證');
+assert.match(samePeriodAction, /saveRows\("申請單", \[samePeriodExchange\]/, '同節互換需沿用既有調課記錄');
+assert.doesNotMatch(samePeriodAction, /queueMail_|persistRequestRowsWithQuota_|syncHomeroomRecordForRequest_/, '管理員同節互換不可觸發通知、額度或代導流程');
+assert.match(source, /特殊流程": "admin_same_period_exchange"/, '同節互換需有可辨識的課表異動標記');
+assert.match(source, /if \(String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"\)[\s\S]*?markEdge\(reqDate, reqPer, reqEm, tgtEm, cls, subj\)[\s\S]*?markEdge\(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj\)/, '後端同節互換應讓雙方接手對方原班級');
+assert.match(appSource, /if \(String\(req\.specialFlow \|\| req\['特殊流程'\] \|\| ''\) === 'admin_same_period_exchange'\)/, '前端個人課表需辨識管理員同節互換');
+assert.match(appSource, /originalTeacherName: req\.requesterName,[\s\S]*?actualTeacherName: req\.targetTeacherName,[\s\S]*?className: leaveCls/, '前端應將 A 原班級改由 B 授課');
+assert.match(appSource, /originalTeacherName: req\.targetTeacherName,[\s\S]*?actualTeacherName: req\.requesterName,[\s\S]*?className: targetCls/, '前端應將 B 原班級改由 A 授課');
+assert.match(appSource, /selectActualDutyRecord\(slotSubs, em\)/, '同格多筆異動應優先保留實際代課責任');
+assert.match(appSource, /resolveSubstitutionCourse\(req, leaveCell, leaveBaseCell, emptyAssign\)/, '再辦申請不可把空堂巡堂任務當成被代課程');
+assert.match(appSource, /buildClassSubstitutionMap\(classSubstitutionRows\.value\)/, '班級課表也應使用實際代課優先的異動整理');
 
 console.log('code.gs exchange contract tests PASS');

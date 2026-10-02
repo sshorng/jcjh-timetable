@@ -123,6 +123,22 @@ window.ExportActivityCover = (function () {
       ? request.requestPeriod : (request.period != null ? request.period : request['異動節次'])), 10) || 0;
   }
 
+  function requestInActivityTime(request, opts) {
+    if (opts.startPeriod == null || opts.endPeriod == null
+        || String(opts.startPeriod).trim() === '' || String(opts.endPeriod).trim() === '') return true;
+    var date = String(request && (request.requestDate || request.date || request['異動日期']) || '').slice(0, 10);
+    var period = requestPeriod(request);
+    if (window.DomainClassAway && window.DomainClassAway.eventAppliesToPeriod) {
+      return window.DomainClassAway.eventAppliesToPeriod({
+        startDate: opts.startDate,
+        endDate: opts.endDate,
+        startPeriod: String(opts.startPeriod),
+        endPeriod: String(opts.endPeriod)
+      }, period, date, opts.endDate || opts.startDate);
+    }
+    return true;
+  }
+
   function identityValues(value) {
     var values = typeof value === 'object' && value !== null
       ? [value.email, value.loginEmail, value.teacherEmail, value.name, value.teacherName,
@@ -234,10 +250,13 @@ window.ExportActivityCover = (function () {
     var type = request.type || request['異動類型'];
     if (type === 'exchange' || type === '對調' || type === '調課') return false;
     if (!isSubmittedStatus(request.status || request['狀態'])) return false;
+    var rawPeriod = request.requestPeriod != null ? request.requestPeriod
+      : (request.period != null ? request.period : request['異動節次']);
+    if (rawPeriod == null || String(rawPeriod).trim() === '' || isNaN(parseInt(rawPeriod, 10))) return false;
     var period = requestPeriod(request);
-    if (!period) return false;
     var fee = request.subFee || request['經費來源'] || '';
     if (opts.onlyActivityFee !== false && !isActivityMutualFee(fee, period)) return false;
+    if (!requestInActivityTime(request, opts)) return false;
     var activityHint = String(opts.activityName || opts.activity || '').trim();
     if (opts.requireActivityHint && activityHint
         && !requestMatchesActivityScope(request, opts)) return false;

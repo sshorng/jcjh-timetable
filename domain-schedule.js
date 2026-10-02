@@ -89,6 +89,67 @@ window.DomainSchedule = (function () {
     return map;
   }
 
+  function isEmptySlotAssignmentRecord(record) {
+    if (!record) return false;
+    if (record.isEmptySlotAssign === true) return true;
+    var reason = String(record.reason || record['請假事由'] || '').trim();
+    var note = String(record.note || record['備註'] || '');
+    return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
+  }
+
+  /** Prefer a real class duty over a later self-assigned empty-slot task at the same time. */
+  function selectActualDutyRecord(records, teacherEmail) {
+    var email = String(teacherEmail || '').toLowerCase();
+    var matches = (records || []).filter(function (record) {
+      return record && record.actualTeacherEmail
+        && String(record.actualTeacherEmail).toLowerCase() === email;
+    });
+    var classDuties = matches.filter(function (record) {
+      return !isEmptySlotAssignmentRecord(record);
+    });
+    var candidates = classDuties.length ? classDuties : matches;
+    return candidates.length ? candidates[candidates.length - 1] : null;
+  }
+
+  function buildClassSubstitutionMap(records) {
+    var map = Object.create(null);
+    (records || []).forEach(function (record) {
+      if (!record) return;
+      var className = String(record.className || record['班級'] || '').trim();
+      var date = String(record.date || record.requestDate || record['異動日期'] || '').slice(0, 10);
+      var period = parseInt(record.period != null ? record.period : record['異動節次'], 10);
+      var key = className + '|' + date + '|' + period;
+      var previous = map[key];
+      var candidateIsTask = isEmptySlotAssignmentRecord(record);
+      var previousIsTask = isEmptySlotAssignmentRecord(previous);
+      // 兩筆異動落在同一班級時段時，實際代課課堂優先於空堂／巡堂任務。
+      // 同一類型仍沿用後寫入者優先的既有行為。
+      if (!previous || (previousIsTask && !candidateIsTask) || previousIsTask === candidateIsTask) {
+        map[key] = record;
+      }
+    });
+    return map;
+  }
+
+  /** Resolve the course for a substitution without inheriting a patrol/empty-slot placeholder. */
+  function resolveSubstitutionCourse(request, effectiveCell, baseCell, forceRequestCourse) {
+    var req = request || {};
+    var current = effectiveCell || null;
+    var base = baseCell || null;
+    var currentIsTask = isEmptySlotAssignmentRecord(current);
+    var className = forceRequestCourse
+      ? (req.className || req['班級'] || '')
+      : (currentIsTask
+        ? ((base && base.className) || req.className || req['班級'] || '')
+        : ((current && current.className) || req.className || req['班級'] || (base && base.className) || ''));
+    var subject = forceRequestCourse
+      ? (req.subject || req['科目'] || '')
+      : (currentIsTask
+        ? ((base && base.subject) || req.subject || req['科目'] || '')
+        : ((current && current.subject) || req.subject || req['科目'] || (base && base.subject) || ''));
+    return { className: String(className || '').trim(), subject: String(subject || '').trim() };
+  }
+
   function normalizeScheduleDate(value) {
     if (value === undefined || value === null || value === '') return '';
     if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
@@ -1067,6 +1128,10 @@ window.DomainSchedule = (function () {
 
   return {
     buildSubstitutionsLookup: buildSubstitutionsLookup,
+    isEmptySlotAssignmentRecord: isEmptySlotAssignmentRecord,
+    selectActualDutyRecord: selectActualDutyRecord,
+    buildClassSubstitutionMap: buildClassSubstitutionMap,
+    resolveSubstitutionCourse: resolveSubstitutionCourse,
     buildScheduleIndex: buildScheduleIndex,
     buildPendingIndex: buildPendingIndex,
     getCandidates: getCandidates,

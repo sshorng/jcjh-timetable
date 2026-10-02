@@ -1,7 +1,7 @@
 /**
  * 活動互代／外出班釋出空堂（純邏輯）
  * 規則：
- * - 釋出：未上到 1 節 → 發放額度 1
+ * - 釋出：一般課表未上到 1 節 → 發放額度 1；代課（小鐘點）空堂另扣，不發額度
  * - 1–7 節額度 ≥ 1 → 扣額度（不結鐘點＋扣折抵額度 1）；不足 1 → 活動公費
  * - 第8節 → 第8節代課（計畫經費，不吃額度）
  * - 請假老師（活動公假）一律不扣鐘點
@@ -73,6 +73,47 @@ window.DomainActivityCover = (function () {
     return true;
   }
 
+  function isActivitySlotInRange(dateStr, period, opts) {
+    opts = opts || {};
+    if (!isDateInRange(dateStr, opts.startDate, opts.endDate)) return false;
+    if (opts.periodMode === 'daily') {
+      if (period == null || String(period).trim() === '') return true;
+      var dcaDaily = window.DomainClassAway;
+      var dailyPeriods = dcaDaily && dcaDaily.normalizePeriods
+        ? dcaDaily.normalizePeriods(opts.periods)
+        : (Array.isArray(opts.periods) ? opts.periods.map(String) : []);
+      if (!dailyPeriods.length || dailyPeriods[0] === 'all') return dailyPeriods.length > 0;
+      var requestedDailyPeriod = dcaDaily && dcaDaily.normalizePeriods
+        ? dcaDaily.normalizePeriods([period])[0]
+        : String(period);
+      return !!requestedDailyPeriod && dailyPeriods.indexOf(requestedDailyPeriod) >= 0;
+    }
+    var startPeriod = opts.startPeriod;
+    var endPeriod = opts.endPeriod;
+    if (startPeriod == null || String(startPeriod).trim() === ''
+        || endPeriod == null || String(endPeriod).trim() === '') return true;
+    var dca = window.DomainClassAway;
+    if (dca && typeof dca.eventAppliesToPeriod === 'function') {
+      return dca.eventAppliesToPeriod({
+        startDate: normalizeDate(opts.startDate),
+        endDate: normalizeDate(opts.endDate),
+        startPeriod: String(startPeriod),
+        endPeriod: String(endPeriod)
+      }, period, normalizeDate(dateStr), normalizeDate(opts.endDate || opts.startDate));
+    }
+    var order = [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+    var periodIndex = order.indexOf(parseInt(period, 10));
+    var startIndex = order.indexOf(parseInt(startPeriod, 10));
+    var endIndex = order.indexOf(parseInt(endPeriod, 10));
+    if (periodIndex < 0 || startIndex < 0 || endIndex < 0) return false;
+    var date = normalizeDate(dateStr);
+    var start = normalizeDate(opts.startDate);
+    var end = normalizeDate(opts.endDate);
+    if (start && date === start && periodIndex < startIndex) return false;
+    if (end && date === end && periodIndex > endIndex) return false;
+    return true;
+  }
+
   /** 列舉期間內的日期 YYYY-MM-DD（最多 60 天防呆） */
   function listDatesInRange(startDate, endDate) {
     var a = normalizeDate(startDate);
@@ -128,11 +169,15 @@ window.DomainActivityCover = (function () {
    * - 活動互代勾選的外出班
    * - 空堂事件班（cell.isClassAway）
    */
-  function isCellAwayReleased(cell, awayClasses) {
+  function isCellAwayReleased(cell, awayClasses, dateStr, period, rangeOpts) {
     if (!cell || cell.isSubstituted) return false;
     if (cell.isClassAway) return true;
     var set = toAwaySet(awayClasses);
-    return isAnyClassAway(cell.className, set);
+    if (!isAnyClassAway(cell.className, set)) return false;
+    if (dateStr !== undefined && period !== undefined && rangeOpts) {
+      return isActivitySlotInRange(dateStr, period, rangeOpts);
+    }
+    return true;
   }
 
   /**
@@ -155,7 +200,7 @@ window.DomainActivityCover = (function () {
   }
 
   /**
-   * 活動期間內，某師因外出班「釋出」的節數（基礎課表 × 期間平日）
+   * 活動期間內，某師因外出班「釋出」的可發額度節數（排除代課／小鐘點課格）
    * opts._schedByTeacher：可傳預建索引 email → 課表列[]，避免每人掃全校課表
    */
   function countReleasedSlotsForTeacher(teacherEmail, opts) {
@@ -188,13 +233,16 @@ window.DomainActivityCover = (function () {
     var n = 0;
     slots.forEach(function (s) {
       if (!s || !isAnyClassAway(s.className, away)) return;
+      // 小鐘點未授課會在月報另行扣除，不重複發放折抵額度。
+      if (s.isSubstitute === true || String(s.attr || s['課堂屬性'] || '').trim() === '代課') return;
       var p = parseInt(s.period, 10);
       if (p > 7) return;
       var d = parseInt(s.dayOfWeek, 10);
       var dates = datesByDow[d] || [];
       dates.forEach(function (dateStr) {
-        if (!window.DomainSchedule || !window.DomainSchedule.isActiveOnDate
-            || window.DomainSchedule.isActiveOnDate(s, dateStr)) n++;
+        if ((!window.DomainSchedule || !window.DomainSchedule.isActiveOnDate
+            || window.DomainSchedule.isActiveOnDate(s, dateStr))
+            && isActivitySlotInRange(dateStr, p, opts)) n++;
       });
     });
     return n;
@@ -219,8 +267,9 @@ window.DomainActivityCover = (function () {
       if (r.status === 'cancelled' || r.status === 'rejected') return;
       if (!isQuotaDeductFee(r.subFee)) return;
       if (emailKey(r.targetTeacherEmail || r.subTeacherEmail) !== em) return;
-      var rd = String(r.requestDate || '');
+      var rd = normalizeDate(r.requestDate || r.date || r['異動日期']);
       if (rangeDates.length && !rangeSet[rd]) return;
+      if (!requestIsInActivityRange(r, rd, opts)) return;
       n++;
     });
     return n;
@@ -272,7 +321,7 @@ window.DomainActivityCover = (function () {
 
   function ledgerType(row) {
     var type = String(ledgerField(row, ['type', '類型']) || '').trim().toLowerCase();
-    var aliases = { '發放': 'earn', '扣用': 'spend', '還原': 'restore', '手動調整': 'adjust' };
+    var aliases = { '發放': 'earn', '扣用': 'spend', '還原': 'restore', '手動調整': 'adjust', '調整': 'adjust', '手動': 'adjust' };
     return aliases[type] || type;
   }
 
@@ -340,9 +389,21 @@ window.DomainActivityCover = (function () {
   }
 
   function requestPeriod(request) {
-    return parseInt(request && (request.requestPeriod != null
-      ? request.requestPeriod
-      : (request.period != null ? request.period : request['異動節次'])), 10) || 0;
+    var raw = request && (request.requestPeriod != null
+      ? request.requestPeriod : (request.period != null ? request.period : request['異動節次']));
+    var parsed = window.DateUtils && typeof window.DateUtils.parsePeriod === 'function'
+      ? window.DateUtils.parsePeriod(raw)
+      : parseInt(raw, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  function requestIsInActivityRange(request, dateStr, opts) {
+    var rawPeriod = request && (request.requestPeriod != null
+      ? request.requestPeriod : (request.period != null ? request.period : request['異動節次']));
+    var hasPeriodRange = opts && opts.startPeriod != null && String(opts.startPeriod).trim() !== ''
+      && opts.endPeriod != null && String(opts.endPeriod).trim() !== '';
+    if (hasPeriodRange && (rawPeriod == null || String(rawPeriod).trim() === '')) return false;
+    return isActivitySlotInRange(dateStr, requestPeriod(request), opts);
   }
 
   function requestText(request) {
@@ -655,6 +716,8 @@ window.DomainActivityCover = (function () {
       if (excludeKey && String(d.key || '') === excludeKey) return;
       var sub = emailKey(d.subEmail || d.subTeacherEmail || d.targetTeacherEmail);
       if (sub !== em) return;
+      var date = normalizeDate(d.dateStr || d.date);
+      if (date && !isActivitySlotInRange(date, d.period, opts)) return;
       var fee = d.fee || d.subFee || '';
       if (!isQuotaDeductFee(fee)) return;
       n++;
@@ -831,7 +894,9 @@ window.DomainActivityCover = (function () {
       return feeByReleaseBalance(opts.remainingBefore, false);
     }
     var cell = opts.subTeacherCell;
-    if (cell && !cell.isSubstituted && isCellAwayReleased(cell, opts.awayClasses)) {
+    if (cell && !cell.isSubstituted && isCellAwayReleased(
+      cell, opts.awayClasses, opts.dateStr, opts.period, opts
+    )) {
       return QUOTA_DEDUCT_FEE;
     }
     return ACTIVITY_PUBLIC_FEE;
@@ -1005,7 +1070,7 @@ window.DomainActivityCover = (function () {
    * @param {boolean} activityMode
    * @param {string[]} awayClasses
    */
-  function isConflictCell(cell, activityMode, awayClasses) {
+  function isConflictCell(cell, activityMode, awayClasses, slotContext) {
     if (!cell || cell.isSubstituted) return false;
     // 空堂事件班：一律不當衝堂（畫面淡化、邏輯空堂）
     if (cell.isClassAway) return false;
@@ -1014,7 +1079,10 @@ window.DomainActivityCover = (function () {
         && window.DomainSchedule.isPatrolCell(cell)) {
       return false;
     }
-    if (activityMode && isCellAwayReleased(cell, awayClasses)) return false;
+    slotContext = slotContext || {};
+    if (activityMode && isCellAwayReleased(
+      cell, awayClasses, slotContext.dateStr, slotContext.period, slotContext
+    )) return false;
     return true;
   }
 
@@ -1076,9 +1144,10 @@ window.DomainActivityCover = (function () {
             if (!isAnyClassAway(cn, away)) return;
            if (parseInt(s.dayOfWeek, 10) !== dow) return;
            if (window.DomainSchedule && window.DomainSchedule.isActiveOnDate
-               && !window.DomainSchedule.isActiveOnDate(s, dateStr)) return;
+                && !window.DomainSchedule.isActiveOnDate(s, dateStr)) return;
            var per = parseInt(s.period, 10);
-          if (!per || per > 7) return; // 釋出額度只算 1–7
+           if (isNaN(per) || per > 7 || per === 45) return; // 釋出額度算早自習與 1–7
+           if (!isActivitySlotInRange(dateStr, per, opts)) return;
           var rk = cn + '|' + dateStr + '|' + per;
           if (releasedKeys[rk]) return;
           releasedKeys[rk] = true;
@@ -1124,9 +1193,10 @@ window.DomainActivityCover = (function () {
       if (!hasLeaders) return; // 未勾帶隊：總覽已安排顯示 0
       var leaveEm = emailKey(r.requesterEmail || r.originalTeacherEmail);
       if (!leaderSet[leaveEm]) return;
-      var rd = String(r.requestDate || r.date || '').slice(0, 10);
-      if (rangeDates.length && !rangeSet[rd]) return;
-      if (!rangeDates.length && !isDateInRange(rd, startDate, endDate)) return;
+       var rd = String(r.requestDate || r.date || '').slice(0, 10);
+       if (rangeDates.length && !rangeSet[rd]) return;
+       if (!rangeDates.length && !isDateInRange(rd, startDate, endDate)) return;
+        if (!requestIsInActivityRange(r, rd, opts)) return;
       var st = String(r.status || '');
       if (st === 'cancelled' || st === 'rejected' || st === 'admin_rejected' || st === 'withdrawn') return;
       if (isQuotaDeductFee(r.subFee)) {
@@ -1145,8 +1215,9 @@ window.DomainActivityCover = (function () {
       if (!s) return;
       if (hasLeaders && !leaderSet[emailKey(s.teacherEmail)]) return;
       if (!hasLeaders) return;
-      var sd = String(s.dateStr || '').slice(0, 10);
-      if (rangeDates.length && !rangeSet[sd]) return;
+       var sd = String(s.dateStr || '').slice(0, 10);
+       if (rangeDates.length && !rangeSet[sd]) return;
+       if (!isActivitySlotInRange(sd, s.period, opts)) return;
       var key = emailKey(s.teacherEmail) + '|' + sd + '|' + String(s.period || '');
       if (!pendingKeys[key]) {
         pendingKeys[key] = true;
@@ -1161,7 +1232,7 @@ window.DomainActivityCover = (function () {
      * 與課表同一套 getScheduleForDate：含單雙週／已代仍算；排除巡堂、抽離、外出班、空堂事件班。
      * 尚缺＝需求−已送出−暫定（已找人代的仍留在需求裡，避免補排時需求變小）
      */
-    function isDemandCell_(cell) {
+    function isDemandCell_(cell, dateStr, period) {
       if (!cell) return false;
       if (window.DomainSchedule && window.DomainSchedule.isPatrolCell
           && window.DomainSchedule.isPatrolCell(cell)) return false;
@@ -1176,7 +1247,8 @@ window.DomainActivityCover = (function () {
       var cn = normalizeClass(cell.className);
       if (!cn) return false;
       if (cn === '巡堂') return false;
-       if (awayCount && isAnyClassAway(cn, away)) return false;
+        if (awayCount && isAnyClassAway(cn, away)
+            && isActivitySlotInRange(dateStr, period, opts)) return false;
       if (cell.isClassAway) return false;
       return true;
     }
@@ -1199,7 +1271,7 @@ window.DomainActivityCover = (function () {
             var p = periodList[pi];
             var cell = null;
             try { cell = getSched(em, dateStr, p, dow); } catch (eG) { cell = null; }
-            if (!isDemandCell_(cell)) continue;
+            if (!isDemandCell_(cell, dateStr, p)) continue;
             slotKeys[dateStr + '|' + p] = true;
           }
         });
@@ -1234,7 +1306,8 @@ window.DomainActivityCover = (function () {
           }
           var cn = normalizeClass(s.className);
           if (!cn || cn === '巡堂') return;
-           if (awayCount && isAnyClassAway(cn, away)) return;
+            if (awayCount && isAnyClassAway(cn, away)
+                && isActivitySlotInRange(dateStr, per, opts)) return;
           slotKeys[dateStr + '|' + per] = true;
         });
       });
@@ -1249,8 +1322,9 @@ window.DomainActivityCover = (function () {
       (opts.requests || []).forEach(function (r) {
         if (!r || r.type === 'exchange') return;
         if (emailKey(r.requesterEmail || r.originalTeacherEmail) !== em) return;
-        var rd = String(r.requestDate || r.date || '').slice(0, 10);
-        if (rangeDates.length && !rangeSet[rd]) return;
+         var rd = String(r.requestDate || r.date || '').slice(0, 10);
+         if (rangeDates.length && !rangeSet[rd]) return;
+          if (!requestIsInActivityRange(r, rd, opts)) return;
         var st = String(r.status || '');
         if (st === 'cancelled' || st === 'rejected' || st === 'admin_rejected' || st === 'withdrawn') return;
         if (isQuotaDeductFee(r.subFee)) arrMut++;
@@ -1265,8 +1339,9 @@ window.DomainActivityCover = (function () {
       (opts.pendingDrafts || []).forEach(function (d) {
         if (!d) return;
         if (emailKey(d.leaveEmail || d.teacherEmail) !== em) return;
-        var sd = String(d.dateStr || '').slice(0, 10);
-        if (rangeDates.length && sd && !rangeSet[sd]) return;
+         var sd = String(d.dateStr || '').slice(0, 10);
+         if (rangeDates.length && sd && !rangeSet[sd]) return;
+         if (sd && !isActivitySlotInRange(sd, d.period, opts)) return;
         drafted++;
       });
       return drafted;
@@ -1277,8 +1352,9 @@ window.DomainActivityCover = (function () {
       (opts.pendingSlots || []).forEach(function (s) {
         if (!s) return;
         if (emailKey(s.teacherEmail) !== em) return;
-        var sd = String(s.dateStr || '').slice(0, 10);
-        if (rangeDates.length && !rangeSet[sd]) return;
+         var sd = String(s.dateStr || '').slice(0, 10);
+         if (rangeDates.length && !rangeSet[sd]) return;
+         if (!isActivitySlotInRange(sd, s.period, opts)) return;
         pend++;
       });
       return pend;
@@ -1322,6 +1398,12 @@ window.DomainActivityCover = (function () {
     else if (startDate) rangeLabel = startDate + ' 起';
     else if (endDate) rangeLabel = '至 ' + endDate;
     else rangeLabel = '本週（未設期間）';
+    if (opts.periodMode === 'daily' && window.DomainClassAway && window.DomainClassAway.periodLabel) {
+      rangeLabel += ' · 每日' + window.DomainClassAway.periodLabel(opts.periods);
+    } else if (opts.startPeriod != null && opts.endPeriod != null
+        && window.DomainClassAway && window.DomainClassAway.periodRangeLabel) {
+      rangeLabel += ' · 連續' + window.DomainClassAway.periodRangeLabel(opts.startPeriod, opts.endPeriod);
+    }
 
     // 按尚缺多→少、再按姓名
     byLeaders.sort(function (a, b) {
@@ -1451,6 +1533,7 @@ window.DomainActivityCover = (function () {
     toAwaySet: toAwaySet,
     toAwayList: toAwayList,
     isDateInRange: isDateInRange,
+    isActivitySlotInRange: isActivitySlotInRange,
     listDatesInRange: listDatesInRange,
     dayOfWeekMon1: dayOfWeekMon1,
     isCellAwayReleased: isCellAwayReleased,

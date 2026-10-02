@@ -255,13 +255,15 @@ window.FieldMap = (function () {
           if (text === '早自習' || text === '早讀' || text === '晨讀') return '0';
           const match = text.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
           const n = match ? parseInt(match[1], 10) : NaN;
-          return Number.isInteger(n) && n >= 0 && n <= 8 ? String(n) : '';
+          return Number.isInteger(n) && (n === 45 || (n >= 0 && n <= 8)) ? String(n) : '';
         }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
       })();
     const periods = normalizedPeriods.length ? normalizedPeriods : ['all'];
     const period = dca && dca.normalizePeriod
       ? dca.normalizePeriod(periodRaw)
       : (periods.indexOf('all') >= 0 || !periods.length ? 'all' : periods.join(','));
+    const startPeriodRaw = pick(e, ['起始節次', '起點節次', 'startPeriod']);
+    const endPeriodRaw = pick(e, ['結束節次', '終點節次', 'endPeriod']);
     let rule = String(pick(e, ['鐘點規則', 'billingRule']) || 'keep').toLowerCase();
     if (rule === '調降' || rule === 'reduce') rule = 'reduce';
     else rule = 'keep';
@@ -282,6 +284,8 @@ window.FieldMap = (function () {
       name: String(pick(e, ['事件名稱', 'name']) || ''),
       startDate: asDateStr(pick(e, ['起日', 'startDate'])),
       endDate: asDateStr(pick(e, ['迄日', 'endDate'])),
+      startPeriod: startPeriodRaw == null || startPeriodRaw === '' ? '' : String(startPeriodRaw).trim(),
+      endPeriod: endPeriodRaw == null || endPeriodRaw === '' ? '' : String(endPeriodRaw).trim(),
       classes: classes,
       scope: scope,
       period: period,

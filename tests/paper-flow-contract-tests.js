@@ -186,6 +186,13 @@ function loadApprovedExchangeConverter(resolveCell) {
     findBaseScheduleSlot: () => null,
     getTeacherSubjectByEmail: () => '',
     isCourseAdjustmentOnlyRequest: isCourseAdjustmentOnlyForTest,
+    isEmptySlotAssignmentRequest: record => {
+      if (!record) return false;
+      if (record.isEmptySlotAssign === true) return true;
+      const reason = String(record.reason || record['請假事由'] || '').trim();
+      const note = String(record.note || record['備註'] || '');
+      return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
+    },
     Date, Number, String, Object, Array, Set, Math, parseInt, isNaN
   };
   vm.createContext(context);
@@ -997,6 +1004,8 @@ function runApplicationFormContractTest() {
   assert.match(html, /id="course-adjustment-only"/);
   assert.match(html, /@change="toggleCourseAdjustmentOnly"/);
   assert.match(html, /<th class="billing-sticky-name">姓名<\/th>\s*<th class="billing-th-job">職務<\/th>\s*<th class="billing-th-subject">科目<\/th>/, '月報應在科目前顯示職務');
+  assert.match(html, /課代節[\s\S]*?課代費/, '月報「我去代課」區應獨立顯示課表代課節數與費用');
+  assert.match(html, /monthlyReportTotals\.substitutePaidCount[\s\S]*?monthlyReportTotals\.substitutePaidFee/, '月報合計列應統計課表代課節數與費用');
   assert.match(html, /<td class="billing-job" :title="row\.jobTitle \|\| '教師'">\{\{ row\.jobTitle \|\| '教師' \}\}<\/td>/, '月報未填職務應預設為教師');
   assert.match(html, /<td class="billing-subj" :title="row\.subject \|\| ''">\{\{ row\.subject \}\}<\/td>/, '月報科目應可移入查看完整文字');
    assert.match(html, /\(pendingRequestData\.mode === 'substitution' \|\| pendingRequestData\.mode === 'exchange'\) && pendingRequestData\.specialFlow !== 'combined_return'/);

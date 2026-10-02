@@ -10,10 +10,11 @@ window.DomainClassAway = (function () {
   var SCOPE_ALL = 'all';
   var SCOPE_CLASSES = 'classes';
   var PERIOD_ALL = 'all';
-  var PERIOD_VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8'];
+  // 順序依校內作息：早自習、上午課、午休、下午課。
+  var PERIOD_VALUES = ['0', '1', '2', '3', '4', '45', '5', '6', '7', '8'];
   var PERIOD_LABELS = {
     '0': '早自習', '1': '第1節', '2': '第2節', '3': '第3節', '4': '第4節',
-    '5': '第5節', '6': '第6節', '7': '第7節', '8': '第8節'
+    '45': '午休', '5': '第5節', '6': '第6節', '7': '第7節', '8': '第8節'
   };
 
   function normDate(d) {
@@ -92,6 +93,7 @@ window.DomainClassAway = (function () {
   function normalizePeriodKey(value) {
     var s = String(value == null ? '' : value).trim().replace(/^'+/, '').toLowerCase();
     if (s === '早自習' || s === '早讀' || s === '晨讀') return '0';
+    if (s === '午休' || s === '午餐' || s === '午' || s === 'lunch') return '45';
     var match = s.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
     if (!match) return '';
     var n = parseInt(match[1], 10);
@@ -136,6 +138,31 @@ window.DomainClassAway = (function () {
     return periods.map(function (value) { return PERIOD_LABELS[value]; }).join('、');
   }
 
+  function normalizeBoundaryPeriod(value) {
+    var key = normalizePeriodKey(value);
+    return PERIOD_VALUES.indexOf(key) >= 0 ? key : '';
+  }
+
+  function periodIndex(value) {
+    return PERIOD_VALUES.indexOf(normalizeBoundaryPeriod(value));
+  }
+
+  function eventPeriodRange(ev) {
+    var start = normalizeBoundaryPeriod(pickEventValue(ev, ['startPeriod', '起始節次', '起點節次']));
+    var end = normalizeBoundaryPeriod(pickEventValue(ev, ['endPeriod', '結束節次', '終點節次']));
+    var startIndex = periodIndex(start);
+    var endIndex = periodIndex(end);
+    if (startIndex < 0 || endIndex < 0) return null;
+    return { startPeriod: start, endPeriod: end, startIndex: startIndex, endIndex: endIndex };
+  }
+
+  function periodRangeLabel(startPeriod, endPeriod) {
+    var start = normalizeBoundaryPeriod(startPeriod);
+    var end = normalizeBoundaryPeriod(endPeriod);
+    if (!start || !end) return '';
+    return start === end ? PERIOD_LABELS[start] : PERIOD_LABELS[start] + '～' + PERIOD_LABELS[end];
+  }
+
   function classListToStore(list) {
     return parseClassList(list).join(',');
   }
@@ -178,6 +205,22 @@ window.DomainClassAway = (function () {
   }
 
   function eventPeriods(ev) {
+    var range = eventPeriodRange(ev);
+    if (range) {
+      var startDate = eventStart(ev);
+      var endDate = normDate(ev.endDate || ev['迄日']);
+      if (!startDate || !endDate) return PERIOD_VALUES.slice();
+      if (startDate === endDate) return PERIOD_VALUES.slice(range.startIndex, range.endIndex + 1);
+      var startParts = startDate.split('-').map(Number);
+      var endParts = endDate.split('-').map(Number);
+      var daysApart = Math.round((Date.UTC(endParts[0], endParts[1] - 1, endParts[2])
+        - Date.UTC(startParts[0], startParts[1] - 1, startParts[2])) / 86400000);
+      if (daysApart > 1) return PERIOD_VALUES.slice();
+      var included = {};
+      PERIOD_VALUES.slice(range.startIndex).concat(PERIOD_VALUES.slice(0, range.endIndex + 1))
+        .forEach(function (period) { included[period] = true; });
+      return PERIOD_VALUES.filter(function (period) { return included[period]; });
+    }
     var raw = ev && ev.periods;
     if (raw !== undefined && raw !== null && (!Array.isArray(raw) || raw.length)) {
       return normalizePeriods(raw);
@@ -189,7 +232,22 @@ window.DomainClassAway = (function () {
     return normalizePeriod(eventPeriods(ev));
   }
 
-  function eventAppliesToPeriod(ev, period) {
+  function eventAppliesToPeriod(ev, period, dateStr, semesterEndDate) {
+    var range = eventPeriodRange(ev);
+    if (range) {
+      if (period === undefined || period === null || String(period).trim() === '') return true;
+      var requestedIndex = periodIndex(period);
+      if (requestedIndex < 0) return false;
+      if (dateStr === undefined || dateStr === null || String(dateStr).trim() === '') {
+        return eventPeriods(ev).indexOf(normalizeBoundaryPeriod(period)) >= 0;
+      }
+      var date = normDate(dateStr);
+      var startDate = eventStart(ev);
+      var endDate = effectiveEnd(ev, semesterEndDate);
+      if (date === startDate && requestedIndex < range.startIndex) return false;
+      if (date === endDate && requestedIndex > range.endIndex) return false;
+      return true;
+    }
     if (period === undefined || period === null || String(period).trim() === '') return true;
     var eventP = eventPeriods(ev);
     if (!eventP.length || eventP[0] === PERIOD_ALL) return true;
@@ -248,7 +306,7 @@ window.DomainClassAway = (function () {
     for (var i = 0; i < list.length; i++) {
       var ev = list[i];
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) continue;
-      if (!eventAppliesToPeriod(ev, period)) continue;
+      if (!eventAppliesToPeriod(ev, period, dateStr, semesterEndDate)) continue;
       for (var j = 0; j < candidates.length; j++) {
         if (eventAppliesToClass(ev, candidates[j])) return true;
       }
@@ -265,7 +323,7 @@ window.DomainClassAway = (function () {
     var set = {};
     (events || []).forEach(function (ev) {
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) return;
-      if (!eventAppliesToPeriod(ev, period)) return;
+      if (!eventAppliesToPeriod(ev, period, dateStr, semesterEndDate)) return;
       classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
     });
     return Object.keys(set).sort();
@@ -284,12 +342,33 @@ window.DomainClassAway = (function () {
     (events || []).forEach(function (ev) {
       if (!isEnabled(ev)) return;
       if (opts.forMutualOnly && !canMutual(ev)) return;
-      if (!eventAppliesToPeriod(ev, opts.period)) return;
       var s = eventStart(ev);
       var e = effectiveEnd(ev, semesterEndDate);
-      if (!s) return;
+      if (!s || s > b || e < a) return;
+      if (opts.period !== undefined && opts.period !== null && String(opts.period).trim() !== '') {
+        var requestedPeriods = normalizePeriods(opts.period);
+        var anyRequestedPeriod = !requestedPeriods.length || requestedPeriods[0] === PERIOD_ALL;
+        var overlapStart = s > a ? s : a;
+        var overlapEnd = e < b ? e : b;
+        var cursorParts = overlapStart.split('-').map(Number);
+        var cursor = new Date(Date.UTC(cursorParts[0], cursorParts[1] - 1, cursorParts[2]));
+        var lastParts = overlapEnd.split('-').map(Number);
+        var last = new Date(Date.UTC(lastParts[0], lastParts[1] - 1, lastParts[2]));
+        var foundPeriod = anyRequestedPeriod;
+        while (cursor <= last && !foundPeriod) {
+          var candidateDate = cursor.getUTCFullYear() + '-' + String(cursor.getUTCMonth() + 1).padStart(2, '0')
+            + '-' + String(cursor.getUTCDate()).padStart(2, '0');
+          for (var pi = 0; pi < requestedPeriods.length; pi++) {
+            if (eventAppliesToPeriod(ev, requestedPeriods[pi], candidateDate, semesterEndDate)) {
+              foundPeriod = true;
+              break;
+            }
+          }
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        if (!foundPeriod) return;
+      }
       // 區間重疊：s<=b && e>=a
-      if (s > b || e < a) return;
       classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
     });
     return Object.keys(set).sort();
@@ -313,7 +392,7 @@ window.DomainClassAway = (function () {
   function eventsActiveOnDate(dateStr, events, semesterEndDate, period) {
     return (events || []).filter(function (ev) {
       return isDateInEvent(dateStr, ev, semesterEndDate)
-        && eventAppliesToPeriod(ev, period);
+        && eventAppliesToPeriod(ev, period, dateStr, semesterEndDate);
     });
   }
 
@@ -417,7 +496,7 @@ window.DomainClassAway = (function () {
     });
   }
 
-  function countReduceSlotsForTeacher(teacherEmail, allSchedules, awayClassSet, weekDates) {
+  function countReduceSlotsForTeacher(teacherEmail, allSchedules, awayClassSet, weekDates, rangeEvents, semesterEndDate) {
     var em = String(teacherEmail || '').toLowerCase();
     var n = 0;
     (allSchedules || []).forEach(function (s) {
@@ -442,12 +521,19 @@ window.DomainClassAway = (function () {
       }
       for (var i = 0; i < classes.length; i++) {
         var period = parseInt(s.period, 10);
-        if (periodSetMatches(awayClassSet[classes[i]], period)
-            || periodSetMatches(awayClassSet['*'], period)) {
-          var scheduleDay = parseInt(s.dayOfWeek != null ? s.dayOfWeek : s['星期'], 10);
-          var activeDate = (weekDates || [])[scheduleDay - 1] || '';
-          if (!activeDate || !window.DomainSchedule || !window.DomainSchedule.isActiveOnDate
-              || window.DomainSchedule.isActiveOnDate(s, activeDate)) n++;
+        var scheduleDay = parseInt(s.dayOfWeek != null ? s.dayOfWeek : s['星期'], 10);
+        var activeDate = (weekDates || [])[scheduleDay - 1] || '';
+        if (activeDate && window.DomainSchedule && window.DomainSchedule.isActiveOnDate
+            && !window.DomainSchedule.isActiveOnDate(s, activeDate)) continue;
+        var legacyHit = periodSetMatches(awayClassSet[classes[i]], period)
+          || periodSetMatches(awayClassSet['*'], period);
+        var rangeHit = !!activeDate && (rangeEvents || []).some(function (ev) {
+          return isDateInEvent(activeDate, ev, semesterEndDate)
+            && eventAppliesToPeriod(ev, period, activeDate, semesterEndDate)
+            && eventAppliesToClass(ev, classes[i]);
+        });
+        if (legacyHit || rangeHit) {
+          n++;
           break;
         }
       }
@@ -477,11 +563,6 @@ window.DomainClassAway = (function () {
     // 依事件加總（多事件同班不重複：先建「每個週一要扣的班集合」）
     mondays.forEach(function (mon) {
       var awaySet = {};
-      events.forEach(function (ev) {
-        if (!mondayInReduceWindow(mon, ev, semesterEnd)) return;
-        addEventToReduceSet(awaySet, ev);
-      });
-      if (!Object.keys(awaySet).length) return;
       var weekStart = new Date(String(mon).replace(/-/g, '/'));
       var weekDates = [];
       for (var wi = 0; wi < 5; wi++) {
@@ -490,7 +571,20 @@ window.DomainClassAway = (function () {
         weekDates.push(weekDate.getFullYear() + '-' + String(weekDate.getMonth() + 1).padStart(2, '0')
           + '-' + String(weekDate.getDate()).padStart(2, '0'));
       }
-      total += countReduceSlotsForTeacher(email, allSchedules, awaySet, weekDates);
+      var rangeEvents = [];
+      events.forEach(function (ev) {
+        if (eventPeriodRange(ev)) {
+          if (getRule(ev) !== RULE_REDUCE || !isEnabled(ev)) return;
+          var rangeStart = eventStart(ev);
+          var rangeEnd = effectiveEnd(ev, semesterEnd);
+          if (rangeStart && rangeStart <= weekDates[4] && rangeEnd >= weekDates[0]) rangeEvents.push(ev);
+          return;
+        }
+        if (!mondayInReduceWindow(mon, ev, semesterEnd)) return;
+        addEventToReduceSet(awaySet, ev);
+      });
+      if (!Object.keys(awaySet).length && !rangeEvents.length) return;
+      total += countReduceSlotsForTeacher(email, allSchedules, awaySet, weekDates, rangeEvents, semesterEnd);
     });
     return total;
   }
@@ -559,6 +653,8 @@ window.DomainClassAway = (function () {
     eventScope: eventScope,
     eventPeriods: eventPeriods,
     eventPeriod: eventPeriod,
+    eventPeriodRange: eventPeriodRange,
+    periodRangeLabel: periodRangeLabel,
     eventAppliesToClass: eventAppliesToClass,
     eventAppliesToPeriod: eventAppliesToPeriod,
     effectiveEnd: effectiveEnd,

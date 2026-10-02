@@ -261,7 +261,7 @@ assert.match(appSource, /const requestedRecordId = req && \(req\.recordId \|\| r
 assert.match(appSource, /targetIds = \[seedRecord\.id\]/, '一般批次單列列印只能使用目前明細');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
-assert.match(indexSource, /print-helper\.js\?v=20261002-history-print1/);
+assert.match(indexSource, /print-helper\.js\?v=20261003-teacher-quota-adjust2/);
 assert.match(indexSource, /@click="openHistoryPrintPreview"/);
 assert.match(appSource, /window\.buildHistoryPrintRecords\(/);
 assert.match(appSource, /openPrintPreview, openHistoryPrintPreview, closePrintPreview/);

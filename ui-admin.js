@@ -1823,6 +1823,12 @@ window.UiAdmin = (function () {
       var existingTeacher = (teachersList.value || []).find(function (teacher) {
         return String(teacher.loginEmail || '').toLowerCase() === email.toLowerCase();
       });
+      var desiredQuota = parseFloat(teacherForm.value.mutualQuota);
+      if (isNaN(desiredQuota) || desiredQuota < 0) desiredQuota = 0;
+      desiredQuota = Math.round(desiredQuota * 1000) / 1000;
+      var previousQuota = existingTeacher ? parseFloat(existingTeacher.mutualQuota) : 0;
+      if (isNaN(previousQuota) || previousQuota < 0) previousQuota = 0;
+      previousQuota = Math.round(previousQuota * 1000) / 1000;
       if (existingTeacher && String(existingTeacher.name || '').trim() !== nextName) {
         var renameOk = await showConfirm(
           '這會把「' + String(existingTeacher.name || '') + '」改為「' + nextName + '」，並同步更新所有歷史課表、申請、代導與額度資料。確定改名？',
@@ -1852,13 +1858,27 @@ window.UiAdmin = (function () {
           return setting.configured ? setting.slotsText : '';
         })(),
         '折抵額度': (function () {
-          var n = parseFloat(teacherForm.value.mutualQuota);
-          return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
+          // saveTeacher 只儲存教師資料；餘額異動另走帳本 action。
+          return previousQuota;
         })()
       };
+      var teacherProfileSaved = false;
       try {
         if (existingTeacher) await backupTeacherExpenseData(existingTeacher);
         await callGasApi('saveTeacher', reqPayload);
+        teacherProfileSaved = true;
+        if (desiredQuota !== previousQuota) {
+          var quotaResult = await callGasApi('updateMutualQuotas', {
+            list: [{ email: email, mutualQuota: desiredQuota, note: '教師管理表單手動調整額度' }]
+          });
+          if (quotaResult && quotaResult.success === false) {
+            throw new Error(quotaResult.message || '額度帳本更新失敗');
+          }
+          try {
+            if (typeof window.__quotaLedgerCacheBust === 'function') window.__quotaLedgerCacheBust();
+          } catch (eQuotaCache) { /* ignore */ }
+        }
+        reqPayload['折抵額度'] = desiredQuota;
         showTeacherModal.value = false;
          var mapped = window.FieldMap.mapTeacher(reqPayload);
         var list = teachersList.value.slice();
@@ -1872,7 +1892,7 @@ window.UiAdmin = (function () {
         softRefreshInBackground({ force: true, delay: 800 });
       } catch (e) {
         console.error(e);
-        showToast('儲存失敗：' + e.message, 'error');
+        showToast((teacherProfileSaved ? '教師資料已儲存，但額度調整失敗：' : '儲存失敗：') + e.message, 'error');
       } finally {
         loading.value = false;
       }

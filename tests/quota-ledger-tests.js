@@ -40,6 +40,19 @@ vm.runInContext(fs.readFileSync(path.join(root, 'export-invigilation-recovered.j
 const domain = context.window.DomainActivityCover;
 const exporter = context.window.ExportActivityCover;
 const invigilation = context.window.ExportInvigilation;
+const smallPeriodQuotaRows = domain.buildQuotaRecalcRows({
+  teachers: [{ email: 'small-period@example.test', name: '小鐘點老師', mutualQuota: 0 }],
+  awayClasses: ['901'],
+  startDate: '2026-10-05',
+  endDate: '2026-10-05',
+  allSchedules: [
+    { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 1, className: '901', attr: '一般' },
+    { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 2, className: '901', attr: '代課' },
+    { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 3, className: '901', isSubstitute: true }
+  ]
+});
+assert.equal(smallPeriodQuotaRows[0].releasedSlots, 1, '發放額度應排除代課屬性與小鐘點旗標課格');
+assert.equal(smallPeriodQuotaRows[0].released, 1, '小鐘點空堂未授課另扣，不應重複取得額度');
 const ledgerRows = [
   {
     name: '甲老師', time: '2026-10-05 09:00:00', delta: 3, balanceAfter: 3,

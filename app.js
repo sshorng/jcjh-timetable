@@ -723,9 +723,10 @@ createApp({
       const asActual = slotSubs.filter(s =>
         s.actualTeacherEmail && String(s.actualTeacherEmail).toLowerCase() === em
       );
-      if (asActual.length) {
-        // 取鏈末端（若同格多筆，後寫入的較新）
-        const hit = asActual[asActual.length - 1];
+      const hit = window.DomainSchedule && typeof window.DomainSchedule.selectActualDutyRecord === 'function'
+        ? window.DomainSchedule.selectActualDutyRecord(slotSubs, em)
+        : (asActual.length ? asActual[asActual.length - 1] : null);
+      if (hit) {
         let cls = hit.className || '';
         let subj = hit.subject || '';
         // 班科空：沿 forward 鏈回推起點
@@ -778,7 +779,10 @@ createApp({
             subject: subj,
             fromSub: true,
             isSubstitutionDuty: true,
-            dutyType: hit.type || ''
+            dutyType: hit.type || '',
+            isEmptySlotAssign: !!(window.DomainSchedule
+              && window.DomainSchedule.isEmptySlotAssignmentRecord
+              && window.DomainSchedule.isEmptySlotAssignmentRecord(hit))
           }, courseMetadataFromRecord(hit) || {});
         }
       }
@@ -965,17 +969,24 @@ createApp({
             req.requestPeriod,
             leaveDay
           );
-          // 空堂排班：班科以申請單為準（無基礎課可疊）
+          // 空堂排班：班科以申請單為準（無基礎課可疊）。
           const emptyAssign = !!(req.isEmptySlotAssign
             || String(req.reason || '').trim() === '空堂排班'
             || String(req.note || '').indexOf('[空堂排班]') >= 0);
-          // 有效課優先（調入再代課／對調時申請單 className 可能是舊基礎課）
-          const leaveCls = emptyAssign
-            ? (req.className || '')
-            : ((leaveCell && leaveCell.className) || req.className || '');
-          const leaveSubj = emptyAssign
-            ? (req.subject || '')
-            : ((leaveCell && leaveCell.subject) || req.subject || '');
+          const leaveCellIsTask = isEmptySlotAssignmentRequest(leaveCell);
+          const leaveBaseCell = leaveCellIsTask && typeof findBaseScheduleSlot === 'function'
+            ? findBaseScheduleSlot(req.requesterEmail, leaveDay, req.requestPeriod, req.requestDate)
+            : null;
+          // 空堂巡堂任務不是被代課程；再辦申請要保留原班科，真正的代課調入仍優先。
+          const leaveCourse = window.DomainSchedule && window.DomainSchedule.resolveSubstitutionCourse
+            ? window.DomainSchedule.resolveSubstitutionCourse(req, leaveCell, leaveBaseCell, emptyAssign)
+            : {
+              className: emptyAssign ? (req.className || '') : ((leaveCell && leaveCell.className) || req.className || ''),
+              subject: emptyAssign ? (req.subject || '') : ((leaveCell && leaveCell.subject) || req.subject || '')
+            };
+          const leaveCls = leaveCourse.className;
+          const leaveSubj = leaveCourse.subject;
+          const leaveMetadataCell = leaveCellIsTask ? leaveBaseCell : leaveCell;
            pushSub(withCourseMetadata({
              id: req.id,
              date: req.requestDate,
@@ -999,7 +1010,7 @@ createApp({
              note: req.note,
              specialFlow: req.specialFlow || '',
              isEmptySlotAssign: emptyAssign
-           }, leaveCell));
+            }, emptyAssign ? leaveCell : leaveMetadataCell));
         } else if (req.type === 'exchange' || req.type === '對調') {
           // 請假節若已是「代課／調入義務」（空堂代生物），再調出必須寫生物，不可回退基礎數學
           // 否則科目＝自己的基礎／專長
@@ -1028,32 +1039,93 @@ createApp({
           const targetEff = resolveAt(
             req.targetTeacherEmail, req.targetDate, req.targetPeriod, dayNum
           );
+          const leaveCellIsTask = isEmptySlotAssignmentRequest(leaveEff);
+          const targetCellIsTask = isEmptySlotAssignmentRequest(targetEff);
+          const leaveBaseCell = leaveCellIsTask && typeof findBaseScheduleSlot === 'function'
+            ? findBaseScheduleSlot(req.requesterEmail, leaveDay, req.requestPeriod, req.requestDate)
+            : null;
+          const targetBaseCell = targetCellIsTask && typeof findBaseScheduleSlot === 'function'
+            ? findBaseScheduleSlot(req.targetTeacherEmail, dayNum, req.targetPeriod, req.targetDate)
+            : null;
           // 網頁課表顯示調課後的實際安排：教師帶著自己的班級／科目換到對方時段。
           // 僅「代課義務」再調課：優先使用有效的義務班科。
-          const leaveSubDuty = !!(leaveEff && leaveEff.fromSub && (
+          const leaveSubDuty = !!(!leaveCellIsTask && leaveEff && leaveEff.fromSub && (
             leaveEff.dutyType === 'substitution' || leaveEff.dutyType === '代課'
           ));
           const leaveCls = leaveSubDuty
             ? ((leaveEff && leaveEff.className) || req.className || '')
-            : (req.className || (leaveEff && leaveEff.className) || '');
+            : (req.className || (leaveCellIsTask && leaveBaseCell && leaveBaseCell.className)
+              || (!leaveCellIsTask && leaveEff && leaveEff.className) || '');
           const leaveSubj = leaveSubDuty
             ? ((leaveEff && leaveEff.subject) || req.subject || '')
             : (req.subject
-              || (leaveEff && leaveEff.subject)
+              || (leaveCellIsTask && leaveBaseCell && leaveBaseCell.subject)
+              || (!leaveCellIsTask && leaveEff && leaveEff.subject)
               || ownSubject(req.requesterEmail, req.requestDate, req.requestPeriod, leaveDay)
               || '');
-          const targetSubDuty = !!(targetEff && targetEff.fromSub && (
+          const targetSubDuty = !!(!targetCellIsTask && targetEff && targetEff.fromSub && (
             targetEff.dutyType === 'substitution' || targetEff.dutyType === '代課'
           ));
           const targetCls = targetSubDuty
             ? ((targetEff && targetEff.className) || req.targetClassName || '')
-            : (req.targetClassName || (targetEff && targetEff.className) || '');
+            : (req.targetClassName || (targetCellIsTask && targetBaseCell && targetBaseCell.className)
+              || (!targetCellIsTask && targetEff && targetEff.className) || '');
           const targetSubj = targetSubDuty
             ? ((targetEff && targetEff.subject) || req.targetSubject || '')
             : (req.targetSubject
-              || (targetEff && targetEff.subject)
+              || (targetCellIsTask && targetBaseCell && targetBaseCell.subject)
+              || (!targetCellIsTask && targetEff && targetEff.subject)
               || ownSubject(req.targetTeacherEmail, req.targetDate, req.targetPeriod, dayNum)
               || '');
+          const leaveMetadataCell = leaveCellIsTask ? leaveBaseCell : leaveEff;
+          const targetMetadataCell = targetCellIsTask ? targetBaseCell : targetEff;
+
+          if (String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange') {
+            // 同節互換是交換教師負責的班級，兩邊原班級留在原時段。
+            pushSub(withCourseMetadata({
+              id: req.id + '_1',
+              date: req.requestDate,
+              period: req.requestPeriod,
+              serial: req.serial || req['單號'] || '',
+              originalTeacherName: req.requesterName,
+              actualTeacherName: req.targetTeacherName,
+              className: leaveCls,
+              subject: leaveSubj,
+              formClassName: leaveCls,
+              formSubject: leaveSubj,
+              requestId: req.id,
+              batchId: req.batchId || '',
+              type: 'exchange',
+              printed: req.printed,
+              subFee: '無',
+              reason: req.reason,
+              leaveTimeType: '',
+              leaveTime: '',
+              note: req.note
+            }, leaveMetadataCell));
+            pushSub(withCourseMetadata({
+              id: req.id + '_2',
+              date: req.targetDate,
+              period: req.targetPeriod,
+              serial: req.serial || req['單號'] || '',
+              originalTeacherName: req.targetTeacherName,
+              actualTeacherName: req.requesterName,
+              className: targetCls,
+              subject: targetSubj,
+              formClassName: targetCls,
+              formSubject: targetSubj,
+              requestId: req.id,
+              batchId: req.batchId || '',
+              type: 'exchange',
+              printed: req.printed,
+              subFee: '無',
+              reason: req.reason,
+              leaveTimeType: '',
+              leaveTime: '',
+              note: req.note
+            }, targetMetadataCell));
+            return;
+          }
 
           // _1：目標日由申請人上自己的原課程。
            pushSub(withCourseMetadata({
@@ -1077,7 +1149,7 @@ createApp({
              leaveTimeType: req.leaveTimeType || '',
              leaveTime: req.leaveTime || '',
              note: req.note
-           }, leaveEff));
+            }, leaveMetadataCell));
 
           // _2：原異動日由受邀人上自己的原課程。
           pushSub(withCourseMetadata({
@@ -1101,7 +1173,7 @@ createApp({
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',
             note: req.note
-          }, targetEff));
+          }, targetMetadataCell));
         }
       });
       return subs;
@@ -1854,7 +1926,44 @@ createApp({
     // 活動期間（預設本週一～五，避免釋出節數算到整份課表）
     const mutualActivityStart = ref('');
     const mutualActivityEnd = ref('');
+    const mutualActivityStartPeriod = ref('0');
+    const mutualActivityEndPeriod = ref('8');
+    const mutualActivityPeriodMode = ref('range');
+    const mutualActivityPeriods = ref(['all']);
     const DAC = () => window.DomainActivityCover;
+    const isMutualActivitySlotInRange = (dateStr, period) => {
+      const date = String(dateStr || '').slice(0, 10);
+      const startDate = String(mutualActivityStart.value || '').slice(0, 10);
+      const endDate = String(mutualActivityEnd.value || mutualActivityStart.value || '').slice(0, 10);
+      if (startDate && date && date < startDate) return false;
+      if (endDate && date && date > endDate) return false;
+      const dca = window.DomainClassAway;
+      if (!dca || typeof dca.eventAppliesToPeriod !== 'function') return true;
+      const useRange = mutualActivityPeriodMode.value !== 'daily';
+      return dca.eventAppliesToPeriod({
+        startDate: startDate,
+        endDate: endDate,
+        startPeriod: useRange ? String(mutualActivityStartPeriod.value || '0') : '',
+        endPeriod: useRange ? String(mutualActivityEndPeriod.value || '8') : '',
+        periods: mutualActivityPeriods.value || ['all'],
+        period: mutualActivityPeriods.value || ['all']
+      }, period, date, endDate || startDate);
+    };
+    const setMutualActivityPeriodBoundary = (field, value) => {
+      if (field !== 'start' && field !== 'end') return;
+      if (field === 'start') mutualActivityStartPeriod.value = String(value || '0');
+      else mutualActivityEndPeriod.value = String(value || '8');
+      if (mutualActivityStart.value && mutualActivityStart.value === mutualActivityEnd.value) {
+        const order = [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+        const startIndex = order.indexOf(parseInt(mutualActivityStartPeriod.value, 10));
+        const endIndex = order.indexOf(parseInt(mutualActivityEndPeriod.value, 10));
+        if (startIndex > endIndex) {
+          if (field === 'start') mutualActivityEndPeriod.value = mutualActivityStartPeriod.value;
+          else mutualActivityStartPeriod.value = mutualActivityEndPeriod.value;
+        }
+      }
+      persistMutualPanelDraft();
+    };
     /** 活動互代領域：首次用到再載 domain-activity-cover.js */
     const ensureDAC = async () => {
       if (window.DomainActivityCover) return window.DomainActivityCover;
@@ -1881,7 +1990,9 @@ createApp({
       _mutualPanelApi = window.UiMutualPanelState.create({
         showToast, showConfirm, callGasApi, isAdmin, loading, loadingMessage,
         isMutualCover, mutualAwayClasses, mutualLeadEmails, mutualSkipNotify, mutualNote, mutualDrafts,
-        mutualActivityStart, mutualActivityEnd, currentWeekDates, classList, teachersList, allSchedules, requestsList,
+        mutualActivityStart, mutualActivityEnd, mutualActivityStartPeriod, mutualActivityEndPeriod,
+        mutualActivityPeriodMode, mutualActivityPeriods,
+        currentWeekDates, classList, teachersList, allSchedules, requestsList,
         activeCell, inputRequestDate, recommendedTeachers, showMatchModal, pendingRequestData, batchSubFee, directApproveMode,
         ACTIVITY_PUBLIC_FEE, PERIOD8_FEE, getTeacherNameByEmail, softRefreshInBackground, defaultSubFeeForReason, getScheduleForDate,
         classAwayEvents,
@@ -1896,6 +2007,9 @@ createApp({
     const clearMutualPanel = async () => { const a = getMutualPanelApi(); if (a) await a.clearMutualPanel(); };
     const ensureMutualActivityRange = () => { const a = getMutualPanelApi(); if (a) a.ensureMutualActivityRange(); };
     const setMutualActivityThisWeek = () => { const a = getMutualPanelApi(); if (a) a.setMutualActivityThisWeek(); };
+    const setMutualActivityPeriodMode = (mode) => { const a = getMutualPanelApi(); if (a) a.setMutualActivityPeriodMode(mode); };
+    const toggleMutualActivityPeriod = (period) => { const a = getMutualPanelApi(); if (a) a.toggleMutualActivityPeriod(period); };
+    const isMutualActivityPeriodSelected = (period) => { const a = getMutualPanelApi(); return a ? a.isMutualActivityPeriodSelected(period) : false; };
     const activityBalanceCtx = (extra) => { const a = getMutualPanelApi(); return a ? a.activityBalanceCtx(extra) : {}; };
     const patchLocalMutualQuota = (email, nextQuota) => { const a = getMutualPanelApi(); if (a) a.patchLocalMutualQuota(email, nextQuota); };
     const recalculateMutualQuotasFromActivity = async () => {
@@ -2084,10 +2198,17 @@ createApp({
     });
 
     const classSubstitutionMap = computed(() => {
+      if (window.DomainSchedule && typeof window.DomainSchedule.buildClassSubstitutionMap === 'function') {
+        return window.DomainSchedule.buildClassSubstitutionMap(classSubstitutionRows.value);
+      }
       const map = {};
       classSubstitutionRows.value.forEach(r => {
         const key = `${r.className}|${r.date}|${r.period}`;
-        map[key] = r;
+        const previous = map[key];
+        const isTask = row => !!(row && (row.isEmptySlotAssign
+          || String(row.reason || row['請假事由'] || '').trim() === '空堂排班'
+          || String(row.note || row['備註'] || '').indexOf('[空堂排班]') >= 0));
+        if (!previous || (isTask(previous) && !isTask(r)) || isTask(previous) === isTask(r)) map[key] = r;
       });
       return map;
     });
@@ -4089,6 +4210,8 @@ createApp({
       return [];
     });
     const batchCompareWeekIndex = ref(0);
+    const batchExchangePreviewSlotKey = ref('');
+    const batchExchangePreviewBatchId = ref('');
     const batchCompareWeekTotal = computed(() => batchCompareWeeks.value.length);
     const batchCompareWeekDates = computed(() => {
       const weeks = batchCompareWeeks.value;
@@ -4113,11 +4236,17 @@ createApp({
     };
     const compareWeekDatesA = computed(() => {
       const pending = pendingRequestData.value || {};
+      if (pending.isBatch && pending.mode === 'exchange') {
+        return getWeekDatesForCompare(pending.date || inputRequestDate.value);
+      }
       if (pending.isBatch) return batchCompareWeekDates.value;
       return getWeekDatesForCompare(pending.date || inputRequestDate.value);
     });
     const compareWeekDatesB = computed(() => {
       const pending = pendingRequestData.value || {};
+      if (pending.isBatch && pending.mode === 'exchange') {
+        return getWeekDatesForCompare(pending.dateB || pending.date || inputRequestDate.value);
+      }
       if (pending.isBatch) return batchCompareWeekDates.value;
       const date = pending.mode === 'exchange' && pending.dateB
         ? pending.dateB
@@ -4137,10 +4266,47 @@ createApp({
       if (who === 'A') compareWeekSelectionA.value = value;
       if (who === 'B') compareWeekSelectionB.value = value;
     };
+    const setBatchExchangePreviewSlot = (slotKey) => {
+      const pending = pendingRequestData.value;
+      if (!pending || !pending.isExchangeBatch || !Array.isArray(pending.batchSlots)) return false;
+      const slot = pending.batchSlots.find(item => String(item.key) === String(slotKey));
+      if (!slot) return false;
+      const encodeTime = (day, period) => (window.DateUtils && window.DateUtils.encodeTimeKey)
+        ? window.DateUtils.encodeTimeKey(day, period)
+        : (String(day) + '-' + String(period));
+      batchExchangePreviewSlotKey.value = String(slot.key);
+      pendingRequestData.value = Object.assign({}, pending, {
+        leaveTeacher: slot.teacherEmail,
+        subTeacher: slot.subTeacherEmail,
+        date: slot.dateStr,
+        timeKey: encodeTime(slot.dayOfWeek, slot.period),
+        cls: slot.className || '',
+        subject: slot.subject || '',
+        dateB: slot.targetDate || '',
+        timeB: encodeTime(slot.targetDayOfWeek, slot.targetPeriod),
+        subBClass: slot.targetClassName || '',
+        subB: slot.targetSubject || ''
+      });
+      compareWeekSelectionA.value = 'source';
+      compareWeekSelectionB.value = 'target';
+      return true;
+    };
     watch(pendingRequestData, (pending) => {
       if (pending && pending.mode === 'exchange') {
         compareWeekSelectionA.value = 'source';
         compareWeekSelectionB.value = 'target';
+      }
+      if (pending && pending.isExchangeBatch) {
+        const batchId = String(pending.submitBatchId || '');
+        if (batchId !== batchExchangePreviewBatchId.value) {
+          batchExchangePreviewBatchId.value = batchId;
+          const slots = Array.isArray(pending.batchSlots) ? pending.batchSlots : [];
+          const first = slots.find(slot => !slot.exchangeSubmitted) || slots[0];
+          batchExchangePreviewSlotKey.value = first ? String(first.key) : '';
+        }
+      } else if (!pending) {
+        batchExchangePreviewBatchId.value = '';
+        batchExchangePreviewSlotKey.value = '';
       }
       if (pending && pending.isBatch) batchCompareWeekIndex.value = 0;
     });
@@ -4415,8 +4581,19 @@ createApp({
     };
 
     const assertCanSubmitAsLeaveTeacher = (leaveEmail) => {
-      if (canOperateOnTeacherEmail(leaveEmail)) {
-        ensureProxyTargetForTeacher(leaveEmail);
+      const leaveKey = String(leaveEmail || (activeCell.value && activeCell.value.teacherEmail) || '').trim();
+      if (isAdmin.value) {
+        if (!leaveKey) {
+          showToast('所選班級課堂缺少任課教師資料，請確認課表設定。', 'warning');
+          return false;
+        }
+        if (pendingRequestData.value && !pendingRequestData.value.leaveTeacher) {
+          pendingRequestData.value.leaveTeacher = leaveKey;
+        }
+        return true;
+      }
+      if (canOperateOnTeacherEmail(leaveKey)) {
+        ensureProxyTargetForTeacher(leaveKey);
         return true;
       }
       if (isStaff.value && !isProxySubmitGranted.value) {
@@ -5093,11 +5270,12 @@ createApp({
 
     // 檢查調代課申請的欄位是否填妥
     const isRequestValid = computed(() => {
-      if (!inputRequestDate.value) return false;
+      const pending = pendingRequestData.value;
+      if (!inputRequestDate.value || !pending) return false;
       if (matchMode.value === 'substitution') {
-        return !!pendingRequestData.value.subTeacher;
+        return !!pending.subTeacher;
       } else {
-        return !!pendingRequestData.value.subTeacher && !!pendingRequestData.value.timeB && !!pendingRequestData.value.dateB;
+        return !!pending.subTeacher && !!pending.timeB && !!pending.dateB;
       }
     });
 
@@ -5594,7 +5772,8 @@ createApp({
       return [];
     };
     const isPeriod8FeeLocked = computed(() => {
-      if (pendingRequestData.value.mode !== 'substitution') return false;
+      const pending = pendingRequestData.value;
+      if (!pending || pending.mode !== 'substitution') return false;
       const periods = resolvePendingPeriods();
       if (!periods.length) return false;
       // 單節第8、或批次全是第8 → 鎖定；混批不鎖 UI（送出時仍逐節強制第8）
@@ -5605,11 +5784,11 @@ createApp({
 
     /** 扣額度預覽：目前額度／本次扣幾／扣後剩幾（依代課老師） */
     const quotaDeductPreview = computed(() => {
-      if (pendingRequestData.value.mode !== 'substitution') return null;
-      if (pendingRequestData.value.subFee !== QUOTA_DEDUCT_FEE) return null;
+      const p = pendingRequestData.value;
+      if (!p || p.mode !== 'substitution') return null;
+      if (p.subFee !== QUOTA_DEDUCT_FEE) return null;
       if (isPeriod8FeeLocked.value) return null;
       const counts = {};
-      const p = pendingRequestData.value;
       if (p.isPerSlot && p.batchSlots && p.batchSlots.length) {
         p.batchSlots.forEach(s => {
           const em = String(s.subTeacherEmail || '').toLowerCase();
@@ -5640,18 +5819,19 @@ createApp({
     );
     /** 額度不足時改經費：活動互代→活動公費；一般→自費 */
     const switchQuotaDeductToSelfPay = () => {
-      if (pendingRequestData.value.mode !== 'substitution') return;
+      const pending = pendingRequestData.value;
+      if (!pending || pending.mode !== 'substitution') return;
       if (isPeriod8FeeLocked.value) {
         showToast('第8節須使用計畫經費，無法改自費', 'warning');
         return;
       }
       if (isMutualCover.value) {
-        pendingRequestData.value.subFee = ACTIVITY_PUBLIC_FEE;
+        pending.subFee = ACTIVITY_PUBLIC_FEE;
         batchSubFee.value = ACTIVITY_PUBLIC_FEE;
         showToast('額度不足，已改為活動公費', 'info');
         return;
       }
-      pendingRequestData.value.subFee = '自費代課';
+      pending.subFee = '自費代課';
       batchSubFee.value = '自費代課';
       showToast('已改為自費代課，請再確認後送出', 'info');
     };
@@ -5661,13 +5841,14 @@ createApp({
      * - 一般 → 擋送出（請改自費或換人）
      */
     const assertQuotaDeductAllowed = () => {
-      if (pendingRequestData.value.mode !== 'substitution') return true;
-      if (pendingRequestData.value.subFee !== QUOTA_DEDUCT_FEE) return true;
+      const pending = pendingRequestData.value;
+      if (!pending || pending.mode !== 'substitution') return true;
+      if (pending.subFee !== QUOTA_DEDUCT_FEE) return true;
       if (isPeriod8FeeLocked.value) return true;
       const lines = quotaDeductPreview.value;
       if (!lines || !lines.length) {
         if (isMutualCover.value) {
-          pendingRequestData.value.subFee = ACTIVITY_PUBLIC_FEE;
+          pending.subFee = ACTIVITY_PUBLIC_FEE;
           batchSubFee.value = ACTIVITY_PUBLIC_FEE;
           showToast('找不到可用額度，已改為活動公費', 'info');
           return true;
@@ -5679,7 +5860,7 @@ createApp({
       if (!shorts.length) return true;
       const tip = shorts.map(q => `${q.name}（現有 ${q.before}，需扣 ${q.deduct}）`).join('、');
       if (isMutualCover.value) {
-        pendingRequestData.value.subFee = ACTIVITY_PUBLIC_FEE;
+        pending.subFee = ACTIVITY_PUBLIC_FEE;
         batchSubFee.value = ACTIVITY_PUBLIC_FEE;
         showToast(`額度不足（${tip}），已自動改為活動公費`, 'info');
         return true;
@@ -6026,7 +6207,7 @@ createApp({
     });
 
     // 準備模擬對比 Modal（ui-request.js → UiSubmitHelpers.prepCompare）
-    const runComparePreparation = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
+    const runComparePreparation = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '', isBatchCandidatePreview = false) => {
       if (!window.UiSubmitHelpers || !window.UiSubmitHelpers.prepCompare) {
         showToast('申請模組未載入', 'error');
         return;
@@ -6035,7 +6216,7 @@ createApp({
         activeCell, inputRequestDate, allSchedules, showConfirm, getScheduleForDate,
          formatDateMMDD, getWeekDayText, exchangePeriodId, exchangeWeekOffset, exchangeTargetDate, isSingleWeek,
         consecAlertsA, consecAlertsB, isMutualCover, assignMutualDraftFromMatch, PERIOD8_FEE,
-        pendingRequestData, showMatchModal, showCompareModal, getLeaveTimeDefaults
+         pendingRequestData, showMatchModal, showCompareModal, getLeaveTimeDefaults, isBatchCandidatePreview
       }, mode, targetEmail, periodIdVal, subjectVal, classVal);
     };
     const prepCompare = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
@@ -6110,6 +6291,19 @@ createApp({
       return 'drafted';
     };
 
+    const previewBatchCandidate = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '') => {
+      if (!isBatchMatchFlow.value || !targetEmail) return 'cancelled';
+      return runComparePreparation(mode, targetEmail, periodIdVal, subjectVal, classVal, true);
+    };
+
+    const closeCompareModal = () => {
+      const isBatchPreview = !!(pendingRequestData.value && pendingRequestData.value.isBatchCandidatePreview);
+      showCompareModal.value = false;
+      if (!isBatchPreview) return;
+      pendingRequestData.value = null;
+      showMatchModal.value = !!(batchSelectMode.value && batchSlots.value.length >= 2);
+    };
+
     const startCombinedReturn = () => {
       const cell = activeCell.value || {};
       const classData = cell.classData || {};
@@ -6180,7 +6374,8 @@ createApp({
 
     // 批次：該日該節是否在選定清單
     const isBatchSlotAt = (dateStr, day, period) => {
-      if (!pendingRequestData.value.isBatch || !batchSlots.value.length) return false;
+      const pending = pendingRequestData.value;
+      if (!pending || !pending.isBatch || !batchSlots.value.length) return false;
       return batchSlots.value.some(s =>
         s.dateStr === dateStr &&
         parseInt(s.dayOfWeek) === parseInt(day) &&
@@ -6192,22 +6387,27 @@ createApp({
     const batchCompareViewEmail = ref('');
 
     const batchCompareSubGroups = computed(() => {
-      if (!pendingRequestData.value.isBatch) return [];
+      const pending = pendingRequestData.value;
+      if (!pending || !pending.isBatch) return [];
       return groupBatchSlotsBySub(batchSlots.value);
     });
 
     const resolveCompareBEmail = () => {
-      if (pendingRequestData.value.isBatch && (pendingRequestData.value.isPerSlot || batchAssignMode.value === 'perSlot')) {
+      const pending = pendingRequestData.value;
+      if (!pending) return '';
+      if (pending.isExchangeBatch) return pending.subTeacher || '';
+      if (pending.isBatch && (pending.isPerSlot || batchAssignMode.value === 'perSlot')) {
         return batchCompareViewEmail.value
           || (batchCompareSubGroups.value[0] && batchCompareSubGroups.value[0].subEmail)
           || '';
       }
-      return pendingRequestData.value.subTeacher || '';
+      return pending.subTeacher || '';
     };
 
     /** B 欄：此格是否為「目前檢視受邀人」要代入的批次節次（須日期＋節次＋受邀人全符合） */
     const getBatchSlotForCompareB = (dateStr, day, period) => {
-      if (!pendingRequestData.value.isBatch || !dateStr) return null;
+      const pending = pendingRequestData.value;
+      if (!pending || !pending.isBatch || !dateStr) return null;
       const bEmail = resolveCompareBEmail();
       if (!bEmail) return null;
       const d = parseInt(day, 10);
@@ -6222,12 +6422,13 @@ createApp({
     };
 
     // 活動模式：外出班釋出不視為衝堂；巡堂可當空堂
-    const isSlotConflict = (cell) => {
+    const isSlotConflict = (cell, dateStr, period) => {
       if (window.DomainSchedule && window.DomainSchedule.isPatrolCell && window.DomainSchedule.isPatrolCell(cell)) {
         return false;
       }
       if (DAC() && isMutualCover.value) {
-        return DAC().isConflictCell(cell, true, mutualAwayClasses.value);
+        const awayAtSlot = isMutualActivitySlotInRange(dateStr, period) ? mutualAwayClasses.value : [];
+        return DAC().isConflictCell(cell, true, awayAtSlot);
       }
       return !!(cell && !cell.isSubstituted);
     };
@@ -6326,26 +6527,27 @@ createApp({
 
     // 輔助：檢查 B 師是否與請假節次衝堂（含批次全節／每節不同人）
     const hasSubTeacherConflict = computed(() => {
-      if (pendingRequestData.value.mode !== 'substitution') return false;
-      if (pendingRequestData.value.isBatch && batchSlots.value.length) {
-        if (pendingRequestData.value.isPerSlot || batchAssignMode.value === 'perSlot') {
+      const pending = pendingRequestData.value;
+      if (!pending || pending.mode !== 'substitution') return false;
+      if (pending.isBatch && batchSlots.value.length) {
+        if (pending.isPerSlot || batchAssignMode.value === 'perSlot') {
           return batchSlots.value.some(s => {
             if (!s.subTeacherEmail) return false;
             const cell = getScheduleForDate(s.subTeacherEmail, s.dateStr, s.period, s.dayOfWeek);
-            return isSlotConflict(cell);
+            return isSlotConflict(cell, s.dateStr, s.period);
           });
         }
-        const subEmail = pendingRequestData.value.subTeacher;
+        const subEmail = pending.subTeacher;
         if (!subEmail) return false;
         return batchSlots.value.some(s => {
           const cell = getScheduleForDate(subEmail, s.dateStr, s.period, s.dayOfWeek);
-          return isSlotConflict(cell);
+          return isSlotConflict(cell, s.dateStr, s.period);
         });
       }
-      const subEmail = pendingRequestData.value.subTeacher;
+      const subEmail = pending.subTeacher;
       if (!subEmail) return false;
-      const timeKey = pendingRequestData.value.timeKey;
-      const dateStr = pendingRequestData.value.date;
+      const timeKey = pending.timeKey;
+      const dateStr = pending.date;
       if (!timeKey || !dateStr) return false;
       const tk = (window.DateUtils && window.DateUtils.decodeTimeKey)
         ? window.DateUtils.decodeTimeKey(timeKey)
@@ -6353,7 +6555,7 @@ createApp({
       const day = parseInt(tk.day, 10);
       const period = parseInt(tk.period, 10);
       const cell = getScheduleForDate(subEmail, dateStr, period, day);
-      return isSlotConflict(cell);
+      return isSlotConflict(cell, dateStr, period);
     });
 
     // ── 子函數①②：表單驗證／組裝 payload（ui-request.js → UiSubmitHelpers）──
@@ -6361,6 +6563,17 @@ createApp({
       if (!window.UiSubmitHelpers) {
         showToast('送出模組未載入', 'error');
         return false;
+      }
+      const mutualPending = pendingRequestData.value || {};
+      if (isMutualCover.value && mutualPending.mode === 'substitution') {
+        const mutualSlots = mutualPending.isBatch && batchSlots.value.length
+          ? batchSlots.value
+          : [{ dateStr: mutualPending.date || mutualPending.requestDate || inputRequestDate.value,
+              period: activeCell.value && activeCell.value.period }];
+        if (mutualSlots.some(slot => !isMutualActivitySlotInRange(slot.dateStr, slot.period))) {
+          showToast('申請節次不在目前活動日期／節次範圍內，請重新選課或調整活動範圍', 'warning');
+          return false;
+        }
       }
       return window.UiSubmitHelpers.validateSubmitRequest({
         pendingRequestData, showToast, showConfirm, isAdmin, getTeacherNameByEmail,
@@ -6596,7 +6809,8 @@ createApp({
          getTeacherNameByEmail, getTeacherSubjectByEmail, formatDateMMDD, isSingleWeek,
         isClassAwayOnDate, getWeekDayText,
          batchSelectMode, batchFlowMode, isBatchSlotSelected, isMutualCover, getMutualDraftAt,
-        mutualDrafts, mutualAwayClasses, mutualActivityStart, mutualActivityEnd, DAC
+         mutualDrafts, mutualAwayClasses, mutualActivityStart, mutualActivityEnd,
+         mutualActivityStartPeriod, mutualActivityEndPeriod, isMutualActivitySlotInRange, DAC
       });
       return _timetableApi;
     };
@@ -7439,7 +7653,7 @@ createApp({
       });
     };
     bindVueModalA11y(showMatchModal, () => { closeMatchModal(); }, '.match-drawer-overlay', '智慧媒合');
-    bindVueModalA11y(showCompareModal, () => { showCompareModal.value = false; }, '[data-tour="compare-modal"]', '模擬對照');
+    bindVueModalA11y(showCompareModal, () => { closeCompareModal(); }, '[data-tour="compare-modal"]', '模擬對照');
     bindVueModalA11y(showLineMessageModal, () => { showLineMessageModal.value = false; }, '[data-tour="line-message-modal"]', 'LINE 訊息');
     bindVueModalA11y(showSuccessModal, () => { showSuccessModal.value = false; }, '[data-tour="success-modal"]', '送出成功');
     // 其餘後台 modal：開啟時抓目前顯示的 .modal-overlay
@@ -7633,6 +7847,7 @@ createApp({
       return a.handleCellClick({
         isScheduleEditMode, openScheduleEditModal, showToast, showConfirm,
         isMutualLead, getMutualDraftAt, removeMutualDraft, activeCell, inputRequestDate,
+        isMutualActivitySlotInRange,
         matchMode, matchPreview, showCompareModal, showMatchModal,
         fetchRecommendations, batchSelectMode, batchFlowMode, isAdmin, user, toggleBatchSlot,
         detailRequest, detailSubRecord, showDetailModal, resolveDetailRequest,
@@ -8248,10 +8463,12 @@ createApp({
            const rows = dac.buildQuotaRecalcRows({
             mode: 'add',
             teachers: teachersList.value || [],
-            awayClasses,
-            startDate,
-            endDate,
-            allSchedules: allSchedules.value || [],
+             awayClasses,
+             startDate,
+             endDate,
+             startPeriod: ev.startPeriod,
+             endPeriod: ev.endPeriod,
+             allSchedules: allSchedules.value || [],
              excludeEmails: leaders
            });
            teacherDemandRows = rows || [];
@@ -8294,6 +8511,8 @@ createApp({
       const res = await window.ExportActivityCover.exportWord({
         startDate,
         endDate,
+        startPeriod: ev.startPeriod,
+        endPeriod: ev.endPeriod,
         activityName,
         grade,
         requests: allReqs,
@@ -10280,6 +10499,31 @@ createApp({
           return;
         }
         if (type === 'exchange' || type === '對調') {
+          if (String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange') {
+            out.push(Object.assign({}, base, {
+              id: String(base.requestId) + '_class_1',
+              requestId: base.requestId,
+              date: requestDate,
+              period: requestPeriod,
+              originalTeacherName: requesterName,
+              actualTeacherName: targetName,
+              className: classValue,
+              subject: subjectValue,
+              type: 'exchange'
+            }));
+            out.push(Object.assign({}, base, {
+              id: String(base.requestId) + '_class_2',
+              requestId: base.requestId,
+              date: targetDateValue,
+              period: targetPeriodValue,
+              originalTeacherName: targetName,
+              actualTeacherName: requesterName,
+              className: targetClassValue,
+              subject: targetSubjectValue,
+              type: 'exchange'
+            }));
+            return;
+          }
           // 調課只交換時段：班級與科目必須跟著原授課教師移動。
           out.push(Object.assign({}, base, {
             id: String(base.requestId) + '_class_1',
@@ -10598,7 +10842,9 @@ createApp({
       openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
       isClassAwayFormClassSelected, selectClassAwayGrade,
       toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange,
+      setClassAwayPeriodBoundary, setClassAwayPeriodMode,
       clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel,
+      classAwayDailyPeriodLabel, classAwayBoundaryPeriodLabel, isClassAwayRangeEvent,
       saveClassAwayEvent, deleteClassAwayEvent
     } = window.UiClassAwayAdmin.create({
       ref,
@@ -10624,8 +10870,12 @@ createApp({
       classAwayEvents,
       classList,
       semesterEndDate,
-      mutualActivityStart,
-      mutualActivityEnd,
+       mutualActivityStart,
+       mutualActivityEnd,
+       mutualActivityStartPeriod,
+       mutualActivityEndPeriod,
+       mutualActivityPeriodMode,
+       mutualActivityPeriods,
       mutualAwayClasses,
       mutualNote,
       mutualLeadEmails,
@@ -12090,6 +12340,89 @@ createApp({
       if (k === 'adjust') return 'quota-type-adjust';
       return '';
     };
+    const showQuotaAdjustModal = ref(false);
+    const quotaAdjustSaving = ref(false);
+    const quotaAdjustForm = ref({ email: '', name: '', balance: 0, direction: 'add', amount: 1, note: '' });
+    const quotaAdjustPreview = computed(() => {
+      const balance = Math.max(0, parseFloat(quotaAdjustForm.value.balance) || 0);
+      const amount = parseFloat(quotaAdjustForm.value.amount) || 0;
+      return Math.round((balance + (quotaAdjustForm.value.direction === 'subtract' ? -amount : amount)) * 1000) / 1000;
+    });
+    const openManualQuotaAdjust = (teacher) => {
+      if (!isAdmin.value) {
+        showToast('僅管理員可手動調整額度', 'warning');
+        return;
+      }
+      if (!teacher) return;
+      const email = String(teacher.loginEmail || teacher.email || teacher.teacherEmail || '').trim().toLowerCase();
+      if (!email) {
+        showToast('找不到教師帳號，無法調整額度', 'warning');
+        return;
+      }
+      const rawBalance = teacher.sheetQuota != null ? teacher.sheetQuota
+        : (teacher.mutualQuota != null ? teacher.mutualQuota : teacher.balance);
+      const balance = Math.max(0, parseFloat(rawBalance) || 0);
+      quotaAdjustForm.value = {
+        email: email,
+        name: String(teacher.name || teacher.teacherName || email),
+        balance: balance,
+        direction: 'add',
+        amount: 1,
+        note: ''
+      };
+      showQuotaLedgerModal.value = false;
+      showQuotaAdjustModal.value = true;
+    };
+    const closeManualQuotaAdjust = () => {
+      if (!quotaAdjustSaving.value) showQuotaAdjustModal.value = false;
+    };
+    const saveManualQuotaAdjust = async () => {
+      if (!isAdmin.value) {
+        showToast('僅管理員可手動調整額度', 'warning');
+        return;
+      }
+      const form = quotaAdjustForm.value;
+      const amount = Number(form.amount);
+      if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+        showToast('請輸入大於 0 的整數節數', 'info');
+        return;
+      }
+      const current = Math.max(0, parseFloat(form.balance) || 0);
+      const next = Math.round((current + (form.direction === 'subtract' ? -amount : amount)) * 1000) / 1000;
+      if (next < 0) {
+        showToast('扣除節數不可超過目前餘額', 'warning');
+        return;
+      }
+      const actionText = form.direction === 'subtract' ? '扣除' : '增加';
+      const note = String(form.note || '').trim();
+      quotaAdjustSaving.value = true;
+      try {
+        const res = await callGasApi('updateMutualQuotas', {
+          list: [{ email: form.email, mutualQuota: next, note: note }]
+        });
+        if (res && res.success === false) throw new Error(res.message || '後端拒絕額度調整');
+        const roster = teachersList.value.slice();
+        const index = roster.findIndex((teacher) =>
+          [teacher.loginEmail, teacher.email, teacher.teacherEmail].some((value) =>
+            value && String(value).trim().toLowerCase() === form.email
+          )
+        );
+        if (index >= 0) {
+          roster[index] = Object.assign({}, roster[index], { mutualQuota: next });
+          teachersList.value = roster;
+        }
+        try {
+          if (typeof window.__quotaLedgerCacheBust === 'function') window.__quotaLedgerCacheBust();
+        } catch (eBust) { /* ignore */ }
+        showQuotaAdjustModal.value = false;
+        showToast('已' + actionText + ' ' + amount + ' 節，餘額 ' + current + ' → ' + next, 'success');
+        await openQuotaLedger({ email: form.email, loginEmail: form.email, name: form.name, mutualQuota: next });
+      } catch (e) {
+        showToast('額度調整失敗：' + (e && e.message ? e.message : String(e)), 'error');
+      } finally {
+        quotaAdjustSaving.value = false;
+      }
+    };
     bindFlagModal(showQuotaLedgerModal, () => { showQuotaLedgerModal.value = false; }, '額度歷程');
 
     // ── 空堂排班（扣額度；預設不寄信；班級可選）──
@@ -12284,20 +12617,22 @@ createApp({
     };
     /** 假別變更時自動帶入預設經費（第8節／活動模式不覆寫） */
     const onLeaveReasonChange = () => {
-      const mode = pendingRequestData.value.mode;
+      const pending = pendingRequestData.value;
+      if (!pending) return;
+      const mode = pending.mode;
       if (mode !== 'substitution' && mode !== 'exchange') return;
-      if (String(pendingRequestData.value.reason || '').trim() === '課務調整') {
+      if (String(pending.reason || '').trim() === '課務調整') {
         toggleCourseAdjustmentOnly({ target: { checked: true } });
         return;
       }
-      if (mode !== 'substitution' || pendingRequestData.value.courseAdjustmentOnly) return;
+      if (mode !== 'substitution' || pending.courseAdjustmentOnly) return;
       if (isPeriod8FeeLocked.value) {
-        pendingRequestData.value.subFee = PERIOD8_FEE;
+        pending.subFee = PERIOD8_FEE;
         batchSubFee.value = PERIOD8_FEE;
         return;
       }
       if (isMutualCover.value) return;
-      const reason = pendingRequestData.value.reason;
+      const reason = pending.reason;
       if (!reason) return;
       pendingRequestData.value.subFee = defaultSubFeeForReason(reason);
       batchSubFee.value = pendingRequestData.value.subFee;
@@ -12312,8 +12647,9 @@ createApp({
       ],
       () => {
         if (!isPeriod8FeeLocked.value) return;
-        if (pendingRequestData.value.mode !== 'substitution') return;
-        pendingRequestData.value.subFee = PERIOD8_FEE;
+        const pending = pendingRequestData.value;
+        if (!pending || pending.mode !== 'substitution') return;
+        pending.subFee = PERIOD8_FEE;
         batchSubFee.value = PERIOD8_FEE;
       }
     );
@@ -12382,7 +12718,15 @@ createApp({
     // 面板勾選變更時自動暫存
     watch(mutualSkipNotify, () => { persistMutualPanelDraft(); });
     watch(mutualNote, () => { persistMutualPanelDraft(); });
-    watch([mutualActivityStart, mutualActivityEnd], () => { persistMutualPanelDraft(); });
+     watch([mutualActivityStart, mutualActivityEnd, mutualActivityStartPeriod, mutualActivityEndPeriod], () => {
+       if (mutualActivityStart.value && mutualActivityStart.value === mutualActivityEnd.value) {
+         const order = [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+         const startIndex = order.indexOf(parseInt(mutualActivityStartPeriod.value, 10));
+         const endIndex = order.indexOf(parseInt(mutualActivityEndPeriod.value, 10));
+         if (startIndex > endIndex) mutualActivityEndPeriod.value = mutualActivityStartPeriod.value;
+       }
+       persistMutualPanelDraft();
+     });
 
     const toggleMutualAwayClass = (cls) => { const a = getMutualPanelApi(); if (a) a.toggleMutualAwayClass(cls); };
     const selectAwayGrade = (grade) => { const a = getMutualPanelApi(); if (a) a.selectAwayGrade(grade); };
@@ -12696,6 +13040,16 @@ createApp({
       return '';
     };
 
+    const samePeriodSwapUI = window.UiSamePeriodSwap.create({
+      ref, computed, isAdmin, activeCell, inputRequestDate, teachersList,
+      getTeacherNameByEmail: (email) => getTeacherNameByEmail(email),
+      getScheduleForDate: (email, date, period, day) => getScheduleForDate(email, date, period, day),
+      formatPeriodText: (period) => formatPeriodText(period),
+      callGasApi, showConfirm, showToast, showMatchModal,
+      clearScheduleCache,
+      softRefreshInBackground: (options) => softRefreshInBackground(options || {})
+    });
+
     // 返回 Vue 拋出變數
     return {
       getMatchSlotDateMMDD,
@@ -12706,16 +13060,30 @@ createApp({
       loadHistoryMonth, setHistoryFilterMode, setHistoryTypeFilter, ensureHistoryMonthLoaded, loadFullSemesterHistory, reloadWindowedHistory,
       selectedMobileDay, isMobile, checkMobile, initMobileDay,
       currentSemester, availableSemesters, currentSemesterName, semestersList, showSemesterModal, semesterModalMode, semesterForm,
-       currentWeekDates, compareWeekDatesA, compareWeekDatesB, compareWeekSelectionA, compareWeekSelectionB, compareDisplayDatesA, compareDisplayDatesB, setCompareWeekSelection, batchCompareWeekIndex, batchCompareWeekTotal, batchCompareWeekSlotCount, shiftBatchCompareWeek, isCrossWeekExchange, getExchangeEndpointText, selectedWeekDate, currentWeekNumber,
+        currentWeekDates, compareWeekDatesA, compareWeekDatesB, compareWeekSelectionA, compareWeekSelectionB, compareDisplayDatesA, compareDisplayDatesB, setCompareWeekSelection, batchCompareWeekIndex, batchCompareWeekTotal, batchCompareWeekSlotCount, shiftBatchCompareWeek, batchExchangePreviewSlotKey, setBatchExchangePreviewSlot, isCrossWeekExchange, getExchangeEndpointText, selectedWeekDate, currentWeekNumber,
        classList, classSchedules, selectedClass, classReadonlyMode, classViewerReadonly, selectClassForView, getClassReadonlyLink, copyClassReadonlyLink,
        searchQuery, selectedSubject, timetableDisplayMode, teachersList, allSchedules, schoolSwaps, substitutionRecords, homeroomRecords, requestsList,
       mySentRequests, myPendingRequests, adminPendingRequests, allPendingRequests,
-       matchMode, activeCell, inputRequestDate, recommendedTeachers, recommendationLoading,
-       trianglePickB, trianglePickC, triangleNote, triangleSubmitting, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC,
+        matchMode, activeCell, inputRequestDate, recommendedTeachers, recommendationLoading,
+        showSamePeriodSwapModal: samePeriodSwapUI.showSamePeriodSwapModal,
+        samePeriodSwapSource: samePeriodSwapUI.samePeriodSwapSource,
+        samePeriodSwapCandidates: samePeriodSwapUI.samePeriodSwapCandidates,
+        samePeriodSwapFilteredCandidates: samePeriodSwapUI.samePeriodSwapFilteredCandidates,
+        samePeriodSwapTargetKey: samePeriodSwapUI.samePeriodSwapTargetKey,
+        samePeriodSwapSearchQuery: samePeriodSwapUI.samePeriodSwapSearchQuery,
+        samePeriodSwapSelectedCandidate: samePeriodSwapUI.samePeriodSwapSelectedCandidate,
+        samePeriodSwapSaving: samePeriodSwapUI.samePeriodSwapSaving,
+        openSamePeriodSwapModal: samePeriodSwapUI.openSamePeriodSwapModal,
+        closeSamePeriodSwapModal: samePeriodSwapUI.closeSamePeriodSwapModal,
+        saveSamePeriodSwap: samePeriodSwapUI.saveSamePeriodSwap,
+        trianglePickB, trianglePickC, triangleNote, triangleSubmitting, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC,
         triangleParticipants, triangleLegs, trianglePreviewRows, trianglePreviewWeekDates, triangleTimetablePreview, triangleValidation, triangleReady, formatTriangleSlot, openTriangleTimetablePreview, submitTriangleRequest,
        batchSelectMode, batchFlowMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote,
        isMutualCover, toggleMutualCover, setMutualCover, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, QUOTA_DEDUCT_FEE, PERIOD8_FEE, TIMETABLE_ONLY_FEE,
-      mutualAwayClasses, mutualActivityStart, mutualActivityEnd, setMutualActivityThisWeek,
+        mutualAwayClasses, mutualActivityStart, mutualActivityEnd, mutualActivityStartPeriod, mutualActivityEndPeriod,
+        mutualActivityPeriodMode, mutualActivityPeriods,
+        setMutualActivityPeriodBoundary, setMutualActivityThisWeek, setMutualActivityPeriodMode,
+        toggleMutualActivityPeriod, isMutualActivityPeriodSelected,
       toggleMutualAwayClass, selectAwayGrade, mutualCoverStats,
       mutualLeadEmails, toggleMutualLead, isMutualLead, onMutualLeadChipClick, jumpToTeacherTimetable,
       mutualSkipNotify, directApproveSkipNotify, mutualNote, mutualDrafts, getMutualDraftAt, removeMutualDraft, clearMutualDrafts,
@@ -12744,7 +13112,9 @@ createApp({
       isScheduleEditMode, showScheduleEditModal, scheduleForm,
           showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots,
           showTeacherExpenseAuditModal, teacherExpenseAuditRows, teacherExpenseAuditSummary, openTeacherExpenseAuditModal, normalizeTeacherExpenseData,
-      showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
+       showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, openQuotaLedger, closeQuotaLedger, quotaTypeClass,
+       showQuotaAdjustModal, quotaAdjustSaving, quotaAdjustForm, quotaAdjustPreview,
+       openManualQuotaAdjust, closeManualQuotaAdjust, saveManualQuotaAdjust,
       showEmptySlotModal, emptySlotForm, emptySlotQuotaZero, openEmptySlotAssign, openEmptySlotFromDetail, closeEmptySlotModal, executeEmptySlotAssign,
        reportMonth, reportStartDate, reportEndDate, reportWeeksCount, monthlyReportData, monthlyReportLoading, monthlyReportTotals, shiftReportPeriod,
        accountingPeriod, accountingExportLoading, period8Loading, period8ExportLoading,
@@ -12779,7 +13149,7 @@ createApp({
       selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, isMatchPreviewSelected,
         selectedClassDate, selectedClassWeekDates, classWeekNumber, classSubstitutionMap, classChangeSummary, getClassChangeTypeLabel, changeClassWeek, goToClassThisWeek,
         period8WeekDate, period8WeekDates, period8WeekNumber, changePeriod8Week, goToPeriod8ThisWeek, period8RosterRows, period8CellsFor, period8StatusLabel,
-       prepCompare, startCombinedReturn, getCompareCellText, getCompareCellClass, executeSubmitRequest, isSubmitting,
+       prepCompare, previewBatchCandidate, closeCompareModal, startCombinedReturn, getCompareCellText, getCompareCellClass, executeSubmitRequest, isSubmitting,
        getStatusText, changeMatchMode, respondToRequest, respondToBatch, adminApprove, adminReject, cancelRequest, deleteSubstitutionRecord, loadMoreMatches,
        isTriangleRequest, isExchangeLikeRequest,
         triangleCandidateSearch, triangleCandidateDisplayCount, triangleCandidateOptions, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateBOptions, triangleCandidateBReadyCount, displayedTriangleBOptions, displayedTriangleCOptions, triangleCandidateIsRestricted, selectTriangleCandidateB, selectTriangleCandidateC, loadMoreTriangleCandidates,
@@ -12815,7 +13185,9 @@ createApp({
         openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
         isClassAwayFormClassSelected, selectClassAwayGrade,
         toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange,
+        setClassAwayPeriodBoundary, setClassAwayPeriodMode,
         clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel,
+        classAwayDailyPeriodLabel, classAwayBoundaryPeriodLabel, isClassAwayRangeEvent,
         saveClassAwayEvent, deleteClassAwayEvent,
        // 全校日期節次對調
        schoolSwapRows, showSchoolSwapModal, schoolSwapModalMode, schoolSwapSaving, schoolSwapForm,

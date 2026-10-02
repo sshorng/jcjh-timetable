@@ -2102,6 +2102,7 @@ window.DomainBilling = (function () {
          publicOvertimeUsed: publicOvertimeUsed,
          substituteScheduledCount: substitutePayout.scheduled,
          substitutePaidCount: substitutePayout.paid,
+         substitutePaidFee: substitutePayout.paid * FEE_REGULAR,
          substituteAttributeDetails: substitutePayout.paidDetails,
          substituteDeduction: substituteDeduction,
         substituteLeaveAdditionalDeduction: substituteLeaveAdditionalDeduction,
@@ -2158,6 +2159,8 @@ window.DomainBilling = (function () {
         "我去代課(公費費1-7)": row.pubSubFee,
         "我去代課(自費節數1-7)": row.selfSubCount,
         "我去代課(自費費1-7)": row.selfSubFee,
+        "課代節": row.substitutePaidCount,
+        "課代費": row.substitutePaidFee,
         "我去代課(自費明細1-7)": row.selfSubDetail,
         "第8節實際上課節數": row.period8SubCount,
         "第8節費(600元/節)": row.period8Fee
@@ -2170,7 +2173,8 @@ window.DomainBilling = (function () {
       'weeklyPeriods', 'baseHours', 'weeklyOvertime', 'reduceDeduction',
       'selfPaidDeduction', 'publicOvertimeUsed', 'selfSubDeduction', 'substituteAdditionalDeduction',
       'actualOvertime', 'overtimeFee', 'pubSubCount', 'pubSubFee',
-      'selfSubCount', 'selfSubFee', 'period8SubCount', 'period8Fee'
+      'selfSubCount', 'selfSubFee', 'substitutePaidCount', 'substitutePaidFee',
+      'period8SubCount', 'period8Fee'
     ];
     var totals = {};
     fields.forEach(function (field) { totals[field] = 0; });

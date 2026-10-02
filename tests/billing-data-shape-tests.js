@@ -433,10 +433,16 @@ assert.deepEqual([
   fixedSmallRow.weeklyOvertime,
   fixedSmallRow.substituteScheduledCount,
   fixedSmallRow.substitutePaidCount,
+  fixedSmallRow.substitutePaidFee,
   fixedSmallRow.substituteDeduction,
   fixedSmallRow.substituteLeaveAdditionalDeduction,
   fixedSmallRow.substituteKeepAwayDeduction
-], [0, 15, 13, 2, 1, 1], '小鐘點應固定週節數乘週數再扣被代與空堂，且不併入超鐘點');
+], [0, 15, 13, 5915, 2, 1, 1], '小鐘點應獨立統計實授節數與費用，不併入超鐘點');
+const fixedSmallExportRow = window.DomainBilling.toExcelRows([fixedSmallRow])[0];
+assert.deepEqual([
+  fixedSmallExportRow['課代節'],
+  fixedSmallExportRow['課代費']
+], [13, 5915], '月報匯出欄位應保留課表代課節數與金額');
 
 const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'SmallSub', name: '小鐘點教師', baseHours: 0 }],
@@ -457,6 +463,7 @@ assert.equal(substituteLeaveRow.substituteDeduction, 1, '代課屬性請假應�
 assert.equal(substituteLeaveRow.substituteLeaveAdditionalDeduction, 1);
 assert.equal(substituteLeaveRow.substituteScheduledCount, 1, '小鐘點應依結算週數計算');
 assert.equal(substituteLeaveRow.substitutePaidCount, 0, '代課屬性未授課不應列入公付代課');
+assert.equal(substituteLeaveRow.substitutePaidFee, 0, '代課屬性未授課不應列入課表代課費');
 assert.equal(substituteLeaveRow.pubSubCount, 0, '代課屬性未授課不應列入公付代課');
 assert.equal(substituteLeaveRow.weeklyOvertime, 0, '只有代課屬性的教師不應產生超鐘點');
 assert.equal(substituteLeaveRow.actualOvertime, 0);
@@ -740,13 +747,15 @@ const reportTotals = window.DomainBilling.sumMonthlyReportRows([
     weeklyPeriods: 20, baseHours: 16, weeklyOvertime: 4, reduceDeduction: 1,
     selfPaidDeduction: 2, publicOvertimeUsed: 3, selfSubDeduction: 4, substituteAdditionalDeduction: 1,
     actualOvertime: -2, overtimeFee: -910, pubSubCount: 4, pubSubFee: 1820,
-    selfSubCount: 1, selfSubFee: 455, period8SubCount: 2, period8Fee: 1200
+    selfSubCount: 1, selfSubFee: 455, substitutePaidCount: 3, substitutePaidFee: 1365,
+    period8SubCount: 2, period8Fee: 1200
   },
   {
     weeklyPeriods: 18, baseHours: 16, weeklyOvertime: 2, reduceDeduction: 0,
     selfPaidDeduction: 1, publicOvertimeUsed: 0, selfSubDeduction: 2, substituteAdditionalDeduction: 2,
     actualOvertime: 1, overtimeFee: 455, pubSubCount: 0, pubSubFee: 0,
-    selfSubCount: 2, selfSubFee: 910, period8SubCount: 1, period8Fee: 600
+    selfSubCount: 2, selfSubFee: 910, substitutePaidCount: 1, substitutePaidFee: 455,
+    period8SubCount: 1, period8Fee: 600
   }
 ]);
 assert.deepEqual(reportTotals, {
@@ -764,6 +773,8 @@ assert.deepEqual(reportTotals, {
   pubSubFee: 1820,
   selfSubCount: 3,
   selfSubFee: 1365,
+  substitutePaidCount: 4,
+  substitutePaidFee: 1820,
   period8SubCount: 3,
   period8Fee: 1800
 });

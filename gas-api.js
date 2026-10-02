@@ -648,6 +648,10 @@ window.GasApi = (function () {
         className: options.myClass || options.className,
         subject: options.myCourse || options.subject,
         awayClasses: options.awayClasses || [],
+        awayStartDate: options.awayStartDate || '',
+        awayEndDate: options.awayEndDate || '',
+        awayStartPeriod: options.awayStartPeriod || '',
+        awayEndPeriod: options.awayEndPeriod || '',
         activityMode: !!options.activityMode,
         limit: options.limit != null ? options.limit : 40
       }, { abortPrevious: true, semesterId: semesterId });

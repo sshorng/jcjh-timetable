@@ -950,7 +950,7 @@ function getHeadersForSheet(sheetName) {
     "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度", "超鐘點節數", "超鐘點節次"],
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
     "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
-    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註"],
+    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註", "起始節次", "結束節次"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "全校對調": ["學期代號", "對調ID", "事件名稱", "日期A", "星期A", "節次A", "日期B", "星期B", "節次B", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     // Ledger truth: index = semester|teacher name; roster quota remains a cache.
@@ -3058,18 +3058,37 @@ function normalizeClassAwayPeriod_(value) {
       selected[0] = true;
       return;
     }
+    if (s === "午休" || s === "午餐" || s === "午" || s.toLowerCase() === "lunch") {
+      selected[45] = true;
+      return;
+    }
     var match = s.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
     if (!match) return;
     var n = parseInt(match[1], 10);
-    if (n >= 0 && n <= 8) selected[n] = true;
+    if ((n >= 0 && n <= 8) || n === 45) selected[n] = true;
   });
 
   var output = [];
-  for (var period = 0; period <= 8; period++) {
-    if (!selected[period]) continue;
-    output.push(period === 0 ? "早自習" : "第" + period + "節");
-  }
+  [0, 1, 2, 3, 4, 45, 5, 6, 7, 8].forEach(function (period) {
+    if (!selected[period]) return;
+    output.push(period === 0 ? "早自習" : (period === 45 ? "午休" : "第" + period + "節"));
+  });
   return output.length ? output.join("、") : "全部";
+}
+
+function normalizeClassAwayBoundaryPeriod_(value, fieldName) {
+  var text = String(value == null ? "" : value).trim().replace(/^'+/, "");
+  if (/^(早自習|早讀|晨讀)$/i.test(text)) return "0";
+  if (/^(午休|午餐|午|lunch)$/i.test(text)) return "45";
+  var match = text.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+  var period = match ? parseInt(match[1], 10) : NaN;
+  if ((period >= 0 && period <= 8) || period === 45) return String(period);
+  throw new Error((fieldName || "節次") + "不是有效的課表節次！");
+}
+
+function classAwayBoundaryPeriodIndex_(value) {
+  var order = [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+  return order.indexOf(parseInt(value, 10));
 }
 
 /** 經費是否為「扣額度」（含舊資料別名「互代不結」） */
@@ -4616,6 +4635,14 @@ function buildMatchCandidates_(semesterId, opts) {
     var k = String(c || "").trim();
     if (k) awaySet[k] = true;
   });
+  var awayRangeEvent = {
+    "起日": String(opts.awayStartDate || dateStr).slice(0, 10),
+    "迄日": String(opts.awayEndDate || dateStr).slice(0, 10),
+    "起始節次": opts.awayStartPeriod,
+    "結束節次": opts.awayEndPeriod
+  };
+  var hasAwayPeriodRange = opts.awayStartPeriod != null && String(opts.awayStartPeriod).trim() !== ""
+    && opts.awayEndPeriod != null && String(opts.awayEndPeriod).trim() !== "";
 
   var teachers = getSemesterTeachersCached_(semesterId) || [];
   var rawSchedules = getSemesterSchedulesCached_(semesterId) || [];
@@ -4760,6 +4787,12 @@ function buildMatchCandidates_(semesterId, opts) {
       var targetCourse = courseAt(tgtEm, targetDate, targetPeriod, targetDay);
       var targetCls = r["對調目標班級"] || r.targetClassName || targetCourse.className;
       var targetSubj = r["對調目標科目"] || r.targetSubject || targetCourse.subject;
+      if (String(r["特殊流程"] || r.specialFlow || "") === "admin_same_period_exchange") {
+        // 同節互換只交換教師負責的班級，班級與科目留在原日期節次。
+        markEdge(reqDate, reqPer, reqEm, tgtEm, cls, subj);
+        markEdge(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj);
+        return;
+      }
       markEdge(reqDate, reqPer, reqEm, tgtEm, targetCls, targetSubj);
       markEdge(targetDate, targetPeriod, tgtEm, reqEm, cls, subj);
     } else {
@@ -4801,17 +4834,18 @@ function buildMatchCandidates_(semesterId, opts) {
       // 進行中佔位：視同有課（不可再媒合）
       return { className: "(pending)", subject: "", attr: "", isPending: true };
     }
-    if (outOnDate[dateKey]) {
-      // 調出：視同空
-      return null;
-    }
     if (inOnDate[dateKey]) {
+      // 同節互換時，教師同時有調出與調入，實際應以調入課為準。
       return {
         className: inOnDate[dateKey].className || (base && base.className) || "",
         subject: inOnDate[dateKey].subject || (base && base.subject) || "",
         attr: (base && base.attr) || "",
         isDuty: true
       };
+    }
+    if (outOnDate[dateKey]) {
+      // 只有調出、沒有調入：視同空堂。
+      return null;
     }
     return base;
   }
@@ -4820,11 +4854,14 @@ function buildMatchCandidates_(semesterId, opts) {
     return !!(cell && (cell.attr === "巡堂" || cell.subject === "巡堂"));
   }
 
-  function isAwayReleased(cell) {
+  function isAwayReleased(cell, targetPeriod) {
     if (!cell) return false;
     if (cell.isPending) return false;
     var cn = String(cell.className || "").trim();
-    return !!(cn && awaySet[cn]);
+    if (!(cn && awaySet[cn])) return false;
+    if (opts.awayStartDate && dateStr < String(opts.awayStartDate).slice(0, 10)) return false;
+    if (opts.awayEndDate && dateStr > String(opts.awayEndDate).slice(0, 10)) return false;
+    return !hasAwayPeriodRange || samePeriodExchangeAwaySlot_(awayRangeEvent, dateStr, targetPeriod, semesterId);
   }
 
   function isFreeAt(email, p) {
@@ -4832,7 +4869,7 @@ function buildMatchCandidates_(semesterId, opts) {
     if (!cell) return { free: true, released: false };
     if (cell.isPending) return { free: false, released: false, isPending: true };
     if (isPatrol(cell)) return { free: true, released: false, isPatrol: true };
-    if (isAwayReleased(cell)) return { free: true, released: true };
+    if (isAwayReleased(cell, p)) return { free: true, released: true };
     return { free: false, released: false };
   }
 
@@ -4919,7 +4956,7 @@ function buildMatchCandidates_(semesterId, opts) {
     var busy = 0;
     for (var p = 1; p <= 8; p++) {
       var c = cellAt(em, day, p);
-      if (c && !isPatrol(c) && !isAwayReleased(c)) busy++;
+      if (c && !isPatrol(c) && !isAwayReleased(c, p)) busy++;
     }
     freeList.push({
       teacherName: String(t["教師姓名"] || t.name || "").trim(),
@@ -5209,9 +5246,12 @@ function buildPublicClassPayload_(semesterId, className) {
       "異動星期": req["異動星期"],
       "異動節次": req["異動節次"],
       "異動類型": req["異動類型"],
+      "特殊流程": req["特殊流程"] || "",
       "對調目標日期": req["對調目標日期"],
       "對調目標星期": req["對調目標星期"],
       "對調目標節次": req["對調目標節次"],
+      "對調目標班級": req["對調目標班級"] || "",
+      "對調目標科目": req["對調目標科目"] || "",
       "經費來源": "",
       "請假事由": ""
     };
@@ -5381,6 +5421,8 @@ function handleReadAction_(postData) {
       var aw = reqData.awayClasses || [];
       mAway = (aw || []).map(function (c) { return String(c || "").trim(); }).filter(Boolean).sort().join(",");
     } catch (eAw) { mAway = ""; }
+    var mAwayRange = [reqData.awayStartDate || "", reqData.awayEndDate || "",
+      reqData.awayStartPeriod || "", reqData.awayEndPeriod || ""].join("_");
     var mGen = "0";
     try {
       mGen = CacheService.getScriptCache().get("jcjh_match_gen_" + String(semesterId || "")) || "0";
@@ -5389,7 +5431,7 @@ function handleReadAction_(postData) {
     if (mAway.length > 80) mAway = mAway.slice(0, 80);
      var matchCacheKey = "jcjh_match_" + CACHE_SCHEMA_VERSION_ + "_" + String(semesterId || "") + "_" + mGen + "_"
       + mDate + "_" + mDay + "_" + mPer + "_" + mLeave + "_" + mAct + "_"
-      + mCls + "_" + mCourse + "_" + mAway;
+      + mCls + "_" + mCourse + "_" + mAway + "_" + mAwayRange;
     if (scope !== "fresh") {
       try {
         var mCached = getCacheChunked(matchCacheKey);
@@ -5591,7 +5633,7 @@ function handleReadAction_(postData) {
       if (k === "earn") return "發放";
       if (k === "spend") return "扣用";
       if (k === "restore") return "還原";
-      if (k === "adjust") return "手動調整";
+      if (k === "adjust") return "手動";
       return t || "—";
     };
     var ledger = rowsL.map(function (r) {
@@ -5890,6 +5932,211 @@ function exchangeRequestIncomingSlots_(row) {
     { teacher: requester, date: targetDate, period: targetPeriod },
     { teacher: target, date: sourceDate, period: sourcePeriod }
   ];
+}
+
+function samePeriodExchangeIsSingleWeek_(dateStr, semesterId) {
+  var semester = schoolSwapSemester_(semesterId);
+  var startRaw = String(semester["開始日期"] || semester.startDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startRaw)) return true;
+  function mondayUtc(value) {
+    var parts = String(value || "").split("-").map(function (part) { return parseInt(part, 10); });
+    if (parts.length !== 3 || parts.some(function (part) { return isNaN(part); })) return NaN;
+    var stamp = Date.UTC(parts[0], parts[1] - 1, parts[2]);
+    var weekday = new Date(stamp).getUTCDay();
+    return stamp - ((weekday + 6) % 7) * 86400000;
+  }
+  var startMonday = mondayUtc(startRaw);
+  var targetMonday = mondayUtc(dateStr);
+  if (!isFinite(startMonday) || !isFinite(targetMonday)) return true;
+  var weekNumber = Math.floor((targetMonday - startMonday) / (7 * 86400000)) + 1;
+  return weekNumber <= 0 || weekNumber % 2 === 1;
+}
+
+function samePeriodExchangeScheduleActive_(row, dateStr, semesterId) {
+  if (!row || !scheduleActiveOnDate_(row, dateStr)) return false;
+  var attr = String(row["課堂屬性"] || row.attr || "").trim();
+  if (attr === "單週") return samePeriodExchangeIsSingleWeek_(dateStr, semesterId);
+  if (attr === "雙週") return !samePeriodExchangeIsSingleWeek_(dateStr, semesterId);
+  return true;
+}
+
+function samePeriodExchangePeriodInAwayEvent_(rawPeriods, period) {
+  var raw = String(rawPeriods == null ? "" : rawPeriods).trim();
+  if (!raw || /^(all|\*|全部|全部節次|全天|全日)$/i.test(raw)) return true;
+  return raw.split(/[,，、;；|｜/／\s]+/).some(function (token) {
+    var value = String(token || "").trim();
+    if (!value) return false;
+    if (/^(早自習|早讀|晨讀)$/.test(value)) return parseInt(period, 10) === 0;
+    if (/^(午休|午餐)$/.test(value)) return parseInt(period, 10) === 45;
+    var match = value.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+    return !!(match && parseInt(match[1], 10) === parseInt(period, 10));
+  });
+}
+
+function samePeriodExchangeAwaySlot_(event, dateStr, period, semesterId) {
+  var startPeriod = event && (event["起始節次"] != null && event["起始節次"] !== "" ? event["起始節次"] : event.startPeriod);
+  var endPeriod = event && (event["結束節次"] != null && event["結束節次"] !== "" ? event["結束節次"] : event.endPeriod);
+  if (startPeriod !== undefined && startPeriod !== null && String(startPeriod).trim() !== ""
+      && endPeriod !== undefined && endPeriod !== null && String(endPeriod).trim() !== "") {
+    var startDate = String(event["起日"] || event.startDate || "").slice(0, 10);
+    var endDate = String(event["迄日"] || event.endDate || "").slice(0, 10);
+    if (!endDate) {
+      var semester = schoolSwapSemester_(semesterId);
+      endDate = String(semester["結束日期"] || semester.endDate || "").slice(0, 10);
+    }
+    if ((startDate && dateStr === startDate || !startDate) && classAwayBoundaryPeriodIndex_(period) < classAwayBoundaryPeriodIndex_(startPeriod)) return false;
+    if (endDate && dateStr === endDate && classAwayBoundaryPeriodIndex_(period) > classAwayBoundaryPeriodIndex_(endPeriod)) return false;
+    return true;
+  }
+  return samePeriodExchangePeriodInAwayEvent_(event && (event["停課節次"] || event.period), period);
+}
+
+function samePeriodExchangeClassIsAway_(className, dateStr, period, semesterId) {
+  var targetClasses = scheduleClassTokens_({ "班級": className });
+  if (!targetClasses.length) return false;
+  var events = getSemesterClassAwayCached_(semesterId) || [];
+  return events.some(function (event) {
+    if (!event || !schoolSwapEnabled_(event)) return false;
+    var start = String(event["起日"] || "").slice(0, 10);
+    var end = String(event["迄日"] || "").slice(0, 10);
+    if ((start && dateStr < start) || (end && dateStr > end)) return false;
+    if (!samePeriodExchangeAwaySlot_(event, dateStr, period, semesterId)) return false;
+    if (normalizeClassAwayScope_(event["適用範圍"]) === "全校") return true;
+    var eventClasses = scheduleClassTokens_({ "班級": event["班級清單"] || "" });
+    return targetClasses.some(function (classToken) { return eventClasses.indexOf(classToken) >= 0; });
+  });
+}
+
+function samePeriodExchangeScheduleForTeacher_(teacher, dateStr, period, semesterId, schedules, schoolSwaps) {
+  var email = String(teacher && (teacher["教師Email"] || teacher.email || teacher.loginEmail) || "").trim().toLowerCase();
+  var name = String(teacher && (teacher["教師姓名"] || teacher.name || teacher.teacherName) || "").trim().toLowerCase();
+  var day = schoolSwapWeekdayForDate_(dateStr);
+  var effective = resolveSchoolSwapSlotForTeacher_(schoolSwaps || [], dateStr, day, period, schedules || [], email);
+  var rows = (schedules || []).filter(function (row) {
+    if (!row) return false;
+    var rowEmail = String(row["教師Email"] || row.teacherEmail || "").trim().toLowerCase();
+    var rowName = String(row["教師姓名"] || row.teacherName || "").trim().toLowerCase();
+    var teacherMatches = rowEmail ? rowEmail === email : (!!name && rowName === name);
+    return teacherMatches
+      && parseInt(row["星期"] != null ? row["星期"] : row.dayOfWeek, 10) === parseInt(effective.dayOfWeek, 10)
+      && parseInt(row["節次"] != null ? row["節次"] : row.period, 10) === parseInt(effective.period, 10)
+      && samePeriodExchangeScheduleActive_(row, dateStr, semesterId);
+  });
+  if (rows.length !== 1) {
+    throw new Error((teacher && (teacher["教師姓名"] || teacher.name) || email)
+      + (rows.length ? "此時段有多筆課表，無法安全互換！" : "此時段沒有有效課程，無法互換！"));
+  }
+  var row = rows[0];
+  var cell = {
+    className: String(row["班級"] || row.className || "").trim(),
+    subject: String(row["科目"] || row.subject || "").trim(),
+    attr: String(row["課堂屬性"] || row.attr || "").trim(),
+    specialTags: String(row["特殊標記"] || row.specialTags || "").trim(),
+    restriction: String(row["調課限制"] || row.restriction || "").trim()
+  };
+  if (!cell.className || !cell.subject) throw new Error("所選教師的班級或科目資料不完整，無法互換！");
+  if (isPatrolScheduleRow_(row)) throw new Error("巡堂節次不可進行同節互換！");
+  if (samePeriodExchangeClassIsAway_(cell.className, dateStr, period, semesterId)) {
+    throw new Error("其中一方的班級該時段為空堂事件，無法互換！");
+  }
+  return cell;
+}
+
+function samePeriodExchangeRequestTouchesSlot_(row, teacherEmail, dateStr, period) {
+  var status = String(translateStatusToEn(row && (row["狀態"] || row.status) || "") || "").trim().toLowerCase();
+  if (status !== "approved" && status !== "pending_teacher" && status !== "pending_admin") return false;
+  var email = String(teacherEmail || "").trim().toLowerCase();
+  var sourceDate = String(row["異動日期"] || row.requestDate || "").trim().slice(0, 10).replace(/\//g, "-");
+  var sourcePeriod = parseInt(row["異動節次"] != null ? row["異動節次"] : row.requestPeriod, 10);
+  var requester = String(row["申請人Email"] || row.requesterEmail || "").trim().toLowerCase();
+  var target = String(row["受邀人Email"] || row.targetTeacherEmail || "").trim().toLowerCase();
+  if (sourceDate === dateStr && sourcePeriod === parseInt(period, 10)
+      && (requester === email || target === email)) return true;
+  if (String(translateTypeToEn(row["異動類型"] || row.type) || "").trim().toLowerCase() !== "exchange") return false;
+  var targetDate = String(row["對調目標日期"] || row.targetDate || "").trim().slice(0, 10).replace(/\//g, "-");
+  var targetPeriod = parseInt(row["對調目標節次"] != null ? row["對調目標節次"] : row.targetPeriod, 10);
+  return targetDate === dateStr && targetPeriod === parseInt(period, 10)
+    && (requester === email || target === email);
+}
+
+function createAdminSamePeriodExchangeRequest_(input, semesterId, operatorEmail, teachers) {
+  var source = input || {};
+  var sid = String(semesterId || "").trim();
+  if (!sid) throw new Error("缺少學期代號！");
+  var date = schoolSwapDate_(source.date, "互換日期");
+  var period = schoolSwapPeriod_(source.period, "互換節次");
+  var day = schoolSwapWeekdayForDate_(date);
+  var semester = schoolSwapSemester_(sid);
+  var semesterStart = String(semester["開始日期"] || semester.startDate || "").slice(0, 10);
+  var semesterEnd = String(semester["結束日期"] || semester.endDate || "").slice(0, 10);
+  if ((semesterStart && date < semesterStart) || (semesterEnd && date > semesterEnd)) {
+    throw new Error("互換日期不在目前學期範圍內！");
+  }
+
+  var emailA = normalizeEmail_(source.teacherAEmail, "教師 A Email");
+  var emailB = normalizeEmail_(source.teacherBEmail, "教師 B Email");
+  if (emailA === emailB) throw new Error("兩位互換教師不可相同！");
+  var teacherRows = teachers || getSemesterTeachersCached_(sid) || [];
+  var teacherA = findSemesterTeacher_(sid, emailA);
+  var teacherB = findSemesterTeacher_(sid, emailB);
+  if (!teacherA || !teacherB) throw new Error("互換教師不在目前學期教師名單中！");
+
+  var schedules = getSemesterSchedulesCached_(sid) || [];
+  var schoolSwaps = getActiveSchoolSwapRows_(sid) || [];
+  var courseA = samePeriodExchangeScheduleForTeacher_(teacherA, date, period, sid, schedules, schoolSwaps);
+  var courseB = samePeriodExchangeScheduleForTeacher_(teacherB, date, period, sid, schedules, schoolSwaps);
+  var pullOutA = courseA.attr.indexOf("抽離") >= 0 || courseA.specialTags.split(/[、,，;；/／|｜\s]+/).indexOf("抽離") >= 0;
+  var pullOutB = courseB.attr.indexOf("抽離") >= 0 || courseB.specialTags.split(/[、,，;；/／|｜\s]+/).indexOf("抽離") >= 0;
+  if (pullOutA !== pullOutB) throw new Error("抽離課僅可與另一節抽離課互換！");
+  if (courseA.className === courseB.className && courseA.subject === courseB.subject) {
+    throw new Error("雙方目前課程相同，無需建立互換！");
+  }
+
+  var requestRows = getSemesterRequestsCached_(sid, true).rows || [];
+  if (requestRows.some(function (row) {
+    return samePeriodExchangeRequestTouchesSlot_(row, emailA, date, period)
+      || samePeriodExchangeRequestTouchesSlot_(row, emailB, date, period);
+  })) {
+    throw new Error("其中一位教師該時段已有調代課異動或待審申請！");
+  }
+
+  var requestId = "same_period_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  var compactDate = date.replace(/-/g, "");
+  var operator = String(operatorEmail || "").trim().toLowerCase();
+  var request = {
+    "學期代號": sid,
+    "申請單ID": requestId,
+    "單號": "互換-" + compactDate + "-" + requestId.slice(-6),
+    "狀態": "approved",
+    "直接核准": "是",
+    "紙本流程": "FALSE",
+    "異動類型": "exchange",
+    "特殊流程": "admin_same_period_exchange",
+    "申請人Email": emailA,
+    "受邀人Email": emailB,
+    "申請人姓名": String(teacherA["教師姓名"] || teacherA.name || "").trim(),
+    "受邀人姓名": String(teacherB["教師姓名"] || teacherB.name || "").trim(),
+    "異動日期": date,
+    "異動星期": day,
+    "異動節次": period,
+    "班級": courseA.className,
+    "科目": courseA.subject,
+    "請假事由": "課務調整",
+    "經費來源": "無",
+    "對調目標日期": date,
+    "對調目標星期": day,
+    "對調目標節次": period,
+    "對調目標班級": courseB.className,
+    "對調目標科目": courseB.subject,
+    "建立時間": toLocalTimeStr(new Date()),
+    "更新時間": toLocalTimeStr(new Date()),
+    "備註": "[管理員同節互換] 登錄者：" + operator
+  };
+  request = prepareNameKeyRequestRow_(request, sid, teacherRows);
+  validateRequestRow_(request, sid);
+  assertNewRequestId_(requestId, sid, emailA, emailB, "");
+  assertNoExchangeIncomingConflict_(request, requestRows);
+  return request;
 }
 
 /** 同一教師的同一日期／節次只能有一筆調課調入。核准與送出時都必須重新驗證。 */
@@ -6683,6 +6930,7 @@ function doPost(e) {
       saveSemester: 1, deleteSemester: 1, setDefaultSemester: 1,
        saveClassAwayEvent: 1, deleteClassAwayEvent: 1,
        saveSchoolSwap: 1, deleteSchoolSwap: 1,
+       adminCreateSamePeriodExchange: 1,
        saveTeacher: 1, backupTeacherExpensePlans: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
       earnMutualQuotaFromActivity: 1,
       saveScheduleCell: 1, clearScheduleCell: 1, importSchedulesBatch: 1,
@@ -6789,6 +7037,17 @@ function doPost(e) {
         schoolSwap: savedSchoolSwap
       })).setMimeType(ContentService.MimeType.JSON);
 
+    } else if (action === "adminCreateSamePeriodExchange") {
+      if (!isAdmin) throw new Error("同節互換僅限管理員操作！");
+      assertNotTooFrequent_(userEmail, "adminCreateSamePeriodExchange");
+      var samePeriodExchange = createAdminSamePeriodExchangeRequest_(reqData || {}, semesterId, userEmail, teachers);
+      saveRows("申請單", [samePeriodExchange], "申請單ID");
+      invalidateSemesterCaches_(semesterId);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        request: samePeriodExchange
+      })).setMimeType(ContentService.MimeType.JSON);
+
     } else if (action === "deleteSchoolSwap") {
       if (!isAdmin) throw new Error("無管理員權限！");
       var deleteSchoolSwapId = String((reqData && (reqData.id || reqData["對調ID"])) || "").trim();
@@ -6833,12 +7092,42 @@ function doPost(e) {
        cae["適用範圍"] = awayScope;
        cae["班級清單"] = awayScope === "全校" ? "" : ("'" + clsParts.join(","));
        cae["停課節次"] = normalizeClassAwayPeriod_(awayPeriodRaw);
-      // 起迄日強制字串 YYYY-MM-DD
-      cae["起日"] = String(cae["起日"] || "").slice(0, 10);
-      cae["迄日"] = cae["迄日"] ? String(cae["迄日"]).slice(0, 10) : "";
-      cae["事件ID"] = String(cae["事件ID"]);
-      cae["鐘點規則"] = String(cae["鐘點規則"] || "keep");
-      cae["可進互代"] = (cae["可進互代"] === true || cae["可進互代"] === "TRUE" || cae["可進互代"] === "true" || cae["可進互代"] === "是") ? "TRUE" : "FALSE";
+       // 起迄日強制字串 YYYY-MM-DD
+       cae["起日"] = String(cae["起日"] || "").slice(0, 10);
+       cae["迄日"] = cae["迄日"] ? String(cae["迄日"]).slice(0, 10) : "";
+       if (cae["迄日"] && cae["迄日"] < cae["起日"]) throw new Error("迄日不可早於起日！");
+        var startPeriodRaw = cae["起始節次"] != null ? cae["起始節次"] : cae.startPeriod;
+        var endPeriodRaw = cae["結束節次"] != null ? cae["結束節次"] : cae.endPeriod;
+        var hasStartPeriod = !(startPeriodRaw == null || String(startPeriodRaw).trim() === "");
+        var hasEndPeriod = !(endPeriodRaw == null || String(endPeriodRaw).trim() === "");
+        if (hasStartPeriod !== hasEndPeriod) {
+          throw new Error("起點與終點節次需同時設定；每日指定節次請留白兩欄！");
+        }
+        if (hasStartPeriod && hasEndPeriod) {
+          cae["起始節次"] = normalizeClassAwayBoundaryPeriod_(startPeriodRaw, "起點節次");
+          cae["結束節次"] = normalizeClassAwayBoundaryPeriod_(endPeriodRaw, "終點節次");
+        } else {
+          // 每日指定節次：起迄留白，節次以「停課節次」為準（例如兩天都只停第8節，一筆即可）。
+          cae["起始節次"] = "";
+          cae["結束節次"] = "";
+          if (cae["停課節次"] === "全部" || cae["停課節次"] === "全部節次") {
+            // 全日每日與連續全日等價，維持每日模式。
+          }
+        }
+       var effectiveAwayEnd = cae["迄日"];
+       if (!effectiveAwayEnd) {
+         var awaySemester = schoolSwapSemester_(semesterId);
+         effectiveAwayEnd = String(awaySemester["結束日期"] || awaySemester.endDate || "").slice(0, 10);
+       }
+        if (cae["起始節次"] !== "" && cae["結束節次"] !== ""
+            && effectiveAwayEnd === cae["起日"]
+            && classAwayBoundaryPeriodIndex_(cae["起始節次"]) > classAwayBoundaryPeriodIndex_(cae["結束節次"])) {
+          throw new Error("同一天的終點節次不可早於起點節次！");
+        }
+       cae["事件ID"] = String(cae["事件ID"]);
+       cae["鐘點規則"] = String(cae["鐘點規則"] || "keep");
+       var mutualRequested = cae["可進互代"] === true || cae["可進互代"] === "TRUE" || cae["可進互代"] === "true" || cae["可進互代"] === "是";
+       cae["可進互代"] = mutualRequested ? "TRUE" : "FALSE";
       cae["啟用"] = (cae["啟用"] === false || cae["啟用"] === "FALSE" || cae["啟用"] === "false" || cae["啟用"] === "否") ? "FALSE" : "TRUE";
       saveRows("空堂事件", [cae], "事件ID");
       // 強制班級欄為文字格式，避免下次被讀成 number

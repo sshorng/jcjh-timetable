@@ -26,6 +26,7 @@ window.UiClassAwayAdmin = (function () {
       { value: '0', label: '早自習' },
       { value: '1', label: '第1節' }, { value: '2', label: '第2節' },
       { value: '3', label: '第3節' }, { value: '4', label: '第4節' },
+      { value: '45', label: '午休' },
       { value: '5', label: '第5節' }, { value: '6', label: '第6節' },
       { value: '7', label: '第7節' }, { value: '8', label: '第8節' }
     ];
@@ -40,15 +41,16 @@ window.UiClassAwayAdmin = (function () {
       return text.split(/[,，、;；|｜/／]+/).map(function (value) {
         value = String(value || '').trim();
         if (value === '早自習') return '0';
+        if (value === '午休' || value === '午餐' || value.toLowerCase() === 'lunch') return '45';
         var match = value.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
         var n = match ? parseInt(match[1], 10) : NaN;
-        return Number.isInteger(n) && n >= 0 && n <= 8 ? String(n) : '';
+        return Number.isInteger(n) && (n === 45 || (n >= 0 && n <= 8)) ? String(n) : '';
       }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
     }
 
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
-      scope: 'classes', classes: [], periods: ['all'],
+      scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
       billingRule: 'keep', forMutual: true, enabled: true, note: ''
     });
 
@@ -64,7 +66,7 @@ window.UiClassAwayAdmin = (function () {
       classAwayModalMode.value = 'add';
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
-        scope: 'classes', classes: [], periods: ['all'],
+        scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
         billingRule: 'keep', forMutual: true, enabled: true, note: ''
       };
       showClassAwayModal.value = true;
@@ -73,8 +75,9 @@ window.UiClassAwayAdmin = (function () {
     function openEditClassAwayModal(ev) {
       classAwayModalMode.value = 'edit';
       var clean = sanitizeClassNames(ev.classes || []);
-      var periods = normalizeClassAwayPeriods(ev.periods !== undefined ? ev.periods : ev.period);
-      var wholeDay = periods.indexOf('all') >= 0;
+      var hasPeriodRange = !!(window.DomainClassAway && window.DomainClassAway.eventPeriodRange
+        ? window.DomainClassAway.eventPeriodRange(ev)
+        : (ev.startPeriod != null && ev.startPeriod !== '' && ev.endPeriod != null && ev.endPeriod !== ''));
       classAwayForm.value = {
         id: ev.id,
         name: ev.name || '',
@@ -82,9 +85,12 @@ window.UiClassAwayAdmin = (function () {
         endDate: ev.endDate || '',
         scope: ev.scope === 'all' ? 'all' : 'classes',
         classes: clean,
-        periods: periods,
+        periodMode: hasPeriodRange ? 'range' : 'daily',
+        periods: hasPeriodRange ? ['all'] : normalizeClassAwayPeriods(ev.periods !== undefined ? ev.periods : ev.period),
+        startPeriod: String(ev.startPeriod == null || ev.startPeriod === '' ? '0' : ev.startPeriod),
+        endPeriod: String(ev.endPeriod == null || ev.endPeriod === '' ? '8' : ev.endPeriod),
         billingRule: ev.billingRule === 'reduce' ? 'reduce' : 'keep',
-        forMutual: wholeDay && !!ev.forMutual,
+        forMutual: !!ev.forMutual,
         enabled: ev.enabled !== false,
         note: ev.note || ''
       };
@@ -93,10 +99,14 @@ window.UiClassAwayAdmin = (function () {
 
     function setClassAwayPeriods(periods) {
       var clean = normalizeClassAwayPeriods(periods);
-      var wholeDay = clean.indexOf('all') >= 0;
       classAwayForm.value = Object.assign({}, classAwayForm.value, {
-        periods: clean,
-        forMutual: wholeDay ? !!classAwayForm.value.forMutual : false
+        periods: clean
+      });
+    }
+
+    function setClassAwayPeriodMode(mode) {
+      classAwayForm.value = Object.assign({}, classAwayForm.value, {
+        periodMode: mode === 'daily' ? 'daily' : 'range'
       });
     }
 
@@ -129,11 +139,29 @@ window.UiClassAwayAdmin = (function () {
       setClassAwayPeriods([]);
     }
 
-    function isClassAwayFullDaySelected() {
-      return normalizeClassAwayPeriods(classAwayForm.value.periods || []).indexOf('all') >= 0;
+    function setClassAwayPeriodBoundary(field, value) {
+      if (field !== 'startPeriod' && field !== 'endPeriod') return;
+      classAwayForm.value = Object.assign({}, classAwayForm.value, { [field]: String(value || '') });
     }
 
-    function classAwayPeriodLabel(ev) {
+    function isClassAwayFullDaySelected() {
+      if (classAwayForm.value.periodMode === 'daily') {
+        return normalizeClassAwayPeriods(classAwayForm.value.periods || []).indexOf('all') >= 0;
+      }
+      return String(classAwayForm.value.startPeriod) === '0'
+        && String(classAwayForm.value.endPeriod) === '8';
+    }
+
+    function isClassAwayRangeEvent(ev) {
+      if (window.DomainClassAway && window.DomainClassAway.eventPeriodRange) {
+        return !!window.DomainClassAway.eventPeriodRange(ev);
+      }
+      return !!(ev && ev.startPeriod != null && ev.startPeriod !== ''
+        && ev.endPeriod != null && ev.endPeriod !== '');
+    }
+
+    function classAwayDailyPeriodLabel(ev) {
+      if (isClassAwayRangeEvent(ev)) return '—';
       var periods = ev && ev.periods !== undefined ? ev.periods : (ev && ev.period);
       if (window.DomainClassAway && window.DomainClassAway.periodLabel) {
         return window.DomainClassAway.periodLabel(periods);
@@ -141,6 +169,35 @@ window.UiClassAwayAdmin = (function () {
       var selected = normalizeClassAwayPeriods(periods);
       if (!selected.length || selected[0] === 'all') return '全部節次';
       return selected.map(function (period) {
+        var option = classAwayPeriodOptions.find(function (item) { return item.value === period; });
+        return option ? option.label : period;
+      }).join('、');
+    }
+
+    function classAwayBoundaryPeriodLabel(ev, boundary) {
+      if (!isClassAwayRangeEvent(ev)) return '—';
+      var start = ev.startPeriod != null && ev.startPeriod !== '' ? ev.startPeriod : ev['起始節次'];
+      var end = ev.endPeriod != null && ev.endPeriod !== '' ? ev.endPeriod : ev['結束節次'];
+      if (window.DomainClassAway && window.DomainClassAway.periodRangeLabel) {
+        var raw = boundary === 'start' ? start : end;
+        return window.DomainClassAway.periodRangeLabel(raw, raw);
+      }
+      var value = String(boundary === 'start' ? start : end);
+      var option = classAwayPeriodOptions.find(function (item) { return item.value === value; });
+      return option ? option.label : value;
+    }
+
+    function classAwayPeriodLabel(ev) {
+      if (isClassAwayRangeEvent(ev) && window.DomainClassAway && window.DomainClassAway.periodRangeLabel) {
+        return '連續：' + window.DomainClassAway.periodRangeLabel(ev.startPeriod || ev['起始節次'], ev.endPeriod || ev['結束節次']);
+      }
+      var periods = ev && ev.periods !== undefined ? ev.periods : (ev && ev.period);
+      if (window.DomainClassAway && window.DomainClassAway.periodLabel) {
+        return '每日：' + window.DomainClassAway.periodLabel(periods);
+      }
+      var selected = normalizeClassAwayPeriods(periods);
+      if (!selected.length || selected[0] === 'all') return '每日：全部節次';
+      return '每日：' + selected.map(function (period) {
         var option = classAwayPeriodOptions.find(function (item) { return item.value === period; });
         return option ? option.label : period;
       }).join('、');
@@ -183,13 +240,22 @@ window.UiClassAwayAdmin = (function () {
       var f = classAwayForm.value;
       if (!String(f.name || '').trim()) { showToast('請填事件名稱', 'info'); return; }
       if (!f.startDate) { showToast('請填起日', 'info'); return; }
+      if (f.endDate && f.endDate < f.startDate) { showToast('迄日不可早於起日', 'info'); return; }
       var scope = f.scope === 'all' ? 'all' : 'classes';
+      var periodMode = f.periodMode === 'daily' ? 'daily' : 'range';
       var selectedPeriods = normalizeClassAwayPeriods(f.periods || []);
-      if (!selectedPeriods.length) { showToast('請至少選擇一個節次', 'info'); return; }
-      var period = window.DomainClassAway && window.DomainClassAway.normalizePeriod
-        ? window.DomainClassAway.normalizePeriod(selectedPeriods)
-        : (selectedPeriods.indexOf('all') >= 0 ? 'all' : selectedPeriods.join(','));
-      var forMutual = period === 'all' && !!f.forMutual;
+      if (periodMode === 'daily') {
+        if (!selectedPeriods.length) { showToast('每日指定節次至少選一個節次', 'info'); return; }
+      } else {
+        var startPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(f.startPeriod); });
+        var endPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(f.endPeriod); });
+        if (startPeriodIndex < 0 || endPeriodIndex < 0
+            || (f.endDate && f.endDate === f.startDate && endPeriodIndex < startPeriodIndex)) {
+          showToast('同一天的終點節次不可早於起點節次', 'info');
+          return;
+        }
+      }
+      var forMutual = !!f.forMutual;
       var cleanClasses = sanitizeClassNames(f.classes || []);
       if (scope === 'classes' && !cleanClasses.length) {
         showToast('請至少勾選一個有效班級（勿含 000）', 'info');
@@ -206,10 +272,14 @@ window.UiClassAwayAdmin = (function () {
           "事件名稱": String(f.name).trim(),
           "起日": String(f.startDate || '').slice(0, 10),
           "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
+          "起始節次": periodMode === 'range' ? String(f.startPeriod) : '',
+          "結束節次": periodMode === 'range' ? String(f.endPeriod) : '',
           "適用範圍": scope === 'all' ? '全校' : '指定班級',
           "班級清單": scope === 'all' ? '' : ("'" + classListStr),
-          "停課節次": window.DomainClassAway && window.DomainClassAway.periodLabel
-            ? window.DomainClassAway.periodLabel(period) : (period === 'all' ? '全部節次' : period),
+          "停課節次": periodMode === 'range'
+            ? '全部節次'
+            : (window.DomainClassAway && window.DomainClassAway.normalizePeriod
+              ? window.DomainClassAway.normalizePeriod(selectedPeriods) : selectedPeriods.join(',')),
           "鐘點規則": f.billingRule === 'reduce' ? 'reduce' : 'keep',
           "可進互代": forMutual ? 'TRUE' : 'FALSE',
           "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
@@ -220,8 +290,8 @@ window.UiClassAwayAdmin = (function () {
           Object.assign({}, sheetRow, { "班級清單": classListStr })
         );
         mapped.classes = cleanClasses.slice();
-        mapped.period = period;
-        mapped.periods = selectedPeriods.slice();
+        mapped.period = window.DomainClassAway.eventPeriod(mapped);
+        mapped.periods = window.DomainClassAway.eventPeriods(mapped);
         var list = classAwayEvents.value.slice();
         var idx = list.findIndex(function (x) { return x.id === id; });
         if (idx >= 0) list[idx] = mapped;
@@ -266,12 +336,17 @@ window.UiClassAwayAdmin = (function () {
       classAwayForm: classAwayForm,
       openAddClassAwayModal: openAddClassAwayModal,
       openEditClassAwayModal: openEditClassAwayModal,
+      setClassAwayPeriodBoundary: setClassAwayPeriodBoundary,
       toggleClassAwayPeriod: toggleClassAwayPeriod,
       isClassAwayPeriodSelected: isClassAwayPeriodSelected,
       selectClassAwayPeriodRange: selectClassAwayPeriodRange,
       clearClassAwayPeriods: clearClassAwayPeriods,
       isClassAwayFullDaySelected: isClassAwayFullDaySelected,
+      setClassAwayPeriodMode: setClassAwayPeriodMode,
       classAwayPeriodLabel: classAwayPeriodLabel,
+      classAwayDailyPeriodLabel: classAwayDailyPeriodLabel,
+      classAwayBoundaryPeriodLabel: classAwayBoundaryPeriodLabel,
+      isClassAwayRangeEvent: isClassAwayRangeEvent,
       toggleClassAwayFormClass: toggleClassAwayFormClass,
       isClassAwayFormClassSelected: isClassAwayFormClassSelected,
       selectClassAwayGrade: selectClassAwayGrade,
@@ -299,6 +374,10 @@ window.UiMutualBridge = (function () {
     var semesterEndDate = deps.semesterEndDate;
     var mutualActivityStart = deps.mutualActivityStart;
     var mutualActivityEnd = deps.mutualActivityEnd;
+    var mutualActivityStartPeriod = deps.mutualActivityStartPeriod;
+    var mutualActivityEndPeriod = deps.mutualActivityEndPeriod;
+    var mutualActivityPeriodMode = deps.mutualActivityPeriodMode || ref('range');
+    var mutualActivityPeriods = deps.mutualActivityPeriods || ref(['all']);
     var mutualAwayClasses = deps.mutualAwayClasses;
     var mutualNote = deps.mutualNote;
     var mutualLeadEmails = deps.mutualLeadEmails;
@@ -317,10 +396,7 @@ window.UiMutualBridge = (function () {
 
     var mutualImportableEvents = computed(function () {
       return (classAwayEvents.value || []).filter(function (e) {
-        // 活動互代面板是全天活動；單節事件（如段考第8節）不直接帶入。
-        var isWholeDay = !(window.DomainClassAway && window.DomainClassAway.eventPeriod)
-          || window.DomainClassAway.eventPeriod(e) === 'all';
-        return e.enabled !== false && e.forMutual && isWholeDay;
+        return e.enabled !== false && e.forMutual;
       });
     });
     var mutualImportEventId = ref('');
@@ -359,22 +435,74 @@ window.UiMutualBridge = (function () {
       var matched = classes.filter(function (c) { return known[c]; });
       if (matched.length) classes = matched;
 
-      mutualActivityStart.value = ev.startDate || '';
-      var end = ev.endDate || (semesterEndDate && semesterEndDate.value) || '';
-      mutualActivityEnd.value = end;
-      mutualAwayClasses.value = classes.slice().sort();
-      if (ev.name) {
-        var rangeTip = ev.startDate ? (ev.startDate + (end ? '～' + end : '')) : '';
-        mutualNote.value = rangeTip ? (ev.name + ' ' + rangeTip) : String(ev.name);
+        var dca = window.DomainClassAway;
+        var hasEventRange = !!(dca && dca.eventPeriodRange && dca.eventPeriodRange(ev));
+        mutualActivityStart.value = ev.startDate || '';
+        var end = ev.endDate || (semesterEndDate && semesterEndDate.value) || '';
+        mutualActivityEnd.value = end;
+        mutualActivityPeriodMode.value = hasEventRange ? 'range' : 'daily';
+        mutualActivityPeriods.value = hasEventRange
+          ? ['all']
+          : (dca && dca.eventPeriods ? dca.eventPeriods(ev) : (ev.periods || ['all']));
+        mutualActivityStartPeriod.value = String(hasEventRange && ev.startPeriod != null && ev.startPeriod !== '' ? ev.startPeriod : '0');
+        mutualActivityEndPeriod.value = String(hasEventRange && ev.endPeriod != null && ev.endPeriod !== '' ? ev.endPeriod : '8');
+       mutualAwayClasses.value = classes.slice().sort();
+       var mutualEventRange = {
+          startDate: mutualActivityStart.value,
+          endDate: mutualActivityEnd.value,
+          periodMode: mutualActivityPeriodMode.value,
+          periods: mutualActivityPeriods.value,
+          startPeriod: hasEventRange ? mutualActivityStartPeriod.value : '',
+          endPeriod: hasEventRange ? mutualActivityEndPeriod.value : ''
+       };
+       var selectedClassSet = {};
+       classes.forEach(function (c) { selectedClassSet[String(c || '').trim()] = true; });
+       function slotStaysInImportedEvent(slot) {
+         if (!slot) return false;
+         var date = String(slot.dateStr || slot.date || '').slice(0, 10);
+         var period = slot.period;
+         if (window.DomainClassAway && window.DomainClassAway.isDateInEvent
+             && !window.DomainClassAway.isDateInEvent(date, mutualEventRange, semesterEndDate && semesterEndDate.value)) return false;
+         if (window.DomainClassAway && window.DomainClassAway.eventAppliesToPeriod
+             && !window.DomainClassAway.eventAppliesToPeriod(mutualEventRange, period, date,
+               semesterEndDate && semesterEndDate.value)) return false;
+         var slotClasses = window.DomainClassAway && window.DomainClassAway.parseClassList
+           ? window.DomainClassAway.parseClassList(slot.className || '')
+           : String(slot.className || '').split(/[,，、/／\s]+/).filter(Boolean);
+         return !slotClasses.length || slotClasses.some(function (c) { return !!selectedClassSet[c]; });
+       }
+       var oldDraftCount = (mutualDrafts.value || []).length;
+       mutualDrafts.value = (mutualDrafts.value || []).filter(slotStaysInImportedEvent);
+       var removedDraftCount = oldDraftCount - mutualDrafts.value.length;
+       if (batchSlots && Array.isArray(batchSlots.value)) {
+         batchSlots.value = batchSlots.value.filter(slotStaysInImportedEvent);
+       }
+       if (ev.name) {
+         var rangeTip = ev.startDate ? (ev.startDate + (end ? '～' + end : '')) : '';
+          var periodTip = mutualActivityPeriodMode.value === 'daily'
+            ? (window.DomainClassAway && window.DomainClassAway.periodLabel
+              ? '每日' + window.DomainClassAway.periodLabel(mutualActivityPeriods.value) : '每日指定節次')
+            : (window.DomainClassAway && window.DomainClassAway.periodRangeLabel
+              ? '連續' + window.DomainClassAway.periodRangeLabel(mutualActivityStartPeriod.value, mutualActivityEndPeriod.value) : '');
+         mutualNote.value = (rangeTip ? (ev.name + ' ' + rangeTip) : String(ev.name))
+           + (periodTip ? ' ' + periodTip : '');
       }
-      persistMutualPanelDraft();
-      clearScheduleCache();
-      if (!classes.length) {
+       persistMutualPanelDraft();
+       clearScheduleCache();
+       if (removedDraftCount) {
+         showToast('已帶入「' + ev.name + '」，並移除 ' + removedDraftCount + ' 筆不在事件班級／時段內的暫定', 'info');
+       }
+       if (!classes.length) {
         showToast('已帶入「' + ev.name + '」的日期，但事件沒有班級清單，請手動勾外出班', 'warning');
       } else {
         showToast(
           '已帶入「' + ev.name + '」：' + classes.length + ' 班 · '
-          + (mutualActivityStart.value || '？') + '～' + (mutualActivityEnd.value || '學期結束'),
+           + (mutualActivityStart.value || '？') + '～' + (mutualActivityEnd.value || '學期結束')
+            + ' · ' + (mutualActivityPeriodMode.value === 'daily'
+              ? (window.DomainClassAway && window.DomainClassAway.periodLabel
+                ? '每日' + window.DomainClassAway.periodLabel(mutualActivityPeriods.value) : '每日指定節次')
+              : (window.DomainClassAway && window.DomainClassAway.periodRangeLabel
+                ? '連續' + window.DomainClassAway.periodRangeLabel(mutualActivityStartPeriod.value, mutualActivityEndPeriod.value) : '全部節次')),
           'success'
         );
       }
@@ -410,6 +538,10 @@ window.UiMutualBridge = (function () {
         awayClasses: mutualAwayClasses.value,
         startDate: mutualActivityStart.value,
         endDate: mutualActivityEnd.value,
+        periodMode: mutualActivityPeriodMode.value,
+        periods: mutualActivityPeriods.value,
+        startPeriod: mutualActivityStartPeriod.value,
+        endPeriod: mutualActivityEndPeriod.value,
         allSchedules: allSchedules.value,
         requests: requestsList.value,
         weekDates: currentWeekDates.value,
@@ -462,6 +594,10 @@ window.UiMutualPanelState = (function () {
     var mutualDrafts = deps.mutualDrafts;
     var mutualActivityStart = deps.mutualActivityStart;
     var mutualActivityEnd = deps.mutualActivityEnd;
+    var mutualActivityStartPeriod = deps.mutualActivityStartPeriod;
+    var mutualActivityEndPeriod = deps.mutualActivityEndPeriod;
+    var mutualActivityPeriodMode = deps.mutualActivityPeriodMode || { value: 'range' };
+    var mutualActivityPeriods = deps.mutualActivityPeriods || { value: ['all'] };
     var currentWeekDates = deps.currentWeekDates;
     var classList = deps.classList;
     var teachersList = deps.teachersList;
@@ -494,6 +630,10 @@ window.UiMutualPanelState = (function () {
           drafts: mutualDrafts.value || [],
           start: mutualActivityStart.value || '',
           end: mutualActivityEnd.value || '',
+          periodMode: mutualActivityPeriodMode.value || 'range',
+          periods: mutualActivityPeriods.value || ['all'],
+          startPeriod: mutualActivityStartPeriod.value || '0',
+          endPeriod: mutualActivityEndPeriod.value || '8',
           panelOpen: !!isMutualCover.value
         }));
       } catch (e) { /* ignore */ }
@@ -518,12 +658,55 @@ window.UiMutualPanelState = (function () {
       if (Array.isArray(saved.drafts)) mutualDrafts.value = saved.drafts.slice();
       if (saved.start) mutualActivityStart.value = saved.start;
       if (saved.end) mutualActivityEnd.value = saved.end;
+      if (saved.periodMode === 'daily' || saved.periodMode === 'range') mutualActivityPeriodMode.value = saved.periodMode;
+      if (Array.isArray(saved.periods)) mutualActivityPeriods.value = saved.periods.slice();
+      if (saved.startPeriod != null) mutualActivityStartPeriod.value = String(saved.startPeriod);
+      if (saved.endPeriod != null) mutualActivityEndPeriod.value = String(saved.endPeriod);
     }
 
     function setMutualActivityThisWeek() {
       var week = currentWeekDates.value || [];
       mutualActivityStart.value = week[0] || '';
       mutualActivityEnd.value = week[4] || week[0] || '';
+      persistMutualPanelDraft();
+    }
+
+    function setMutualActivityPeriodMode(mode) {
+      mutualActivityPeriodMode.value = mode === 'daily' ? 'daily' : 'range';
+      persistMutualPanelDraft();
+    }
+
+    function normalizeMutualPeriods(periods) {
+      var dca = window.DomainClassAway;
+      if (dca && dca.normalizePeriods) return dca.normalizePeriods(periods);
+      if (Array.isArray(periods)) return periods.map(String);
+      return ['all'];
+    }
+
+    function isMutualActivityPeriodSelected(period) {
+      var selected = normalizeMutualPeriods(mutualActivityPeriods.value || []);
+      return selected.indexOf('all') >= 0 || selected.indexOf(String(period)) >= 0;
+    }
+
+    function toggleMutualActivityPeriod(period) {
+      var value = String(period || '');
+      var selected = normalizeMutualPeriods(mutualActivityPeriods.value || []);
+      if (value === 'all') {
+        mutualActivityPeriods.value = selected.indexOf('all') >= 0 ? [] : ['all'];
+      } else {
+        if (selected.indexOf('all') >= 0) selected = [];
+        var index = selected.indexOf(value);
+        if (index >= 0) selected.splice(index, 1);
+        else selected.push(value);
+        var order = ['0', '1', '2', '3', '4', '45', '5', '6', '7', '8'];
+        selected.sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+        mutualActivityPeriods.value = selected;
+      }
+      persistMutualPanelDraft();
+    }
+
+    function setMutualActivityPeriods(periods) {
+      mutualActivityPeriods.value = normalizeMutualPeriods(periods);
       persistMutualPanelDraft();
     }
 
@@ -537,6 +720,10 @@ window.UiMutualPanelState = (function () {
       var hasData = (mutualAwayClasses.value || []).length
         || (mutualLeadEmails.value || []).length
         || (mutualDrafts.value || []).length
+        || mutualActivityPeriodMode.value !== 'range'
+        || normalizeMutualPeriods(mutualActivityPeriods.value || []).join(',') !== 'all'
+        || String(mutualActivityStartPeriod.value || '0') !== '0'
+        || String(mutualActivityEndPeriod.value || '8') !== '8'
         || String(mutualNote.value || '').trim();
       if (hasData) {
         var ok = await showConfirm(
@@ -550,6 +737,10 @@ window.UiMutualPanelState = (function () {
       mutualDrafts.value = [];
       mutualNote.value = '';
       mutualSkipNotify.value = true;
+      mutualActivityPeriodMode.value = 'range';
+      mutualActivityPeriods.value = ['all'];
+      mutualActivityStartPeriod.value = '0';
+      mutualActivityEndPeriod.value = '8';
       setMutualActivityThisWeek();
       persistMutualPanelDraft();
       showToast('已清空活動互代面板', 'info');
@@ -629,6 +820,10 @@ window.UiMutualPanelState = (function () {
         awayClasses: mutualAwayClasses.value,
         startDate: mutualActivityStart.value,
         endDate: mutualActivityEnd.value,
+        periodMode: mutualActivityPeriodMode.value,
+        periods: mutualActivityPeriods.value,
+        startPeriod: mutualActivityStartPeriod.value,
+        endPeriod: mutualActivityEndPeriod.value,
         weekDates: currentWeekDates.value,
         allSchedules: allSchedules.value,
         requests: requestsList.value,
@@ -685,8 +880,13 @@ window.UiMutualPanelState = (function () {
           var es = String(e.startDate || '').slice(0, 10);
           var ee = String(e.endDate || '').slice(0, 10);
           var score = 0;
+          var samePeriodRange = String(e.startPeriod == null || e.startPeriod === '' ? '0' : e.startPeriod)
+              === String(mutualActivityStartPeriod.value || '0')
+            && String(e.endPeriod == null || e.endPeriod === '' ? '8' : e.endPeriod)
+              === String(mutualActivityEndPeriod.value || '8');
           if (start && es && start === es) score += 3;
           if (end && ee && end === ee) score += 2;
+          if (samePeriodRange) score += 4;
           if (start && es && !end && start === es) score += 1;
           var cls = Array.isArray(e.classes) ? e.classes : [];
           var overlap = 0;
@@ -715,6 +915,7 @@ window.UiMutualPanelState = (function () {
           var awayKey = (mutualAwayClasses.value || []).slice().sort().join(',');
           return {
             eventId: 'act_' + mutualActivityStart.value + '_' + mutualActivityEnd.value + '_'
+              + mutualActivityStartPeriod.value + '_' + mutualActivityEndPeriod.value + '_'
               + String(awayKey).replace(/[^0-9A-Za-z\u4e00-\u9fff,]/g, '').slice(0, 40),
             eventName: nameFromNote
           };
@@ -747,6 +948,10 @@ window.UiMutualPanelState = (function () {
         awayClasses: mutualAwayClasses.value,
         startDate: mutualActivityStart.value,
         endDate: mutualActivityEnd.value,
+        periodMode: mutualActivityPeriodMode.value,
+        periods: mutualActivityPeriods.value,
+        startPeriod: mutualActivityStartPeriod.value,
+        endPeriod: mutualActivityEndPeriod.value,
         weekDates: currentWeekDates.value,
         allSchedules: allSchedules.value,
         excludeEmails: leaders
@@ -797,9 +1002,14 @@ window.UiMutualPanelState = (function () {
         : '';
       var ok = await showConfirm(
         '將寫入「額度帳本」並更新教師名單餘額（同活動不重複）\n'
-        + '規則：未上 1 節＝發 1；扣額度須滿 1 才扣 1\n'
-        + '空堂事件：' + eventName + '\n'
-        + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + '\n'
+        + '規則：一般課表未上 1 節＝發 1；小鐘點不發額度（未授課另扣）；扣額度須滿 1 才扣 1\n'
+         + '空堂事件：' + eventName + '\n'
+         + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + ' · '
+         + (mutualActivityPeriodMode.value === 'daily'
+           ? (window.DomainClassAway && window.DomainClassAway.periodLabel
+             ? '每日' + window.DomainClassAway.periodLabel(mutualActivityPeriods.value) : '每日指定')
+           : (window.DomainClassAway && window.DomainClassAway.periodRangeLabel
+             ? '連續' + window.DomainClassAway.periodRangeLabel(mutualActivityStartPeriod.value, mutualActivityEndPeriod.value) : '全部節次')) + '\n'
         + '外出班：' + mutualAwayClasses.value.length + ' 班\n'
         + '發放 ' + sorted.length + ' 位教師　·　合計釋出 ' + totalSlots + ' 節　·　合計額度 ＋' + fmtQ(totalReleased)
         + skipTip + '\n\n'
@@ -978,6 +1188,10 @@ window.UiMutualPanelState = (function () {
       clearMutualPanel: clearMutualPanel,
       ensureMutualActivityRange: ensureMutualActivityRange,
       setMutualActivityThisWeek: setMutualActivityThisWeek,
+      setMutualActivityPeriodMode: setMutualActivityPeriodMode,
+      toggleMutualActivityPeriod: toggleMutualActivityPeriod,
+      isMutualActivityPeriodSelected: isMutualActivityPeriodSelected,
+      setMutualActivityPeriods: setMutualActivityPeriods,
       toggleMutualLead: toggleMutualLead,
       isMutualLead: isMutualLead,
       toggleMutualAwayClass: toggleMutualAwayClass,
@@ -1053,6 +1267,17 @@ window.UiMutualSubmit = (function () {
     if (!mutualDrafts.value.length) {
       showToast('尚無暫定安排', 'info');
       return;
+    }
+    var rangeCheck = activityBalanceCtx();
+    var activityDomain = DAC();
+    if (activityDomain && activityDomain.isActivitySlotInRange) {
+      var outOfRangeDrafts = mutualDrafts.value.filter(function (draft) {
+        return !activityDomain.isActivitySlotInRange(draft.dateStr, draft.period, rangeCheck);
+      });
+      if (outOfRangeDrafts.length) {
+        showToast('有 ' + outOfRangeDrafts.length + ' 筆暫定不在目前活動日期／節次範圍內，請移除或調整範圍', 'warning');
+        return;
+      }
     }
     if (isSubmitting) isSubmitting.value = true;
     loading.value = true;
@@ -1576,12 +1801,26 @@ window.UiBatchSubmit = (function () {
       unlockSubmit();
       return;
     }
+    if (isMutualCover.value && DAC() && DAC().isActivitySlotInRange) {
+      var currentActivityRange = typeof activityBalanceCtx === 'function' ? activityBalanceCtx() : {};
+      var outOfRangeSlots = workSlots.filter(function (slot) {
+        return !DAC().isActivitySlotInRange(slot.dateStr, slot.period, currentActivityRange);
+      });
+      if (outOfRangeSlots.length) {
+        showToast('有 ' + outOfRangeSlots.length + ' 節不在目前活動日期／節次範圍內，請移除或調整範圍', 'warning');
+        unlockSubmit();
+        return;
+      }
+    }
 
     var conflicts = [];
     workSlots.forEach(function (s) {
       var cell = getScheduleForDate(s.subTeacherEmail, s.dateStr, s.period, s.dayOfWeek);
+      var activityRange = isMutualCover.value && typeof activityBalanceCtx === 'function'
+        ? activityBalanceCtx() : {};
       var isConflict = DAC()
-        ? DAC().isConflictCell(cell, !!isMutualCover.value, mutualAwayClasses.value)
+        ? DAC().isConflictCell(cell, !!isMutualCover.value, mutualAwayClasses.value,
+          Object.assign({}, activityRange, { dateStr: s.dateStr, period: s.period }))
         : !!(cell && !cell.isSubstituted);
       if (isConflict) {
         conflicts.push(getTeacherNameByEmail(s.subTeacherEmail) + ' ' + s.dateStr + ' 第' + s.period + '節');
@@ -1641,15 +1880,18 @@ window.UiBatchSubmit = (function () {
       }
       function feeForSlot(s, i) {
         if (parseInt(s.period, 10) === 8) return PERIOD8_FEE;
-        if (feeAssigns && feeAssigns[i]) return feeAssigns[i].fee;
-        if (!DAC()) return isMutualCover.value ? ACTIVITY_PUBLIC_FEE : fee;
-        return DAC().feeForSubSlot({
-          activityMode: !!isMutualCover.value,
-          fallbackFee: fee,
-          period: s.period,
-          subTeacherCell: getScheduleForDate(s.subTeacherEmail, s.dateStr, s.period, s.dayOfWeek),
-          awayClasses: mutualAwayClasses.value
-        });
+       if (feeAssigns && feeAssigns[i]) return feeAssigns[i].fee;
+       if (!DAC()) return isMutualCover.value ? ACTIVITY_PUBLIC_FEE : fee;
+       var activityRange = typeof activityBalanceCtx === 'function' ? activityBalanceCtx() : {};
+       return DAC().feeForSubSlot({
+           ...activityRange,
+           activityMode: !!isMutualCover.value,
+           fallbackFee: fee,
+           period: s.period,
+           dateStr: s.dateStr,
+           subTeacherCell: getScheduleForDate(s.subTeacherEmail, s.dateStr, s.period, s.dayOfWeek),
+           awayClasses: mutualAwayClasses.value
+         });
       }
       var leaveEmBatch = String(leaveEmail || '').toLowerCase();
       var proxyActive = false;
@@ -1992,14 +2234,17 @@ window.UiBatchPanel = (function () {
 
     function setBatchFlowMode(mode) {
       var nextMode = mode === 'exchange' ? 'exchange' : 'substitution';
-      if (batchFlowMode.value === nextMode) return;
+      if (batchFlowMode.value === nextMode) {
+        if (nextMode === 'exchange') batchAssignMode.value = 'perSlot';
+        return;
+      }
       if (nextMode === 'exchange' && isMutualCover.value) {
         showToast('活動互代批次不支援調課，請先關閉活動互代模式', 'warning');
         return;
       }
       clearBatchSlots();
       batchFlowMode.value = nextMode;
-      batchAssignMode.value = 'same';
+      batchAssignMode.value = nextMode === 'exchange' ? 'perSlot' : 'same';
       matchMode.value = nextMode;
       if (exchangeWeekOffset) exchangeWeekOffset.value = 0;
       if (exchangeWeekdayFilter) exchangeWeekdayFilter.value = 0;
@@ -2057,6 +2302,7 @@ window.UiBatchPanel = (function () {
     };
 
     function setBatchAssignMode(mode) {
+      if (batchFlowMode && batchFlowMode.value === 'exchange') mode = 'perSlot';
       if (batchSlots.value.some(s => s.exchangeSubmissionUnknown)) {
         showToast('有調課組送出結果不明，請先重新整理確認歷程', 'warning');
         return;
@@ -2243,6 +2489,10 @@ window.UiBatchPanel = (function () {
       inputRequestDate.value = slot.dateStr;
       matchPreview.value = null;
       if (batchFlowMode && batchFlowMode.value === 'exchange') {
+        // 每組來源課堂的可對調星期不同；切換組別時清除上一組篩選，避免候選被舊條件藏起來。
+        if (exchangeWeekdayFilter) exchangeWeekdayFilter.value = 0;
+        if (matchSearchQuery) matchSearchQuery.value = '';
+        if (matchDisplayCount) matchDisplayCount.value = 10;
         recommendedTeachers.value = [];
         matchShowNoTeacherWarning.value = false;
         if (matchEmptyReasons) matchEmptyReasons.value = null;
@@ -2302,7 +2552,7 @@ window.UiBatchPanel = (function () {
       const first = batchSlots.value[0];
       const conflicts = batchSlots.value.filter(s => {
         const cell = getScheduleForDate(targetEmail, s.dateStr, s.period, s.dayOfWeek);
-        return isSlotConflict(cell);
+        return isSlotConflict(cell, s.dateStr, s.period);
       });
       var proxyForce2 = false;
       if (deps.isProxySubmitActive) {
@@ -2428,7 +2678,7 @@ window.UiBatchPanel = (function () {
         const okP = await showConfirm(tip + '\n\n仍要指定？', '巡堂提醒');
         if (!okP) return;
       }
-      if (isSlotConflict(cell)) {
+      if (isSlotConflict(cell, slot.dateStr, slot.period)) {
         if (isAdmin.value) {
           const ok = await showConfirm(
             `${getTeacherNameByEmail(targetEmail)} 老師在 ${slot.dateStr} 第${slot.period}節 已有課，管理員可強制安排，確定？`,

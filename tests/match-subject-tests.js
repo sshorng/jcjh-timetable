@@ -135,4 +135,53 @@ assert.ok(candDing, '丁于珊 should appear in candidates');
 assert.equal(candDing.isSameSubject, true, '丁于珊（英語科）should be 同科 when leave teacher has 英語資優、英語科');
 assert.ok(!candMathAgain || candMathAgain.isSameSubject === false, '數學教師 should not be 同科 for 英語 leave teacher');
 
+const sameSlotTeachers = [
+  { '教師Email': 'swap-a@school.example', '教師姓名': 'A老師', '授課科目': '國文' },
+  { '教師Email': 'swap-b@school.example', '教師姓名': 'B老師', '授課科目': '數學' },
+  { '教師Email': 'swap-c@school.example', '教師姓名': 'C老師', '授課科目': '英文' },
+  { '教師Email': 'swap-d@school.example', '教師姓名': 'D老師', '授課科目': '自然' }
+];
+const sameSlotSchedules = [
+  { '教師Email': 'swap-a@school.example', '教師姓名': 'A老師', '星期': 1, '節次': 2, '班級': '701', '科目': '國文' },
+  { '教師Email': 'swap-b@school.example', '教師姓名': 'B老師', '星期': 1, '節次': 2, '班級': '802', '科目': '數學' },
+  { '教師Email': 'swap-c@school.example', '教師姓名': 'C老師', '星期': 1, '節次': 2, '班級': '903', '科目': '英文' }
+];
+const sameSlotRequest = {
+  '申請單ID': 'same-period-approved',
+  '狀態': 'approved',
+  '異動類型': 'exchange',
+  '特殊流程': 'admin_same_period_exchange',
+  '申請人Email': 'swap-a@school.example',
+  '受邀人Email': 'swap-b@school.example',
+  '異動日期': '2026-09-07',
+  '異動節次': 2,
+  '班級': '701',
+  '科目': '國文',
+  '對調目標日期': '2026-09-07',
+  '對調目標節次': 2,
+  '對調目標班級': '802',
+  '對調目標科目': '數學'
+};
+const sameSlotContext = Object.assign({}, context, {
+  getSemesterTeachersCached_: () => sameSlotTeachers,
+  getSemesterSchedulesCached_: () => sameSlotSchedules,
+  getActiveSchoolSwapRows_: () => [],
+  getSemesterRequestsCached_: () => ({ rows: [sameSlotRequest] }),
+  _dayFromDateStr_: () => 1
+});
+vm.createContext(sameSlotContext);
+vm.runInContext(source.slice(start, end), sameSlotContext, { filename: 'code.gs.same-period-exchange' });
+const sameSlotCandidates = sameSlotContext.buildMatchCandidates_('115-1', {
+  leaveEmail: 'swap-c@school.example',
+  dateStr: '2026-09-07',
+  dayOfWeek: 1,
+  period: 2,
+  myCourse: '英文',
+  myDomain: '英文',
+  myClass: '903',
+  limit: 40
+}).candidates;
+assert.ok(!sameSlotCandidates.some(candidate => candidate.teacherEmail === 'swap-a@school.example'), '同節互換後 A 老師仍有調入課，不可被媒合成空堂');
+assert.ok(!sameSlotCandidates.some(candidate => candidate.teacherEmail === 'swap-b@school.example'), '同節互換後 B 老師仍有調入課，不可被媒合成空堂');
+
 console.log('match subject tests PASS');

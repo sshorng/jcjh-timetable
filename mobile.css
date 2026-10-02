@@ -764,12 +764,19 @@
     bottom: 0;
     width: 100% !important;
     min-width: 0;
-    max-height: 62vh;
+    height: 90vh;
+    max-height: 90vh;
     border-left: none;
     border-top: 1px solid var(--border-color);
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.15);
     animation: matchDrawerUp 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @supports (height: 90dvh) {
+    .match-drawer {
+      height: 90dvh;
+      max-height: 90dvh;
+    }
   }
   @keyframes matchDrawerUp {
     from { transform: translateY(100%); opacity: 0.6; }
@@ -990,6 +997,11 @@
     font-size: 0.8rem !important;
     white-space: nowrap !important;
     max-width: 100%;
+  }
+  .match-table td:last-child .match-op-pair-horizontal .btn {
+    min-height: 32px !important;
+    padding: 4px 5px !important;
+    font-size: 0.66rem !important;
   }
   /* 減少列內多餘空白感 */
   .match-table tr.match-row td {

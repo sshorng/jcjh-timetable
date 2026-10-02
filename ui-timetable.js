@@ -28,6 +28,9 @@ window.UiTimetable = (function () {
     var mutualAwayClasses = deps.mutualAwayClasses;
     var mutualActivityStart = deps.mutualActivityStart;
     var mutualActivityEnd = deps.mutualActivityEnd;
+    var mutualActivityStartPeriod = deps.mutualActivityStartPeriod;
+    var mutualActivityEndPeriod = deps.mutualActivityEndPeriod;
+    var isMutualActivitySlotInRange = deps.isMutualActivitySlotInRange;
     var DAC = deps.DAC || function () { return window.DomainActivityCover; };
 
     var scheduleIndex = computed(function () {
@@ -259,17 +262,17 @@ window.UiTimetable = (function () {
       if (!cls) return false;
        if (isClassAwayOnDate(cls, dateStr, period)) return true;
       if (!isMutualCover.value) return false;
-      if (!(mutualAwayClasses.value || []).includes(cls)) return false;
-      var start = mutualActivityStart.value;
-      var end = mutualActivityEnd.value;
-      if (!start && !end) return true;
-      if (DAC() && DAC().isDateInRange) {
-        return DAC().isDateInRange(dateStr, start, end);
-      }
-      var d = String(dateStr || '').slice(0, 10);
-      if (start && d < start) return false;
-      if (end && d > end) return false;
-      return true;
+       if (!(mutualAwayClasses.value || []).includes(cls)) return false;
+       var start = mutualActivityStart.value;
+       var end = mutualActivityEnd.value;
+       if (DAC() && DAC().isDateInRange) {
+         if (!DAC().isDateInRange(dateStr, start, end)) return false;
+         return !isMutualActivitySlotInRange || isMutualActivitySlotInRange(dateStr, period);
+       }
+       var d = String(dateStr || '').slice(0, 10);
+       if (start && d < start) return false;
+       if (end && d > end) return false;
+       return !isMutualActivitySlotInRange || isMutualActivitySlotInRange(dateStr, period);
     }
 
     function getClassCellClassForDate(teacherEmail, dateStr, period, dayOfWeek) {
@@ -370,6 +373,10 @@ window.UiTimetable = (function () {
           myClass: activeCell.value.classData ? activeCell.value.classData.className : '',
           getScheduleForDate: getScheduleForDate,
           awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
+          awayStartDate: isMutualCover.value ? mutualActivityStart.value : '',
+          awayEndDate: isMutualCover.value ? mutualActivityEnd.value : '',
+          awayStartPeriod: isMutualCover.value ? mutualActivityStartPeriod.value : '',
+          awayEndPeriod: isMutualCover.value ? mutualActivityEndPeriod.value : '',
           activityMode: !!isMutualCover.value,
           preferReleasedByAway: !!isMutualCover.value
         });
@@ -408,7 +415,11 @@ window.UiTimetable = (function () {
         var cacheKey = [
           leaveEmail, inputRequestDate.value,
           activeCell.value.dayOfWeek, activeCell.value.period,
-          myClass, myCourse, isMutualCover.value ? '1' : '0'
+          myClass, myCourse, isMutualCover.value ? '1' : '0',
+          isMutualCover.value ? mutualActivityStart.value : '',
+          isMutualCover.value ? mutualActivityEnd.value : '',
+          isMutualCover.value ? mutualActivityStartPeriod.value : '',
+          isMutualCover.value ? mutualActivityEndPeriod.value : ''
         ].join('|');
         var now = Date.now();
         if (!fetchRecommendations._cache) fetchRecommendations._cache = {};
@@ -428,6 +439,10 @@ window.UiTimetable = (function () {
           myDomain: myDomain,
           myClass: myClass,
           awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
+          awayStartDate: isMutualCover.value ? mutualActivityStart.value : '',
+          awayEndDate: isMutualCover.value ? mutualActivityEnd.value : '',
+          awayStartPeriod: isMutualCover.value ? mutualActivityStartPeriod.value : '',
+          awayEndPeriod: isMutualCover.value ? mutualActivityEndPeriod.value : '',
           activityMode: !!isMutualCover.value,
           limit: 40
         }).then(function (res) {
@@ -518,6 +533,12 @@ window.UiTimetable = (function () {
 
       if (isScheduleEditMode.value) {
         openScheduleEditModal(teacherEmail, dayOfWeek, period);
+        return;
+      }
+
+      if (isMutualCover.value && clickDeps.isMutualActivitySlotInRange
+          && !clickDeps.isMutualActivitySlotInRange(dateStr, period)) {
+        showToast('此日期／節次不在活動互代的起訖時段內', 'info');
         return;
       }
 
@@ -807,14 +828,16 @@ window.UiTimetable = (function () {
           var k = String(c || '').trim();
           if (k) awaySet[k] = true;
         });
+        var slotAwaySet = isMutualCover.value && isMutualActivitySlotInRange
+          && !isMutualActivitySlotInRange(slot.dateStr, slot.period) ? {} : awaySet;
         var freeTeachers = (teachersList.value || []).filter(function (t) {
           if (!t.email || String(t.email).toLowerCase() === String(leaveEmail).toLowerCase()) return false;
           var cell = getScheduleForDate(t.email, slot.dateStr, slot.period, slot.dayOfWeek);
           if (window.DomainMatch && window.DomainMatch.isSlotFreeForMatch) {
-            return window.DomainMatch.isSlotFreeForMatch(cell, awaySet);
+            return window.DomainMatch.isSlotFreeForMatch(cell, slotAwaySet);
           }
           if (cell === null || cell.isSubstituted || cell.isClassAway) return true;
-          if (cell.className && awaySet[String(cell.className).trim()]) return true;
+          if (cell.className && slotAwaySet[String(cell.className).trim()]) return true;
           return false;
         });
         var ranked = window.DomainMatch.rankSubstitutionCandidates({
@@ -826,10 +849,14 @@ window.UiTimetable = (function () {
           targetPeriod: slot.period,
           myCourse: slot.subject || '',
           myDomain: myDomain,
-          myClass: slot.className || '',
-          getScheduleForDate: getScheduleForDate,
-          awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
-          activityMode: !!isMutualCover.value,
+           myClass: slot.className || '',
+           getScheduleForDate: getScheduleForDate,
+           awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
+           awayStartDate: isMutualCover.value ? mutualActivityStart.value : '',
+           awayEndDate: isMutualCover.value ? mutualActivityEnd.value : '',
+           awayStartPeriod: isMutualCover.value ? mutualActivityStartPeriod.value : '',
+           awayEndPeriod: isMutualCover.value ? mutualActivityEndPeriod.value : '',
+           activityMode: !!isMutualCover.value,
           preferReleasedByAway: !!isMutualCover.value
         });
         if (isMutualCover.value && DAC() && DAC().enrichCandidatesWithBalance) {
@@ -925,11 +952,13 @@ window.UiTimetable = (function () {
           if (!t.email || String(t.email).toLowerCase() === String(leaveEmail).toLowerCase()) return false;
           return batchSlots.value.every(function (s) {
             var cell = getScheduleForDate(t.email, s.dateStr, s.period, s.dayOfWeek);
+            var slotAwaySet = isMutualCover.value && isMutualActivitySlotInRange
+              && !isMutualActivitySlotInRange(s.dateStr, s.period) ? {} : awaySet;
             if (window.DomainMatch && window.DomainMatch.isSlotFreeForMatch) {
-              return window.DomainMatch.isSlotFreeForMatch(cell, awaySet);
+              return window.DomainMatch.isSlotFreeForMatch(cell, slotAwaySet);
             }
             if (cell === null || cell.isSubstituted || cell.isClassAway) return true;
-            if (cell.className && awaySet[String(cell.className).trim()]) return true;
+            if (cell.className && slotAwaySet[String(cell.className).trim()]) return true;
             return false;
           });
         });
@@ -959,10 +988,14 @@ window.UiTimetable = (function () {
             targetPeriod: s.period,
             myCourse: s.subject || '',
             myDomain: myDomain,
-            myClass: s.className || '',
-            getScheduleForDate: getScheduleForDate,
-            awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
-            activityMode: !!isMutualCover.value,
+             myClass: s.className || '',
+             getScheduleForDate: getScheduleForDate,
+             awayClasses: isMutualCover.value ? mutualAwayClasses.value : [],
+             awayStartDate: isMutualCover.value ? mutualActivityStart.value : '',
+             awayEndDate: isMutualCover.value ? mutualActivityEnd.value : '',
+             awayStartPeriod: isMutualCover.value ? mutualActivityStartPeriod.value : '',
+             awayEndPeriod: isMutualCover.value ? mutualActivityEndPeriod.value : '',
+             activityMode: !!isMutualCover.value,
             preferReleasedByAway: !!isMutualCover.value
           });
           ranked.forEach(function (r) {
@@ -1221,25 +1254,28 @@ window.UiTimetable = (function () {
            if (deps.showToast) deps.showToast('此班本節為空堂事件，不需申請代課。', 'info');
            return;
          }
-         var canClassAct = !!(isAdmin && isAdmin.value);
-        if (!canClassAct && deps.canOperateOnTeacherEmail) {
-          canClassAct = !!deps.canOperateOnTeacherEmail(cellData.teacherEmail);
-        }
-        if (!canClassAct) return;
-        if (deps.ensureProxyTargetForTeacher) {
-          try { deps.ensureProxyTargetForTeacher(cellData.teacherEmail); } catch (eCls) { /* ignore */ }
-        }
-        var tName = cellData.teacherName || getTeacherNameByEmail(cellData.teacherEmail);
-        activeCell.value = {
-          teacherEmail: cellData.teacherEmail,
-          teacherName: tName,
+          var canClassAct = !!(isAdmin && isAdmin.value);
+         var teacherKey = String(cellData.teacherEmail || '').trim();
+         var tName = String(cellData.teacherName || cellData['教師姓名'] || getTeacherNameByEmail(teacherKey) || '').trim();
+         if (!teacherKey) teacherKey = tName;
+         if (!canClassAct && deps.canOperateOnTeacherEmail) {
+           canClassAct = !!deps.canOperateOnTeacherEmail(teacherKey);
+         }
+         if (!canClassAct) return;
+         if (deps.ensureProxyTargetForTeacher) {
+           try { deps.ensureProxyTargetForTeacher(teacherKey); } catch (eCls) { /* ignore */ }
+         }
+         activeCell.value = {
+           teacherEmail: teacherKey,
+           teacherName: tName,
           dayOfWeek: day,
           period: period,
           classData: {
-            className: cls,
-            subject: cellData.subject,
-            teacherName: tName,
-            attr: cellData.attr || '基本',
+             className: cls,
+             subject: cellData.subject,
+             teacherName: tName,
+             teacherEmail: teacherKey,
+             attr: cellData.attr || '基本',
             restriction: cellData.restriction || ''
           }
         };
