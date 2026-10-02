@@ -444,14 +444,15 @@ const mergedOvertime = window.ExportAccounting.buildExportData({
   reportWeeksCount: 5,
   periods: { overtime: { start: '2026-09-01', end: '2026-09-30' } },
   teachers: [
-    { email: 'original@x', name: '黃美蘭', baseHours: 0, expensePlan: '計畫A' },
     { email: 'cover-a@x', name: '莊英勝', jobTitle: '706導師', baseHours: 16 },
-    { email: 'cover-b@x', name: '洪筱仙', jobTitle: '教學組長', baseHours: 16 },
+    { email: 'original@x', name: '黃美蘭', baseHours: 0, expensePlan: '計畫A' },
+    { email: 'cover-b@x', name: '洪筱仙', jobTitle: '教學組長', baseHours: 0, expensePlan: '計畫A' },
     { email: 'lv@x', name: '呂哲瑜', baseHours: 0, expensePlan: '計畫A' }
   ],
   allSchedules: [
     { teacherEmail: 'original@x', dayOfWeek: 2, period: 5, className: '905', attr: '一般', specialTags: '超鐘點' },
     { teacherEmail: 'original@x', dayOfWeek: 2, period: 6, className: '906', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'cover-b@x', dayOfWeek: 1, period: 1, className: '907', attr: '一般', specialTags: '超鐘點' },
     { teacherEmail: 'lv@x', dayOfWeek: 5, period: 6, className: '906', attr: '一般', specialTags: '超鐘點' }
   ],
   substitutionRecords: [
@@ -470,6 +471,16 @@ assert.deepEqual(mergedOvertimeRows.map(row => [row.name, row.grossHours, row.am
   ['洪筱仙', '', 1365]
 ], '同一實際代課教師的超鐘點明細應合併且清空黃底欄位');
 assert.deepEqual(mergedOvertimeRows.map(row => row.actualHours), [2, 3], '代課明細應保留合計時數');
+const mergedOvertimeRowIndexes = {
+  original: mergedOvertimePlan.rows.findIndex(row => row.name === '黃美蘭' && row.weeks !== ''),
+  noOvertimeCover: mergedOvertimePlan.rows.findIndex(row => row.name === '莊英勝' && row.weeks === ''),
+  overtimeCover: mergedOvertimePlan.rows.findIndex(row => row.name === '洪筱仙' && row.weeks === ''),
+  overtimeCoverSummary: mergedOvertimePlan.rows.findIndex(row => row.name === '洪筱仙' && row.weeks !== '')
+};
+assert.equal(mergedOvertimeRowIndexes.noOvertimeCover, mergedOvertimeRowIndexes.original + 1,
+  '沒有超鐘點的代課教師明細應緊接在被代教師摘要下方');
+assert.equal(mergedOvertimeRowIndexes.overtimeCover, mergedOvertimeRowIndexes.overtimeCoverSummary + 1,
+  '有超鐘點的代課教師明細應接在自己的超鐘點摘要下方');
 mergedOvertimeRows.forEach(row => {
   assert.deepEqual([
     row.weeklyOvertime, row.schedule, row.weeks,
@@ -895,12 +906,9 @@ const mixed = build([
     originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: '自費代課', status: 'approved'
   }
 ], 1, mixedSchedules);
-assert.equal(mixed.sheets.overtime.length, 2);
-assert.equal(mixed.sheets.overtime[0].name, 'Billing');
-assert.equal(mixed.sheets.overtime[0].deduction, 3);
-assert.equal(mixed.sheets.overtime[0].actualHours, -1);
-assert.equal(mixed.sheets.overtime[1].name, 'cover@x');
-assert.equal(mixed.sheets.overtime[1].actualHours, 2);
+assert.equal(mixed.sheets.overtime.length, 1);
+assert.equal(mixed.sheets.overtime[0].name, 'cover@x');
+assert.equal(mixed.sheets.overtime[0].actualHours, 2);
 assert.equal(mixed.sheets.selfSub.length, 1, '非超鐘點自費應保留在自付代課表');
 assert.equal(mixed.sheets.selfSub[0].course, '703');
 assert.equal(mixed.sheets.overtime[0].note.includes('\u8b8a\u52d5'), false, '超鐘點備註不應顯示變動字眼');
@@ -943,7 +951,7 @@ assert.deepEqual(nonOvertimeSelfExport.sheets.selfSub.map(row => [row.actualName
   ['一般自費代課人', '六', '自費原教師']
 ], '非超鐘點自費應列入自付代課明細表');
 assert.equal(nonOvertimeSelfExport.sheets.selfSub[0].amount, 455);
-assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 2, '非超鐘點自費也應在超鐘點列扣原教師');
+assert.equal(nonOvertimeSelfExport.sheets.overtime[0].deduction, 1, '只有超鐘點課的自費代課應扣超鐘點');
 assert.ok(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '超鐘自費代課人'),
   '超鐘點自費代課仍應列入原計畫超鐘點代課列');
 assert.equal(nonOvertimeSelfExport.sheets.overtime.some(row => row.name === '一般自費代課人'), false,

@@ -1926,9 +1926,10 @@ window.DomainBilling = (function () {
       // 超鐘點以固定每週超鐘點 × 結算週數計算；放假／空堂不扣，
       // 只從符合規則的代課紀錄扣除，扣除明細會寫入 Excel 備註。
       var reduceDeduction = 0;
-      var selfPaidDeduction = leaveRecords.filter(function (r) {
-        return isSelfPaidFee(r);
-      }).length;
+      var selfPaidOvertimeRecords = leaveRecords.filter(function (r) {
+        return isSelfPaidFee(r)
+          && isConcurrentLeaveSlot(r, allSchedules, schoolSwapIndex, t);
+      });
       // 全部公費請假（學校仍付代課費）
       var pubLeaveRecords = leaveRecords.filter(function (r) {
         return isPublicLeaveFee(r);
@@ -1955,10 +1956,7 @@ window.DomainBilling = (function () {
         expenseSourceConflictKeys[key] = true;
         expenseSourceConflicts.push(conflict);
       }
-      leaveRecords.filter(function (record) {
-        return isSelfPaidFee(record)
-          || pubConcurrentLeaveRecords.indexOf(record) >= 0;
-      }).forEach(function (record) {
+      selfPaidOvertimeRecords.concat(pubConcurrentLeaveRecords).forEach(function (record) {
         var sourceResolution = overtimeExpenseResolutionForRecord(record, [t], allSchedules, schoolSwapIndex);
         if (sourceResolution && !sourceResolution.canAutoAllocate && sourceResolution.conflict) {
           appendExpenseSourceConflict(Object.assign({}, sourceResolution.conflict, {
@@ -2026,7 +2024,7 @@ window.DomainBilling = (function () {
         : '無';
 
       // 允許負數：無超鐘卻自費請假 → 實得超時／超鐘點費為負，提醒自付代課費
-      var actualOvertime = scheduledOvertime - reduceDeduction - selfPaidDeduction - publicOvertimeUsed;
+      var actualOvertime = scheduledOvertime - reduceDeduction - selfPaidOvertimeRecords.length - publicOvertimeUsed;
       var overtimeFee = actualOvertime * FEE_OVERTIME;
       var pubSubFee = pubSubCount * FEE_REGULAR;
       var expenseBucketResult = buildOvertimeExpenseBuckets({
@@ -2040,7 +2038,7 @@ window.DomainBilling = (function () {
       var expensePlanAllocations = applyOvertimeExpenseDeductions(
         expenseBucketResult,
         reduceDeduction,
-        selfPaidDeduction + publicOvertimeUsed,
+        selfPaidOvertimeRecords.length + publicOvertimeUsed,
         expenseDeductionBySource
       );
       (expenseBucketResult.conflicts || []).forEach(appendExpenseSourceConflict);
@@ -2077,7 +2075,7 @@ window.DomainBilling = (function () {
           weeklyOvertime: weeklyOvertime,
          scheduledOvertime: scheduledOvertime,
         reduceDeduction: reduceDeduction,
-        selfPaidDeduction: selfPaidDeduction,
+        selfPaidDeduction: selfPaidOvertimeRecords.length,
          publicOvertimeUsed: publicOvertimeUsed,
          substituteScheduledCount: substitutePayout.scheduled,
          substitutePaidCount: substitutePayout.paid,

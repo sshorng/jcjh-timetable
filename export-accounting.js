@@ -1446,7 +1446,7 @@
          && teacherEmail(record.actualTeacherEmail)
          && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
     });
-    // \u4f9d\u7db2\u9801\u6708\u5831\uff1a\u81ea\u8cbb\u5168\u90e8\u6263\u539f\u6559\u5e2b\u8d85\u9418\uff1b\u516c\u8cbb\u4f9d\u6b63\u5f0f\u8ab2\u7a0b\u539f\u5802\u5c6c\u6027\u70ba\u8d85\u9418\u9ede\u6642\u6263\uff0c\u542b\u65e9\u81ea\u7fd00\u30011\u81f37\u8207\u5348\u4f1145\u3002
+    // \u53ea\u6709\u539f\u8ab2\u662f\u8d85\u9418\u9ede\u624d\u6c96\u6e1b\u8d85\u9418\uff1b\u975e\u8d85\u9418\u9ede\u81ea\u8cbb\u4ee3\u8ab2\u7559\u5728\u81ea\u4ed8\u4ee3\u8ab2\u8868\u3002
     var selfRecords = eligible.filter(function (record) {
       return isSelfPaidRecord(record)
         && isOvertimeSubstitution(record, schedules, schoolSwapIndex, teacher);
@@ -1549,6 +1549,8 @@
       serial: serial,
       _rowKind: 'overtimeSubstitution',
       _teacherKey: actualTeacherKey,
+      _coveredTeacherKey: teacherSortKey(sourceTeacher) || teacherSortKey(source),
+      _coveredTeacherName: originalName,
       title: teacherTitle(actualTeacher) || '\u6559\u5e2b',
       name: teacherName(actualTeacher, record.actualTeacherName || record.actualTeacherEmail),
       weeklyOvertime: '',
@@ -1570,7 +1572,7 @@
       .trim().toLowerCase();
   }
 
-  function mergeOvertimeSubstitutionRows(rows, substitutionRows, opts) {
+  function mergeOvertimeSubstitutionRows(rows, substitutionRows, opts, teachersWithOvertime) {
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     var primaryGroups = {};
     var substitutionGroups = {};
@@ -1592,8 +1594,12 @@
     (substitutionRows || []).forEach(function (row) {
       if (!row) return;
       var teacherKey = summaryRowTeacherKey(row) || '__unknown__';
-      var groupKey = teacherKey + '|' + (Number(row.rate) || 0);
+      var coveredTeacherKey = String(row._coveredTeacherKey || '').trim().toLowerCase();
+      var anchorKey = teachersWithOvertime && teachersWithOvertime[teacherKey]
+        ? teacherKey : (coveredTeacherKey || teacherKey);
+      var groupKey = anchorKey + '|' + teacherKey + '|' + (Number(row.rate) || 0);
       if (!mergedSubstitutionGroups[groupKey]) {
+        row._anchorTeacherKey = anchorKey;
         mergedSubstitutionGroups[groupKey] = row;
       } else {
         var merged = mergedSubstitutionGroups[groupKey];
@@ -1602,13 +1608,14 @@
         merged._noteRecords = (merged._noteRecords || []).concat(row._noteRecords || []);
       }
       rememberLabel(teacherKey, row);
+      if (anchorKey !== teacherKey) rememberLabel(anchorKey, { name: row._coveredTeacherName });
     });
 
     Object.keys(mergedSubstitutionGroups).forEach(function (groupKey) {
       var row = mergedSubstitutionGroups[groupKey];
-      var teacherKey = summaryRowTeacherKey(row) || '__unknown__';
-      if (!substitutionGroups[teacherKey]) substitutionGroups[teacherKey] = [];
-      substitutionGroups[teacherKey].push(row);
+      var anchorKey = String(row._anchorTeacherKey || summaryRowTeacherKey(row) || '__unknown__');
+      if (!substitutionGroups[anchorKey]) substitutionGroups[anchorKey] = [];
+      substitutionGroups[anchorKey].push(row);
     });
 
     var teacherKeys = [];
@@ -1638,6 +1645,9 @@
       row.serial = index + 1;
       delete row._rowKind;
       delete row._teacherKey;
+      delete row._anchorTeacherKey;
+      delete row._coveredTeacherKey;
+      delete row._coveredTeacherName;
       delete row._noteRecords;
     });
     return output;
@@ -1682,6 +1692,7 @@
     var weeks = Number(opts.reportWeeksCount) > 0 ? Number(opts.reportWeeksCount) : (periodWeekCount(period) || 1);
     var rows = [];
     var substitutionRows = [];
+    var teachersWithOvertime = {};
     var expectedPlan = (config.key === 'overtime' || config.key === 'teachingSupport')
       ? planLabel(planFilter) : null;
     reportSourceRows(opts).forEach(function (source) {
@@ -1730,7 +1741,12 @@
           if ((config.key !== 'overtime' && config.key !== 'teachingSupport') || !expectedPlan) return true;
           return matchesExpectedPlan(record);
         });
-        var selfCount = planLeave.filter(isSelfPaidRecord).length;
+        var selfPaidLeave = planLeave.filter(function (record) {
+          return isSelfPaidRecord(record)
+            && (config.key !== 'overtime'
+              || isOvertimeSubstitution(record, opts.allSchedules || [], schoolSwapIndex, t || sourceRow));
+        });
+        var selfCount = selfPaidLeave.length;
         var publicUsed = expectedPlan || allocation
           ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
@@ -1751,6 +1767,8 @@
           : (sourceRow.scheduledOvertime !== undefined
             ? Number(sourceRow.scheduledOvertime) || 0
             : (Number(sourceRow.weeklyOvertime) || 0) * weeks);
+        var overtimeTeacherKey = String(teacherSortKey(t) || teacherSortKey(sourceRow) || '').trim().toLowerCase();
+        if (overtimeTeacherKey && scheduledOvertime > 0) teachersWithOvertime[overtimeTeacherKey] = true;
         if ((config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport')
             && scheduledOvertime <= 0) return;
         var grossHours = noAwayDeduction && allocation && allocation.rawHours !== undefined
@@ -1764,7 +1782,7 @@
         var actualHours = allocation && allocation.actualHours !== undefined && !noAwayDeduction
           ? Number(allocation.actualHours) || 0
           : grossHours - deduction;
-        var selfPaidDeduction = notePeriodCount(planLeave.filter(isSelfPaidRecord));
+        var selfPaidDeduction = notePeriodCount(selfPaidLeave);
         var selfPaidAvailableHours = Math.max(0, Number(grossHours) || 0);
         var selfPaidOverdrawn = selfPaidDeduction > selfPaidAvailableHours;
         var weeklyOvertime = allocation
@@ -1776,14 +1794,14 @@
         var schedule = allocation && allocation.schedule
           ? String(allocation.schedule)
           : scheduleText(sourceRow, opts.allSchedules, true, period);
-        var deductionRecordsForSource = planLeave.filter(isSelfPaidRecord).concat(
+        var deductionRecordsForSource = selfPaidLeave.concat(
           chargedRecordsForSource.filter(isPublicOvertimeRecord)
         );
         var overtimeNotes = leaveNoteParts(
           deductionRecordsForSource,
           publicUsed,
-          chargedCombinedRecords.concat(planLeave.filter(function (record) {
-            return isSelfPaidRecord(record) && isCombinedReturnRecord(record);
+          chargedCombinedRecords.concat(selfPaidLeave.filter(function (record) {
+            return isCombinedReturnRecord(record);
           }))
         );
         var notes = config.key === 'overtime'
@@ -1832,7 +1850,7 @@
       });
     });
     var output = config.key === 'overtime' || config.key === 'adjunct' || config.key === 'teachingSupport'
-      ? mergeOvertimeSubstitutionRows(rows, substitutionRows, opts)
+      ? mergeOvertimeSubstitutionRows(rows, substitutionRows, opts, teachersWithOvertime)
       : rows;
     return appendMergedPlanNotes(output, config, planFilter);
   }

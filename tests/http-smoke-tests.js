@@ -38,7 +38,7 @@ function request(server, method, requestPath) {
     assert.match(root.body.toString('utf8'), /application-name" content="JCJH Timetable"/);
       assert.match(root.body.toString('utf8'), /domain-match\.js\?v=20260917-[^"]+/);
       assert.match(root.body.toString('utf8'), /ui-request\.js\?v=20260917-[^"]+/);
-      assert.match(root.body.toString('utf8'), /app\.js\?v=20260917-[^"]+/);
+      assert.match(root.body.toString('utf8'), /app\.js\?v=\d{8}-[^"]+/);
     assert.equal(root.headers['cache-control'], 'no-cache');
     assert.match(root.headers['content-security-policy'], /frame-ancestors 'none'/);
 

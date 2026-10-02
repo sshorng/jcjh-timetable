@@ -756,7 +756,7 @@
           assert('抽離超鐘點也要扣', pulloutOvertime.publicOvertimeUsed === 1 && pulloutOvertime.schoolPublicPayout === 0);
          assert('公費早自習正式課不超鐘不扣', publicEarlyRegular.publicOvertimeUsed === 0 && publicEarlyRegular.schoolPublicPayout === 1);
          assert('公費午休正式課不超鐘不扣', publicLunchRegular.publicOvertimeUsed === 0 && publicLunchRegular.schoolPublicPayout === 1);
-            assert('自費早自習仍要扣', selfEarly.selfPaidDeduction === 1);
+             assert('非超鐘點自費早自習不扣超鐘點', selfEarly.selfPaidDeduction === 0);
 
           var datedBilling = window.DomainBilling.buildMonthlyReportRows({
             teachers: [{ email: 'dated@x', name: 'Dated', baseHours: 0 }],
@@ -787,10 +787,10 @@
              reportMonth: '2026-07',
              reportWeeksCount: 1
            })[0];
-           assert('公費超鐘點逐筆扣，不受自費或每週超時上限影響', mixedBilling
-             && mixedBilling.selfPaidDeduction === 1
-             && mixedBilling.publicOvertimeUsed === 2
-             && mixedBilling.actualOvertime === -1);
+            assert('公費超鐘點逐筆扣；一般課自費不扣超鐘點', mixedBilling
+              && mixedBilling.selfPaidDeduction === 0
+              && mixedBilling.publicOvertimeUsed === 2
+              && mixedBilling.actualOvertime === 0);
 
           function combinedBillingCase(period, attr, fee, specialTags) {
             return window.DomainBilling.buildMonthlyReportRows({
@@ -810,7 +810,7 @@
           var combinedSelfRegular = combinedBillingCase(1, '基本', '自費代課');
            assert('合班回原班公費超鐘點仍扣被代教師', combinedPublicOvertime.publicOvertimeUsed === 1 && combinedPublicOvertime.schoolPublicPayout === 0 && combinedPublicOvertime.pubSubCount === 0);
            assert('合班回原班公費正式課仍照算', combinedPublicRegular.publicOvertimeUsed === 0 && combinedPublicRegular.schoolPublicPayout === 1 && combinedPublicRegular.pubSubCount === 0);
-           assert('合班回原班自費仍扣被代教師', combinedSelfRegular.selfPaidDeduction === 1 && combinedSelfRegular.selfSubCount === 0);
+            assert('合班回原班一般課自費不扣超鐘點', combinedSelfRegular.selfPaidDeduction === 0 && combinedSelfRegular.selfSubCount === 0);
            var combinedPeriod8 = window.DomainBilling.buildPeriod8Payout({
              reportMonth: '2026-07',
              allSchedules: [{ teacherEmail: 'combined@x', dayOfWeek: 1, period: 8, className: '701、702', attr: '課輔' }],
