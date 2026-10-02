@@ -25,6 +25,35 @@ const context = {
   isNaN
 };
 vm.createContext(context);
+const submittedBuilderStart = appSource.indexOf('const buildPaperRecordsForSubmittedRequests =');
+const submittedBuilderEnd = appSource.indexOf('const openPaperPrintDraft =', submittedBuilderStart);
+assert.ok(submittedBuilderStart >= 0 && submittedBuilderEnd > submittedBuilderStart, 'submitted paper record builder must remain discoverable');
+const submittedBuilderContext = {
+  teachersList: { value: [
+    { loginEmail: 'owner@school.example', email: 'owner@school.example', name: '陳小華', teacherName: '陳小華' },
+    { loginEmail: 'invitee@school.example', email: 'invitee@school.example', name: '王小明', teacherName: '王小明' }
+  ] },
+  isCourseAdjustmentOnlyRequest: () => false,
+  isCombinedReturnRequest: () => false,
+  resolveExchangeTargetCell: () => null,
+  findBaseScheduleSlot: () => null,
+  getTeacherNameByEmail: email => ({
+    'owner@school.example': '陳小華',
+    'invitee@school.example': '王小明'
+  })[String(email || '').toLowerCase()] || String(email || ''),
+  Date,
+  Number,
+  String,
+  Array,
+  Object,
+  parseInt,
+  isNaN
+};
+vm.createContext(submittedBuilderContext);
+const submittedPaperRecordBuilder = vm.runInContext(`(() => {
+  ${appSource.slice(submittedBuilderStart, submittedBuilderEnd)}
+  return buildPaperRecordsForSubmittedRequests;
+})()`, submittedBuilderContext);
 const printHelperSource = fs.readFileSync(path.join(root, 'print-helper.js'), 'utf8');
 const styleSource = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 const mobileSource = fs.readFileSync(path.join(root, 'mobile.css'), 'utf8');
@@ -232,7 +261,10 @@ assert.match(appSource, /const requestedRecordId = req && \(req\.recordId \|\| r
 assert.match(appSource, /targetIds = \[seedRecord\.id\]/, '一般批次單列列印只能使用目前明細');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
-assert.match(indexSource, /print-helper\.js\?v=20260917-[^"]+/);
+assert.match(indexSource, /print-helper\.js\?v=20261002-history-print1/);
+assert.match(indexSource, /@click="openHistoryPrintPreview"/);
+assert.match(appSource, /window\.buildHistoryPrintRecords\(/);
+assert.match(appSource, /openPrintPreview, openHistoryPrintPreview, closePrintPreview/);
 assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
 assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
 assert.match(indexSource, /class="teacher-email-cell"/);
@@ -453,6 +485,29 @@ assert.equal(batchPreview.staffFormCount, 1);
 assert.equal(batchPreview.classCopyCount, 1);
 assert.match(batchPreview.documentHtml, /801/);
 assert.match(batchPreview.documentHtml, /健康教育/);
+
+const historyBatchRequests = [
+  { id: 'history-raw-1', type: 'substitution', batchId: 'history-batch', requesterEmail: 'owner@school.example', requesterName: '陳小華', targetTeacherEmail: 'invitee@school.example', targetTeacherName: '王小明', requestDate: '2026-09-01', requestPeriod: 1, className: '801', subject: '國文', reason: '事假' },
+  { id: 'history-raw-2', type: 'substitution', batchId: 'history-batch', requesterEmail: 'owner@school.example', requesterName: '陳小華', targetTeacherEmail: 'invitee@school.example', targetTeacherName: '王小明', requestDate: '2026-09-02', requestPeriod: 2, className: '801', subject: '英文', reason: '事假' }
+];
+const historyScheduleRows = [
+  Object.assign({}, batchRecords[0], { id: 'history-raw-1', requestId: 'history-raw-1', batchId: 'history-batch', date: '2026-09-01', period: 1, className: '801' }),
+  Object.assign({}, batchRecords[1], { id: 'history-raw-2', requestId: 'history-raw-2', batchId: 'history-batch', date: '2026-09-02', period: 2, className: '802' })
+];
+const historyPrintRecords = context.window.buildHistoryPrintRecords(
+  ['history-raw-1', 'history-raw-2'],
+  historyScheduleRows,
+  historyBatchRequests,
+  submittedPaperRecordBuilder
+);
+assert.deepEqual(historyPrintRecords.map(record => record.className), ['801', '801'], '歷史列印應使用原始申請班級，而非目前課表解析值');
+const historyAlignedForms = context.window.buildPrintForms(historyPrintRecords, historyScheduleRows, fixtureContext);
+assert.equal(historyAlignedForms.staffFormCount, 1, '歷史紀錄與待辦批核應使用相同教師版合併規則');
+assert.equal(historyAlignedForms.classCopyCount, 1, '歷史紀錄與待辦批核應依原始申請班級合併班級副本');
+const singleHistoryPrintRecord = context.window.buildHistoryPrintRecords(
+  ['history-raw-1'], historyScheduleRows, historyBatchRequests, submittedPaperRecordBuilder
+);
+assert.equal(singleHistoryPrintRecord.length, 1, '歷史列印資料轉換需保留勾選的單筆紀錄');
 
 const batchDifferentClassGroups = context.window.buildPrintGroups([
   batchRecords[0],

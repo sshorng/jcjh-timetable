@@ -1155,6 +1155,30 @@ function getSelectedPrintRecords(ctx) {
   return { ids, records };
 }
 
+/** 歷史列印改用原始申請資料組單，與待辦批核預覽採用相同的資料轉換。 */
+function buildHistoryPrintRecords(selectedIds, historyRecords, requestRecords, buildRecords) {
+  const ids = uniquePrintValues((selectedIds || []).map(value => String(value == null ? '' : value)));
+  const historyById = new Map();
+  (historyRecords || []).forEach(record => {
+    if (record && record.id != null) historyById.set(String(record.id), record);
+  });
+
+  const requestIds = new Set(ids.map(id => {
+    const record = historyById.get(id);
+    return String((record && record.requestId) || id.replace(/_[12]$/, '')).trim();
+  }).filter(Boolean));
+  const requests = (requestRecords || []).filter(request =>
+    request && requestIds.has(String(request.id || request.requestId || '').trim())
+  );
+  const generated = typeof buildRecords === 'function' ? buildRecords(requests) : [];
+  const generatedById = new Map();
+  (generated || []).forEach(record => {
+    if (record && record.id != null) generatedById.set(String(record.id), record);
+  });
+
+  return ids.map(id => generatedById.get(id) || historyById.get(id)).filter(Boolean);
+}
+
 function buildPrintForms(recordsToPrint, allSubs, ctx) {
   const groupList = buildPrintGroups(recordsToPrint, allSubs, ctx);
   const weekGroups = [];
@@ -1604,3 +1628,4 @@ window.packPrintForms = packPrintForms;
 window.getPrintPreviewCss = getPrintPreviewCss;
 window.buildPrintPreview = buildPrintPreview;
 window.buildPrintPreviewImageSvg = buildPrintPreviewImageSvg;
+window.buildHistoryPrintRecords = buildHistoryPrintRecords;

@@ -8621,6 +8621,55 @@ createApp({
       }
     };
 
+    const openHistoryPrintPreview = async () => {
+      if (typeof syncHistorySelectionFromDom === 'function') syncHistorySelectionFromDom();
+      const selectedIds = (selectedRecordIds.value || []).map(id => String(id));
+      if (!selectedIds.length) {
+        showToast('請先勾選歷史紀錄中要列印的單據！', 'warning');
+        return false;
+      }
+
+      try {
+        await ensurePrintReady();
+        if (typeof window.buildHistoryPrintRecords !== 'function') {
+          throw new Error('歷史列印資料轉換模組尚未載入');
+        }
+        const records = window.buildHistoryPrintRecords(
+          selectedIds,
+          substitutionRecords.value || [],
+          requestsList.value || [],
+          buildPaperRecordsForSubmittedRequests
+        );
+        if (!records.length) {
+          showToast('找不到已勾選紀錄對應的原始申請資料', 'warning');
+          return false;
+        }
+
+        // 與待辦批核紙本預覽相同：管理員版預填教師姓名，行政版保留簽名空格。
+        const signatureByTeacher = {};
+        records.forEach(record => {
+          [record.actualTeacherEmail, record.originalTeacherEmail].forEach(email => {
+            const name = String(getTeacherNameByEmail(email) || email || '').trim();
+            if (name) signatureByTeacher[name.toLowerCase()] = isAdmin.value ? name : '';
+          });
+        });
+        const printRecords = records.map(record => Object.assign({}, record, {
+          signatureByTeacher: Object.assign({}, record.signatureByTeacher || {}, signatureByTeacher)
+        }));
+
+        return await openPrintPreview('Notice', {
+          records: printRecords,
+          allSubs: (substitutionRecords.value || []).concat(printRecords),
+          source: 'history',
+          skipMarkPrinted: false
+        });
+      } catch (error) {
+        console.error('歷史紀錄列印預覽失敗：', error);
+        showToast('產生列印預覽失敗：' + (error && error.message ? error.message : error), 'error');
+        return false;
+      }
+    };
+
     const closePrintPreview = (returnToSource = true) => {
       const returnTo = printPreview.value && printPreview.value.returnTo;
       showPrintPreviewModal.value = false;
@@ -12553,7 +12602,7 @@ createApp({
        exchangeWeekdayFilter, exchangeWeekdayOptions, setExchangeWeekdayFilter, filteredExchangeList,
        showCompareModal, showTriangleTimetablePreview, showMatchModal, pendingRequestData, combinedReturnCandidates, askFirstLineText, askFirstLineDraft, selectedRecordIds, showDevDropdown, devTeacherQuery, filteredDevTeachers,
              paperPrintDraft, paperSignatureByTeacher, openPaperPrintDraftFromCompare, openPaperPrintForRequest, openPaperPrintMutualDrafts, openTrianglePaperPreview, printPaperDraft, openPaperDraftPreview,
-           showPrintPreviewModal, printPreview, printPreviewImageBusy, openPrintPreview, closePrintPreview, confirmPrintPreview, copyPrintPreviewImage, downloadPrintPreviewImage,
+            showPrintPreviewModal, printPreview, printPreviewImageBusy, openPrintPreview, openHistoryPrintPreview, closePrintPreview, confirmPrintPreview, copyPrintPreviewImage, downloadPrintPreviewImage,
       showDetailModal, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord,
        showLineMessageModal, lineMessageTitle, lineMessageText, openLineMessageEditor, copyEditedLineMessage, sendEditedLineMessage,
        showSuccessModal,

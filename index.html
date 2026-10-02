@@ -1433,7 +1433,7 @@
                   @click="sendSelectedBatchNotices"
                   title="依代課老師合併寄出（後發通知，適合活動互代先排後寄）"
                 >📧 批次發通知信</button>
-                <button class="btn btn-primary btn-md" @click="openPrintPreview('Notice')" title="先預覽單欄合併結果，再依原版格式列印">🖨️ 預覽／列印代（調、補）課單</button>
+                <button class="btn btn-primary btn-md" @click="openHistoryPrintPreview" title="依待辦批核相同的分組規則預覽並列印">🖨️ 預覽／列印代（調、補）課單</button>
               </div>
             </div>
 
@@ -4704,7 +4704,7 @@
         <script defer src="ui-approval.js?v=20260917-quota-ledger4"></script>
   <!-- ui-admin：僅管理員／後台操作時 ensureUiAdmin -->
         <script defer src="app-shell-utils.js?v=20260917-quota-ledger4"></script>
-       <script defer src="app.js?v=20261002-report-range-strict1"></script>
+       <script defer src="app.js?v=20261002-history-print1"></script>
   <script>
     (function () {
       function loadScript(src) {
@@ -4754,7 +4754,7 @@
       };
       window.ensurePrintHelper = function () {
         if (typeof window.generateFormHtml === 'function') return Promise.resolve();
-             if (!_printP) _printP = loadScript('print-helper.js?v=20260917-quota-ledger3');
+              if (!_printP) _printP = loadScript('print-helper.js?v=20261002-history-print1');
         return _printP;
       };
       window.ensureExportSchoolTimetable = function () {
