@@ -909,7 +909,7 @@ window.ExportInvigilation = (function () {
 
   }
 
-  function personalizeValues(ws, layout, recipientName, before, used, remain) {
+  function personalizeValues(ws, layout, recipientName, before, used, remain, hideQuotaBracket) {
     var noteRow = (layout && layout.noteRow) || 48;
     if (recipientName) {
       var label = '教師：' + recipientName;
@@ -933,13 +933,19 @@ window.ExportInvigilation = (function () {
     var noteText = noteCell.value;
     if (noteText == null) return;
     noteText = String(noteText);
-    var bracket = (
-      '【未執行的課務共' + before + '節，本次段考已安排' + used
-      + '節，尚有' + remain + '節，未執行節數將會累計於本學年度】'
-    );
-    if (NOTE5_RE.test(noteText)) noteText = noteText.replace(NOTE5_RE, bracket);
-    else if (/【[^】]*未執行[^】]*】/.test(noteText)) {
-      noteText = noteText.replace(/【[^】]*未執行[^】]*】/, bracket);
+    if (hideQuotaBracket) {
+      // 特教監考個人表：額度三欄無意義，整段括號移除、其餘備註保留
+      if (NOTE5_RE.test(noteText)) noteText = noteText.replace(NOTE5_RE, '');
+      else noteText = noteText.replace(/【[^】]*未執行[^】]*】/, '');
+    } else {
+      var bracket = (
+        '【未執行的課務共' + before + '節，本次段考已安排' + used
+        + '節，尚有' + remain + '節，未執行節數將會累計於本學年度】'
+      );
+      if (NOTE5_RE.test(noteText)) noteText = noteText.replace(NOTE5_RE, bracket);
+      else if (/【[^】]*未執行[^】]*】/.test(noteText)) {
+        noteText = noteText.replace(/【[^】]*未執行[^】]*】/, bracket);
+      }
     }
     // 模板第 48 列沿用原列高；替換後文字稍長，僅縮小字型，框線與列高不動。
     var noteFont = clonePlain(noteCell.font)
@@ -1180,7 +1186,8 @@ window.ExportInvigilation = (function () {
         name,
         quotaStats.before,
         quotaStats.used,
-        quotaStats.remaining
+        quotaStats.remaining,
+        isSpecialEducationTeacher(rec)
       );
 
       try {

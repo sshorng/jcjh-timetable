@@ -4097,16 +4097,68 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
 }
 
 /**
- * 申請作廢批次還額：一次讀、一次寫
+ * 刪除帳本中指定申請單的扣用／還原列（取消作廢用）。
+ * 只刪類型 spend／restore；earn 發放與 adjust 手動調整一律保留。
+ * @returns {{deleted:number, emails:string[]}}
+ */
+function deleteQuotaLedgerRowsForRequestIds_(semesterId, requestIds) {
+  var sid = String(semesterId || "");
+  if (!sid || !requestIds || !requestIds.length) return { deleted: 0, emails: [] };
+  var idSet = {};
+  requestIds.forEach(function (id) {
+    var key = String(id || "").trim();
+    if (key) idSet[key] = 1;
+  });
+  if (!Object.keys(idSet).length) return { deleted: 0, emails: [] };
+  var sheet = null;
+  try {
+    sheet = getSpreadsheet().getSheetByName(QUOTA_LEDGER_SHEET_);
+  } catch (eSheet) { sheet = null; }
+  if (!sheet || sheet.getLastRow() < 2) return { deleted: 0, emails: [] };
+  var headers = [];
+  try { headers = getHeadersForSheet(QUOTA_LEDGER_SHEET_); } catch (eH) { return { deleted: 0, emails: [] }; }
+  var idCol = headers.indexOf("申請單ID");
+  var typeCol = headers.indexOf("類型");
+  var semCol = headers.indexOf("學期代號");
+  var emailCol = headers.indexOf("教師Email");
+  if (idCol < 0) return { deleted: 0, emails: [] };
+  var values = [];
+  try { values = sheet.getDataRange().getValues(); } catch (eV) { return { deleted: 0, emails: [] }; }
+  var targets = [];
+  var emails = {};
+  for (var i = 1; i < values.length; i++) {
+    var rowId = String(values[i][idCol] == null ? "" : values[i][idCol]).trim();
+    if (!rowId || !idSet[rowId]) continue;
+    if (semCol >= 0 && String(values[i][semCol] || "").trim() !== sid) continue;
+    var typ = String(typeCol >= 0 ? (values[i][typeCol] || "") : "").trim().toLowerCase();
+    // 取消只刪扣用及其舊還原列；發放／手動調整保留，避免監考表多算
+    if (typ !== "spend" && typ !== "restore") continue;
+    targets.push(i + 1);
+    if (emailCol >= 0) {
+      var em = String(values[i][emailCol] || "").toLowerCase().trim();
+      if (em) emails[em] = 1;
+    }
+  }
+  if (!targets.length) return { deleted: 0, emails: [] };
+  deleteSheetRowsDescending_(sheet, targets);
+  try { bustTableDataMem_(QUOTA_LEDGER_SHEET_); } catch (eB1) {}
+  bustQuotaLedgerMem_();
+  try { bustQuotaLedgerScriptCache_(sid); } catch (eB2) {}
+  return { deleted: targets.length, emails: Object.keys(emails) };
+}
+
+/**
+ * 申請作廢批次還額：直接刪除帳本扣用列，不另寫還原列，避免監考表多算。
+ * 找不到扣用列時回 0，不動教師餘額。
  */
 function restoreMutualQuotaForRequests_(reqs) {
   var list = Array.isArray(reqs) ? reqs : (reqs ? [reqs] : []);
   if (!list.length) return 0;
   try { backfillQuotaLedgerIndexKeys_(); } catch (eBfR) {}
-  var addMap = {};
-  var metaMap = {};
-  var emptyRestoreRows = [];
   var sid = "";
+  var requestIds = [];
+  var requestIdSet = {};
+  var affectedEmails = {};
   list.forEach(function (r) {
     if (!r) return;
     var st = r._prevStatus != null ? r._prevStatus : r["狀態"];
@@ -4116,112 +4168,54 @@ function restoreMutualQuotaForRequests_(reqs) {
     if (!em) return;
     if (!sid) sid = String(r["學期代號"] || "");
     var requestId = String(r["申請單ID"] || r.id || "").trim();
-    if (isEmptySlotAssignmentRequest_(r)) {
-      emptyRestoreRows.push({ row: r, email: em, requestId: requestId });
-      return;
+    // 無單號無法定位刪除；略過不寫還原列，避免監考表多算
+    if (!requestId) return;
+    if (!requestIdSet[requestId]) {
+      requestIdSet[requestId] = 1;
+      requestIds.push(requestId);
     }
-    addMap[em] = (addMap[em] || 0) + 1;
-    if (!metaMap[em]) {
-      metaMap[em] = {
-        name: r["受邀人姓名"] || "",
-        requestId: requestId
-      };
-    }
+    affectedEmails[em] = 1;
   });
   if (!sid) sid = String((list[0] && list[0]["學期代號"]) || "");
-  if (emptyRestoreRows.length && sid) {
-    var spentRequestIds = {};
+  if (!sid || !requestIds.length) return 0;
+  // 先以帳本確認確有扣用列（含空堂任務額度不足根本沒扣的情況）；無則直接回 0 不碰表
+  var existingSpendIds = {};
+  try {
     (getQuotaLedgerRows_(sid) || []).forEach(function (ledgerRow) {
-      if (String(ledgerRow["類型"] || "").toLowerCase() !== "spend") return;
+      var typ = String(ledgerRow["類型"] || "").toLowerCase();
+      if (typ !== "spend" && typ !== "restore") return;
       var spentId = String(ledgerRow["申請單ID"] || "").trim();
-      if (spentId) spentRequestIds[spentId] = true;
+      if (spentId && requestIdSet[spentId]) existingSpendIds[spentId] = 1;
     });
-    emptyRestoreRows.forEach(function (item) {
-      if (!item.requestId || !spentRequestIds[item.requestId]) return;
-      addMap[item.email] = (addMap[item.email] || 0) + 1;
-      if (!metaMap[item.email]) {
-        metaMap[item.email] = {
-          name: item.row["受邀人姓名"] || "",
-          requestId: item.requestId
-        };
-      }
-    });
+  } catch (eRead) {}
+  requestIds = requestIds.filter(function (id) { return !!existingSpendIds[id]; });
+  if (!requestIds.length) return 0;
+  var removed = null;
+  try {
+    removed = deleteQuotaLedgerRowsForRequestIds_(sid, requestIds);
+  } catch (eDel) {
+    logError_("deleteQuotaLedger_after_cancel", eDel);
+    return 0;
   }
-  var emails = Object.keys(addMap);
-  if (!emails.length) return 0;
-
-  var state = buildTeacherPackStateFromLedger_(sid);
-  var teachersAll = getSemesterTeachersCached_(sid) || [];
-  var sheetQ = {};
-  teachersAll.forEach(function (t) {
-    var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
-    if (!em) return;
-    var sqR = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
-    if (isNaN(sqR) || sqR < 0) sqR = 0;
-    sheetQ[em] = Math.round(sqR * 1000) / 1000;
-  });
-
-  // 最近 spend 包
-  var lastSpendPack = {};
-  getQuotaLedgerRows_(sid).forEach(function (r) {
-    if (String(r["類型"] || "").toLowerCase() !== "spend") return;
-    var em = String(r["教師Email"] || "").toLowerCase().trim();
-    if (!em) return;
-    var t = String(r["時間"] || "");
-    if (!lastSpendPack[em] || t > lastSpendPack[em].time) {
-      lastSpendPack[em] = {
-        time: t,
-        packageId: r["包ID"] || "",
-        eventId: r["事件ID"] || "",
-        eventName: r["事件名稱"] || ""
-      };
-    }
-  });
-
-  var ledgerRows = [];
+  if (!removed || !removed.deleted) return 0;
+  var emails = {};
+  Object.keys(affectedEmails).forEach(function (em) { emails[em] = 1; });
+  (removed.emails || []).forEach(function (em) { emails[em] = 1; });
+  var emailList = Object.keys(emails);
+  // 刪除後以帳本加總重算餘額並寫回教師名單
   var finalBal = {};
-  var now = quotaNowStr_();
-  var seq = 0;
-  emails.forEach(function (em) {
-    var need = addMap[em];
-    var meta = metaMap[em] || {};
-    var prev = state[em] ? state[em].bal : (sheetQ[em] || 0);
-    if (prev == null || isNaN(prev)) prev = sheetQ[em] || 0;
-    if (prev < 0) prev = 0;
-    var next = prev + need;
-    var sp = lastSpendPack[em] || {};
-    var packId = sp.packageId || ("pkg_restore_" + em);
-    seq++;
-    ledgerRows.push({
-      "學期代號": sid,
-      "流水ID": "ql_" + Date.now() + "_" + seq + "_" + Math.random().toString(36).substr(2, 4),
-      "時間": now,
-      "教師Email": em,
-      "教師姓名": meta.name || "",
-      "異動": need,
-      "餘額後": next,
-      "類型": "restore",
-      "包ID": packId,
-      "事件ID": sp.eventId || "",
-      "事件名稱": sp.eventName || "",
-      "起日": "",
-      "迄日": "",
-      "申請單ID": meta.requestId || "",
-      "操作者": "",
-      "備註": "申請作廢還額 ×" + need
-    });
-    finalBal[em] = next;
+  try { bustQuotaLedgerMem_(); } catch (eB3) {}
+  emailList.forEach(function (em) {
+    var bal = 0;
+    try { bal = sumTeacherLedgerBalance_(sid, em); } catch (eS) { bal = 0; }
+    if (isNaN(bal) || bal < 0) bal = 0;
+    finalBal[em] = Math.round(bal * 1000) / 1000;
   });
-
-  if (ledgerRows.length) {
-    appendQuotaLedgerRowsFast_(ledgerRows);
-    bustQuotaLedgerMem_();
-  }
   if (Object.keys(finalBal).length) {
-    patchTeacherMutualQuotaColumn_(sid, finalBal);
+    try { patchTeacherMutualQuotaColumn_(sid, finalBal); } catch (eP) { logError_("patchQuota_after_ledger_delete", eP); }
   }
-  invalidateQuotaCaches_(sid, emails);
-  return emails.length;
+  try { invalidateQuotaCaches_(sid, emailList); } catch (eI) {}
+  return emailList.length;
 }
 
 /** 單人扣用（後備；批次請用 spendMutualQuotaForRequests_） */
