@@ -3450,25 +3450,18 @@
                           → 剩 <strong :style="{color: q.short ? '#b91c1c' : '#5b21b6'}">{{ q.short ? '不足' : q.after }}</strong>
                           <span v-if="q.short" class="text-danger-deep">{{ isMutualCover ? '（將改活動公費）' : '（不可送出）' }}</span>
                         </div>
-                        <div v-if="quotaPackLoading" style="margin-top:6px;color:#7c3aed;">正在查詢額度包…</div>
+                        <div v-if="quotaPackLoading" style="margin-top:6px;color:#7c3aed;">查詢中…</div>
                         <div v-else-if="quotaPackError" style="margin-top:6px;color:#b91c1c;">{{ quotaPackError }}</div>
                         <div v-else-if="quotaPackOptions && quotaPackOptions.length" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;">
-                          <div style="font-weight:700;margin-bottom:4px;">將扣自哪個事件包（預設 FIFO，可改選）</div>
-                          <div v-if="quotaSelectedPack" style="margin-bottom:6px;">
-                            預設：<strong>{{ quotaSelectedPack.eventName || '（未命名）' }}</strong>
-                            <span style="color:#6d28d9;">（包 {{ quotaSelectedPack.packageId }}，餘 {{ quotaSelectedPack.remaining }}）</span>
-                            <span v-if="pendingRequestData.quotaPackageId && pendingRequestData.quotaPackageId !== quotaFifoPackageId" style="color:#b91c1c;">（已手動覆寫）</span>
-                          </div>
+                          <label class="form-label" style="margin-bottom:4px;">扣自事件包（預設最早有餘額者）</label>
                           <select class="form-select" v-model="pendingRequestData.quotaPackageId" style="width:100%;font-size:0.78rem;">
                             <option v-for="opt in quotaPackOptions" :key="opt.packageId" :value="opt.packageId">
-                              {{ opt.eventName || '（未命名）' }}｜餘{{ opt.remaining }}｜{{ opt.packageId }}{{ opt.packageId === quotaFifoPackageId ? '（預設）' : '' }}
+                              {{ opt.eventName || '未命名' }}｜餘{{ opt.remaining }}{{ opt.packageId === quotaFifoPackageId ? '（預設）' : '' }}
                             </option>
                           </select>
-                          <button type="button" class="btn btn-secondary" style="margin-top:6px;padding:2px 10px;font-size:0.72rem;" @click="resetQuotaPackOverride">重設為預設包</button>
-                          <div style="margin-top:4px;color:#6d28d9;">送出後帳本「包ID／事件」即寫入此包。</div>
                         </div>
-                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && !quotaDeductInsufficient" style="margin-top:6px;color:#6d28d9;">該師有總餘額但無分包明細，送出時以後端總餘額包（pkg_balance_）寫入，不需選包。</div>
-                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && quotaDeductInsufficient" style="margin-top:6px;color:#b91c1c;">總餘額不足，請先發放或改經費。</div>
+                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && !quotaDeductInsufficient" style="margin-top:6px;color:#6d28d9;">無分包明細，以總餘額扣。</div>
+                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && quotaDeductInsufficient" style="margin-top:6px;color:#b91c1c;">餘額不足，請先發放或改經費。</div>
                         <div v-if="quotaDeductInsufficient" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;color:#b91c1c;">
                           <template v-if="isMutualCover">
                             額度不足：送出時會<strong>自動改為活動公費</strong>。

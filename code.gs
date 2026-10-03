@@ -3931,43 +3931,46 @@ function resolveQuotaOverrideMeta_(req) {
  * 送出前預覽：回傳每位教師的包餘額＋FIFO 預設 pick，不寫入。
  * 給前端顯示「將扣自哪個包／事件」，並提供下拉改選。
  */
-function buildQuotaSpendPreview_(semesterId, emails, reqs) {
+function buildQuotaSpendPreview_(semesterId, emails, reqs, names) {
   var sid = String(semesterId || "");
   var teachersAll = getSemesterTeachersCached_(sid) || [];
-  var sheetQ = {};
   var teacherByEmail = {};
+  var teacherByName = {};
   teachersAll.forEach(function (t) {
     var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
-    if (!em) return;
-    var sq = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
-    if (isNaN(sq) || sq < 0) sq = 0;
-    sheetQ[em] = Math.round(sq * 1000) / 1000;
-    teacherByEmail[em] = t;
+    var nm = String(t["教師姓名"] || t.name || "").trim();
+    if (em) teacherByEmail[em] = t;
+    if (nm && !teacherByName[nm]) teacherByName[nm] = t;
   });
-  var targets = (emails && emails.length ? emails : (reqs || []).map(function (r) {
+  // 姓名為唯一識別：前端傳 names；emails 僅相容舊版呼叫，一律轉姓名
+  var rawNames = (names && names.length ? names : []).map(function (n) { return String(n || "").trim(); }).filter(Boolean);
+  var rawEmails = (emails && emails.length ? emails : (reqs || []).map(function (r) {
     return String((r && (r["受邀人Email"] || r.targetTeacherEmail || r.subTeacherEmail)) || "").toLowerCase().trim();
   })).map(function (e) { return String(e || "").toLowerCase().trim(); }).filter(Boolean);
+  // Email 反查姓名（名單對照不到就略過，後面只用姓名匹配）
+  rawEmails.forEach(function (em) {
+    var hit = teacherByEmail[em];
+    var nm = hit ? String(hit["教師姓名"] || hit.name || "").trim() : "";
+    if (nm && rawNames.indexOf(nm) < 0) rawNames.push(nm);
+  });
   var seen = {};
-  targets = targets.filter(function (e) { if (!e || seen[e]) return false; seen[e] = true; return true; });
+  var targetNames = rawNames.filter(function (n) { if (!n || seen[n]) return false; seen[n] = true; return true; });
   var allLedger = [];
   try { allLedger = getQuotaLedgerRows_(sid) || []; } catch (eL) { allLedger = []; }
-  return targets.map(function (em) {
-    var tHit = teacherByEmail[em] || null;
-    var tName = tHit ? String(tHit["教師姓名"] || tHit.name || "").trim() : "";
-    var idxKey = tName ? (sid + "|" + tName) : "";
-    // 與額度歷程同一篩選：索引鍵優先，Email／姓名備援（姓名鍵轉換後 Email 可能已改寫）
+  return targetNames.map(function (tName) {
+    var tHit = teacherByName[tName] || null;
+    var em = tHit ? String(tHit["教師Email"] || tHit.email || "").toLowerCase().trim() : "";
+    var idxKey = sid + "|" + tName;
+    // 只認姓名：索引鍵 → 教師姓名欄，不再比 Email
     var mine = allLedger.filter(function (r) {
       var ik = String(r["索引鍵"] || "").trim();
-      if (ik && idxKey) return ik === idxKey;
-      var rem = String(r["教師Email"] || r.email || "").toLowerCase().trim();
-      if (rem && rem === em) return true;
+      if (ik) return ik === idxKey;
       var rnm = String(r["教師姓名"] || r.name || "").trim();
-      if (rnm && tName && rnm === tName) return true;
-      return false;
+      return !!rnm && rnm === tName;
     });
     var packMap = {};
     mine.forEach(function (r) {
-      var pid = String(r["包ID"] || "").trim() || ("nopack_" + em);
+      var pid = String(r["包ID"] || "").trim() || ("nopack_" + tName);
       if (!packMap[pid]) {
         packMap[pid] = { packageId: pid, eventId: "", eventName: "", remaining: 0, firstTime: r["時間"] || "" };
       }
@@ -3989,10 +3992,12 @@ function buildQuotaSpendPreview_(semesterId, emails, reqs) {
     for (var i = 0; i < packs.length; i++) {
       if (Math.floor(packs[i].remaining || 0) >= 1) { fifo = packs[i]; break; }
     }
-    var bal = (sheetQ[em] != null ? sheetQ[em] : 0);
+    var balRaw = tHit ? (tHit["折抵額度"] != null ? tHit["折抵額度"] : tHit.mutualQuota) : 0;
+    var bal = parseFloat(balRaw);
+    if (isNaN(bal) || bal < 0) bal = 0;
     return {
       email: em,
-      name: tName || em,
+      name: tName,
       balance: Math.max(0, Math.round(bal * 1000) / 1000),
       packs: packs.map(function (p) {
         return { packageId: p.packageId, eventId: p.eventId || "", eventName: p.eventName || "", remaining: p.remaining || 0, firstTime: p.firstTime || "" };
@@ -5837,8 +5842,11 @@ function handleReadAction_(postData) {
     var pvEmails = reqData.emails || reqData.teacherEmails || [];
     if (reqData.email && (!pvEmails || !pvEmails.length)) pvEmails = [reqData.email];
     if (typeof pvEmails === "string") pvEmails = [pvEmails];
+    var pvNames = reqData.names || reqData.teacherNames || [];
+    if (reqData.name && (!pvNames || !pvNames.length)) pvNames = [reqData.name];
+    if (typeof pvNames === "string") pvNames = [pvNames];
     var pvReqs = reqData.requests || [];
-    var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs);
+    var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs, pvNames);
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       preview: preview

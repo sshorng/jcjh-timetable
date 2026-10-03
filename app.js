@@ -2131,6 +2131,7 @@ const app = createApp({
         patchLocalMutualQuota(t ? t.teacherName || t.name : key, next);
       });
       if (hasQuotaMutation) bustQuotaLedgerViewCache();
+      try { if (typeof window.__quotaPackCacheBust === 'function') window.__quotaPackCacheBust(); } catch (eCache) {}
     };
     /**
      * 申請作廢時樂觀還原折抵額度（後端已寫回試算表；此處只更新畫面）
@@ -5891,7 +5892,56 @@ const app = createApp({
     const quotaPackLoading = ref(false);
     const quotaPackError = ref('');
     let quotaPackReqId = 0;
-    const fetchQuotaPackPreview = async () => {
+    const quotaPackCache = Object.create(null);
+    const QUOTA_PACK_CACHE_MS = 180000;
+    let quotaPackDebounce = null;
+    try {
+      window.__quotaPackCacheBust = function (email) {
+        try {
+          if (email) { delete quotaPackCache[String(email).toLowerCase().trim()]; return; }
+          Object.keys(quotaPackCache).forEach(function (k) { delete quotaPackCache[k]; });
+        } catch (e) {}
+      };
+    } catch (e) {}
+    // 背景預熱：還沒切到扣額度就先查，真正切過去時吃快取秒出（不動畫面 loading）
+    // 識別只用姓名
+    const quotaTeacherNameOf = (email) => {
+      const em = String(email || '').toLowerCase().trim();
+      if (!em) return '';
+      try {
+        const t = (typeof lookupTeacher === 'function' ? lookupTeacher(em) : null);
+        const nm = (t && (t.teacherName || t.name)) || (typeof getTeacherNameByEmail === 'function' ? getTeacherNameByEmail(em) : '') || '';
+        return String(nm || '').trim();
+      } catch (e) { return ''; }
+    };
+    let quotaPackWarmId = 0;
+    const warmQuotaPackCache = async (email) => {
+      const em = String(email || '').toLowerCase().trim();
+      if (!em || !isAdmin.value) return;
+      const nm = quotaTeacherNameOf(em);
+      if (!nm) return;
+      const key = nm;
+      const hit = quotaPackCache[key];
+      if (hit && (Date.now() - hit.ts) < QUOTA_PACK_CACHE_MS) return;
+      const myId = ++quotaPackWarmId;
+      try {
+        let preview = [];
+        if (typeof fetchQuotaSpendPreview === 'function') {
+          const res = await fetchQuotaSpendPreview({ names: [nm] });
+          preview = (res && res.preview) || [];
+        } else {
+          const res = await callGasApi('getQuotaSpendPreview', { names: [nm] });
+          preview = (res && res.preview) || [];
+        }
+        if (myId !== quotaPackWarmId) return;
+        if (preview && preview[0]) quotaPackCache[key] = { ts: Date.now(), preview: preview };
+      } catch (e) { /* 預熱失敗不打擾，等正式查詢再報錯 */ }
+    };
+    const fetchQuotaPackPreview = () => {
+      if (quotaPackDebounce) clearTimeout(quotaPackDebounce);
+      quotaPackDebounce = setTimeout(function () { doFetchQuotaPackPreview(); }, 250);
+    };
+    const doFetchQuotaPackPreview = async () => {
       const p = pendingRequestData.value;
       if (!p || p.mode !== 'substitution' || p.subFee !== QUOTA_DEDUCT_FEE || isPeriod8FeeLocked.value) {
         quotaPackPreview.value = [];
@@ -5903,27 +5953,44 @@ const app = createApp({
         quotaPackPreview.value = [];
         return;
       }
+      const nm = quotaTeacherNameOf(em);
+      if (!nm) {
+        quotaPackPreview.value = [];
+        return;
+      }
+      const key = nm;
+      // 快取：同師 3 分鐘內直接用，GAS 冷啟動不用每次等
+      const cached = quotaPackCache[key];
+      if (cached && (Date.now() - cached.ts) < QUOTA_PACK_CACHE_MS && cached.preview) {
+        quotaPackPreview.value = cached.preview;
+        const cf = cached.preview[0];
+        if (cf && cf.packs && cf.packs.length && !p.quotaPackageId) p.quotaPackageId = cf.fifoPackageId || '';
+        quotaPackLoading.value = false;
+        return;
+      }
       const myId = ++quotaPackReqId;
       quotaPackLoading.value = true;
       quotaPackError.value = '';
       try {
         let preview = [];
         if (typeof fetchQuotaSpendPreview === 'function') {
-          const res = await fetchQuotaSpendPreview({ emails: [em] });
+          const res = await fetchQuotaSpendPreview({ names: [nm] });
           preview = (res && res.preview) || [];
         } else {
-          const res = await callGasApi('getQuotaSpendPreview', { emails: [em] });
+          const res = await callGasApi('getQuotaSpendPreview', { names: [nm] });
           preview = (res && res.preview) || [];
         }
         if (myId !== quotaPackReqId) return;
         quotaPackPreview.value = preview;
         // 若尚未選包，預設選 FIFO；無分包明細時清空覆寫，後端以總餘額包（pkg_balance_）寫入
-        const first = preview[0];
+        let first = preview[0];
         if (first && first.packs && first.packs.length) {
           if (!p.quotaPackageId) {
             p.quotaPackageId = first.fifoPackageId || '';
           }
+          quotaPackCache[key] = { ts: Date.now(), preview: preview };
         } else {
+          // 無分包：清空覆寫，後端送出時以總餘額包（pkg_balance_）寫入
           if (p) p.quotaPackageId = '';
           quotaPackError.value = '';
         }
@@ -5957,16 +6024,22 @@ const app = createApp({
       p.quotaEventId = '';
       p.quotaEventName = '';
     };
-    // 管理員才需要包預覽；一般教師不打 API
-    watch([pendingRequestData, showCompareModal], () => {
+    // 管理員才需要包預覽；一般教師不打 API（用 getter 監聽，下拉切換經費也會觸發）
+    // 未切到扣額度時先背景預熱，切過去吃快取秒出
+    watch(function () {
+      const pd = pendingRequestData.value || {};
+      return [pd.mode, pd.subFee, pd.subTeacher, showCompareModal.value, isPeriod8FeeLocked.value];
+    }, function () {
       if (!isAdmin.value) return;
       if (!showCompareModal.value) return;
       const p = pendingRequestData.value;
-      if (p && p.mode === 'substitution' && p.subFee === QUOTA_DEDUCT_FEE && !isPeriod8FeeLocked.value) {
+      if (!p || p.mode !== 'substitution' || isPeriod8FeeLocked.value) return;
+      if (p.subFee === QUOTA_DEDUCT_FEE) {
         fetchQuotaPackPreview();
       } else {
         quotaPackPreview.value = [];
         quotaPackError.value = '';
+        if (p.subTeacher) warmQuotaPackCache(p.subTeacher);
       }
     });
 
