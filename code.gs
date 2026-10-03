@@ -3838,10 +3838,30 @@ function postLedgerAndSync_(o) {
  */
 function buildTeacherPackStateFromLedger_(semesterId) {
   var sid = String(semesterId || "");
+  // 姓名鍵相容：帳本舊列的教師Email可能已轉為姓名，以教師名單建名→email 對照
+  var emailByName = {};
+  try {
+    (getSemesterTeachersCached_(sid) || []).forEach(function (t) {
+      var nm = String(t["教師姓名"] || t.name || "").trim();
+      var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
+      if (nm && em && !emailByName[nm]) emailByName[nm] = em;
+    });
+  } catch (eDir) {}
   var byEmail = {}; // em -> { bal, packs: [{packageId, eventId, eventName, remaining, firstTime, name}] }
   getQuotaLedgerRows_(sid).forEach(function (r) {
-    var em = String(r["教師Email"] || "").toLowerCase().trim();
-    if (!em) return;
+    var em = String(r["教師Email"] || r.email || "").toLowerCase().trim();
+    // 轉換後該欄可能是姓名（無 @）：用名單對回 email；再不行用索引鍵／姓名欄
+    if (!em || em.indexOf("@") < 0) {
+      var nm0 = String(r["教師姓名"] || r.name || em || "").trim();
+      if (nm0 && emailByName[nm0]) em = emailByName[nm0];
+      else {
+        var ik = String(r["索引鍵"] || "").trim();
+        var ikName = ik.indexOf("|") >= 0 ? ik.slice(ik.indexOf("|") + 1) : "";
+        if (ikName && emailByName[ikName]) em = emailByName[ikName];
+        else if (em && emailByName[em]) em = emailByName[em];
+      }
+    }
+    if (!em || em.indexOf("@") < 0) return;
     if (!byEmail[em]) byEmail[em] = { bal: 0, packs: {}, name: "" };
     var st = byEmail[em];
     var d = parseFloat(r["異動"]);
@@ -3913,41 +3933,70 @@ function resolveQuotaOverrideMeta_(req) {
  */
 function buildQuotaSpendPreview_(semesterId, emails, reqs) {
   var sid = String(semesterId || "");
-  var state = buildTeacherPackStateFromLedger_(sid);
   var teachersAll = getSemesterTeachersCached_(sid) || [];
   var sheetQ = {};
+  var teacherByEmail = {};
   teachersAll.forEach(function (t) {
     var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
     if (!em) return;
     var sq = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
     if (isNaN(sq) || sq < 0) sq = 0;
     sheetQ[em] = Math.round(sq * 1000) / 1000;
+    teacherByEmail[em] = t;
   });
   var targets = (emails && emails.length ? emails : (reqs || []).map(function (r) {
     return String((r && (r["受邀人Email"] || r.targetTeacherEmail || r.subTeacherEmail)) || "").toLowerCase().trim();
   })).map(function (e) { return String(e || "").toLowerCase().trim(); }).filter(Boolean);
   var seen = {};
   targets = targets.filter(function (e) { if (!e || seen[e]) return false; seen[e] = true; return true; });
+  var allLedger = [];
+  try { allLedger = getQuotaLedgerRows_(sid) || []; } catch (eL) { allLedger = []; }
   return targets.map(function (em) {
-    var st = state[em] || { bal: (sheetQ[em] || 0), packList: [], name: "" };
-    var packs = (st.packList || []).map(function (p) {
-      return { packageId: p.packageId, eventId: p.eventId || "", eventName: p.eventName || "", remaining: p.remaining || 0, firstTime: p.firstTime || "" };
+    var tHit = teacherByEmail[em] || null;
+    var tName = tHit ? String(tHit["教師姓名"] || tHit.name || "").trim() : "";
+    var idxKey = tName ? (sid + "|" + tName) : "";
+    // 與額度歷程同一篩選：索引鍵優先，Email／姓名備援（姓名鍵轉換後 Email 可能已改寫）
+    var mine = allLedger.filter(function (r) {
+      var ik = String(r["索引鍵"] || "").trim();
+      if (ik && idxKey) return ik === idxKey;
+      var rem = String(r["教師Email"] || r.email || "").toLowerCase().trim();
+      if (rem && rem === em) return true;
+      var rnm = String(r["教師姓名"] || r.name || "").trim();
+      if (rnm && tName && rnm === tName) return true;
+      return false;
     });
+    var packMap = {};
+    mine.forEach(function (r) {
+      var pid = String(r["包ID"] || "").trim() || ("nopack_" + em);
+      if (!packMap[pid]) {
+        packMap[pid] = { packageId: pid, eventId: "", eventName: "", remaining: 0, firstTime: r["時間"] || "" };
+      }
+      var p = packMap[pid];
+      var d = parseFloat(r["異動"]);
+      if (isNaN(d)) d = 0;
+      p.remaining = Math.round((p.remaining + d) * 1000) / 1000;
+      if (r["事件ID"] && !p.eventId) p.eventId = r["事件ID"];
+      if (r["事件名稱"] && !p.eventName) p.eventName = r["事件名稱"];
+      var t = String(r["時間"] || "");
+      if (t && (!p.firstTime || t < p.firstTime)) p.firstTime = t;
+    });
+    var packs = Object.keys(packMap).map(function (k) { return packMap[k]; }).filter(function (p) {
+      return Math.max(0, Math.round((p.remaining || 0) * 1000) / 1000) > 0;
+    });
+    packs.forEach(function (p) { p.remaining = Math.max(0, Math.round((p.remaining || 0) * 1000) / 1000); });
+    packs.sort(function (a, b) { return String(a.firstTime || "").localeCompare(String(b.firstTime || "")); });
     var fifo = null;
     for (var i = 0; i < packs.length; i++) {
       if (Math.floor(packs[i].remaining || 0) >= 1) { fifo = packs[i]; break; }
     }
-    var bal = (typeof st.bal === "number" ? st.bal : (sheetQ[em] || 0));
-    var tHit = null;
-    for (var ti = 0; ti < teachersAll.length; ti++) {
-      var tem = String(teachersAll[ti]["教師Email"] || teachersAll[ti].email || "").toLowerCase().trim();
-      if (tem === em) { tHit = teachersAll[ti]; break; }
-    }
+    var bal = (sheetQ[em] != null ? sheetQ[em] : 0);
     return {
       email: em,
-      name: (tHit && (tHit["教師姓名"] || tHit.name)) || st.name || em,
+      name: tName || em,
       balance: Math.max(0, Math.round(bal * 1000) / 1000),
-      packs: packs,
+      packs: packs.map(function (p) {
+        return { packageId: p.packageId, eventId: p.eventId || "", eventName: p.eventName || "", remaining: p.remaining || 0, firstTime: p.firstTime || "" };
+      }),
       fifoPackageId: fifo ? fifo.packageId : "",
       fifoEventId: fifo ? (fifo.eventId || "") : "",
       fifoEventName: fifo ? (fifo.eventName || "") : ""
@@ -3955,10 +4004,6 @@ function buildQuotaSpendPreview_(semesterId, emails, reqs) {
   });
 }
 
-/**
- * 舊帳更正：把指定申請單的 spend 列搬到正確的包／事件（同教師內，不動總餘額）。
- * 只改「包ID／事件ID／事件名稱」；總餘額與教師名單不變，但會清快取。
- */
 function quotaDutyDate_(row) {
   row = row || {};
   var value = row["異動日期"] || row.requestDate || row.date || row["起日"] || row.startDate || "";

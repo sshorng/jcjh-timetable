@@ -5917,14 +5917,15 @@ const app = createApp({
         }
         if (myId !== quotaPackReqId) return;
         quotaPackPreview.value = preview;
-        // 若尚未選包，預設選 FIFO；若已選手動包但不在清單，保留但標示
+        // 若尚未選包，預設選 FIFO；無分包明細時清空覆寫，後端以總餘額包（pkg_balance_）寫入
         const first = preview[0];
         if (first && first.packs && first.packs.length) {
           if (!p.quotaPackageId) {
             p.quotaPackageId = first.fifoPackageId || '';
           }
-        } else if (first && !first.packs.length) {
-          quotaPackError.value = '該師目前無可用額度包（餘額不足或尚未發放）';
+        } else {
+          if (p) p.quotaPackageId = '';
+          quotaPackError.value = '';
         }
       } catch (e) {
         if (myId !== quotaPackReqId) return;
