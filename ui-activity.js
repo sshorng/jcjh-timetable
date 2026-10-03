@@ -1556,15 +1556,18 @@ window.UiBatchSubmit = (function () {
       return;
     }
 
-    // 批次調課一律走審核：不直接核准，本人送待對方同意，行政代送待行政核准（與批次代課同）
-    var directApprove = false;
+    // 核准規則與批次代課一致：管理員勾選直接核准即生效；紙本／代送走行政核准；其餘待對方同意
     var proxyActiveAny = prepared.some(function (item) { return !!(item.request && item.request.isProxySubmit); });
     var paperActiveAny = prepared.some(function (item) {
       return !!(item.request && (item.request.paperFlow === true
         || String(item.request['紙本流程'] || '').toUpperCase() === 'TRUE'));
     });
+    var directApprove = !!(deps.isAdmin && deps.isAdmin.value
+      && deps.directApproveMode && deps.directApproveMode.value
+      && !proxyActiveAny && !paperActiveAny);
     var skipNotify = !!(
-      paperActiveAny
+      (directApprove && deps.directApproveSkipNotify && deps.directApproveSkipNotify.value)
+      || paperActiveAny
       || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && deps.isAdmin && deps.isAdmin.value)
     );
     var response = null;

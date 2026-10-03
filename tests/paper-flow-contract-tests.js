@@ -1054,8 +1054,7 @@ function runApplicationFormContractTest() {
      assert.equal(isMutualRec({ subFee: '第8節代課' }), false, '第8節代課經費不可顯示為互代');
      assert.equal(isMutualRec({ subFee: '活動公費' }), true, '活動公費仍應顯示為互代');
      assert.match(appSource, /const paperFlow = computed\(\(\) =>\s*!isMutualCover\.value\s*&&\s*notificationsSuppressed\.value\s*&&\s*!isProxySubmitActive\.value\s*\);/, '關閉線上申請時應優先走紙本流程');
-    assert.match(html, /v-if="isAdmin && !notificationsSuppressed && !pendingRequestData\.isExchangeBatch && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項，且批次調課不應顯示直接核准選項');
-    assert.match(html, /批次調課一律需對方同意後再送行政審核/, '批次調課應提示一律走審核流程');
+    assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
     assert.match(appSource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
     assert.match(appSource, /const ownerKeys = \[record\.actualTeacherEmail, record\.actualTeacherName\]/, '本人判定應以實際授課教師為準');
     assert.match(appSource, /if \(!canStartSecondSubFromDetail\.value\) \{/, '再辦操作入口應再次驗證本人權限');
@@ -2039,7 +2038,7 @@ async function runBatchExchangeTest() {
   await api.executeBatchSubmit(deps);
   assert.equal(sent.length, 1, '批次調課以單一 API 逐組回傳結果');
   assert.equal(sent[0].batchId, 'bat-exchange-test');
-  assert.equal(sent[0].directApprove, false, '批次調課一律走審核，不可直接核准');
+  assert.equal(sent[0].directApprove, false, '非管理員不應直接核准');
   assert.equal(sent[0].paperFlow, false, '非紙本模式不應標記紙本流程');
   assert.equal(sent[0].requests.length, 2, '每組互調都應建立獨立申請列');
   assert.ok(sent[0].requests.every(row => row['異動類型'] === 'exchange'));
@@ -2050,6 +2049,84 @@ async function runBatchExchangeTest() {
   assert.match(deps.successModalTitle.value, /部分送出/);
   assert.equal(deps.lineBatchParts.value.length, 1, '批次調課成功即產生 LINE 範本（與批次代課一致）');
   assert.equal(deps.hasLineTemplate.value, true);
+
+  // 管理員勾選直接核准：與批次代課一致，整批直接生效
+  const directSlots = ref([{
+    key: 'owner@school.example|2026-08-17|1', batchId: 'bat-exchange-direct',
+    teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-17', dayOfWeek: 1,
+    period: 1, className: '701', subject: '國文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人',
+    targetDate: '2026-08-18', targetDayOfWeek: 2, targetPeriod: 2, targetClassName: '701', targetSubject: '國文'
+  }, {
+    key: 'owner@school.example|2026-08-17|2', batchId: 'bat-exchange-direct',
+    teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-17', dayOfWeek: 1,
+    period: 2, className: '702', subject: '英文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人',
+    targetDate: '2026-08-18', targetDayOfWeek: 2, targetPeriod: 3, targetClassName: '702', targetSubject: '英文'
+  }]);
+  const directPending = ref({
+    mode: 'exchange', isBatch: true, isExchangeBatch: true, batchCount: 2,
+    submitBatchId: 'bat-exchange-direct', reason: '課務調整', courseAdjustmentOnly: true, note: ''
+  });
+  const directSent = [];
+  let directCleared = 0;
+  const directDeps = {
+    batchSlots: directSlots,
+    pendingRequestData: directPending,
+    batchFlowMode: ref('exchange'),
+    batchAssignMode: ref('perSlot'),
+    isSubmitting: ref(false),
+    loading: ref(false),
+    loadingMessage: ref(''),
+    showToast: () => {},
+    buildSubmitPayload: requestId => ({
+      newRequest: {
+        '申請單ID': requestId,
+        '申請人姓名': '申請人',
+        '受邀人姓名': '受邀人',
+        '異動日期': '2026-08-17',
+        '狀態': 'pending_teacher',
+        '紙本流程': 'FALSE'
+      }
+    }),
+    callGasApi: async (action, payload) => {
+      directSent.push(payload);
+      return {
+        success: true,
+        successes: [
+          { requestId: directSlots.value[0].exchangeRequestId, status: 'approved' },
+          { requestId: directSlots.value[1].exchangeRequestId, status: 'approved' }
+        ],
+        failures: []
+      };
+    },
+    sheetRequestToFront: row => row,
+    optimisticUpsertRequest: () => {},
+    softRefreshInBackground: () => {},
+    successActionRequests: ref([]),
+    successModalTitle: ref(''),
+    successModalMessage: ref(''),
+    successFlowMode: ref(''),
+    showCompareModal: ref(true),
+    showMatchModal: ref(false),
+    showSuccessModal: ref(false),
+    batchSelectMode: ref(true),
+    clearBatchSlots: () => { directCleared++; directSlots.value = []; },
+    directApproveMode: ref(true),
+    directApproveSkipNotify: ref(true),
+    isAdmin: ref(true),
+    notificationsSuppressed: ref(false),
+    buildLineInviteText: () => 'LINE-INVITE',
+    hasLineTemplate: ref(false),
+    lineBatchParts: ref([]),
+    lineCopyText: ref('')
+  };
+
+  await api.executeBatchSubmit(directDeps);
+  assert.equal(directSent.length, 1);
+  assert.equal(directSent[0].directApprove, true, '管理員勾選直接核准時與批次代課一致可直核');
+  assert.equal(directSent[0].skipNotify, true, '直核不寄通知信時以後續 LINE 範本手動通知');
+  assert.equal(directDeps.successFlowMode.value, 'direct');
+  assert.equal(directCleared, 1, '全數成功即清空批次');
+  assert.equal(directDeps.batchSelectMode.value, false);
 
   const retrySlots = ref([{
     key: 'retry-slot', exchangeRequestId: 'req-failed-original', exchangeSerial: 'SWP-failed-original',

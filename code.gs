@@ -8359,9 +8359,9 @@ function doPost(e) {
           validateRequestRow_(row, semesterId);
 
           var isSelf = leaveEmail === userEmail;
-          // 批次調課一律走審核：忽略前端 directApprove，本人送待對方同意，代送待行政核准
-          var directApproveRow = false;
-          var proxyRow = !isSelf && (isAdmin || exchangeBatchCanProxy);
+          // 核准規則與代課一致：管理員勾選直接核准即生效；紙本／代送走行政核准；其餘待對方同意
+          var directApproveRow = isAdmin && reqData.directApprove === true;
+          var proxyRow = !isSelf && !directApproveRow && (isAdmin || exchangeBatchCanProxy);
           if (!isSelf && !directApproveRow && !exchangeBatchCanProxy) {
             throw new Error("您無權代表此申請人發起調課！");
           }
