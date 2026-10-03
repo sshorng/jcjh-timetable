@@ -8615,21 +8615,17 @@ createApp({
         showToast('匯出模組載入失敗：' + (e && e.message ? e.message : e), 'error');
         return;
       }
-      // 全校表內容＝全體教師；分發份數＝下方勾選（少勾可大幅加速）
-      const teachers = (teachersList.value || []).filter(t => t && t.email);
-      if (!teachers.length) {
-        showToast('尚無教師名單', 'warning');
-        return;
-      }
+      // 主表＋分發皆以下方勾選為準；未勾選不列入主表；已勾選即使無課也保留空白列
       const selectedSet = {};
       (schoolExportSelectedEmails.value || []).forEach(e => {
         selectedSet[String(e || '').toLowerCase()] = 1;
       });
-      let recipients = teachers.filter(t => selectedSet[String(t.email || '').toLowerCase()]);
-         if (!recipients.length) {
-           showToast('請在下方勾選要分發的教師（至少一位）', 'warning');
-           return;
-         }
+      const teachers = (teachersList.value || []).filter(t => t && t.email && selectedSet[String(t.email || '').toLowerCase()]);
+      if (!teachers.length) {
+        showToast('請在下方勾選要匯出的教師（至少一位）', 'warning');
+        return;
+      }
+      let recipients = teachers.slice();
          loading.value = true;
          loadingMessage.value = '產生監考表中…';
          try {
@@ -8713,7 +8709,7 @@ createApp({
         if (res.warning) showToast(res.warning, 'info');
         showToast(
           '已下載：' + res.fileName
-          + '（表內全校 ' + res.teacherCount + ' 人 × 分發 ' + res.copyCount + ' 份 × '
+          + '（表內 ' + res.teacherCount + ' 人 × 分發 ' + res.copyCount + ' 份 × '
           + res.dayCount + ' 日；異動 '
           + (res.changedMarked != null ? res.changedMarked : '?')
           + ' 格、基礎巡堂 '
