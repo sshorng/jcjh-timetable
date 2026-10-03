@@ -1556,10 +1556,15 @@ window.UiBatchSubmit = (function () {
       return;
     }
 
-    var directApprove = !!(deps.isAdmin && deps.isAdmin.value
-      && deps.directApproveMode && deps.directApproveMode.value);
+    // 批次調課一律走審核：不直接核准，本人送待對方同意，行政代送待行政核准（與批次代課同）
+    var directApprove = false;
+    var proxyActiveAny = prepared.some(function (item) { return !!(item.request && item.request.isProxySubmit); });
+    var paperActiveAny = prepared.some(function (item) {
+      return !!(item.request && (item.request.paperFlow === true
+        || String(item.request['紙本流程'] || '').toUpperCase() === 'TRUE'));
+    });
     var skipNotify = !!(
-      (directApprove && deps.directApproveSkipNotify && deps.directApproveSkipNotify.value)
+      paperActiveAny
       || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && deps.isAdmin && deps.isAdmin.value)
     );
     var response = null;
@@ -1569,7 +1574,8 @@ window.UiBatchSubmit = (function () {
       response = await deps.callGasApi('submitExchangeBatch', {
         batchId: batchId,
         directApprove: directApprove,
-        paperFlow: false,
+        proxySubmit: proxyActiveAny,
+        paperFlow: paperActiveAny,
         skipNotify: skipNotify,
         requests: prepared.map(item => item.request)
       });
@@ -1645,7 +1651,11 @@ window.UiBatchSubmit = (function () {
     }
     if (deps.successModalMessage) {
       var details = submitFailures.slice(0, 5).map(item => item.error).join('；');
-      deps.successModalMessage.value = '成功送出 ' + successful.length + ' 組'
+      var exProxyCount = successful.filter(function (row) { return !!row.isProxySubmit; }).length;
+      var exProxyTip = exProxyCount
+        ? (exProxyCount === successful.length ? '（行政代申請，已跳過受邀確認）' : '（其中 ' + exProxyCount + ' 組為行政代申請）')
+        : '';
+      deps.successModalMessage.value = '成功送出 ' + successful.length + ' 組' + exProxyTip
         + (totalFailures ? '，' + totalFailures + ' 組未送出，錯誤已保留在各組供修正。' : '。')
         + (details ? '\n' + details : '');
     }
@@ -1661,8 +1671,9 @@ window.UiBatchSubmit = (function () {
       return;
     }
 
+    // LINE 範本與批次代課一致：成功即產生手動通知範本（系統信之外，受邀人也可用 LINE 通知）
     var manualLineParts = [];
-    if (skipNotify && successful.length && typeof deps.buildLineInviteText === 'function') {
+    if (successful.length && typeof deps.buildLineInviteText === 'function') {
       var systemUrl = window.location.origin + window.location.pathname;
       successful.forEach(function (row) {
         var requestId = String(row['申請單ID'] || '');
@@ -1677,7 +1688,7 @@ window.UiBatchSubmit = (function () {
           classB: row['對調目標班級'], subjectB: row['對調目標科目'],
           agreeLink: systemUrl + '?action=respond&id=' + encodeURIComponent(requestId) + '&status=agree',
           declineLink: systemUrl + '?action=respond&id=' + encodeURIComponent(requestId) + '&status=decline',
-          notificationOnly: String(row['狀態'] || '') === 'approved', systemUrl: systemUrl
+          notificationOnly: String(row['狀態'] || '') !== 'pending_teacher', systemUrl: systemUrl
         });
         manualLineParts.push({ name: row['受邀人姓名'] || '', count: 1, text: message });
       });
@@ -1983,7 +1994,7 @@ window.UiBatchSubmit = (function () {
          || paperFlowActive
          || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && isAdmin.value)
       );
-      await callGasApi('submitRequestBatch', {
+      var batchResponse = await callGasApi('submitRequestBatch', {
         batchId: batchId,
          directApprove: doDirectApprove,
          proxySubmit: !!proxyActive,
@@ -1992,13 +2003,35 @@ window.UiBatchSubmit = (function () {
         requests: rows
       });
 
-       var frontRows = rows.map(function (r) { return sheetRequestToFront(r); });
+       // 逐列對帳（與批次調課一致）：後端逐列回報 successes/failures；舊回應無明細時視為全數成功
+       var batchOkIds = null;
+       var batchFailById = {};
+       if (batchResponse && (batchResponse.successes || batchResponse.failures)) {
+         batchOkIds = {};
+         (batchResponse.successes || []).forEach(function (s) { batchOkIds[String(s.requestId || '')] = true; });
+         (batchResponse.failures || []).forEach(function (f) { batchFailById[String(f.requestId || '')] = String(f.error || '送出失敗'); });
+       }
+       var okRows = [];
+       var failRows = [];
+       rows.forEach(function (r) {
+         var rid = String(r['申請單ID'] || '');
+         if (!batchOkIds) { okRows.push(r); return; }
+         if (batchOkIds[rid]) { okRows.push(r); }
+         else { failRows.push({ row: r, error: batchFailById[rid] || '伺服器未回報此節送出成功' }); }
+       });
+       if (!okRows.length) {
+         var noOkDetails = failRows.slice(0, 5).map(function (f) { return f.error; }).join('；');
+         showToast('沒有節次送出成功，請修正後再試' + (noOkDetails ? '：' + noOkDetails : ''), 'warning');
+         return;
+       }
+
+       var frontRows = okRows.map(function (r) { return sheetRequestToFront(r); });
        frontRows.forEach(function (r) {
          optimisticUpsertRequest(r);
        });
        if (successActionRequests) successActionRequests.value = frontRows;
-      if (rows.some(function (r) { return isQuotaDeductFee(r['經費來源'] || r.subFee); })) {
-        await deductMutualQuotaForRows(rows);
+      if (okRows.some(function (r) { return isQuotaDeductFee(r['經費來源'] || r.subFee); })) {
+        await deductMutualQuotaForRows(okRows);
       }
       softRefreshInBackground({ delay: 2000 });
 
@@ -2010,17 +2043,36 @@ window.UiBatchSubmit = (function () {
         lineBatchParts.value = [];
         if (showSuccessModal) showSuccessModal.value = false;
         if (typeof deps.openPaperPrintDraft === 'function') {
-          deps.openPaperPrintDraft(rows);
+          deps.openPaperPrintDraft(okRows);
         }
-        batchSelectMode.value = false;
-        clearBatchSlots();
-        showToast('批次申請已送出，請列印紙本通知並交由調代課教師簽名，再送教學組線上核准。', 'success', 6000);
+        if (failRows.length) {
+          var paperFailByKey = {};
+          failRows.forEach(function (f) {
+            var fk = String(f.row['申請人Email'] || '').toLowerCase() + '|' + f.row['異動日期'] + '|' + f.row['異動節次'];
+            paperFailByKey[fk] = f.error;
+          });
+          batchSlots.value = (batchSlots.value || []).filter(function (s) {
+            var sk = String(s.teacherEmail || '').toLowerCase() + '|' + s.dateStr + '|' + s.period;
+            if (paperFailByKey[sk]) {
+              s.submitError = paperFailByKey[sk];
+              return true;
+            }
+            return false;
+          });
+          batchSelectMode.value = true;
+          showToast('已送出 ' + okRows.length + ' 節紙本申請，另有 ' + failRows.length + ' 節未送出，已保留供修正重送。', 'warning', 6000);
+        } else {
+          batchSelectMode.value = false;
+          clearBatchSlots();
+          showToast('批次申請已送出，請列印紙本通知並交由調代課教師簽名，再送教學組線上核准。', 'success', 6000);
+        }
         return;
       }
 
-      var n = rows.length;
+      var n = okRows.length;
+      var partialFail = failRows.length > 0;
       var groups = {};
-      rows.forEach(function (r) {
+      okRows.forEach(function (r) {
          var em = String(r["受邀人姓名"] || '').toLowerCase();
         if (!groups[em]) groups[em] = { name: r["受邀人姓名"], rows: [] };
         groups[em].rows.push(r);
@@ -2031,7 +2083,7 @@ window.UiBatchSubmit = (function () {
       }).join('、');
 
       var feeKinds = {};
-      rows.forEach(function (r) {
+      okRows.forEach(function (r) {
         var f = r['經費來源'] || fee;
         feeKinds[f] = (feeKinds[f] || 0) + 1;
       });
@@ -2040,7 +2092,15 @@ window.UiBatchSubmit = (function () {
       }).join('、');
       var mutualTip = isMutualCover.value ? '（活動互代：' + feeTip + '）' : '';
       var notifyTip = skipNotify ? ' 尚未寄信，請用下方 LINE 範本手動通知。' : '';
-      if (doDirectApprove) {
+      var failTip = partialFail ? '，' + failRows.length + ' 節未送出（已保留在批次中供修正重送）' : '';
+      var failDetails = partialFail
+        ? '\n' + failRows.slice(0, 5).map(function (f) {
+          return f.row['異動日期'] + ' 第' + f.row['異動節次'] + '節：' + f.error;
+        }).join('；')
+        : '';
+      if (partialFail) {
+        successModalTitle.value = '🎉 批次部分送出';
+      } else if (doDirectApprove) {
         successModalTitle.value = '🎉 批次已直接核准';
       } else if (proxyActive) {
         successModalTitle.value = '🎉 批次已送交教學組';
@@ -2049,8 +2109,8 @@ window.UiBatchSubmit = (function () {
       }
       var proxyTip = proxyActive ? '（行政代申請，已跳過受邀確認）' : '';
       successModalMessage.value = groupList.length === 1
-        ? '共 ' + n + ' 節已送出' + proxyTip + mutualTip + '，代課：' + groupList[0].name + ' 老師。' + notifyTip
-        : '共 ' + n + ' 節已送出' + proxyTip + mutualTip + '，由 ' + groupList.length + ' 位老師分代：' + subSummary + '。' + notifyTip;
+        ? '共 ' + n + ' 節已送出' + proxyTip + mutualTip + failTip + '，代課：' + groupList[0].name + ' 老師。' + notifyTip + failDetails
+        : '共 ' + n + ' 節已送出' + proxyTip + mutualTip + failTip + '，由 ' + groupList.length + ' 位老師分代：' + subSummary + '。' + notifyTip + failDetails;
       if (deps.successFlowMode) {
         deps.successFlowMode.value = doDirectApprove ? 'direct' : (proxyActive ? 'proxy' : 'normal');
       }
@@ -2093,8 +2153,26 @@ window.UiBatchSubmit = (function () {
       showSuccessModal.value = true;
       showCompareModal.value = false;
       showMatchModal.value = false;
-      batchSelectMode.value = false;
-      clearBatchSlots();
+      if (partialFail) {
+        // 部分成功：移除已成功節次，保留未送出節次與錯誤供修正重送（與批次調課一致）
+        var subFailByKey = {};
+        failRows.forEach(function (f) {
+          var fk = String(f.row['申請人Email'] || '').toLowerCase() + '|' + f.row['異動日期'] + '|' + f.row['異動節次'];
+          subFailByKey[fk] = f.error;
+        });
+        batchSlots.value = (batchSlots.value || []).filter(function (s) {
+          var sk = String(s.teacherEmail || '').toLowerCase() + '|' + s.dateStr + '|' + s.period;
+          if (subFailByKey[sk]) {
+            s.submitError = subFailByKey[sk] || '送出失敗';
+            return true;
+          }
+          return false;
+        });
+        batchSelectMode.value = true;
+      } else {
+        batchSelectMode.value = false;
+        clearBatchSlots();
+      }
     } catch (err) {
       console.error('批次送出失敗', err);
       showToast('批次送出失敗：' + (err && err.message ? err.message : String(err)), 'error');

@@ -8359,8 +8359,9 @@ function doPost(e) {
           validateRequestRow_(row, semesterId);
 
           var isSelf = leaveEmail === userEmail;
-          var directApproveRow = isAdmin && reqData.directApprove === true;
-          var proxyRow = !isSelf && !directApproveRow && (isAdmin || exchangeBatchCanProxy);
+          // 批次調課一律走審核：忽略前端 directApprove，本人送待對方同意，代送待行政核准
+          var directApproveRow = false;
+          var proxyRow = !isSelf && (isAdmin || exchangeBatchCanProxy);
           if (!isSelf && !directApproveRow && !exchangeBatchCanProxy) {
             throw new Error("您無權代表此申請人發起調課！");
           }
@@ -8492,121 +8493,145 @@ function doPost(e) {
        if (paperFlowRequestedBatch && isOnlineSubstitutionEnabled_()) {
          throw new Error("目前為線上模式，不能使用紙本流程！");
        }
-       var paperFlowBatch = !isOnlineSubstitutionEnabled_()
-         && !anyOther
-         && !(isAdmin && reqData.directApprove === true);
-       // 代別人：已授權行政，或教學組未勾直接核准 → pending_admin
-       var directOk = isAdmin && reqData.directApprove === true && !paperFlowBatch;
-       var isProxyBatch = !!(anyOther && !directOk && (staffCanProxyBatch || isAdmin));
-       var finalStatus = paperFlowBatch ? "pending_admin" : (directOk ? "approved" : (isProxyBatch ? "pending_admin" : "pending_teacher"));
+        // 各列狀態逐列判定（與批次調課一致）：本人→待受邀確認，代送→待行政核准，紙本→待行政核准
+        var batchDirectOk = !!(isAdmin && reqData.directApprove === true);
       var actorNameBatch = currentTeacher
         ? String(currentTeacher["教師姓名"] || currentTeacher.name || userEmail)
         : userEmail;
-      var rows = [];
-      var existingBatchRows = [];
-      var seenBatchRequestIds = {};
-      for (var bi = 0; bi < list.length; bi++) {
-        var row = list[bi] || {};
-        var leaveEmB = normalizeEmail_(row["申請人Email"], "申請人 Email");
-        var targetEmB = normalizeEmail_(row["受邀人Email"] || row.targetTeacherEmail, "受邀人 Email");
-        if (!findSemesterTeacher_(semesterId, leaveEmB)) throw new Error("批次申請人不在目前學期教師名單！");
-        if (!findSemesterTeacher_(semesterId, targetEmB)) throw new Error("批次受邀人不在目前學期教師名單！");
-        if (leaveEmB === targetEmB) throw new Error("批次申請人與受邀人不可為同一人！");
-         row["申請人Email"] = leaveEmB;
-         row["受邀人Email"] = targetEmB;
-         if (isTimetableOnlyFee_(row["經費來源"] || row.subFee)) {
-           row["經費來源"] = TIMETABLE_ONLY_FEE_;
+       var rows = [];
+       var batchFailures = [];
+       var batchExisting = [];
+       var seenBatchRequestIds = {};
+       for (var bi = 0; bi < list.length; bi++) {
+         var row = list[bi] || {};
+         var batchRequestId = String((row && row["申請單ID"]) || "").trim()
+           || ("req_" + Date.now() + "_" + bi + "_" + Math.random().toString(36).substr(2, 6));
+         row["申請單ID"] = batchRequestId;
+         try {
+           if (seenBatchRequestIds[batchRequestId]) throw new Error("批次內含重複的申請單 ID！");
+           seenBatchRequestIds[batchRequestId] = true;
+           var leaveEmB = normalizeEmail_(row["申請人Email"], "申請人 Email");
+           var targetEmB = normalizeEmail_(row["受邀人Email"] || row.targetTeacherEmail, "受邀人 Email");
+           if (!findSemesterTeacher_(semesterId, leaveEmB)) throw new Error("批次申請人不在目前學期教師名單！");
+           if (!findSemesterTeacher_(semesterId, targetEmB)) throw new Error("批次受邀人不在目前學期教師名單！");
+           if (leaveEmB === targetEmB) throw new Error("批次申請人與受邀人不可為同一人！");
+            row["申請人Email"] = leaveEmB;
+            row["受邀人Email"] = targetEmB;
+            if (isTimetableOnlyFee_(row["經費來源"] || row.subFee)) {
+              row["經費來源"] = TIMETABLE_ONLY_FEE_;
+            }
+            validateRequestRow_(row, semesterId);
+           var isSelfRowB = (leaveEmB === userEmail);
+           var directRowB = batchDirectOk;
+           var proxyRowB = !isSelfRowB && !directRowB && (isAdmin || staffCanProxyBatch);
+           if (!isSelfRowB && !directRowB && !staffCanProxyBatch && !isAdmin) {
+             throw new Error("批次中含非本人申請，已拒絕！");
+           }
+           var feeRow = String(row["經費來源"] || "");
+            if ((isQuotaDeductFee_(feeRow) || feeRow === "活動公費" || feeRow === "第8節代課" || isTimetableOnlyFee_(feeRow)) && !isAdmin) {
+              throw new Error("特殊經費（含扣額度、活動公費、第8節與僅課表呈現）僅限管理員發起！");
+            }
+           var paperRowB = !isOnlineSubstitutionEnabled_() && isSelfRowB && !directRowB;
+           var rowStatusB = paperRowB ? "pending_admin" : (directRowB ? "approved" : (proxyRowB ? "pending_admin" : "pending_teacher"));
+           row["學期代號"] = semesterId;
+           row["批次ID"] = batchId;
+           row["狀態"] = rowStatusB;
+            row["直接核准"] = directRowB ? "是" : "";
+            row["紙本流程"] = paperRowB ? "TRUE" : "FALSE";
+           row.paperFlow = paperRowB;
+           row.directApprove = directRowB;
+           row.isProxySubmit = !!proxyRowB;
+          if (proxyRowB && leaveEmB !== userEmail) {
+            row["代申請人Email"] = userEmail;
+            row["代申請人姓名"] = actorNameBatch;
+            var noteB = String(row["備註"] || "").trim();
+            if (noteB.indexOf("[行政代申請") < 0) {
+              var leaveNmB = String(row["申請人姓名"] || leaveEmB);
+              var tagB = "[行政代申請：" + actorNameBatch + " 代 " + leaveNmB + "]";
+              row["備註"] = noteB ? (tagB + " " + noteB) : tagB;
+            }
+          }
+          var existingBatch = assertNewRequestId_(row["申請單ID"], semesterId, leaveEmB, targetEmB, batchId);
+          if (existingBatch) {
+            batchExisting.push({
+              requestId: batchRequestId,
+              status: translateStatusToEn(existingBatch["狀態"] || ""),
+              paperFlow: isPaperFlowRow_(existingBatch)
+            });
+          } else {
+            if (!row["建立時間"]) row["建立時間"] = toLocalTimeStr(new Date());
+            rows.push(row);
+          }
+         } catch (batchRowError) {
+           batchFailures.push({
+             requestId: batchRequestId,
+             index: bi,
+             error: String(batchRowError && batchRowError.message || batchRowError)
+           });
          }
-         validateRequestRow_(row, semesterId);
-        if (leaveEmB !== userEmail && !isAdmin && !isProxyBatch) {
-          throw new Error("批次中含非本人申請，已拒絕！");
-        }
-        var feeRow = String(row["經費來源"] || "");
-         if ((isQuotaDeductFee_(feeRow) || feeRow === "活動公費" || feeRow === "第8節代課" || isTimetableOnlyFee_(feeRow)) && !isAdmin) {
-           throw new Error("特殊經費（含扣額度、活動公費、第8節與僅課表呈現）僅限管理員發起！");
-        }
-         row["學期代號"] = semesterId;
-         row["批次ID"] = batchId;
-         row["狀態"] = finalStatus;
-          row["直接核准"] = directOk ? "是" : "";
-          row["紙本流程"] = paperFlowBatch ? "TRUE" : "FALSE";
-         row.paperFlow = paperFlowBatch;
-        if (isProxyBatch && leaveEmB !== userEmail) {
-          row["代申請人Email"] = userEmail;
-          row["代申請人姓名"] = actorNameBatch;
-          var noteB = String(row["備註"] || "").trim();
-          if (noteB.indexOf("[行政代申請") < 0) {
-            var leaveNmB = String(row["申請人姓名"] || leaveEmB);
-            var tagB = "[行政代申請：" + actorNameBatch + " 代 " + leaveNmB + "]";
-            row["備註"] = noteB ? (tagB + " " + noteB) : tagB;
-          }
-        }
-        if (!row["申請單ID"]) row["申請單ID"] = "req_" + Date.now() + "_" + bi + "_" + Math.random().toString(36).substr(2, 6);
-        var batchRequestId = String(row["申請單ID"] || "").trim();
-        if (seenBatchRequestIds[batchRequestId]) throw new Error("批次內含重複的申請單 ID！");
-        seenBatchRequestIds[batchRequestId] = true;
-        var existingBatch = assertNewRequestId_(row["申請單ID"], semesterId, leaveEmB, targetEmB, batchId);
-        if (existingBatch) existingBatchRows.push(existingBatch);
-        if (!row["建立時間"]) row["建立時間"] = toLocalTimeStr(new Date());
-        rows.push(row);
-      }
-       if (existingBatchRows.length) {
-        if (existingBatchRows.length !== rows.length) {
-          throw new Error("批次中部分申請單 ID 已存在，為避免重複寫入請重新整理後再試！");
-        }
-        return ContentService.createTextOutput(JSON.stringify({
-          success: true,
-          idempotent: true,
-          batchId: batchId,
-          count: existingBatchRows.length,
-          ids: existingBatchRows.map(function (r) { return r["申請單ID"]; })
-        })).setMimeType(ContentService.MimeType.JSON);
        }
-       var existingRequestsForExchange = (getSemesterRequestsCached_(semesterId, true).rows || []);
+       if (!rows.length && !batchExisting.length) {
+         // 整批皆無效：維持舊行為整批拒絕，避免前端誤判部分成功
+         var firstBatchError = batchFailures.length ? String(batchFailures[0].error || "") : "批次申請無效！";
+         throw new Error(firstBatchError);
+       }
+       var existingRequestsForBatch = (getSemesterRequestsCached_(semesterId, true).rows || []);
        rows.forEach(function (row) {
-         assertNoExchangeIncomingConflict_(row, existingRequestsForExchange.concat(rows));
+         assertNoExchangeIncomingConflict_(row, existingRequestsForBatch.concat(rows));
        });
-       persistRequestRowsWithQuota_(rows, userEmail);
-      if (finalStatus === "approved") {
-        rows.forEach(function (r) { syncHomeroomRecordForRequest_(r, userEmail); });
-      }
-      // skipNotify=true：只寫單不寄信；代申請／pending_admin 不寄邀請信
-       var skipNotifyBatch = reqData.skipNotify === true || reqData.skipNotify === "true"
-         || isProxyBatch || finalStatus === "pending_admin" || paperFlowBatch || !isOnlineSubstitutionEnabled_();
-      if (!skipNotifyBatch) {
-        queueMail_("submitRequestBatchMail", function () {
-          var byInvitee = {};
-          rows.forEach(function (r) {
-            var em = String(r["受邀人Email"] || r.targetTeacherEmail || "").toLowerCase();
-            if (!em) return;
-            if (!byInvitee[em]) byInvitee[em] = [];
-            byInvitee[em].push(r);
-          });
-          if (finalStatus === "approved") {
-            Object.keys(byInvitee).forEach(function (em) {
-              sendAdminApproveBatchEmail_(byInvitee[em], currentUrl);
-            });
-          } else if (finalStatus === "pending_teacher") {
-            Object.keys(byInvitee).forEach(function (em) {
-              var group = byInvitee[em];
-              if (group.length === 1) {
-                sendSubInviteEmail_(group[0], currentUrl);
-              } else {
-                sendSubInviteBatchEmail_(group, currentUrl);
-              }
-            });
-          }
-        });
-      }
-      invalidateSemesterCaches_(semesterId);
-      return ContentService.createTextOutput(JSON.stringify({
-        success: true,
-        batchId: batchId,
-        count: rows.length,
-        skipNotify: !!skipNotifyBatch,
-        proxySubmit: !!isProxyBatch,
-        ids: rows.map(function (r) { return r["申請單ID"]; })
-      })).setMimeType(ContentService.MimeType.JSON);
+       if (rows.length) {
+         persistRequestRowsWithQuota_(rows, userEmail);
+         rows.forEach(function (r) {
+           if (String(r["狀態"] || "") === "approved") syncHomeroomRecordForRequest_(r, userEmail);
+         });
+       }
+       // skipNotify=true：只寫單不寄信；代申請／pending_admin／紙本不寄邀請信（與批次調課一致：只寄 approved 與 pending_teacher）
+        var skipNotifyBatch = reqData.skipNotify === true || reqData.skipNotify === "true"
+          || !isOnlineSubstitutionEnabled_();
+       if (!skipNotifyBatch && rows.length) {
+         queueMail_("submitRequestBatchMail", function () {
+           var byInvitee = {};
+           rows.forEach(function (r) {
+             var st = String(r["狀態"] || "");
+             if (st !== "approved" && st !== "pending_teacher") return;
+             var em = String(r["受邀人Email"] || r.targetTeacherEmail || "").toLowerCase();
+             if (!em) return;
+             if (!byInvitee[em]) byInvitee[em] = [];
+             byInvitee[em].push(r);
+           });
+           Object.keys(byInvitee).forEach(function (em) {
+             var group = byInvitee[em];
+             var approvedGroup = group.filter(function (r) { return String(r["狀態"] || "") === "approved"; });
+             var pendingGroup = group.filter(function (r) { return String(r["狀態"] || "") === "pending_teacher"; });
+             if (approvedGroup.length) {
+               sendAdminApproveBatchEmail_(approvedGroup, currentUrl);
+             }
+             if (pendingGroup.length === 1) {
+               sendSubInviteEmail_(pendingGroup[0], currentUrl);
+             } else if (pendingGroup.length > 1) {
+               sendSubInviteBatchEmail_(pendingGroup, currentUrl);
+             }
+           });
+         });
+       }
+       invalidateSemesterCaches_(semesterId);
+       var batchSuccesses = batchExisting.concat(rows.map(function (r) {
+         return {
+           requestId: String(r["申請單ID"] || ""),
+           status: translateStatusToEn(r["狀態"] || ""),
+           paperFlow: isPaperFlowRow_(r)
+         };
+       }));
+       return ContentService.createTextOutput(JSON.stringify({
+         success: true,
+         batchId: batchId,
+         count: batchSuccesses.length,
+         skipNotify: !!skipNotifyBatch,
+         proxySubmit: !!rows.some(function (r) { return !!r.isProxySubmit; }),
+         ids: batchSuccesses.map(function (s) { return s.requestId; }),
+         successes: batchSuccesses,
+         failures: batchFailures
+       })).setMimeType(ContentService.MimeType.JSON);
       
     } else if (action === "sendBatchNotices") {
       // 歷史紀錄後發通知：核准信寄雙方；邀請信只寄受邀人；同人合併

@@ -1839,7 +1839,7 @@
               <div style="margin-top:16px;border-top:1px solid var(--border-color);padding-top:12px;">
                 <div class="flex-wrap-gap-8-mb">
                   <strong style="font-size:0.88rem;">選擇教師</strong>
-                  <span class="text-xs-muted-78">已選 {{ schoolExportSelectedEmails.length }}／{{ teachersList.length }}（課表勾選列；監考＝分發份數）</span>
+                  <span class="text-xs-muted-78">已選 {{ schoolExportSelectedEmails.length }}／{{ teachersList.length }}（課表、監考表皆只匯出勾選列）</span>
                   <button type="button" class="btn btn-secondary p-3-10-75" @click="selectAllSchoolExportTeachers">全選</button>
                   <button type="button" class="btn btn-secondary p-3-10-75" @click="clearSchoolExportTeachers">全不選</button>
                   <input
@@ -3117,7 +3117,7 @@
                 送出後<strong>跳過受邀確認</strong>，直接進入「待教學組核准」。
               </div>
             </div>
-               <div v-if="isAdmin && !notificationsSuppressed && pendingRequestData.specialFlow !== 'combined_return' && !pendingRequestData.isBatchCandidatePreview && !(isProxySubmitActive && pendingRequestData.leaveTeacher && user && String(pendingRequestData.leaveTeacher).toLowerCase() !== String(getTeacherNameByEmail(user.email) || '').toLowerCase())" class="direct-approve-box">
+               <div v-if="isAdmin && !notificationsSuppressed && !pendingRequestData.isExchangeBatch && pendingRequestData.specialFlow !== 'combined_return' && !pendingRequestData.isBatchCandidatePreview && !(isProxySubmitActive && pendingRequestData.leaveTeacher && user && String(pendingRequestData.leaveTeacher).toLowerCase() !== String(getTeacherNameByEmail(user.email) || '').toLowerCase())" class="direct-approve-box">
               <label class="direct-approve-row">
                 <input type="checkbox" class="direct-approve-check" v-model="directApproveMode">
                 <span class="direct-approve-text">
@@ -3129,6 +3129,12 @@
                 <input type="checkbox" class="direct-approve-check-sm" v-model="directApproveSkipNotify">
                 <span>不寄通知信（稍後可用 LINE／批次通知）</span>
               </label>
+            </div>
+            <div v-if="pendingRequestData.isExchangeBatch && !pendingRequestData.isBatchCandidatePreview" class="direct-approve-box" style="border-color:#93c5fd;background:#eff6ff;">
+              <div class="direct-approve-title" style="color:#1d4ed8;">🔁 批次調課審核流程</div>
+              <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:4px;">
+                批次調課一律需對方同意後再送行政審核，不可直接核准。
+              </div>
             </div>
 
             <div v-if="pendingRequestData.specialFlow === 'combined_return'" style="margin-bottom:12px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
@@ -3550,7 +3556,7 @@
                    ? '送出中…'
                        : (pendingRequestData.isBatch
                        ? (pendingRequestData.mode === 'exchange'
-                         ? ('確認批次調課送出（' + (pendingRequestData.batchValidCount || 0) + ' 組）')
+                         ? ((paperFlow ? '送出申請並列印調課單（' : '確認批次調課送出（') + (pendingRequestData.batchValidCount || 0) + ' 組）')
                          : ('確認批次送出（' + (pendingRequestData.batchCount || batchSlots.length) + ' 節）'))
                        : (paperFlow ? '送出申請並列印調代課單' : '確認送出')) }}
                </button>

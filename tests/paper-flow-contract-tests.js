@@ -1054,7 +1054,8 @@ function runApplicationFormContractTest() {
      assert.equal(isMutualRec({ subFee: '第8節代課' }), false, '第8節代課經費不可顯示為互代');
      assert.equal(isMutualRec({ subFee: '活動公費' }), true, '活動公費仍應顯示為互代');
      assert.match(appSource, /const paperFlow = computed\(\(\) =>\s*!isMutualCover\.value\s*&&\s*notificationsSuppressed\.value\s*&&\s*!isProxySubmitActive\.value\s*\);/, '關閉線上申請時應優先走紙本流程');
-    assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
+    assert.match(html, /v-if="isAdmin && !notificationsSuppressed && !pendingRequestData\.isExchangeBatch && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項，且批次調課不應顯示直接核准選項');
+    assert.match(html, /批次調課一律需對方同意後再送行政審核/, '批次調課應提示一律走審核流程');
     assert.match(appSource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
     assert.match(appSource, /const ownerKeys = \[record\.actualTeacherEmail, record\.actualTeacherName\]/, '本人判定應以實際授課教師為準');
     assert.match(appSource, /if \(!canStartSecondSubFromDetail\.value\) \{/, '再辦操作入口應再次驗證本人權限');
@@ -2029,6 +2030,7 @@ async function runBatchExchangeTest() {
     directApproveSkipNotify: ref(false),
     isAdmin: ref(false),
     notificationsSuppressed: ref(false),
+    buildLineInviteText: () => 'LINE-INVITE',
     hasLineTemplate: ref(false),
     lineBatchParts: ref([]),
     lineCopyText: ref('')
@@ -2037,6 +2039,8 @@ async function runBatchExchangeTest() {
   await api.executeBatchSubmit(deps);
   assert.equal(sent.length, 1, '批次調課以單一 API 逐組回傳結果');
   assert.equal(sent[0].batchId, 'bat-exchange-test');
+  assert.equal(sent[0].directApprove, false, '批次調課一律走審核，不可直接核准');
+  assert.equal(sent[0].paperFlow, false, '非紙本模式不應標記紙本流程');
   assert.equal(sent[0].requests.length, 2, '每組互調都應建立獨立申請列');
   assert.ok(sent[0].requests.every(row => row['異動類型'] === 'exchange'));
   assert.deepEqual(Array.from(optimistic, row => row['申請單ID']), ['req-exchange-1'], '只有成功組應更新本地資料');
@@ -2044,6 +2048,8 @@ async function runBatchExchangeTest() {
   assert.equal(batchSlots.value[1].exchangeSubmitError, '調課衝堂測試', '失敗組需保留逐組錯誤');
   assert.equal(cleared, 0, '部分成功時保留批次草稿，讓使用者可以修正失敗組');
   assert.match(deps.successModalTitle.value, /部分送出/);
+  assert.equal(deps.lineBatchParts.value.length, 1, '批次調課成功即產生 LINE 範本（與批次代課一致）');
+  assert.equal(deps.hasLineTemplate.value, true);
 
   const retrySlots = ref([{
     key: 'retry-slot', exchangeRequestId: 'req-failed-original', exchangeSerial: 'SWP-failed-original',
@@ -2080,6 +2086,118 @@ async function runBatchExchangeTest() {
   });
   unknownPanel.clearBatchSlotSub('unknown-slot');
   assert.equal(unknownSlots.value[0].exchangeRequestId, 'req-unknown', '送出結果不明時不可更新申請 ID');
+}
+
+async function runBatchPartialTest() {
+  const api = load('ui-activity.js').UiBatchSubmit;
+  const batchSlots = ref([
+    { key: 'owner@school.example|2026-08-17|1', teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-17', dayOfWeek: 1, period: 1, className: '701', subject: '國文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人' },
+    { key: 'owner@school.example|2026-08-18|2', teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-18', dayOfWeek: 1, period: 2, className: '701', subject: '國文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人' },
+    { key: 'owner@school.example|2026-08-19|3', teacherEmail: 'owner@school.example', teacherName: '申請人', dateStr: '2026-08-19', dayOfWeek: 1, period: 3, className: '701', subject: '國文', subTeacherEmail: 'invitee@school.example', subTeacherName: '受邀人' }
+  ]);
+  const pendingRequestData = ref({
+    isBatch: true,
+    isPerSlot: false,
+    reason: '事假',
+    courseAdjustmentOnly: false,
+    note: '',
+    subTeacher: 'invitee@school.example',
+    subFee: '自費代課',
+    leaveTimeType: '全天',
+    leaveTimeStart: '08:00',
+    leaveTimeEnd: '16:00',
+    leaveTime: '08:00~16:00',
+    submitBatchId: 'bat-partial',
+    submitSerial: 'SUB0001'
+  });
+  const sent = [];
+  const optimistic = [];
+  let cleared = 0;
+  let deducted = null;
+  const deps = {
+    batchSlots,
+    pendingRequestData,
+    batchAssignMode: ref('same'),
+    batchReason: ref('事假'),
+    batchNote: ref(''),
+    batchSubTeacher: ref('invitee@school.example'),
+    batchSubFee: ref('自費代課'),
+    showToast: () => {},
+    showConfirm: async () => true,
+    getScheduleForDate: () => null,
+    getTeacherNameByEmail: teacherName,
+    getLeaveTimeDefaults: () => ({ type: '全天', start: '08:00', end: '16:00', range: '08:00~16:00' }),
+    isMutualCover: ref(false),
+    mutualAwayClasses: ref([]),
+    mutualSkipNotify: ref(false),
+    isAdmin: ref(false),
+    isQuotaDeductFee: () => false,
+    QUOTA_DEDUCT_FEE: '扣額度',
+    ACTIVITY_PUBLIC_FEE: '活動公費',
+    PERIOD8_FEE: '第8節代課',
+    defaultSubFeeForReason: () => '自費代課',
+    assertQuotaDeductAllowed: () => true,
+    loading: ref(false),
+    loadingMessage: ref(''),
+    currentSemester: ref('115-1'),
+    directApproveMode: ref(false),
+    directApproveSkipNotify: ref(false),
+    paperFlow: ref(false),
+    paperMode: ref(false),
+    notificationsSuppressed: ref(false),
+    callGasApi: async (action, payload) => {
+      assert.equal(action, 'submitRequestBatch');
+      sent.push(payload);
+      return {
+        success: true,
+        successes: [
+          { requestId: 'req_bat-partial-0', status: 'pending_teacher' },
+          { requestId: 'req_bat-partial-1', status: 'pending_teacher' }
+        ],
+        failures: [{ requestId: 'req_bat-partial-2', error: '測試失敗：該節已有代課' }]
+      };
+    },
+    optimisticUpsertRequest: row => optimistic.push(row),
+    sheetRequestToFront: row => row,
+    deductMutualQuotaForRows: async rows => { deducted = rows; },
+    softRefreshInBackground: () => {},
+    activityBalanceCtx: () => ({}),
+    successModalTitle: ref(''),
+    successModalMessage: ref(''),
+    hasLineTemplate: ref(false),
+    lineBatchParts: ref([]),
+    lineCopyText: ref(''),
+    showSuccessModal: ref(false),
+    successActionRequests: ref([]),
+    showCompareModal: ref(true),
+    showMatchModal: ref(false),
+    batchSelectMode: ref(true),
+    clearBatchSlots: () => { cleared++; batchSlots.value = []; },
+    buildLineBatchInviteText: () => 'LINE-BATCH',
+    DAC: () => null,
+    openPaperPrintDraft: () => { throw new Error('非紙本不應開啟列印'); },
+    isSubmitting: ref(false),
+    successFlowMode: ref('')
+  };
+
+  await api.executeBatchSubmit(deps);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].requests.length, 3);
+  assert.deepEqual(Array.from(optimistic, row => row['申請單ID']), ['req_bat-partial-0', 'req_bat-partial-1'], '只有成功節次應更新本地資料');
+  assert.equal(deducted, null, '無扣額度節次不應觸發額度扣款');
+  assert.equal(cleared, 0, '部分成功時不可清空批次');
+  assert.equal(batchSlots.value.length, 1, '部分成功時只保留未送出節次');
+  assert.equal(batchSlots.value[0].dateStr, '2026-08-19');
+  assert.equal(batchSlots.value[0].submitError, '測試失敗：該節已有代課', '失敗節次需保留錯誤供修正');
+  assert.equal(deps.successActionRequests.value.length, 2);
+  assert.match(deps.successModalTitle.value, /部分送出/);
+  assert.match(deps.successModalMessage.value, /2 節已送出/);
+  assert.match(deps.successModalMessage.value, /1 節未送出/);
+  assert.equal(deps.showSuccessModal.value, true);
+  assert.equal(deps.showCompareModal.value, false);
+  assert.equal(deps.batchSelectMode.value, true, '部分成功時維持批次模式以便重送');
+  assert.equal(deps.hasLineTemplate.value, true);
+  assert.equal(deps.lineBatchParts.value.length, 1, 'LINE 範本只含成功節次');
 }
 
 function runRechangeLabelTest() {
@@ -2222,6 +2340,7 @@ Promise.resolve()
     .then(() => runBatchTest(false, true))
     .then(() => runBatchTest(false, false, true))
    .then(() => runBatchExchangeTest())
+   .then(() => runBatchPartialTest())
    .then(() => console.log('paper flow contract tests PASS'))
   .catch(error => {
     console.error(error);

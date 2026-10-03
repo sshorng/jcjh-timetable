@@ -635,6 +635,26 @@ const teacherPaperBatch = invoke({
 assert.strictEqual(teacherPaperBatch.success, true);
 assert.strictEqual(persistedRows.length, 2);
 assert.ok(persistedRows.every(row => row['狀態'] === 'pending_admin' && row['紙本流程'] === 'TRUE'));
+
+resetMutationState();
+const teacherPartialBatch = invoke({
+  email: TEACHER_EMAIL,
+  action: 'submitRequestBatch',
+  data: {
+    batchId: 'bat-partial-test',
+    paperFlow: true,
+    requests: [
+      makeRequest({ '申請單ID': 'req-partial-0', '申請人Email': TEACHER_EMAIL, '申請人姓名': '教師', '異動節次': 1 }),
+      makeRequest({ '申請單ID': 'req-partial-1', '申請人Email': TEACHER_EMAIL, '申請人姓名': '教師', '異動節次': 2, '受邀人Email': TEACHER_EMAIL, '受邀人姓名': '教師' })
+    ]
+  }
+});
+assert.strictEqual(teacherPartialBatch.success, true, '部分列有效時應部分成功而非整批拒絕');
+assert.strictEqual(teacherPartialBatch.successes.length, 1);
+assert.strictEqual(teacherPartialBatch.failures.length, 1);
+assert.match(teacherPartialBatch.failures[0].error, /不可為同一人/);
+assert.strictEqual(persistedRows.length, 1, '只有有效列應寫入');
+assert.strictEqual(persistedRows[0]['申請單ID'], 'req-partial-0');
 onlineEnabled = true;
 
 resetMutationState();
