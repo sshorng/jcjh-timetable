@@ -2182,6 +2182,7 @@ window.UiBatchPanel = (function () {
     var lineCopyText = deps.lineCopyText;
     var showSuccessModal = deps.showSuccessModal;
     var successActionRequests = deps.successActionRequests;
+    var buildSubmitPayload = deps.buildSubmitPayload;
     var buildLineBatchInviteText = deps.buildLineBatchInviteText;
 
     function batchSlotKey(email, dateStr, period) {
