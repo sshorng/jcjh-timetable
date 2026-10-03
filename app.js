@@ -1,6 +1,23 @@
 const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
 
-createApp({
+/** 單行自動縮小字級：內容超過一行寬度時逐級縮小，直到下限；hover 靠 title 顯示全文 */
+function fitSingleLineText(el) {
+  if (!el || !el.isConnected) return;
+  var max = parseFloat((el.dataset && el.dataset.autofitMax) || '13.5');
+  var min = parseFloat((el.dataset && el.dataset.autofitMin) || '9');
+  if (!(max > 0)) max = 13.5;
+  if (!(min > 0)) min = 9;
+  var size = max;
+  el.style.fontSize = size + 'px';
+  var guard = 0;
+  while (el.scrollWidth > el.clientWidth + 1 && size > min && guard < 20) {
+    size = Math.max(min, size - 0.5);
+    el.style.fontSize = size + 'px';
+    guard++;
+  }
+}
+
+const app = createApp({
   setup() {
     // 清空舊有的系統設定快取避免衝突
     localStorage.removeItem('jcjh_google_client_id');
@@ -414,7 +431,7 @@ createApp({
     const {
       callGasApi, fetchInitialData, fetchMetaData, fetchPublicClassData,
       fetchPendingOnly, fetchRequestsDelta, fetchHistoryMonth, fetchMatchCandidates,
-      fetchMutualQuotaLedger,
+      fetchMutualQuotaLedger, fetchQuotaSpendPreview,
       decodeJwt, isTokenExpired, isTokenExpiringSoon,
       formatError, clearSWR, cancelAll, parseAllowedHd, isEmailDomainAllowed, DEFAULT_ALLOWED_HD
     } = window.GasApi.createClient({
@@ -5868,6 +5885,89 @@ createApp({
       showToast(`額度不足，不可用「扣額度」：${tip}。請改自費排代，或另選有額度的老師。`, 'warning');
       return false;
     };
+
+    // ── 扣額度包預覽＋手動覆寫（送出前顯示將扣哪包，預設 FIFO，可下拉改包）──
+    const quotaPackPreview = ref([]);
+    const quotaPackLoading = ref(false);
+    const quotaPackError = ref('');
+    let quotaPackReqId = 0;
+    const fetchQuotaPackPreview = async () => {
+      const p = pendingRequestData.value;
+      if (!p || p.mode !== 'substitution' || p.subFee !== QUOTA_DEDUCT_FEE || isPeriod8FeeLocked.value) {
+        quotaPackPreview.value = [];
+        quotaPackError.value = '';
+        return;
+      }
+      const em = String(p.subTeacher || '').toLowerCase().trim();
+      if (!em) {
+        quotaPackPreview.value = [];
+        return;
+      }
+      const myId = ++quotaPackReqId;
+      quotaPackLoading.value = true;
+      quotaPackError.value = '';
+      try {
+        let preview = [];
+        if (typeof fetchQuotaSpendPreview === 'function') {
+          const res = await fetchQuotaSpendPreview({ emails: [em] });
+          preview = (res && res.preview) || [];
+        } else {
+          const res = await callGasApi('getQuotaSpendPreview', { emails: [em] });
+          preview = (res && res.preview) || [];
+        }
+        if (myId !== quotaPackReqId) return;
+        quotaPackPreview.value = preview;
+        // 若尚未選包，預設選 FIFO；若已選手動包但不在清單，保留但標示
+        const first = preview[0];
+        if (first && first.packs && first.packs.length) {
+          if (!p.quotaPackageId) {
+            p.quotaPackageId = first.fifoPackageId || '';
+          }
+        } else if (first && !first.packs.length) {
+          quotaPackError.value = '該師目前無可用額度包（餘額不足或尚未發放）';
+        }
+      } catch (e) {
+        if (myId !== quotaPackReqId) return;
+        quotaPackError.value = (e && e.message) ? e.message : String(e);
+        quotaPackPreview.value = [];
+      } finally {
+        if (myId === quotaPackReqId) quotaPackLoading.value = false;
+      }
+    };
+    const quotaPackOptions = computed(() => {
+      const first = (quotaPackPreview.value && quotaPackPreview.value[0]) || null;
+      return (first && first.packs) || [];
+    });
+    const quotaFifoPackageId = computed(() => {
+      const first = (quotaPackPreview.value && quotaPackPreview.value[0]) || null;
+      return (first && first.fifoPackageId) || '';
+    });
+    const quotaSelectedPack = computed(() => {
+      const p = pendingRequestData.value || {};
+      const want = String(p.quotaPackageId || '').trim();
+      const opts = quotaPackOptions.value || [];
+      if (!want) return opts.find(o => String(o.packageId) === String(quotaFifoPackageId.value)) || null;
+      return opts.find(o => String(o.packageId) === want) || null;
+    });
+    const resetQuotaPackOverride = () => {
+      const p = pendingRequestData.value;
+      if (!p) return;
+      p.quotaPackageId = quotaFifoPackageId.value || '';
+      p.quotaEventId = '';
+      p.quotaEventName = '';
+    };
+    // 管理員才需要包預覽；一般教師不打 API
+    watch([pendingRequestData, showCompareModal], () => {
+      if (!isAdmin.value) return;
+      if (!showCompareModal.value) return;
+      const p = pendingRequestData.value;
+      if (p && p.mode === 'substitution' && p.subFee === QUOTA_DEDUCT_FEE && !isPeriod8FeeLocked.value) {
+        fetchQuotaPackPreview();
+      } else {
+        quotaPackPreview.value = [];
+        quotaPackError.value = '';
+      }
+    });
 
     // 個人調代課摘要 (未來排前，過去排後且淡化)
     const personalChanges = computed(() => {
@@ -13116,7 +13216,8 @@ createApp({
        accountingPeriod, accountingExportLoading, period8Loading, period8ExportLoading,
       excelData, excelHeaders, mappingFields, importPreview, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules,
          directApproveMode, onlineSubstitutionEnabled, paperMode, paperFlow, notificationsSuppressed, setOnlineSubstitutionEnabled, googleClientId, gasApiUrl, saveClientSettings,
-      isSubFeeLockedToSelf, isPeriod8FeeLocked, quotaDeductPreview, quotaDeductInsufficient, switchQuotaDeductToSelfPay, hasSubTeacherConflict,
+       isSubFeeLockedToSelf, isPeriod8FeeLocked, quotaDeductPreview, quotaDeductInsufficient, switchQuotaDeductToSelfPay, hasSubTeacherConflict,
+      quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, fetchQuotaPackPreview, resetQuotaPackOverride,
        isAdmin, isStaff, canViewAllTimetables, canStaffProxySubmit, canStartSecondSubFromDetail, isProxySubmitActive, isProxySubmitGranted,
       proxySubmitEnabled, proxySubmitEnabledBy, proxySubmitEnabledAt, setProxySubmitEnabled,
       proxySubmitEmails, proxyGrantQuery, proxyGrantCandidateTeachers, proxyGrantedTeachers,
@@ -13195,7 +13296,28 @@ createApp({
       tourDemoInvite, tourDemoInviteRespond
     };
   }
-}).mount('#app');
+});
+
+app.directive('autofit', {
+  mounted: function (el) {
+    var raf = function () { fitSingleLineText(el); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(raf);
+    else raf();
+    try {
+      if (typeof ResizeObserver === 'function') {
+        var ro = new ResizeObserver(function () { fitSingleLineText(el); });
+        ro.observe(el);
+        el.__autofitRo = ro;
+      }
+    } catch (e) { /* ignore */ }
+  },
+  updated: function (el) { fitSingleLineText(el); },
+  unmounted: function (el) {
+    try { if (el.__autofitRo) el.__autofitRo.disconnect(); } catch (e) { /* ignore */ }
+  }
+});
+
+app.mount('#app');
 
 
 

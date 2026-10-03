@@ -748,9 +748,9 @@
                                        </span>
                                      </div>
                                      <div v-if="slot.cell.outgoingDuty.subject" class="cell-overlap-subject">{{ slot.cell.outgoingDuty.subject }}</div>
-                                     <div v-if="!isMobile && slot.cell.outgoingDuty.subText" class="cell-overlap-subtext">{{ slot.cell.outgoingDuty.subText }}</div>
-                                   </div>
-                                  </div>
+                                   <div v-if="!isMobile && slot.cell.outgoingDuty.subText" class="cell-overlap-subtext">{{ slot.cell.outgoingDuty.subText }}</div>
+            </div>
+          </div>
                                   <div class="cell-badges">
                                      <span v-if="slot.cell.hasConcurrentDuty" class="cell-badge tag-gray" title="原課已調出，本節改上掉入課">原課調出</span>
                                      <span v-if="slot.cell.isCombinedReturn" class="cell-badge tag-combined">併班上課</span>
@@ -2067,23 +2067,21 @@
             </div>
             
             <div class="table-responsive">
-               <table class="custom-table" style="font-size:0.85rem;table-layout:fixed;min-width:1450px;">
+               <table class="custom-table" style="font-size:0.85rem;table-layout:fixed;min-width:1350px;">
                  <colgroup>
                    <col style="width:7%;">
-                   <col style="width:11%;">
                    <col style="width:7%;">
                    <col style="width:8%;">
-                   <col style="width:13%;">
+                   <col style="width:7%;">
                    <col style="width:10%;">
-                   <col style="width:14%;">
+                   <col style="width:18%;">
                     <col style="width:8%;">
                    <col style="width:8%;">
-                    <col style="width:14%;">
+                    <col style="width:25%;">
                  </colgroup>
                  <thead>
                    <tr>
                      <th style="text-align:left;">姓名</th>
-                     <th style="text-align:left;">Email（帳號）</th>
                      <th>科目</th>
                      <th>職務</th>
                      <th>超鐘點計畫</th>
@@ -2097,10 +2095,9 @@
                  <tbody>
                    <tr v-for="t in teachersListDetails" :key="t.loginEmail || t.email" @dblclick="openEditTeacherModal(t)" class="cursor-pointer" title="點擊兩下快速編輯此教師資料">
                      <td style="vertical-align:middle;word-break:keep-all;"><strong>{{ t.name }}</strong></td>
-                     <td class="teacher-email-cell" style="vertical-align:middle;white-space:normal;overflow-wrap:anywhere;line-height:1.35;">{{ t.loginEmail }}</td>
                      <td style="vertical-align:middle;word-break:keep-all;overflow-wrap:anywhere;">{{ t.subject }}</td>
                      <td style="vertical-align:middle;word-break:keep-all;overflow-wrap:anywhere;">{{ t.jobTitle || '教師' }}</td>
-                     <td style="vertical-align:middle;line-height:1.45;white-space:normal;word-break:break-word;overflow-wrap:anywhere;" :title="getExpensePlanSummary(t.expensePlan)">{{ getExpensePlanSummary(t.expensePlan) }}</td>
+                      <td style="vertical-align:middle;overflow:hidden;" :title="getExpensePlanSummary(t.expensePlan)"><span v-autofit data-autofit-max="13.5" data-autofit-min="9" style="display:block;white-space:nowrap;overflow:hidden;line-height:1.45;">{{ getExpensePlanSummary(t.expensePlan) }}</span></td>
                      <td style="vertical-align:middle;text-align:center;white-space:nowrap;">
                         <!-- 基礎基本鐘點設定 -->
                         <input
@@ -2267,9 +2264,9 @@
                       </td>
                     </tr>
                   </tbody>
-                </table>
-              </div>
+              </table>
             </div>
+          </div>
           </div>
 
 <!-- 子分頁 4：系統設定（空堂事件 → 學期 → 連線唯讀置底） -->
@@ -3446,13 +3443,31 @@
                         v-if="quotaDeductPreview && quotaDeductPreview.length"
                         style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:0.78rem;color:#5b21b6;line-height:1.55;"
                       >
-                        <div style="font-weight:700;margin-bottom:4px;">折抵額度預覽（扣額度）</div>
+                        <div style="font-weight:700;margin-bottom:4px;">折抵額度預覽（扣額度，僅管理員可見）</div>
                         <div v-for="q in quotaDeductPreview" :key="q.email">
                           {{ q.name }}：目前 <strong>{{ q.before }}</strong>
                           → 扣 <strong>{{ q.deduct }}</strong>
                           → 剩 <strong :style="{color: q.short ? '#b91c1c' : '#5b21b6'}">{{ q.short ? '不足' : q.after }}</strong>
                           <span v-if="q.short" class="text-danger-deep">{{ isMutualCover ? '（將改活動公費）' : '（不可送出）' }}</span>
                         </div>
+                        <div v-if="quotaPackLoading" style="margin-top:6px;color:#7c3aed;">正在查詢額度包…</div>
+                        <div v-else-if="quotaPackError" style="margin-top:6px;color:#b91c1c;">{{ quotaPackError }}</div>
+                        <div v-else-if="quotaPackOptions && quotaPackOptions.length" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;">
+                          <div style="font-weight:700;margin-bottom:4px;">將扣自哪個事件包（預設 FIFO，可改選）</div>
+                          <div v-if="quotaSelectedPack" style="margin-bottom:6px;">
+                            預設：<strong>{{ quotaSelectedPack.eventName || '（未命名）' }}</strong>
+                            <span style="color:#6d28d9;">（包 {{ quotaSelectedPack.packageId }}，餘 {{ quotaSelectedPack.remaining }}）</span>
+                            <span v-if="pendingRequestData.quotaPackageId && pendingRequestData.quotaPackageId !== quotaFifoPackageId" style="color:#b91c1c;">（已手動覆寫）</span>
+                          </div>
+                          <select class="form-select" v-model="pendingRequestData.quotaPackageId" style="width:100%;font-size:0.78rem;">
+                            <option v-for="opt in quotaPackOptions" :key="opt.packageId" :value="opt.packageId">
+                              {{ opt.eventName || '（未命名）' }}｜餘{{ opt.remaining }}｜{{ opt.packageId }}{{ opt.packageId === quotaFifoPackageId ? '（預設）' : '' }}
+                            </option>
+                          </select>
+                          <button type="button" class="btn btn-secondary" style="margin-top:6px;padding:2px 10px;font-size:0.72rem;" @click="resetQuotaPackOverride">重設為預設包</button>
+                          <div style="margin-top:4px;color:#6d28d9;">送出後帳本「包ID／事件」即寫入此包；選錯可在額度歷程更正。</div>
+                        </div>
+                        <div v-else-if="pendingRequestData.subFee === '扣額度'" style="margin-top:6px;color:#b91c1c;">查無可用額度包，請先發放或改經費。</div>
                         <div v-if="quotaDeductInsufficient" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;color:#b91c1c;">
                           <template v-if="isMutualCover">
                             額度不足：送出時會<strong>自動改為活動公費</strong>。
@@ -4939,7 +4954,7 @@
             <button type="button" class="btn-close" @click="closeQuotaLedger" aria-label="關閉">&times;</button>
           </div>
           <div class="modal-body">
-            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。</p>
+            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。僅管理員可見。事件＝顯示名稱；包ID＝實際扣自哪個額度包（同名事件可能分屬不同包）；事件ID＝系統分類（evt_sub 代課／evt_exam 段考／evt_empty_slot 空堂）。</p>
             <div v-if="quotaLedgerLoading" class="quota-ledger-loading">載入中…</div>
             <div v-if="!quotaLedgerLoading && !quotaLedgerRows.length" class="quota-ledger-empty">尚無歷程列</div>
             <div v-if="quotaLedgerRows.length" class="table-responsive quota-ledger-table-wrap" :class="{ 'is-refreshing': quotaLedgerLoading }">
@@ -4951,6 +4966,8 @@
                     <th>異動</th>
                     <th>餘額後</th>
                     <th>事件</th>
+                    <th title="實際扣自哪個額度包">包ID</th>
+                    <th title="系統事件分類">事件ID</th>
                     <th>備註</th>
                   </tr>
                 </thead>
@@ -4969,7 +4986,9 @@
                        <span v-else class="text-muted">無</span>
                       <span v-if="row.startDate" class="quota-ledger-range"> {{ row.startDate }}{{ row.endDate && row.endDate !== row.startDate ? ('～' + row.endDate) : '' }}</span>
                     </td>
-                     <td class="quota-ledger-note">{{ row.note || (row.operator ? ('操作：' + row.operator) : '未填') }}</td>
+                    <td style="font-size:0.7rem;word-break:break-all;max-width:160px;">{{ row.packageId || '—' }}</td>
+                    <td style="font-size:0.7rem;">{{ row.eventId || '—' }}</td>
+                     <td class="quota-ledger-note">{{ row.note || (row.operator ? ('操作：' + row.operator) : '未填') }}<div v-if="row.requestId" style="font-size:0.68rem;color:var(--text-muted);">單 {{ row.requestId }}</div></td>
                   </tr>
                 </tbody>
               </table>

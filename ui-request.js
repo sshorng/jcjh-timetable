@@ -352,6 +352,19 @@ window.UiSubmitHelpers = (function () {
     if (proxyActive && proxyByEmail) {
        newRequest["代申請人姓名"] = proxyByName || getTeacherNameByEmail(proxyByEmail) || '';
     }
+    // 扣額度指定包覆寫（送出前下拉選擇，不選則後端 FIFO）
+    if (pending.quotaPackageId) {
+      newRequest.quotaPackageId = String(pending.quotaPackageId || '').trim();
+      newRequest["指定包ID"] = String(pending.quotaPackageId || '').trim();
+    }
+    if (pending.quotaEventId) {
+      newRequest.quotaEventId = String(pending.quotaEventId || '').trim();
+      newRequest["指定事件ID"] = String(pending.quotaEventId || '').trim();
+    }
+    if (pending.quotaEventName) {
+      newRequest.quotaEventName = String(pending.quotaEventName || '').trim();
+      newRequest["指定事件名稱"] = String(pending.quotaEventName || '').trim();
+    }
 
     if (isExchange) {
       newRequest["對調目標日期"] = pending.dateB;

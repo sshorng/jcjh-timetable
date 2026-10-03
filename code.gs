@@ -3884,6 +3884,81 @@ function buildTeacherPackStateFromLedger_(semesterId) {
   return byEmail;
 }
 
+/**
+ * 扣額度指定包覆寫：前端送出前可指定要扣的包，避免 FIFO 選錯。
+ * 讀取 req 上的 quotaPackageId（相容「指定包ID」），回傳命中的 pack；找不到回 null 由呼叫端決定。
+ */
+function resolveQuotaOverridePack_(req, packs) {
+  req = req || {};
+  var want = String(req.quotaPackageId != null ? req.quotaPackageId : (req["指定包ID"] != null ? req["指定包ID"] : (req.quotaPackId != null ? req.quotaPackId : ""))).trim();
+  if (!want) return null;
+  var list = packs || [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].packageId || "").trim() === want) return list[i];
+  }
+  return { packageId: want, eventId: "", eventName: "", remaining: 0, __missing: true };
+}
+
+function resolveQuotaOverrideMeta_(req) {
+  req = req || {};
+  var eventId = String(req.quotaEventId != null ? req.quotaEventId : (req["指定事件ID"] != null ? req["指定事件ID"] : "")).trim();
+  var eventName = String(req.quotaEventName != null ? req.quotaEventName : (req["指定事件名稱"] != null ? req["指定事件名稱"] : "")).trim();
+  if (!eventId && !eventName) return null;
+  return { eventId: eventId, eventName: eventName };
+}
+
+/**
+ * 送出前預覽：回傳每位教師的包餘額＋FIFO 預設 pick，不寫入。
+ * 給前端顯示「將扣自哪個包／事件」，並提供下拉改選。
+ */
+function buildQuotaSpendPreview_(semesterId, emails, reqs) {
+  var sid = String(semesterId || "");
+  var state = buildTeacherPackStateFromLedger_(sid);
+  var teachersAll = getSemesterTeachersCached_(sid) || [];
+  var sheetQ = {};
+  teachersAll.forEach(function (t) {
+    var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
+    if (!em) return;
+    var sq = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
+    if (isNaN(sq) || sq < 0) sq = 0;
+    sheetQ[em] = Math.round(sq * 1000) / 1000;
+  });
+  var targets = (emails && emails.length ? emails : (reqs || []).map(function (r) {
+    return String((r && (r["受邀人Email"] || r.targetTeacherEmail || r.subTeacherEmail)) || "").toLowerCase().trim();
+  })).map(function (e) { return String(e || "").toLowerCase().trim(); }).filter(Boolean);
+  var seen = {};
+  targets = targets.filter(function (e) { if (!e || seen[e]) return false; seen[e] = true; return true; });
+  return targets.map(function (em) {
+    var st = state[em] || { bal: (sheetQ[em] || 0), packList: [], name: "" };
+    var packs = (st.packList || []).map(function (p) {
+      return { packageId: p.packageId, eventId: p.eventId || "", eventName: p.eventName || "", remaining: p.remaining || 0, firstTime: p.firstTime || "" };
+    });
+    var fifo = null;
+    for (var i = 0; i < packs.length; i++) {
+      if (Math.floor(packs[i].remaining || 0) >= 1) { fifo = packs[i]; break; }
+    }
+    var bal = (typeof st.bal === "number" ? st.bal : (sheetQ[em] || 0));
+    var tHit = null;
+    for (var ti = 0; ti < teachersAll.length; ti++) {
+      var tem = String(teachersAll[ti]["教師Email"] || teachersAll[ti].email || "").toLowerCase().trim();
+      if (tem === em) { tHit = teachersAll[ti]; break; }
+    }
+    return {
+      email: em,
+      name: (tHit && (tHit["教師姓名"] || tHit.name)) || st.name || em,
+      balance: Math.max(0, Math.round(bal * 1000) / 1000),
+      packs: packs,
+      fifoPackageId: fifo ? fifo.packageId : "",
+      fifoEventId: fifo ? (fifo.eventId || "") : "",
+      fifoEventName: fifo ? (fifo.eventName || "") : ""
+    };
+  });
+}
+
+/**
+ * 舊帳更正：把指定申請單的 spend 列搬到正確的包／事件（同教師內，不動總餘額）。
+ * 只改「包ID／事件ID／事件名稱」；總餘額與教師名單不變，但會清快取。
+ */
 function quotaDutyDate_(row) {
   row = row || {};
   var value = row["異動日期"] || row.requestDate || row.date || row["起日"] || row.startDate || "";
@@ -4020,13 +4095,23 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
       || (state[em] && state[em].name) || "";
     var reqId = String(req["申請單ID"] || req.id || "").trim();
 
-    // 選 FIFO 包（有餘額 ≥1 優先；否則總餘額）
+    // 選包：有手動指定優先（送出前下拉覆寫 FIFO）；否則 FIFO（有餘額 ≥1 優先）
     var pack = null;
-    var pi;
-    for (pi = 0; pi < packs.length; pi++) {
-      if (Math.floor(packs[pi].remaining || 0) >= 1) {
-        pack = packs[pi];
-        break;
+    var overridePack = resolveQuotaOverridePack_(req, packs);
+    if (overridePack && !overridePack.__missing) {
+      if (Math.floor(overridePack.remaining || 0) < 1) {
+        throw new Error("指定的額度包餘額不足：" + overridePack.packageId);
+      }
+      pack = overridePack;
+    } else if (overridePack && overridePack.__missing) {
+      throw new Error("指定的額度包不存在：" + overridePack.packageId);
+    } else {
+      var pi;
+      for (pi = 0; pi < packs.length; pi++) {
+        if (Math.floor(packs[pi].remaining || 0) >= 1) {
+          pack = packs[pi];
+          break;
+        }
       }
     }
     // 一般扣額度須餘額 ≥ 1；空堂任務額度不足時仍可建立，改由人工安排他人還一節。
@@ -4041,6 +4126,11 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
     }
 
     var meta = buildQuotaSpendMeta_(req, pack || {});
+    var overrideMeta = resolveQuotaOverrideMeta_(req);
+    if (overrideMeta) {
+      if (overrideMeta.eventId) meta.eventId = overrideMeta.eventId;
+      if (overrideMeta.eventName) meta.eventName = overrideMeta.eventName;
+    }
     bal = Math.round(Math.max(0, bal - 1) * 1000) / 1000;
     runBal[em] = bal;
     finalBal[em] = bal;
@@ -5698,6 +5788,18 @@ function handleReadAction_(postData) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
+  if (action === "getQuotaSpendPreview") {
+    var pvEmails = reqData.emails || reqData.teacherEmails || [];
+    if (reqData.email && (!pvEmails || !pvEmails.length)) pvEmails = [reqData.email];
+    if (typeof pvEmails === "string") pvEmails = [pvEmails];
+    var pvReqs = reqData.requests || [];
+    var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      preview: preview
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   if (action === "getInitialData") {
     var teachersForRole = readerTeachers;
     var personalizeOpts = { isStaff: readerIsStaff, canViewAllTimetables: !!(readerIsAdmin || readerIsStaff) };
@@ -6901,6 +7003,7 @@ function doPost(e) {
     if (action === "getInitialData" || action === "getMetaData" || action === "getPublicClassData"
         || action === "getPendingOnly" || action === "getHistoryMonth"
         || action === "getMatchCandidates" || action === "getMutualQuotaLedger"
+        || action === "getQuotaSpendPreview"
         || action === "getHomeroomRecords") {
       return handleReadAction_(postData);
     }
@@ -7380,7 +7483,7 @@ function doPost(e) {
         success: true,
         packages: outPacks
       })).setMimeType(ContentService.MimeType.JSON);
-      
+
     } else if (action === "saveScheduleCell") {
       if (!isAdmin) throw new Error("無管理員權限！");
       reqData = normalizePatrolScheduleRow_(reqData);

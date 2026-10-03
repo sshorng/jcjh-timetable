@@ -668,6 +668,16 @@ window.GasApi = (function () {
       }, { abortPrevious: true, semesterId: semesterId });
     }
 
+    /** 扣額度預覽：每位教師的包餘額＋FIFO 預設（送出前顯示，可下拉覆寫） */
+    async function fetchQuotaSpendPreview(options) {
+      options = options || {};
+      const semesterId = options.semesterId || opts.getSemesterId();
+      return await postJson('getQuotaSpendPreview', {
+        emails: options.emails || (options.email ? [options.email] : []),
+        requests: options.requests || []
+      }, { abortPrevious: true, semesterId: semesterId });
+    }
+
     return {
       callGasApi,
       fetchInitialData,
@@ -678,6 +688,7 @@ window.GasApi = (function () {
       fetchHistoryMonth,
       fetchMatchCandidates,
       fetchMutualQuotaLedger,
+      fetchQuotaSpendPreview,
       decodeJwt,
       isTokenExpired,
       isTokenExpiringSoon,
