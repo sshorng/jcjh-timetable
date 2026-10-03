@@ -718,15 +718,8 @@ window.ExportInvigilation = (function () {
 
     var all = (teachers || []).slice();
     var mapped = all.map(function (t, i) { return mapOne(t, i, all.length); });
-    var canDetermineCourse = typeof getCell === 'function' || baseList.length > 0;
-    var included = canDetermineCourse
-      ? mapped.filter(function (teacher) {
-        if (teacher.specialEducation) return true;
-        return (teacher.slots || []).some(function (slot) {
-          return slot && String(slot.text || '').trim() !== '';
-        });
-      })
-      : mapped;
+    // 沒課的老師也一樣匯出：空白列保留姓名、分發個人表；空白不影響班級覆蓋檢查。
+    var included = mapped;
     var half = Math.min(Math.ceil(included.length / 2), cap);
     var shown = included.slice(0, cap * 2);
     return {
@@ -1115,11 +1108,7 @@ window.ExportInvigilation = (function () {
     if (!coverage.ok) {
       return { ok: false, error: formatCoverageError(coverage), coverage: coverage };
     }
-    var includedTeachers = matrix.includedTeachers || [];
-    recipients = recipients.filter(function (recipient) {
-      return includedTeachers.some(function (teacher) { return teachersMatch(recipient, teacher); });
-    });
-    if (!recipients.length) return { ok: false, error: '選取的教師在考試期間沒有課務' };
+    if (!recipients.length) return { ok: false, error: '請選擇要分發的教師' };
     total = recipients.length;
 
     progress('寫入全校文字…', 0, total);
