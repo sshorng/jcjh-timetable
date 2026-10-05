@@ -59,11 +59,11 @@
         { email: 'g@x', name: '庚', subject: '國文' }
       ];
       var schedules = [
-        { teacherEmail: 'a@x', dayOfWeek: 1, period: 2, className: '701', subject: '國文' },
-        { teacherEmail: 'b@x', dayOfWeek: 1, period: 3, className: '702', subject: '輔導' },
-        { teacherEmail: 'd@x', dayOfWeek: 2, period: 1, className: '701', subject: '輔導' },
-        { teacherEmail: 'e@x', dayOfWeek: 2, period: 3, className: '901', subject: '輔導' },
-        { teacherEmail: 'g@x', dayOfWeek: 2, period: 4, className: '901', subject: '生物' }
+        { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 2, className: '701', subject: '國文' },
+        { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 1, period: 3, className: '702', subject: '輔導' },
+        { teacherEmail: 'd@x', teacherName: '丁', dayOfWeek: 2, period: 1, className: '701', subject: '輔導' },
+        { teacherEmail: 'e@x', teacherName: '戊', dayOfWeek: 2, period: 3, className: '901', subject: '輔導' },
+        { teacherEmail: 'g@x', teacherName: '庚', dayOfWeek: 2, period: 4, className: '901', subject: '生物' }
       ];
       // 簡易 getScheduleForDate：只看基礎課表，不管異動
       function mockGet(email, dateStr, period, day) {
@@ -105,12 +105,12 @@
         { email: 'busy-load@x', name: '早午都有課', subject: '國文' }
       ];
       var workloadSchedules = [
-        { teacherEmail: 'leave-load@x', dayOfWeek: 3, period: 1, className: '701', subject: '國文' },
-        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 0, className: '8英資B', subject: '英語' },
-        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 2, className: '801', subject: '國文' },
-        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 3, className: '802', subject: '國文' },
-        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 4, className: '803', subject: '國文' },
-        { teacherEmail: 'busy-load@x', dayOfWeek: 3, period: 45, className: '9英資B', subject: '英語' }
+        { teacherEmail: 'leave-load@x', teacherName: '請假者', dayOfWeek: 3, period: 1, className: '701', subject: '國文' },
+        { teacherEmail: 'busy-load@x', teacherName: '早午都有課', dayOfWeek: 3, period: 0, className: '8英資B', subject: '英語' },
+        { teacherEmail: 'busy-load@x', teacherName: '早午都有課', dayOfWeek: 3, period: 2, className: '801', subject: '國文' },
+        { teacherEmail: 'busy-load@x', teacherName: '早午都有課', dayOfWeek: 3, period: 3, className: '802', subject: '國文' },
+        { teacherEmail: 'busy-load@x', teacherName: '早午都有課', dayOfWeek: 3, period: 4, className: '803', subject: '國文' },
+        { teacherEmail: 'busy-load@x', teacherName: '早午都有課', dayOfWeek: 3, period: 45, className: '9英資B', subject: '英語' }
       ];
       var workloadRanked = window.DomainMatch.rankSubstitutionCandidates({
         teachers: workloadTeachers,
@@ -178,7 +178,7 @@
         { email: 'special@x', name: '特師', subject: '特教' }
       ]);
       var schedulesWithEnglish = schedules.concat([
-        { teacherEmail: 'yingrui@x', dayOfWeek: 3, period: 0, className: '8英資A', subject: '專題探究' }
+        { teacherEmail: 'yingrui@x', teacherName: '曾瀅芮', dayOfWeek: 3, period: 0, className: '8英資A', subject: '專題探究' }
       ]);
       var rankedYingRui = window.DomainMatch.rankSubstitutionCandidates({
         teachers: teachersWithEnglish,
@@ -222,7 +222,7 @@
         datedSchedules[0], datedSchedules[1]
       ) === false);
       var base = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x',
+        teacherEmail: 'a@x', teacherName: '甲',
         dateStr: '2026-07-13',
         period: 2,
         dayOfWeek: 1,
@@ -261,10 +261,10 @@
       assert('對調標籤含事件名稱', window.DomainSchoolSwap.label(swapA.row).indexOf('校慶補課') >= 0);
 
       var swappedSchedules = schedules.concat([
-        { teacherEmail: 'a@x', dayOfWeek: 2, period: 3, className: '702', subject: '數學' }
+        { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 2, period: 3, className: '702', subject: '數學' }
       ]);
       var swappedCell = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x',
+        teacherEmail: 'a@x', teacherName: '甲',
         dateStr: '2026-07-13',
         period: 2,
         dayOfWeek: 1,
@@ -286,8 +286,8 @@
 
       // 代課出：a 的課由 d 代
       var subRec = {
-        originalTeacherEmail: 'a@x',
-        actualTeacherEmail: 'd@x',
+        originalTeacherEmail: 'a@x', originalTeacherName: '甲',
+        actualTeacherEmail: 'd@x', actualTeacherName: '丁',
         type: 'substitution',
         requestId: 'r1',
         subject: '國文',
@@ -297,7 +297,7 @@
         subFee: '自費代課'
       };
       var outCell = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x',
+        teacherEmail: 'a@x', teacherName: '甲',
         dateStr: '2026-07-13',
         period: 2,
         dayOfWeek: 1,
@@ -316,7 +316,7 @@
       assert('代課調出 isSubstituted', outCell && outCell.isSubstituted === true);
 
       var inCell = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'd@x',
+        teacherEmail: 'd@x', teacherName: '丁',
         dateStr: '2026-07-13',
         period: 2,
         dayOfWeek: 1,
@@ -338,16 +338,16 @@
       // 對調：課程留在原來的位置，只交換授課教師
       var exA = {
         id: 'ex1', requestId: 'rex', type: 'exchange',
-        originalTeacherEmail: 'a@x', actualTeacherEmail: 'd@x',
+        originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'd@x', actualTeacherName: '丁',
          date: '2026-07-13', period: 2, className: '701', subject: '國文', subFee: '無'
       };
       var exB = {
         id: 'ex2', requestId: 'rex', type: 'exchange',
-        originalTeacherEmail: 'd@x', actualTeacherEmail: 'a@x',
+        originalTeacherEmail: 'd@x', originalTeacherName: '丁', actualTeacherEmail: 'a@x', actualTeacherName: '甲',
          date: '2026-07-14', period: 3, className: '702', subject: '輔導', subFee: '無'
       };
       var schedulesEx = schedules.concat([
-        { teacherEmail: 'd@x', dayOfWeek: 2, period: 3, className: '702', subject: '輔導' }
+        { teacherEmail: 'd@x', teacherName: '丁', dayOfWeek: 2, period: 3, className: '702', subject: '輔導' }
       ]);
       var idxEx = window.DomainSchedule.buildScheduleIndex(schedulesEx);
       var helpersEx = {
@@ -358,7 +358,7 @@
         isClassAway: function () { return false; }
       };
       var aOut = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
+        teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
         allSchedules: schedulesEx, scheduleIndex: idxEx,
         periodSubs: [exA], allSubs: [exA, exB], helpers: helpersEx
       });
@@ -367,7 +367,7 @@
         aOut && (aOut.className + '/' + aOut.subject));
       assert('對調調出副標有對方時間', aOut && aOut.subText && aOut.subText.indexOf('調至') >= 0);
       var aIn = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x', dateStr: '2026-07-14', period: 3, dayOfWeek: 2,
+        teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-14', period: 3, dayOfWeek: 2,
         allSchedules: schedulesEx, scheduleIndex: idxEx,
         periodSubs: [exB], allSubs: [exA, exB], helpers: helpersEx
       });
@@ -378,7 +378,7 @@
         return '';
       };
       aIn = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'a@x', dateStr: '2026-07-14', period: 3, dayOfWeek: 2,
+        teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-14', period: 3, dayOfWeek: 2,
         allSchedules: schedulesEx, scheduleIndex: idxEx,
         periodSubs: [exB], allSubs: [exA, exB], helpers: helpersEx
       });
@@ -388,19 +388,19 @@
 
         // A理化 B國文 C數學：AB 後 BC — 各異動格仍顯示原位置課程
       var schedulesABC = [
-        { teacherEmail: 'a@x', dayOfWeek: 1, period: 1, className: '801', subject: '理化' },
-        { teacherEmail: 'b@x', dayOfWeek: 1, period: 2, className: '802', subject: '國文' },
-        { teacherEmail: 'c@x', dayOfWeek: 1, period: 3, className: '803', subject: '數學' }
+        { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 1, className: '801', subject: '理化' },
+        { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 1, period: 2, className: '802', subject: '國文' },
+        { teacherEmail: 'c@x', teacherName: '丙', dayOfWeek: 1, period: 3, className: '803', subject: '數學' }
       ];
       var idxABC = window.DomainSchedule.buildScheduleIndex(schedulesABC);
-       var ab1 = { id: 'ab1', requestId: 'ab', type: 'exchange', originalTeacherEmail: 'a@x', actualTeacherEmail: 'b@x',
+       var ab1 = { id: 'ab1', requestId: 'ab', type: 'exchange', originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'b@x', actualTeacherName: '乙',
          date: '2026-07-13', period: 1, className: '801', subject: '理化', subFee: '無' };
-       var ab2 = { id: 'ab2', requestId: 'ab', type: 'exchange', originalTeacherEmail: 'b@x', actualTeacherEmail: 'a@x',
+       var ab2 = { id: 'ab2', requestId: 'ab', type: 'exchange', originalTeacherEmail: 'b@x', originalTeacherName: '乙', actualTeacherEmail: 'a@x', actualTeacherName: '甲',
          date: '2026-07-13', period: 2, className: '802', subject: '國文', subFee: '無' };
        // BC：B 再調，仍保留原位置課程
-       var bc1 = { id: 'bc1', requestId: 'bc', type: 'exchange', originalTeacherEmail: 'b@x', actualTeacherEmail: 'c@x',
+       var bc1 = { id: 'bc1', requestId: 'bc', type: 'exchange', originalTeacherEmail: 'b@x', originalTeacherName: '乙', actualTeacherEmail: 'c@x', actualTeacherName: '丙',
          date: '2026-07-13', period: 1, className: '801', subject: '理化', subFee: '無' };
-       var bc2 = { id: 'bc2', requestId: 'bc', type: 'exchange', originalTeacherEmail: 'c@x', actualTeacherEmail: 'b@x',
+       var bc2 = { id: 'bc2', requestId: 'bc', type: 'exchange', originalTeacherEmail: 'c@x', originalTeacherName: '丙', actualTeacherEmail: 'b@x', actualTeacherName: '乙',
          date: '2026-07-13', period: 3, className: '803', subject: '數學', subFee: '無' };
       var hABC = {
         getTeacherNameByEmail: function (e) { return e; },
@@ -415,28 +415,28 @@
         isClassAway: function () { return false; }
       };
       var bP1 = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'b@x', dateStr: '2026-07-13', period: 1, dayOfWeek: 1,
+        teacherEmail: 'b@x', teacherName: '乙', dateStr: '2026-07-13', period: 1, dayOfWeek: 1,
         allSchedules: schedulesABC, scheduleIndex: idxABC,
         periodSubs: [ab1, bc1], allSubs: [ab1, ab2, bc1, bc2], helpers: hABC
       });
         assert('B 再調出主標仍是原位置理化', bP1 && bP1.isSubstituted && bP1.subject === '理化' && bP1.className === '801',
          bP1 && (bP1.className + '/' + bP1.subject + '/' + (bP1.isSubstituted ? 'out' : '')));
       var cP1 = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'c@x', dateStr: '2026-07-13', period: 1, dayOfWeek: 1,
+        teacherEmail: 'c@x', teacherName: '丙', dateStr: '2026-07-13', period: 1, dayOfWeek: 1,
         allSchedules: schedulesABC, scheduleIndex: idxABC,
         periodSubs: [ab1, bc1], allSubs: [ab1, ab2, bc1, bc2], helpers: hABC
       });
        assert('C 調入主標＝原位置課(801/理化)', cP1 && cP1.isSubstitutionDuty && cP1.subject === '理化' && cP1.className === '801',
         cP1 && (cP1.className + '/' + cP1.subject));
       var bP3 = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'b@x', dateStr: '2026-07-13', period: 3, dayOfWeek: 1,
+        teacherEmail: 'b@x', teacherName: '乙', dateStr: '2026-07-13', period: 3, dayOfWeek: 1,
         allSchedules: schedulesABC, scheduleIndex: idxABC,
         periodSubs: [bc2], allSubs: [ab1, ab2, bc1, bc2], helpers: hABC
       });
        assert('B 調入主標＝原位置課(803/數學)', bP3 && bP3.isSubstitutionDuty && bP3.subject === '數學' && bP3.className === '803',
         bP3 && (bP3.className + '/' + bP3.subject));
       var bP2 = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'b@x', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
+        teacherEmail: 'b@x', teacherName: '乙', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
         allSchedules: schedulesABC, scheduleIndex: idxABC,
         periodSubs: [ab2], allSubs: [ab1, ab2, bc1, bc2], helpers: hABC
       });
@@ -445,8 +445,8 @@
 
       // 多段鏈：a→d 後，d 再轉給 e（同節）— e 應仍見原課班科
       var subRec2 = {
-        originalTeacherEmail: 'd@x',
-        actualTeacherEmail: 'e@x',
+        originalTeacherEmail: 'd@x', originalTeacherName: '丁',
+        actualTeacherEmail: 'e@x', actualTeacherName: '戊',
         type: 'exchange',
         requestId: 'r2',
         subject: '國文',
@@ -456,7 +456,7 @@
         subFee: '無'
       };
       var chainIn = window.DomainSchedule.resolveApprovedSchedule({
-        teacherEmail: 'e@x',
+        teacherEmail: 'e@x', teacherName: '戊',
         dateStr: '2026-07-13',
         period: 2,
         dayOfWeek: 1,
@@ -479,8 +479,8 @@
 
       // pending 疊加
       var pendingOut = window.DomainSchedule.applyPendingOverlay({
-        cell: { className: '701', subject: '國文', teacherEmail: 'a@x' },
-        teacherEmail: 'a@x',
+        cell: { className: '701', subject: '國文', teacherEmail: 'a@x', teacherName: '甲' },
+        teacherEmail: 'a@x', teacherName: '甲',
         dateStr: '2026-07-13',
         period: 2,
         pendingRequests: [{
@@ -683,9 +683,9 @@
         assert('isQuota 扣額度', DAC.isQuotaDeductFee('扣額度') === true);
 
         var schedules = [
-          { teacherEmail: 'a@x', dayOfWeek: 1, period: 1, className: '701', attr: '基本' },
-          { teacherEmail: 'a@x', dayOfWeek: 1, period: 2, className: '702', attr: '基本' },
-          { teacherEmail: 'a@x', dayOfWeek: 1, period: 3, className: '703', attr: '基本' }
+          { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 1, className: '701', attr: '基本' },
+          { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 2, className: '702', attr: '基本' },
+          { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 3, className: '703', attr: '基本' }
         ];
         var reqs = [
           { type: 'substitution', requesterEmail: 'a@x', requestDate: '2026-07-13', subFee: '扣額度', status: 'approved' },
@@ -724,7 +724,7 @@
            awayClasses: ['702'],
            startDate: '2026-07-13',
            endDate: '2026-07-13',
-           allSchedules: [{ teacherEmail: 'combined-away@x', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' }],
+           allSchedules: [{ teacherEmail: 'combined-away@x', teacherName: '併班教師', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' }],
            weekDates: ['2026-07-13'],
            leaderEmails: [{ email: 'combined-away@x', name: '併班教師' }],
            teachers: [{ email: 'combined-away@x', name: '併班教師' }],
@@ -736,8 +736,8 @@
             active: true, awayClasses: ['702'], startDate: '2026-07-13', endDate: '2026-07-13',
             startPeriod: '2', endPeriod: '2',
             allSchedules: [
-              { teacherEmail: 'partial@x', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' },
-              { teacherEmail: 'partial@x', dayOfWeek: 1, period: 2, className: '701、702', attr: '一般' }
+              { teacherEmail: 'partial@x', teacherName: '部分時段教師', dayOfWeek: 1, period: 1, className: '701、702', attr: '一般' },
+              { teacherEmail: 'partial@x', teacherName: '部分時段教師', dayOfWeek: 1, period: 2, className: '701、702', attr: '一般' }
             ],
             weekDates: ['2026-07-13'],
             leaderEmails: [{ email: 'partial@x', name: '部分時段教師' }],
@@ -773,9 +773,9 @@
         var bill = window.DomainBilling.buildMonthlyReportRows({
           teachers: [{ email: 'p@x', name: '巡', baseHours: 16 }],
           allSchedules: [
-            { teacherEmail: 'p@x', period: 1, attr: '基本' },
-            { teacherEmail: 'p@x', period: 2, attr: '巡堂' },
-            { teacherEmail: 'p@x', period: 3, attr: '巡堂' }
+            { teacherEmail: 'p@x', teacherName: '巡', period: 1, attr: '基本' },
+            { teacherEmail: 'p@x', teacherName: '巡', period: 2, attr: '巡堂' },
+            { teacherEmail: 'p@x', teacherName: '巡', period: 3, attr: '巡堂' }
           ],
           substitutionRecords: [],
           reportMonth: '2026-07',
@@ -801,10 +801,10 @@
           var combinedHoursBilling = window.DomainBilling.buildMonthlyReportRows({
             teachers: [{ email: 'combined-hours@x', name: 'Combined Hours', baseHours: 1 }],
             allSchedules: [
-              { teacherEmail: 'combined-hours@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '併班' },
-              { teacherEmail: 'combined-hours@x', dayOfWeek: 1, period: 1, className: '702', attr: '一般', specialTags: '併班' },
-              { teacherEmail: 'combined-hours@x', dayOfWeek: 1, period: 2, className: '703', attr: '一般', specialTags: '併班、超鐘點' },
-              { teacherEmail: 'combined-hours@x', dayOfWeek: 1, period: 2, className: '704', attr: '一般', specialTags: '併班、超鐘點' }
+              { teacherEmail: 'combined-hours@x', teacherName: 'Combined Hours', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '併班' },
+              { teacherEmail: 'combined-hours@x', teacherName: 'Combined Hours', dayOfWeek: 1, period: 1, className: '702', attr: '一般', specialTags: '併班' },
+              { teacherEmail: 'combined-hours@x', teacherName: 'Combined Hours', dayOfWeek: 1, period: 2, className: '703', attr: '一般', specialTags: '併班、超鐘點' },
+              { teacherEmail: 'combined-hours@x', teacherName: 'Combined Hours', dayOfWeek: 1, period: 2, className: '704', attr: '一般', specialTags: '併班、超鐘點' }
             ],
             substitutionRecords: [],
             reportMonth: '2026-07',
@@ -825,10 +825,10 @@
           function billingCase(period, attr, fee, specialTags) {
             return window.DomainBilling.buildMonthlyReportRows({
               teachers: [{ email: 'bill@x', name: 'Billing', baseHours: 0 }],
-              allSchedules: [{ teacherEmail: 'bill@x', dayOfWeek: 1, period: period, className: '701', attr: attr, specialTags: specialTags || '' }],
+              allSchedules: [{ teacherEmail: 'bill@x', teacherName: 'Billing', dayOfWeek: 1, period: period, className: '701', attr: attr, specialTags: specialTags || '' }],
              substitutionRecords: fee ? [{
                date: '2026-07-13', period: period, className: '701', type: 'substitution',
-               originalTeacherEmail: 'bill@x', actualTeacherEmail: 'cover@x', subFee: fee
+               originalTeacherEmail: 'bill@x', originalTeacherName: 'Billing', actualTeacherEmail: 'cover@x', subFee: fee
              }] : [],
              reportMonth: '2026-07',
              reportWeeksCount: 1
@@ -854,8 +854,8 @@
           var datedBilling = window.DomainBilling.buildMonthlyReportRows({
             teachers: [{ email: 'dated@x', name: 'Dated', baseHours: 0 }],
             allSchedules: [
-              { teacherEmail: 'dated@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點', activeTo: '2026-08-09' },
-              { teacherEmail: 'dated@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點', activeFrom: '2026-08-10' }
+              { teacherEmail: 'dated@x', teacherName: 'Dated', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點', activeTo: '2026-08-09' },
+              { teacherEmail: 'dated@x', teacherName: 'Dated', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點', activeFrom: '2026-08-10' }
             ],
             substitutionRecords: [],
             reportMonth: '2026-08',
@@ -868,14 +868,14 @@
             var mixedBilling = window.DomainBilling.buildMonthlyReportRows({
              teachers: [{ email: 'mixed@x', name: 'Mixed', baseHours: 1 }],
              allSchedules: [
-                { teacherEmail: 'mixed@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
-                { teacherEmail: 'mixed@x', dayOfWeek: 1, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
-               { teacherEmail: 'mixed@x', dayOfWeek: 1, period: 3, className: '703', attr: '基本' }
+                { teacherEmail: 'mixed@x', teacherName: 'Mixed', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+                { teacherEmail: 'mixed@x', teacherName: 'Mixed', dayOfWeek: 1, period: 2, className: '702', attr: '一般', specialTags: '超鐘點' },
+               { teacherEmail: 'mixed@x', teacherName: 'Mixed', dayOfWeek: 1, period: 3, className: '703', attr: '基本' }
              ],
              substitutionRecords: [
-               { date: '2026-07-13', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'mixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課' },
-               { date: '2026-07-13', period: 2, className: '702', type: 'substitution', originalTeacherEmail: 'mixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課' },
-               { date: '2026-07-13', period: 3, className: '703', type: 'substitution', originalTeacherEmail: 'mixed@x', actualTeacherEmail: 'cover@x', subFee: '自費代課' }
+               { date: '2026-07-13', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'mixed@x', originalTeacherName: 'Mixed', actualTeacherEmail: 'cover@x', subFee: '公費代課' },
+               { date: '2026-07-13', period: 2, className: '702', type: 'substitution', originalTeacherEmail: 'mixed@x', originalTeacherName: 'Mixed', actualTeacherEmail: 'cover@x', subFee: '公費代課' },
+               { date: '2026-07-13', period: 3, className: '703', type: 'substitution', originalTeacherEmail: 'mixed@x', originalTeacherName: 'Mixed', actualTeacherEmail: 'cover@x', subFee: '自費代課' }
              ],
              reportMonth: '2026-07',
              reportWeeksCount: 1
@@ -888,10 +888,10 @@
           function combinedBillingCase(period, attr, fee, specialTags) {
             return window.DomainBilling.buildMonthlyReportRows({
               teachers: [{ email: 'combined@x', name: 'Combined', baseHours: 0 }],
-              allSchedules: [{ teacherEmail: 'combined@x', dayOfWeek: 1, period: period, className: '701、702', attr: attr, specialTags: specialTags || '' }],
+              allSchedules: [{ teacherEmail: 'combined@x', teacherName: 'Combined', dayOfWeek: 1, period: period, className: '701、702', attr: attr, specialTags: specialTags || '' }],
               substitutionRecords: [{
                 date: '2026-07-13', period: period, className: '701、702', type: 'substitution',
-                 originalTeacherEmail: 'combined@x', actualTeacherEmail: 'cover@x', subFee: fee,
+                 originalTeacherEmail: 'combined@x', originalTeacherName: 'Combined', actualTeacherEmail: 'cover@x', subFee: fee,
                 specialFlow: 'combined_return'
               }],
               reportMonth: '2026-07',
@@ -906,10 +906,10 @@
             assert('合班回原班一般課自費不扣超鐘點', combinedSelfRegular.selfPaidDeduction === 0 && combinedSelfRegular.selfSubCount === 0);
            var combinedPeriod8 = window.DomainBilling.buildPeriod8Payout({
              reportMonth: '2026-07',
-             allSchedules: [{ teacherEmail: 'combined@x', dayOfWeek: 1, period: 8, className: '701、702', attr: '課輔' }],
+             allSchedules: [{ teacherEmail: 'combined@x', teacherName: 'Combined', dayOfWeek: 1, period: 8, className: '701、702', attr: '課輔' }],
              substitutionRecords: [{
                date: '2026-07-13', period: 8, className: '701、702',
-               originalTeacherEmail: 'combined@x', actualTeacherEmail: 'cover@x',
+               originalTeacherEmail: 'combined@x', originalTeacherName: 'Combined', actualTeacherEmail: 'cover@x',
                 type: 'substitution', subFee: '第8節代課', specialFlow: 'combined_return'
              }],
              getTeacherNameByEmail: function (e) { return e; },
@@ -928,7 +928,7 @@
          var p8 = window.DomainBilling.buildPeriod8Payout({
           reportMonth: '2026-07',
           allSchedules: [
-            { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' }
+            { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' }
           ],
           substitutionRecords: [],
           classAwayEvents: [{
@@ -948,8 +948,8 @@
          var p8Exam = window.DomainBilling.buildPeriod8Payout({
            reportMonth: '2026-07',
            allSchedules: [
-             { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },
-             { teacherEmail: 'b@x', dayOfWeek: 2, period: 8, className: '702', subject: '課輔', attr: '課輔' }
+             { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },
+             { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 2, period: 8, className: '702', subject: '課輔', attr: '課輔' }
            ],
            substitutionRecords: [],
            classAwayEvents: [{
@@ -970,12 +970,12 @@
           var p8MixedFees = window.DomainBilling.buildPeriod8Payout({
            reportMonth: '2026-07',
            allSchedules: [
-             { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },
-             { teacherEmail: 'b@x', dayOfWeek: 2, period: 8, className: '702', subject: '課輔', attr: '課輔' }
+             { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' },
+             { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 2, period: 8, className: '702', subject: '課輔', attr: '課輔' }
            ],
            substitutionRecords: [
-             { date: '2026-07-13', period: 8, className: '701', originalTeacherEmail: 'a@x', actualTeacherEmail: 'c@x', type: 'substitution', subFee: '公費代課' },
-             { date: '2026-07-14', period: 8, className: '702', originalTeacherEmail: 'b@x', actualTeacherEmail: 'd@x', type: 'substitution', subFee: '自費代課' }
+             { date: '2026-07-13', period: 8, className: '701', originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'c@x', actualTeacherName: '丙', type: 'substitution', subFee: '公費代課' },
+             { date: '2026-07-14', period: 8, className: '702', originalTeacherEmail: 'b@x', originalTeacherName: '乙', actualTeacherEmail: 'd@x', actualTeacherName: '丁', type: 'substitution', subFee: '自費代課' }
            ],
            getTeacherNameByEmail: function (e) { return e; },
            isSingleWeek: function () { return true; }
@@ -986,10 +986,10 @@
           var p8Pending = window.DomainBilling.buildPeriod8Payout({
             reportMonth: '2026-07',
             allSchedules: [
-              { teacherEmail: 'a@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' }
+              { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 8, className: '701', subject: '課輔', attr: '課輔' }
             ],
             substitutionRecords: [
-              { date: '2026-07-13', period: 8, className: '701', originalTeacherEmail: 'a@x', actualTeacherEmail: 'c@x', type: 'substitution', subFee: '自費代課', status: 'pending_teacher' }
+              { date: '2026-07-13', period: 8, className: '701', originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'c@x', actualTeacherName: '丙', type: 'substitution', subFee: '自費代課', status: 'pending_teacher' }
             ],
             getTeacherNameByEmail: function (e) { return e; },
             isSingleWeek: function () { return true; }
@@ -1020,7 +1020,7 @@
         assert('pending 代入索引', !!(pIdx['d@x|2026-07-13|2'] && pIdx['d@x|2026-07-13|2'].subIn));
         var ov = window.DomainSchedule.applyPendingOverlay({
           cell: { className: '701', subject: '國文' },
-          teacherEmail: 'a@x', dateStr: '2026-07-13', period: 2,
+          teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-13', period: 2,
           pendingRequests: [], pendingIndex: pIdx,
           getWeekDayText: function () { return '一'; }
         });
@@ -1032,7 +1032,7 @@
          }]);
         var combinedPending = window.DomainSchedule.applyPendingOverlay({
           cell: { className: '701、702', subject: '國文' },
-          teacherEmail: 'a@x', dateStr: '2026-07-13', period: 2,
+          teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-13', period: 2,
           pendingRequests: [], pendingIndex: combinedIdx,
           getWeekDayText: function () { return '一'; }
          });
@@ -1041,7 +1041,7 @@
             && combinedPending.isSubstituted === true);
          var combinedPendingIn = window.DomainSchedule.applyPendingOverlay({
            cell: { className: '702', subject: '英文' },
-           teacherEmail: 'b@x', dateStr: '2026-07-13', period: 2,
+           teacherEmail: 'b@x', teacherName: '乙', dateStr: '2026-07-13', period: 2,
            pendingRequests: [], pendingIndex: combinedIdx,
            getWeekDayText: function () { return '一'; }
          });
@@ -1049,17 +1049,17 @@
            && combinedPendingIn.pendingType === 'combined_return_in'
            && combinedPendingIn.className === '701、702');
          var combinedApproved = window.DomainSchedule.resolveApprovedSchedule({
-           teacherEmail: 'b@x', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
+           teacherEmail: 'b@x', teacherName: '乙', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
            allSchedules: [
-             { teacherEmail: 'a@x', dayOfWeek: 1, period: 2, className: '701、702', subject: '國文', attr: '基本' },
-             { teacherEmail: 'b@x', dayOfWeek: 1, period: 2, className: '702', subject: '英文', attr: '基本' }
+             { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 2, className: '701、702', subject: '國文', attr: '基本' },
+             { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 1, period: 2, className: '702', subject: '英文', attr: '基本' }
            ],
            periodSubs: [{
-             originalTeacherEmail: 'a@x', actualTeacherEmail: 'b@x', date: '2026-07-13', period: 2,
+             originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'b@x', actualTeacherName: '乙', date: '2026-07-13', period: 2,
              type: 'substitution', className: '701、702', subject: '國文', specialFlow: 'combined_return'
            }],
            allSubs: [{
-             originalTeacherEmail: 'a@x', actualTeacherEmail: 'b@x', date: '2026-07-13', period: 2,
+             originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'b@x', actualTeacherName: '乙', date: '2026-07-13', period: 2,
              type: 'substitution', className: '701、702', subject: '國文', specialFlow: 'combined_return'
            }],
            helpers: { getTeacherNameByEmail: function (e) { return e; }, isClassAway: function () { return false; }, isSingleWeek: function () { return true; } }
@@ -1070,13 +1070,13 @@
             && combinedApproved.className === '701、702'
             && combinedApproved.subRecord.actualTeacherEmail === 'b@x');
           var combinedApprovedOut = window.DomainSchedule.resolveApprovedSchedule({
-            teacherEmail: 'a@x', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
+            teacherEmail: 'a@x', teacherName: '甲', dateStr: '2026-07-13', period: 2, dayOfWeek: 1,
             allSchedules: [
-              { teacherEmail: 'a@x', dayOfWeek: 1, period: 2, className: '701、702', subject: '國文', attr: '基本' },
-              { teacherEmail: 'b@x', dayOfWeek: 1, period: 2, className: '702', subject: '英文', attr: '基本' }
+              { teacherEmail: 'a@x', teacherName: '甲', dayOfWeek: 1, period: 2, className: '701、702', subject: '國文', attr: '基本' },
+              { teacherEmail: 'b@x', teacherName: '乙', dayOfWeek: 1, period: 2, className: '702', subject: '英文', attr: '基本' }
             ],
             periodSubs: [{
-              originalTeacherEmail: 'a@x', actualTeacherEmail: 'b@x', date: '2026-07-13', period: 2,
+              originalTeacherEmail: 'a@x', originalTeacherName: '甲', actualTeacherEmail: 'b@x', actualTeacherName: '乙', date: '2026-07-13', period: 2,
               type: 'substitution', className: '701、702', subject: '國文', specialFlow: 'combined_return'
             }],
             allSubs: [],
@@ -1118,8 +1118,8 @@
           awayClasses: ['701'],
           startDate: '2026-07-13', endDate: '2026-07-13', startPeriod: '2', endPeriod: '2',
           allSchedules: [
-            { teacherEmail: 'partial@example.com', dayOfWeek: 1, period: 1, className: '701' },
-            { teacherEmail: 'partial@example.com', dayOfWeek: 1, period: 2, className: '701' }
+            { teacherEmail: 'partial@example.com', teacherName: '指定時段教師', dayOfWeek: 1, period: 1, className: '701' },
+            { teacherEmail: 'partial@example.com', teacherName: '指定時段教師', dayOfWeek: 1, period: 2, className: '701' }
           ]
         });
         assert('活動互代額度只計指定時段', partialQuotaRows.length === 1

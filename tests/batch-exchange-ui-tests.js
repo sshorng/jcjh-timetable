@@ -75,6 +75,9 @@ assert.equal(batchAssignMode.value, 'same', '切回批次代課仍保留原本�
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+const submitSource = fs.readFileSync(path.join(__dirname, '..', 'ui-submit.js'), 'utf8');
+// 2A：申請欄位檢查已移至 ui-homeroom.js
+const homeroomSource = fs.readFileSync(path.join(__dirname, '..', 'ui-homeroom.js'), 'utf8');
 assert.doesNotMatch(html, /同一人全調/, '批次調課介面不再顯示同一人全調選項');
 assert.match(html, /batchSelectMode \? '批次' : '📦 批次處理'/, '啟用時用短標籤與顏色表示，未啟用時顯示批次處理');
 assert.match(html, /class="batch-operation-picker" role="group" aria-label="批次處理方式"/, '三種批次操作應以單一控制群組呈現');
@@ -96,11 +99,11 @@ assert.doesNotMatch(html, /逐組指定對調教師與對方課堂|逐組選定�
 assert.match(html, /type="button" class="btn btn-primary btn-sm-compact" @click\.stop\.prevent="prepCompare\('exchange'/, '選為本組按鈕不可觸發表單預設送出');
 assert.doesNotMatch(html, /目前配對：/, '批次調課媒合區不再顯示佔空間的目前配對摘要');
 assert.match(html, /class="match-filter-area"[\s\S]*?<div v-if="!activeCell\.dayOfWeek"/, '一般媒合篩選區分支應由有效的 v-if 開始');
-assert.match(appSource, /const isPeriod8FeeLocked = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '第8節經費計算可處理空的申請資料');
-assert.match(appSource, /const hasSubTeacherConflict = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '代課衝堂計算可處理空的申請資料');
-assert.match(appSource, /const isRequestValid = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!inputRequestDate\.value \|\| !pending\)/, '申請欄位檢查可處理空的申請資料');
-assert.match(appSource, /if \(pending\.isBatch && pending\.mode === 'exchange'\)\s*\{\s*return getWeekDatesForCompare\(pending\.date/, '批次調課左側課表依目前配對組別週次顯示');
-assert.match(appSource, /if \(pending\.isExchangeBatch\) return pending\.subTeacher/, '批次調課右側課表依目前配對組別切換教師');
+assert.match(submitSource, /const isPeriod8FeeLocked = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '第8節經費計算可處理空的申請資料');
+assert.match(submitSource, /const hasSubTeacherConflict = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '代課衝堂計算可處理空的申請資料');
+assert.match(homeroomSource, /const isRequestValid = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!inputRequestDate\.value \|\| !pending\)/, '申請欄位檢查可處理空的申請資料');
+assert.match(submitSource, /if \(pending\.isBatch && pending\.mode === 'exchange'\)\s*\{\s*return getWeekDatesForCompare\(pending\.date/, '批次調課左側課表依目前配對組別週次顯示');
+assert.match(submitSource, /if \(pending\.isExchangeBatch\) return pending\.subTeacher/, '批次調課右側課表依目前配對組別切換教師');
 
 const styles = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
 const mobileStyles = fs.readFileSync(path.join(__dirname, '..', 'mobile.css'), 'utf8');

@@ -54,9 +54,10 @@ function load(sourceName) {
 }
 
 function loadPaperDraftRecordBuilder(pendingRequestData) {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  // 2A：已移至 ui-print.js；沿用同等測試樁直接驗本體
+  const source = fs.readFileSync(path.join(root, 'ui-print.js'), 'utf8');
   const start = source.indexOf('const buildPaperDraftRecords =');
-  const end = source.indexOf('const buildPaperRecordsForSubmittedRequests =', start);
+  const end = source.indexOf('const buildTrianglePaperDraftRecords =', start);
   assert.ok(start >= 0 && end > start, 'paper draft record builder must remain discoverable');
   const context = {
     pendingRequestData,
@@ -80,11 +81,12 @@ function loadPaperDraftRecordBuilder(pendingRequestData) {
 }
 
 function loadSubmittedPaperRecordBuilder() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const buildPaperRecordsForSubmittedRequests =');
-  const end = source.indexOf('const openPaperPrintDraft =', start);
-  assert.ok(start >= 0 && end > start, 'submitted paper record builder must remain discoverable');
+  // 2A：已移至 ui-export.js；以 UiExport.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-export.js'), 'utf8');
+  assert.match(libSource, /const buildPaperRecordsForSubmittedRequests =/,
+    'submitted paper record builder must remain discoverable');
   const context = {
+      window: {},
       teachersList: ref([
        { loginEmail: 'owner@example.com', email: '申請人', teacherName: '申請人', name: '申請人' },
        { loginEmail: 'invitee@example.com', email: '受邀人', teacherName: '受邀人', name: '受邀人' }
@@ -112,22 +114,30 @@ function loadSubmittedPaperRecordBuilder() {
     isNaN
   };
   vm.createContext(context);
-  return vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return buildPaperRecordsForSubmittedRequests;
-  })()`, context);
+  vm.runInContext(libSource, context, { filename: 'ui-export.js' });
+  return context.window.UiExport.create({
+    teachersList: context.teachersList,
+    isCourseAdjustmentOnlyRequest: context.isCourseAdjustmentOnlyRequest,
+    isCombinedReturnRequest: context.isCombinedReturnRequest,
+    resolveExchangeTargetCell: context.resolveExchangeTargetCell,
+    findBaseScheduleSlot: context.findBaseScheduleSlot,
+    getTeacherNameByEmail: context.getTeacherNameByEmail
+  }).buildPaperRecordsForSubmittedRequests;
 }
 
 function loadApproveRiskFlags() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const getApproveRiskFlags =');
-  const end = source.indexOf('const formatRequestSummary =', start);
-  assert.ok(start >= 0 && end > start, 'approve risk flag helper must remain discoverable');
+  // 2A：風險旗標已移至 ui-approval.js；以 UiApproval.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-approval.js'), 'utf8');
+  assert.match(libSource, /function getApproveRiskFlags\(req\) \{/,
+    'approve risk flag helper must remain discoverable');
   const roster = [
     { loginEmail: 'leave@example.com', email: '被代教師', teacherName: '被代教師', name: '被代教師', mutualQuota: 0 },
     { loginEmail: 'cover@example.com', email: '代課教師', teacherName: '代課教師', name: '代課教師', mutualQuota: 1 }
   ];
   const context = {
+    window: {},
+    Date, Math, String, Number, Array, Object, parseInt, parseFloat, isNaN,
+    ref: value => ({ value }),
     teachersList: ref(roster),
     lookupTeacher: value => {
       const key = String(value || '').trim().toLowerCase();
@@ -141,20 +151,22 @@ function loadApproveRiskFlags() {
     isExchangeClassRestricted: () => false,
     isRequestExchangeRechanged: () => false,
     ACTIVITY_PUBLIC_FEE: '活動公費',
-    TIMETABLE_ONLY_FEE: '僅課表呈現（不結算）',
-    String,
-    Number,
-    Array,
-    Object,
-    parseInt,
-    parseFloat,
-    isNaN
+    TIMETABLE_ONLY_FEE: '僅課表呈現（不結算）'
   };
   vm.createContext(context);
-  const get = vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return getApproveRiskFlags;
-  })()`, context);
+  vm.runInContext(libSource, context, { filename: 'ui-approval.js' });
+  const get = context.window.UiApproval.create({
+    ref: context.ref,
+    teachersList: context.teachersList,
+    lookupTeacher: context.lookupTeacher,
+    isExchangeLikeRequest: context.isExchangeLikeRequest,
+    isQuotaDeductFee: context.isQuotaDeductFee,
+    isTimetableOnlyFee: context.isTimetableOnlyFee,
+    isLeaveClassRestricted: context.isLeaveClassRestricted,
+    isExchangeClassRestricted: context.isExchangeClassRestricted,
+    isRequestExchangeRechanged: context.isRequestExchangeRechanged,
+    ACTIVITY_PUBLIC_FEE: context.ACTIVITY_PUBLIC_FEE
+  }).getApproveRiskFlags;
   return { get, roster };
 }
 
@@ -176,15 +188,38 @@ function runQuotaRiskFlagTargetTest() {
 }
 
 function loadApprovedExchangeConverter(resolveCell) {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const convertRequestsToSubstitutions =');
-  const end = source.indexOf('const requestsList =', start);
-  assert.ok(start >= 0 && end > start, 'approved exchange converter must remain discoverable');
+  // 2A：轉換器已移至 ui-timetable.js；以 UiTimetable.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+  assert.match(libSource, /const convertRequestsToSubstitutions = \(requests\) => \{/,
+    'approved exchange converter must remain discoverable');
   const context = {
     window: {},
+    computed: fn => ({ get value() { return fn(); } }),
+    allSchedules: { value: [] },
+    schoolSwaps: { value: [] },
+    substitutionRecords: { value: [] },
+    substitutionsLookup: { value: {} },
+    allPendingRequests: { value: [] },
+    displayTimetableTeachers: { value: [] },
+    currentWeekDates: { value: [] },
+    getTeacherNameByEmail: () => '',
+    getTeacherSubjectByEmail: () => '',
+    formatDateMMDD: s => s,
+    isSingleWeek: () => true,
+    isClassAwayOnDate: () => false,
+    getWeekDayText: () => '',
+    batchSelectMode: { value: false },
+    isBatchSlotSelected: () => false,
+    isMutualCover: { value: false },
+    getMutualDraftAt: () => null,
+    mutualAwayClasses: { value: [] },
+    mutualActivityStart: { value: '' },
+    mutualActivityEnd: { value: '' },
+    mutualActivityStartPeriod: { value: '' },
+    mutualActivityEndPeriod: { value: '' },
+    isMutualActivitySlotInRange: () => false,
     resolveCellFromBaseAndSubs: resolveCell || (() => null),
     findBaseScheduleSlot: () => null,
-    getTeacherSubjectByEmail: () => '',
     isCourseAdjustmentOnlyRequest: isCourseAdjustmentOnlyForTest,
     isEmptySlotAssignmentRequest: record => {
       if (!record) return false;
@@ -193,31 +228,61 @@ function loadApprovedExchangeConverter(resolveCell) {
       const note = String(record.note || record['備註'] || '');
       return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
     },
-    Date, Number, String, Object, Array, Set, Math, parseInt, isNaN
+    Date, Number, String, Object, Array, Set, Map, Math, parseInt, isNaN
   };
   vm.createContext(context);
-  return vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return convertRequestsToSubstitutions;
-  })()`, context);
+  vm.runInContext(libSource, context, { filename: 'ui-timetable.js' });
+  return context.window.UiTimetable.create({
+    computed: context.computed,
+    allSchedules: context.allSchedules,
+    schoolSwaps: context.schoolSwaps,
+    substitutionRecords: context.substitutionRecords,
+    substitutionsLookup: context.substitutionsLookup,
+    allPendingRequests: context.allPendingRequests,
+    displayTimetableTeachers: context.displayTimetableTeachers,
+    currentWeekDates: context.currentWeekDates,
+    getTeacherNameByEmail: context.getTeacherNameByEmail,
+    getTeacherSubjectByEmail: context.getTeacherSubjectByEmail,
+    formatDateMMDD: context.formatDateMMDD,
+    isSingleWeek: context.isSingleWeek,
+    isClassAwayOnDate: context.isClassAwayOnDate,
+    getWeekDayText: context.getWeekDayText,
+    batchSelectMode: context.batchSelectMode,
+    isBatchSlotSelected: context.isBatchSlotSelected,
+    isMutualCover: context.isMutualCover,
+    getMutualDraftAt: context.getMutualDraftAt,
+    mutualAwayClasses: context.mutualAwayClasses,
+    mutualActivityStart: context.mutualActivityStart,
+    mutualActivityEnd: context.mutualActivityEnd,
+    mutualActivityStartPeriod: context.mutualActivityStartPeriod,
+    mutualActivityEndPeriod: context.mutualActivityEndPeriod,
+    isMutualActivitySlotInRange: context.isMutualActivitySlotInRange,
+    resolveCellFromBaseAndSubs: context.resolveCellFromBaseAndSubs,
+    findBaseScheduleSlot: context.findBaseScheduleSlot,
+    isCourseAdjustmentOnlyRequest: context.isCourseAdjustmentOnlyRequest,
+    isEmptySlotAssignmentRequest: context.isEmptySlotAssignmentRequest
+  }).convertRequestsToSubstitutions;
 }
 
 function loadPublicClassRequestMapper() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const mapPublicClassRequests =');
-  const end = source.indexOf('const applyClassPayload =', start);
-  assert.ok(start >= 0 && end > start, 'public class request mapper must remain discoverable');
+  // 2A：已移至 ui-classview.js；以 UiClassView.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-classview.js'), 'utf8');
+  assert.match(libSource, /const mapPublicClassRequests = \(/,
+    'public class request mapper must remain discoverable');
   const context = {
+    window: {},
+    computed: fn => ({ get value() { return fn(); } }),
     classViewSchedules: ref([
       { teacherName: '吳冠萱', dayOfWeek: 3, period: 5, className: '904', subject: '輔導' }
     ]),
     Date, Number, String, Object, Array, parseInt, isNaN
   };
   vm.createContext(context);
-  return vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return mapPublicClassRequests;
-  })()`, context);
+  vm.runInContext(libSource, context, { filename: 'ui-classview.js' });
+  return context.window.UiClassView.create({
+    computed: context.computed,
+    classViewSchedules: context.classViewSchedules
+  }).mapPublicClassRequests;
 }
 
 function runExchangePaperRecordMappingTest() {
@@ -482,15 +547,18 @@ function runPublicClassCourseFollowsTeacherTest() {
 }
 
 function runNoSyntheticStudySubjectTest() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  // 2A：原班科解析已移至 ui-timetable.js；教師查詢留守 app.js
+  // R16：getTeacherJobTitleByEmail 已移至 ui-homeroom.js；改讀模組源碼
+  const source = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+  const hmSource = fs.readFileSync(path.join(root, 'ui-homeroom.js'), 'utf8');
   const subjectStart = source.indexOf('const getOriginalRequestSubject =');
   const subjectEnd = source.indexOf('const getOriginalRequestClass =', subjectStart);
-  const teacherStart = source.indexOf('const getTeacherSubjectByEmail =');
-  const teacherEnd = source.indexOf('const getTeacherJobTitleByEmail =', teacherStart);
+  const teacherStart = hmSource.indexOf('const getTeacherJobTitleByEmail =');
+  const teacherEnd = hmSource.indexOf('const chineseClassNumber =', teacherStart);
   assert.ok(subjectStart >= 0 && subjectEnd > subjectStart);
   assert.ok(teacherStart >= 0 && teacherEnd > teacherStart);
   assert.doesNotMatch(source.slice(subjectStart, subjectEnd), /自習/);
-  assert.doesNotMatch(source.slice(teacherStart, teacherEnd), /自習/);
+  assert.doesNotMatch(hmSource.slice(teacherStart, teacherEnd), /自習/);
 }
 
 runSubmittedExchangePaperRecordMappingTest();
@@ -503,99 +571,83 @@ runPublicClassCourseFollowsTeacherTest();
 runNoSyntheticStudySubjectTest();
 
 function loadProgressSteps() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const getRequestProgressSteps = (req) => {');
-  const end = source.indexOf('// 今日／本週儀表板', start);
-  assert.ok(start >= 0 && end > start, 'progress step function must remain discoverable');
-  const expression = source.slice(source.indexOf('=', start) + 1, end).trim().replace(/;$/, '');
-  return vm.runInNewContext(`(${expression})`, {
+  // 2A：進度步驟已移至 ui-approval.js；以 UiApproval.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-approval.js'), 'utf8');
+  assert.match(libSource, /function getRequestProgressSteps\(req\) \{/,
+    'progress step function must remain discoverable');
+  const context = {
+    window: {},
     Date, Math, String, isNaN,
-    isPaperFlowRequest: req => !!(req && req.paperFlow === true),
-    isProxySubmitRequest: req => !!(req && req.isProxySubmit === true)
-  });
+    notificationsSuppressed: { value: false }
+  };
+  vm.createContext(context);
+  vm.runInContext(libSource, context, { filename: 'ui-approval.js' });
+  return context.window.UiApproval.create({
+    ref: value => ({ value }),
+    notificationsSuppressed: context.notificationsSuppressed
+  }).getRequestProgressSteps;
+}
+
+function loadListHelpers() {
+  // 2A：申請清單排序／分組已移至 ui-list-helpers.js；直接載入該模組
+  const source = fs.readFileSync(path.join(root, 'ui-list-helpers.js'), 'utf8');
+  assert.match(source, /window\.UiListHelpers = \(function/, 'request list helper module must remain discoverable');
+  const context = { window: {}, Date, Math, String, Number, Object, Array, RegExp, parseInt, isFinite };
+  vm.createContext(context);
+  vm.runInContext(source, context, { filename: 'ui-list-helpers.js' });
+  return context.window.UiListHelpers;
 }
 
 function loadRequestListSorter() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const requestTimestampText =');
-  const end = source.indexOf('const recomputeRequestBuckets =', start);
-  assert.ok(start >= 0 && end > start, 'request list sorter must remain discoverable');
-  const context = {
-    Date, Math, String, Number, Object, Array, RegExp, parseInt, isFinite
+  const helpers = loadListHelpers();
+  assert.equal(typeof helpers.sortRequestListDesc, 'function', 'request list sorter must remain discoverable');
+  assert.equal(typeof helpers.formatRequestApplicationDate, 'function', 'request date formatter must remain discoverable');
+  return {
+    sortRequestListDesc: helpers.sortRequestListDesc,
+    formatRequestApplicationDate: helpers.formatRequestApplicationDate
   };
-  vm.createContext(context);
-  return vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return { sortRequestListDesc, formatRequestApplicationDate };
-  })()`, context);
 }
 
 function loadLineTemplates() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const formatLineSlot = (');
-  const end = source.indexOf('const copyLineMessageForRequest =', start);
-  assert.ok(start >= 0 && end > start, 'LINE template functions must remain discoverable');
-  const block = source.slice(start, end);
-  return vm.runInNewContext(`(() => {
-    const formatDateMMDD = value => String(value || '').slice(5).replace('-', '/');
-    const formatPeriodText = value => '第' + value + '節';
-    const getWeekDayText = value => ({ 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' })[value] || '';
-    const getOriginalRequestClass = row => row.className || '';
-    const getOriginalRequestSubject = row => row.subject || '';
-    const getOriginalTargetClass = row => row.targetClassName || '';
-    const getOriginalTargetSubject = row => row.targetSubject || '';
-    ${block}
-    return { buildLineInviteText, buildAskFirstLineText, buildLineBatchInviteText, getLineHandledSlot };
-  })()`, {
-    window: { location: { origin: 'https://school.example', pathname: '/index.html' } },
+  // 2A：LINE 模板已移至 ui-line-template.js；直接載入該模組並注入測試樁
+  const source = fs.readFileSync(path.join(root, 'ui-line-template.js'), 'utf8');
+  assert.match(source, /window\.UiLineTemplate = \(function/, 'LINE template module must remain discoverable');
+  const context = {
+    window: {
+      location: { origin: 'https://school.example', pathname: '/index.html' },
+      DateUtils: {
+        formatDateMMDD: value => String(value || '').slice(5).replace('-', '/'),
+        formatPeriodText: value => '第' + value + '節',
+        getWeekDayText: value => ({ 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' })[value] || ''
+      }
+    },
     String, encodeURIComponent
-  });
+  };
+  vm.createContext(context);
+  vm.runInContext(source, context, { filename: 'ui-line-template.js' });
+  return context.window.UiLineTemplate;
 }
 
 function loadCourseDisplayFormatter() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const formatCourseDisplayText =');
-  const end = source.indexOf('/** 同節先前義務', start);
-  assert.ok(start >= 0 && end > start, 'course display formatter must remain discoverable');
-  return vm.runInNewContext(`(() => {
-    ${source.slice(start, end)}
-    return { formatCourseDisplayText, _fmtSlot };
-  })()`, {
-    String,
-    Number,
-    getWeekDayText: value => ({ 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' })[value] || '',
-    formatPeriodText: value => '第' + value + '節'
-  });
+  // 2A：課程顯示格式已移至 ui-line-template.js（與 LINE 模板同模組）
+  const templates = loadLineTemplates();
+  assert.equal(typeof templates.formatCourseDisplayText, 'function', 'course display formatter must remain discoverable');
+  assert.equal(typeof templates._fmtSlot, 'function', 'slot formatter must remain discoverable');
+  return {
+    formatCourseDisplayText: templates.formatCourseDisplayText,
+    _fmtSlot: templates._fmtSlot
+  };
 }
 
 function loadTriangleLineTemplates() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const lineStart = source.indexOf('const formatLineSlot =');
-  const lineEnd = source.indexOf('const copyLineMessageForRequest =', lineStart);
-  const triangleStart = source.indexOf('const formatTriangleSlot =');
-  const triangleEnd = source.indexOf('const submitTriangleRequest =', triangleStart);
-  assert.ok(lineStart >= 0 && lineEnd > lineStart, 'LINE slot formatter must remain discoverable');
-  assert.ok(triangleStart >= 0 && triangleEnd > triangleStart, 'triangle LINE formatter must remain discoverable');
-  return vm.runInNewContext(`(() => {
-    ${source.slice(lineStart, lineEnd)}
-    ${source.slice(triangleStart, triangleEnd)}
-    return { buildTriangleLineText, formatTriangleSlot };
-  })()`, {
-    window: { location: { origin: 'https://school.example', pathname: '/index.html' } },
-    String,
-    Number,
-    Array,
-    Object,
-    Date,
-    Math,
-    RegExp,
-    parseInt,
-    isNaN,
-    encodeURIComponent,
-    formatDateMMDD: value => String(value || '').slice(5).replace('-', '/'),
-    getWeekDayText: value => ({ 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' })[value] || '',
-    formatPeriodText: value => '第' + value + '節'
-  });
+  // 2A：三角顯示已移至 ui-line-template.js；直接取模組函式
+  const templates = loadLineTemplates();
+  assert.equal(typeof templates.formatTriangleSlot, 'function', 'triangle LINE formatter must remain discoverable');
+  assert.equal(typeof templates.buildTriangleLineText, 'function', 'triangle LINE text must remain discoverable');
+  return {
+    buildTriangleLineText: templates.buildTriangleLineText,
+    formatTriangleSlot: templates.formatTriangleSlot
+  };
 }
 
 function runLineTemplateTest() {
@@ -793,16 +845,22 @@ function runTriangleLineFormatTest() {
 }
 
 function loadPaperFlowClassifier() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const isPaperFlowValue =');
-  const end = source.indexOf('/** 目前 UI 身分 Email', start);
-  assert.ok(start >= 0 && end > start, 'paper flow classifier must remain discoverable');
-  return vm.runInNewContext(`(() => {
-    const notificationsSuppressed = { value: true };
-    const isProxySubmitRequest = request => !!(request && request.isProxySubmit);
-    ${source.slice(start, end)}
-    return { isPaperFlowRequest };
-  })()`, { Object, String });
+  // 2A：紙本判定已移至 ui-approval.js；以 UiApproval.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-approval.js'), 'utf8');
+  assert.match(libSource, /function isPaperFlowRequest\(request\) \{/,
+    'paper flow classifier must remain discoverable');
+  const context = {
+    window: {},
+    Date, Math, String, Object, Array, Set, Map, parseInt, isNaN,
+    notificationsSuppressed: { value: true }
+  };
+  vm.createContext(context);
+  vm.runInContext(libSource, context, { filename: 'ui-approval.js' });
+  const api = context.window.UiApproval.create({
+    ref: value => ({ value }),
+    notificationsSuppressed: context.notificationsSuppressed
+  });
+  return { isPaperFlowRequest: api.isPaperFlowRequest };
 }
 
 function runProgressTest() {
@@ -897,11 +955,15 @@ function runFieldMapTest() {
 
 function runRequestListSortTest() {
   const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  assert.match(appSource, /const serverRequestChangesLocal = \(localRow, serverRow\) =>/,
+  assert.match(
+    fs.readFileSync(path.join(root, 'ui-list-helpers.js'), 'utf8'),
+    /function serverRequestChangesLocal\(localRow, serverRow\)/,
     '背景同步應共用伺服器列變更檢查');
-  assert.match(appSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(Object\.keys\(byId\)/,
+  // 2A：同步合併已移至 ui-sync.js
+  const syncSource = fs.readFileSync(path.join(root, 'ui-sync.js'), 'utf8');
+  assert.match(syncSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(Object\.keys\(byId\)/,
     '一般申請合併無變更時應跳過整表排序與 bucket 重算');
-  assert.match(appSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(next\);\s*recomputeRequestBuckets\(\);/,
+  assert.match(syncSource, /if \(changed\) \{\s*requestsList\.value = sortRequestListDesc\(next\);\s*recomputeRequestBuckets\(\);/,
     'pendingOnly 無變更時應跳過整表排序與 bucket 重算');
   const sorter = loadRequestListSorter();
   const rows = [
@@ -924,10 +986,8 @@ function runCalendarFallbackContractTest() {
   assert.ok(buttonStart >= 0 && buttonEnd > buttonStart, 'detail calendar button markup must remain valid');
   assert.match(html.slice(buttonStart, buttonEnd), /type="button"/, 'detail calendar button must not submit a form');
 
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const addToGoogleCalendar =');
-  const end = source.indexOf('const downloadIcsCalendar =', start);
-  assert.ok(start >= 0 && end > start, 'Google calendar helper must remain discoverable');
+  const calSource = fs.readFileSync(path.join(root, 'ui-calendar.js'), 'utf8');
+  assert.ok(calSource.indexOf('window.UiCalendar = (function') >= 0, 'Google calendar helper must remain discoverable');
 
   const toasts = [];
   let clickedFallbackLink = 0;
@@ -961,10 +1021,11 @@ function runCalendarFallbackContractTest() {
     encodeURIComponent
   };
   vm.createContext(context);
-  const addToGoogleCalendar = vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return addToGoogleCalendar;
-  })()`, context);
+  // 2A：行事曆已移至 ui-calendar.js，以同 mock 注入 getCalendarDetails
+  vm.runInContext(calSource, context, { filename: 'ui-calendar.js' });
+  const addToGoogleCalendar = context.window.UiCalendar.create({
+    getCalendarDetails: context.getCalendarDetails
+  }).addToGoogleCalendar;
 
   addToGoogleCalendar({ id: 'calendar-fallback' });
   assert.equal(clickedFallbackLink, 1, 'blocked popup must trigger the new-tab link fallback');
@@ -983,10 +1044,10 @@ function runCalendarFallbackContractTest() {
     document: context.document
   });
   vm.createContext(popupContext);
-  const popupOpener = vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return addToGoogleCalendar;
-  })()`, popupContext);
+  vm.runInContext(calSource, popupContext, { filename: 'ui-calendar.js' });
+  const popupOpener = popupContext.window.UiCalendar.create({
+    getCalendarDetails: popupContext.getCalendarDetails
+  }).addToGoogleCalendar;
   popupOpener({ id: 'calendar-popup' });
   assert.equal(openedWindow.opener, null, 'opened calendar window must not retain the app as opener');
   assert.equal(popupContext.window.location.href, 'https://school.example/index.html');
@@ -1023,9 +1084,17 @@ function runApplicationFormContractTest() {
   assert.match(html, /@click="closeSuccessGoRecords"/);
       const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
       const activitySource = fs.readFileSync(path.join(root, 'ui-activity.js'), 'utf8');
+      // 2B 拆分：互代面板／一次送出已移至 ui-mutual.js（懶載），相關斷言改讀該檔
+      const mutualSource = fs.readFileSync(path.join(root, 'ui-mutual.js'), 'utf8');
+      // 2A：假別變更處理已移至 ui-backoffice.js
+      const backofficeSource = fs.readFileSync(path.join(root, 'ui-backoffice.js'), 'utf8');
+      // 2A：列印紙本已移至 ui-print.js
+      const printSource = fs.readFileSync(path.join(root, 'ui-print.js'), 'utf8');
+      // 2A：導覽已移至 ui-tour.js
+      const tourSource = fs.readFileSync(path.join(root, 'ui-tour.js'), 'utf8');
       const onboardingSource = fs.readFileSync(path.join(root, 'onboarding-tour.js'), 'utf8');
       assert.match(appSource, /PUBLIC_FEE_REASONS = \['公假', '婚假', '喪假', '產假'/, '產假應列入公費預設假別');
-      assert.match(appSource, /pendingRequestData\.value\.subFee = defaultSubFeeForReason\(reason\)/, '假別變更應重新帶入預設經費');
+      assert.match(backofficeSource, /pendingRequestData\.value\.subFee = defaultSubFeeForReason\(reason\)/, '假別變更應重新帶入預設經費');
       const feeHelperStart = appSource.indexOf('const PUBLIC_FEE_REASONS =');
       const feeHelperEnd = appSource.indexOf('const getHistoryEditDefaultSubFee', feeHelperStart);
       assert.ok(feeHelperStart >= 0 && feeHelperEnd > feeHelperStart, '經費預設 helper 必須存在');
@@ -1043,37 +1112,49 @@ function runApplicationFormContractTest() {
       ['休假', '病假', '事假', '補休', '其他'].forEach(reason => {
         assert.equal(feeHelpers.defaultSubFeeForReason(reason), '自費代課', `${reason}應預設自費代課`);
       });
-      const mutualRecStart = appSource.indexOf('const isMutualRec =');
-     const mutualRecEnd = appSource.indexOf('/** 事由是否屬「請假」類', mutualRecStart);
-     assert.ok(mutualRecStart >= 0 && mutualRecEnd > mutualRecStart, '個人異動互代判斷函式必須存在');
-     const isMutualRec = vm.runInNewContext(`(() => {
-       const isQuotaDeductFee = fee => String(fee || '') === '扣額度' || String(fee || '') === '互代不結';
-       ${appSource.slice(mutualRecStart, mutualRecEnd)}
-       return isMutualRec;
-     })()`);
+     // 2A：isMutualRec 已隨 personalChanges 移至 ui-history.js（具名匯出供測）
+     const histSource = fs.readFileSync(path.join(root, 'ui-history.js'), 'utf8');
+     assert.match(histSource, /const isMutualRec = \(r\) => \{/, '個人異動互代判斷函式必須存在');
+     const histCtx = {
+       window: {
+         FeeUtils: {
+           isQuotaDeductFee: fee => String(fee || '') === '扣額度' || String(fee || '') === '互代不結'
+         }
+       },
+       String
+     };
+     vm.createContext(histCtx);
+     vm.runInContext(histSource, histCtx, { filename: 'ui-history.js' });
+     const isMutualRec = histCtx.window.UiHistory.create({
+       computed: () => ({}),
+       isQuotaDeductFee: histCtx.window.FeeUtils.isQuotaDeductFee
+     }).isMutualRec;
      assert.equal(isMutualRec({ subFee: '第8節代課' }), false, '第8節代課經費不可顯示為互代');
      assert.equal(isMutualRec({ subFee: '活動公費' }), true, '活動公費仍應顯示為互代');
      assert.match(appSource, /const paperFlow = computed\(\(\) =>\s*!isMutualCover\.value\s*&&\s*notificationsSuppressed\.value\s*&&\s*!isProxySubmitActive\.value\s*\);/, '關閉線上申請時應優先走紙本流程');
-    assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
-    assert.match(appSource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
-    assert.match(appSource, /const ownerKeys = \[record\.actualTeacherEmail, record\.actualTeacherName\]/, '本人判定應以實際授課教師為準');
-    assert.match(appSource, /if \(!canStartSecondSubFromDetail\.value\) \{/, '再辦操作入口應再次驗證本人權限');
+     assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
+    // 2A：代申請驗證已移至 ui-proxy.js
+    const proxySource = fs.readFileSync(path.join(root, 'ui-proxy.js'), 'utf8');
+    assert.match(proxySource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
+    // 2A：點格與本人判定已移至 ui-interaction.js
+    const interactSource = fs.readFileSync(path.join(root, 'ui-interaction.js'), 'utf8');
+    assert.match(interactSource, /const ownerKeys = \[record\.actualTeacherEmail, record\.actualTeacherName\]/, '本人判定應以實際授課教師為準');
+    // 2A：startSecondSub 已移至 ui-interaction.js
+    assert.match(interactSource, /if \(!canStartSecondSubFromDetail\.value\) \{/, '再辦操作入口應再次驗證本人權限');
     assert.equal((html.match(/getBatchGroupTeacherSummary\(row\)/g) || []).length, 3, '三個批次主列都應顯示全部代課教師');
-    const batchTeacherStart = appSource.indexOf('const getBatchGroupTeacherSummary =');
-    const batchTeacherEnd = appSource.indexOf('const getBatchGroupStatusValues =', batchTeacherStart);
-    assert.ok(batchTeacherStart >= 0 && batchTeacherEnd > batchTeacherStart, '批次教師摘要函式必須存在');
-    const getBatchGroupTeacherSummary = vm.runInNewContext(`(() => {
-      ${appSource.slice(batchTeacherStart, batchTeacherEnd)}
-      return getBatchGroupTeacherSummary;
-    })()`, { String, Set });
+    // 2A：批次教師摘要已移至 ui-list-helpers.js
+    const getBatchGroupTeacherSummary = loadListHelpers().getBatchGroupTeacherSummary;
+    assert.equal(typeof getBatchGroupTeacherSummary, 'function', '批次教師摘要函式必須存在');
     assert.equal(getBatchGroupTeacherSummary({ items: [
       { targetTeacherName: '黃健忠' },
       { targetTeacherName: '余明錦' },
       { targetTeacherName: '黃健忠' }
     ] }), '黃健忠、余明錦', '批次主列應去重顯示全部教師');
-    assert.match(appSource, /if \(p\.mode !== 'substitution' && p\.mode !== 'exchange'\) return;/, '課務調整切換應支援調課模式');
-   assert.match(appSource, /const d = p\.mode === 'substitution'\s*\? getLeaveTimeDefaults\(p\.leaveTeacher\)\s*:\s*\{ type: '', start: '', end: '', range: '' \};/, '調課取消課務調整時不應套用請假時間');
-    assert.match(appSource, /reason \|\| ''\)\.trim\(\) === '課務調整'[\s\S]*toggleCourseAdjustmentOnly/, '直接選擇課務調整時應清空請假時間');
+    // 2A：toggleCourseAdjustmentOnly 已移至 ui-submit.js
+    const appSubmitSource = fs.readFileSync(path.join(root, 'ui-submit.js'), 'utf8');
+    assert.match(appSubmitSource, /if \(p\.mode !== 'substitution' && p\.mode !== 'exchange'\) return;/, '課務調整切換應支援調課模式');
+    assert.match(appSubmitSource, /const d = p\.mode === 'substitution'\s*\? getLeaveTimeDefaults\(p\.leaveTeacher\)\s*:\s*\{ type: '', start: '', end: '', range: '' \};/, '調課取消課務調整時不應套用請假時間');
+     assert.match(backofficeSource, /reason \|\| ''\)\.trim\(\) === '課務調整'[\s\S]*toggleCourseAdjustmentOnly/, '直接選擇課務調整時應清空請假時間');
     assert.match(html, /課務調整（無請假）/, '申請表應可直接選擇課務調整');
    const batchPanelStart = activitySource.indexOf('window.UiBatchPanel =');
   assert.ok(batchPanelStart >= 0, 'batch panel module must remain discoverable');
@@ -1081,67 +1162,72 @@ function runApplicationFormContractTest() {
   assert.match(batchPanelSource, /var successActionRequests = deps\.successActionRequests/);
   assert.match(batchPanelSource, /showSuccessModal, successActionRequests, showCompareModal/);
   assert.match(appSource, /successActionRequests: successActionRequests/);
-   assert.match(appSource, /returnTo === 'compare'\) showCompareModal\.value = true/);
+   assert.match(printSource, /returnTo === 'compare'\) showCompareModal\.value = true/);
    assert.match(html, /getClassChangeTypeLabel\(item\.type\)/, 'class change badges should use compact labels');
    assert.match(html, /isHomeroomTeacher\(t, activeCell\.classData && activeCell\.classData\.className\)/, 'substitution candidates should show class-specific homeroom status');
-   assert.match(appSource, /const getClassChangeTypeLabel =/);
-   assert.match(appSource, /const isHomeroomTeacher =/);
-   assert.match(appSource, /const getHomeroomClassCodes =/);
-   const helperStart = appSource.indexOf('const chineseClassNumber =');
-   const helperEnd = appSource.indexOf('const getRealTeacherName =', helperStart);
-   assert.ok(helperStart >= 0 && helperEnd > helperStart, 'class-specific homeroom helper must remain discoverable');
-   const helperContext = {
-     activeCell: { value: { classData: { className: '904' } } },
-     getTeacherJobTitleByEmail: () => ''
-   };
-   vm.createContext(helperContext);
-   const homeroomHelpers = vm.runInContext(`(() => {
-     ${appSource.slice(helperStart, helperEnd)}
-     return { isHomeroomTeacher };
-   })()`, helperContext);
+    assert.match(appSource, /const getClassChangeTypeLabel =/);
+    // R16：代導判定已移至 ui-homeroom.js；改讀模組源碼
+    const hmSource = fs.readFileSync(path.join(root, 'ui-homeroom.js'), 'utf8');
+    assert.match(hmSource, /const isHomeroomTeacher =/);
+    assert.match(hmSource, /const getHomeroomClassCodes =/);
+    const helperStart = hmSource.indexOf('const getTeacherJobTitleByEmail =');
+    const helperEnd = hmSource.indexOf('var getLeaveTimeDefaults =', helperStart);
+    assert.ok(helperStart >= 0 && helperEnd > helperStart, 'class-specific homeroom helper must remain discoverable');
+    const helperContext = {
+      activeCell: { value: { classData: { className: '904' } } },
+      lookupTeacher: () => null
+    };
+    vm.createContext(helperContext);
+    const homeroomHelpers = vm.runInContext(`(() => {
+      ${hmSource.slice(helperStart, helperEnd)}
+      return { isHomeroomTeacher };
+    })()`, helperContext);
    assert.equal(homeroomHelpers.isHomeroomTeacher({ jobTitle: '904導師' }, '904'), true);
    assert.equal(homeroomHelpers.isHomeroomTeacher({ jobTitle: '901導師' }, '904'), false);
    assert.equal(homeroomHelpers.isHomeroomTeacher({ jobTitle: '導師' }, '904'), false);
    assert.match(appSource, /openPaperPrintDraft\(null, \{ returnTo: 'compare', canPrint: false \}\)/);
-  assert.match(appSource, /canPrint: options\.canPrint === true/);
+   assert.match(printSource, /canPrint: options\.canPrint === true/);
   assert.match(appSource, /openPaperPrintDraft\(buildPaperRecordsForSubmittedRequests\(requests\), \{ canPrint: true \}\)/);
-  assert.match(appSource, /snapshot\.canPrint === false/);
-  assert.match(appSource, /returnTo: draft\.returnTo \|\| ''/);
+   assert.match(printSource, /snapshot\.canPrint === false/);
+   assert.match(printSource, /returnTo: draft\.returnTo \|\| ''/);
   assert.match(appSource, /successActionRequests/);
-   assert.match(appSource, /mode: notificationsSuppressed\.value \? 'paper' : 'online'/, 'onboarding should follow the global paper mode');
-   assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
-    assert.match(appSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
+   assert.match(tourSource, /mode: notificationsSuppressed\.value \? 'paper' : 'online'/, 'onboarding should follow the global paper mode');
+   assert.match(tourSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
+    assert.match(tourSource, /ONBOARDING_SCRIPT = 'onboarding-tour\.js\?v=20260831-combined3'/, 'onboarding cache must refresh with the exchange tour');
        assert.match(html, /ui-activity\.js\?v=\d{8}-[^"]+/);
            assert.match(html, /app\.js\?v=\d{8}-[^"]+/);
-      assert.match(activitySource, /email: r\.loginEmail \|\| r\.email/,
+      assert.match(mutualSource, /email: r\.loginEmail \|\| r\.email/,
         '活動額度發放應傳送登入 Email，不得把姓名鍵 email 當作登入 Email');
-       assert.match(appSource, /paperFlow: notificationsSuppressed\.value/);
-         assert.match(appSource, /const paperFlowRequest = req\.status === 'pending_admin'\s*\|\|\s*\(!isProxySubmitRequest\(req\) && \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value\)\);/, '紙本與待行政核准傳訊不得帶線上簽核連結');
-        assert.match(appSource, /const rows = \[req\];/, 'LINE 單筆操作不得展開整個批次');
-        const lineRequestStart = appSource.indexOf('const copyLineMessageForRequest =');
-        const lineRequestEnd = appSource.indexOf('const pendingRequestData =', lineRequestStart);
+        assert.match(tourSource, /paperFlow: notificationsSuppressed\.value/);
+        // 2A：copyLineMessageForRequest 已移至 ui-timetable.js
+        const timetableSource = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+          assert.match(timetableSource, /const paperFlowRequest = req\.status === 'pending_admin'\s*\|\|\s*\(!isProxySubmitRequest\(req\) && \(isPaperFlowRequest\(req\) \|\| notificationsSuppressed\.value\)\);/, '紙本與待行政核准傳訊不得帶線上簽核連結');
+         assert.match(timetableSource, /const rows = \[req\];/, 'LINE 單筆操作不得展開整個批次');
+        const lineRequestStart = timetableSource.indexOf('const copyLineMessageForRequest =');
+        const lineRequestEnd = timetableSource.indexOf('const convertRequestsToSubstitutions =', lineRequestStart);
         assert.ok(lineRequestStart >= 0 && lineRequestEnd > lineRequestStart, 'LINE 單筆訊息函式必須存在');
-        assert.doesNotMatch(appSource.slice(lineRequestStart, lineRequestEnd), /requestsList\.value/, 'LINE 單筆操作不得讀取整批申請');
+        assert.doesNotMatch(timetableSource.slice(lineRequestStart, lineRequestEnd), /requestsList\.value/, 'LINE 單筆操作不得讀取整批申請');
         const printSingleStart = appSource.indexOf('const printSingleRequest =');
         const printSingleEnd = appSource.indexOf('const showDetailForRecord =', printSingleStart);
         assert.ok(printSingleStart >= 0 && printSingleEnd > printSingleStart, '單筆列印函式必須存在');
          assert.doesNotMatch(appSource.slice(printSingleStart, printSingleEnd), /batchId && seedRecord/, '單筆列印不得依批次擴展資料');
          assert.match(html, /printSingleRequest\(\{ recordId: row\.id \}, 'Notice'\)/, '批次歷史列印應傳入該列明細 ID');
-         const printRequestStart = appSource.indexOf('const openPaperPrintForRequest =');
-        const printRequestEnd = appSource.indexOf('const openPaperPrintDraftFromCompare =', printRequestStart);
-        assert.ok(printRequestStart >= 0 && printRequestEnd > printRequestStart, '單筆紙本列印入口必須存在');
-        assert.match(appSource.slice(printRequestStart, printRequestEnd), /isTriangleRequest\(request\) && triangleId/, '只有三角調列印可保留整組');
-        assert.doesNotMatch(appSource.slice(printRequestStart, printRequestEnd), /const rows = batchId/, '一般批次列印不得展開整批');
-        assert.match(appSource, /const monthlyReportTotals = computed\(\(\) =>/);
-        assert.match(appSource, /sumMonthlyReportRows\(monthlyReportData\.value\)/);
+         const printRequestStart = printSource.indexOf('const openPaperPrintForRequest =');
+         const printRequestEnd = printSource.indexOf('const openTrianglePaperPreview =', printRequestStart);
+         assert.ok(printRequestStart >= 0 && printRequestEnd > printRequestStart, '單筆紙本列印入口必須存在');
+         assert.match(printSource.slice(printRequestStart, printRequestEnd), /isTriangleRequest\(request\) && triangleId/, '只有三角調列印可保留整組');
+         assert.doesNotMatch(printSource.slice(printRequestStart, printRequestEnd), /const rows = batchId/, '一般批次列印不得展開整批');
+        // 2A：月報合計已移至 ui-report.js
+        const reportSource = fs.readFileSync(path.join(root, 'ui-report.js'), 'utf8');
+        assert.match(reportSource, /const monthlyReportTotals = computed\(\(\) =>/);
+        assert.match(reportSource, /sumMonthlyReportRows\(monthlyReportData\.value\)/);
         assert.match(html, /<tr v-if="monthlyReportData\.length > 0" class="billing-total-row">/, '鐘點結算應顯示合計列');
         assert.match(html, /monthlyReportTotals\.period8Fee/, '合計列應包含第 8 節金額');
-      assert.match(appSource, /openPaperPrintDemo: \(\) => openPaperPrintDemoForTour\(\)/, 'paper tour should open a print preview demo');
-     assert.match(appSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
-    assert.match(appSource, /source: 'paperTour'/, 'paper tour preview must use an isolated source');
-    assert.match(appSource, /snapshot\.source === 'paperTour'/, 'paper tour print actions must not print real data');
-   assert.match(appSource, /const shouldAutoStartOnboarding =/);
-  assert.match(appSource, /ONBOARDING_PAPER_STORAGE_KEY/);
+  assert.match(tourSource, /openPaperPrintDemo: \(\) => openPaperPrintDemoForTour\(\)/, 'paper tour should open a print preview demo');
+     assert.match(tourSource, /openExchangeModeDemo: \(\) => openExchangeModeDemoForTour\(\)/, 'tour should demonstrate exchange mode');
+    assert.match(tourSource, /source: 'paperTour'/, 'paper tour preview must use an isolated source');
+   assert.match(tourSource, /const shouldAutoStartOnboarding =/);
+  assert.match(tourSource, /ONBOARDING_PAPER_STORAGE_KEY/);
   assert.match(onboardingSource, /var PAPER_STORAGE_KEY = 'jcjh_onboarding_paper_v1'/);
    assert.match(onboardingSource, /var PAPER_STEP_OVERRIDES =/);
    assert.match(onboardingSource, /step\.id !== 'line-success' && step\.id !== 'pending-invite'/);
@@ -1787,7 +1873,7 @@ async function runCourseAdjustmentTest() {
 }
 
 function runExchangeIncomingConflictDetectionTest() {
-  const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+  const appSource = fs.readFileSync(path.join(root, 'ui-submit.js'), 'utf8');
   const start = appSource.indexOf('const exchangeIncomingConflict = computed(() =>');
   const end = appSource.indexOf('const confirmIfTargetPatrol', start);
   assert.ok(start >= 0 && end > start, 'exchange incoming conflict detector must remain discoverable');
@@ -2278,49 +2364,108 @@ async function runBatchPartialTest() {
 }
 
 function runRechangeLabelTest() {
-  const source = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-  const start = source.indexOf('const findPriorDutyAtSlot =');
-  const end = source.indexOf('const formatHistoryLeaveSlot =', start);
-  assert.ok(start >= 0 && end > start, 'rechange detector block must remain discoverable');
+  // 2A：再異動判定簇已移至 ui-timetable.js；以 UiTimetable.create 注入同等測試樁
+  const libSource = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+  for (const name of ['normalizeRechangeRequestId', 'isEffectiveChangedDuty',
+    'hasOtherChangedDutyAtSlot', 'isHistoryLeaveRechanged']) {
+    assert.ok(libSource.indexOf('const ' + name + ' =') >= 0,
+      'rechange detector ' + name + ' must remain discoverable');
+  }
   const context = {
-     substitutionRecords: ref([{
-        id: 'exchange-1_2',
-        requestId: 'exchange-1',
-       date: '2026-09-04',
-       period: 2,
-       originalTeacherEmail: '申請人',
-       actualTeacherEmail: '受邀人',
-       className: '904'
-     }, {
-       id: 'exchange-1_1',
+    window: { UiListHelpers: { isTriangleRequest: () => false } },
+    computed: fn => ({ get value() { return fn(); } }),
+    allSchedules: ref([]),
+    schoolSwaps: ref([]),
+    substitutionRecords: ref([{
+       id: 'exchange-1_2',
        requestId: 'exchange-1',
-       date: '2026-09-02',
-       period: 5,
-       originalTeacherEmail: '受邀人',
-        actualTeacherEmail: '申請人',
-        className: '904'
-      }]),
-     requestsList: ref([{
-       id: 'admin-rejected-prior',
-       status: 'admin_rejected'
-     }]),
-    String,
-    Number,
-    Array,
-    Math,
-    parseInt,
-     isNaN,
-     isExchangeLikeRequest: req => {
-       const type = String(req && req.type || '').trim().toLowerCase();
-       return type === 'exchange' || type === '對調' || type === 'triangle'
-         || type === '三角調' || !!(req && req.triangleId);
-     }
+      date: '2026-09-04',
+      period: 2,
+      originalTeacherEmail: '申請人',
+      actualTeacherEmail: '受邀人',
+      className: '904'
+    }, {
+      id: 'exchange-1_1',
+      requestId: 'exchange-1',
+      date: '2026-09-02',
+      period: 5,
+      originalTeacherEmail: '受邀人',
+       actualTeacherEmail: '申請人',
+      className: '904'
+    }]),
+    substitutionsLookup: ref({}),
+    allPendingRequests: ref([]),
+    displayTimetableTeachers: ref([]),
+    currentWeekDates: ref([]),
+    getTeacherNameByEmail: () => '',
+    getTeacherSubjectByEmail: () => '',
+    formatDateMMDD: s => s,
+    isSingleWeek: () => true,
+    isClassAwayOnDate: () => false,
+    getWeekDayText: () => '',
+    batchSelectMode: ref(false),
+    isBatchSlotSelected: () => false,
+    isMutualCover: ref(false),
+    getMutualDraftAt: () => null,
+    mutualAwayClasses: ref([]),
+    mutualActivityStart: ref(''),
+    mutualActivityEnd: ref(''),
+    mutualActivityStartPeriod: ref(''),
+    mutualActivityEndPeriod: ref(''),
+    isMutualActivitySlotInRange: () => false,
+    requestsList: ref([{
+      id: 'admin-rejected-prior',
+      status: 'admin_rejected'
+    }]),
+   String,
+   Number,
+   Array,
+   Object,
+   Map,
+   Math,
+   parseInt,
+    isNaN,
+    isExchangeLikeRequest: req => {
+      const type = String(req && req.type || '').trim().toLowerCase();
+      return type === 'exchange' || type === '對調' || type === 'triangle'
+        || type === '三角調' || !!(req && req.triangleId);
+    }
   };
   vm.createContext(context);
-  const detector = vm.runInContext(`(() => {
-    ${source.slice(start, end)}
-    return { isHistoryLeaveRechanged, isHistoryExchangeRechanged, isRequestLeaveRechanged, isRequestExchangeRechanged };
-  })()`, context);
+  vm.runInContext(libSource, context, { filename: 'ui-timetable.js' });
+  const api = context.window.UiTimetable.create({
+    computed: context.computed,
+    allSchedules: context.allSchedules,
+    schoolSwaps: context.schoolSwaps,
+    substitutionRecords: context.substitutionRecords,
+    substitutionsLookup: context.substitutionsLookup,
+    allPendingRequests: context.allPendingRequests,
+    displayTimetableTeachers: context.displayTimetableTeachers,
+    currentWeekDates: context.currentWeekDates,
+    getTeacherNameByEmail: context.getTeacherNameByEmail,
+    getTeacherSubjectByEmail: context.getTeacherSubjectByEmail,
+    formatDateMMDD: context.formatDateMMDD,
+    isSingleWeek: context.isSingleWeek,
+    isClassAwayOnDate: context.isClassAwayOnDate,
+    getWeekDayText: context.getWeekDayText,
+    batchSelectMode: context.batchSelectMode,
+    isBatchSlotSelected: context.isBatchSlotSelected,
+    isMutualCover: context.isMutualCover,
+    getMutualDraftAt: context.getMutualDraftAt,
+    mutualAwayClasses: context.mutualAwayClasses,
+    mutualActivityStart: context.mutualActivityStart,
+    mutualActivityEnd: context.mutualActivityEnd,
+    mutualActivityStartPeriod: context.mutualActivityStartPeriod,
+    mutualActivityEndPeriod: context.mutualActivityEndPeriod,
+    isMutualActivitySlotInRange: context.isMutualActivitySlotInRange,
+    requestsList: context.requestsList
+  });
+  const detector = {
+    isHistoryLeaveRechanged: api.isHistoryLeaveRechanged,
+    isHistoryExchangeRechanged: api.isHistoryExchangeRechanged,
+    isRequestLeaveRechanged: api.isRequestLeaveRechanged,
+    isRequestExchangeRechanged: api.isRequestExchangeRechanged
+  };
   const request = {
     id: 'exchange-1',
     type: 'exchange',

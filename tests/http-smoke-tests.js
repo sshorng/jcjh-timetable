@@ -36,15 +36,18 @@ function request(server, method, requestPath) {
     assert.equal(root.status, 200);
     assert.match(root.body.toString('utf8'), /<title>建成國中線上課表系統<\/title>/);
     assert.match(root.body.toString('utf8'), /application-name" content="JCJH Timetable"/);
-      assert.match(root.body.toString('utf8'), /domain-match\.js\?v=20261003-[^"]+/);
-      assert.match(root.body.toString('utf8'), /ui-request\.js\?v=20261003-[^"]+/);
+      assert.match(root.body.toString('utf8'), /domain-match\.js\?v=[^"']+/);
+      assert.match(root.body.toString('utf8'), /ui-request\.js\?v=[^"']+/);
       assert.match(root.body.toString('utf8'), /app\.js\?v=\d{8}-[^"]+/);
     assert.equal(root.headers['cache-control'], 'no-cache');
     assert.match(root.headers['content-security-policy'], /frame-ancestors 'none'/);
 
       const app = await request(server, 'GET', '/app.js?v=20260904-calendar-new-tab');
     assert.equal(app.status, 200);
-    assert.match(app.body.toString('utf8'), /params\.set\('response_type', 'id_token token'\)/);
+    // 2A：OAuth 參數已移至 ui-auth.js
+    const auth = await request(server, 'GET', '/ui-auth.js?v=20260904-calendar-new-tab');
+    assert.equal(auth.status, 200);
+    assert.match(auth.body.toString('utf8'), /params\.set\('response_type', 'id_token token'\)/);
 
       const head = await request(server, 'HEAD', '/style.css?v=20260904-calendar-new-tab');
     assert.equal(head.status, 200);

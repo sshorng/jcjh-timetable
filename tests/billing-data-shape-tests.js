@@ -24,7 +24,7 @@ assert.equal(schedule.attr, '一般');
 assert.equal(schedule.isOvertime, true);
 
 const substituteSchedule = window.FieldMap.mapSchedule({
-  '教師姓名': 'SmallSub',
+  '教師姓名': '小鐘點教師',
   '星期': 1,
   '節次': 1,
   '班級': '701',
@@ -155,12 +155,12 @@ const quotaRows = window.DomainBilling.buildMonthlyReportRows({
     { email: 'QuotaCover', name: 'QuotaCover', baseHours: 0 }
   ],
   allSchedules: [{
-    teacherEmail: 'QuotaOwner', dayOfWeek: 1, period: 1,
+    teacherEmail: 'QuotaOwner', teacherName: 'QuotaOwner', dayOfWeek: 1, period: 1,
     className: '701', attr: '一般', specialTags: '超鐘點'
   }],
   substitutionRecords: [{
     date: '2026-07-13', period: 1, className: '701', type: 'substitution',
-    originalTeacherEmail: 'QuotaOwner', actualTeacherEmail: 'QuotaCover', subFee: '扣額度'
+    originalTeacherEmail: 'QuotaOwner', originalTeacherName: 'QuotaOwner', actualTeacherEmail: 'QuotaCover', actualTeacherName: 'QuotaCover', subFee: '扣額度'
   }],
   reportMonth: '2026-07',
   reportWeeksCount: 1
@@ -174,7 +174,7 @@ assert.equal(quotaCoverRow.selfSubCount, 0, '扣額度不應支付代課教師�
 
 const rangedReport = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'RangeTeacher', name: 'RangeTeacher', baseHours: 0 }],
-  allSchedules: [{ teacherEmail: 'RangeTeacher', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' }],
+  allSchedules: [{ teacherEmail: 'RangeTeacher', teacherName: 'RangeTeacher', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' }],
   substitutionRecords: [],
   reportMonth: '2026-07',
   reportStartDate: '2026-07-13',
@@ -190,17 +190,17 @@ const strictRangeRows = window.DomainBilling.buildMonthlyReportRows({
     { email: 'range-p8-cover@x', name: '區間第八節代課教師', baseHours: 0 }
   ],
   allSchedules: [
-    { teacherEmail: 'range-owner@x', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'range-owner@x', dayOfWeek: 1, period: 8, className: '701', attr: '一般' }
+    { teacherEmail: 'range-owner@x', teacherName: '區間原教師', dayOfWeek: 1, period: 1, className: '701', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'range-owner@x', teacherName: '區間原教師', dayOfWeek: 1, period: 8, className: '701', attr: '一般' }
   ],
   substitutionRecords: [
-    { date: '2026-07-12', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
-    { date: '2026-07-13', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
-    { date: '2026-07-17', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '自費代課', status: 'approved' },
-    { date: '2026-07-18', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-cover@x', subFee: '公費代課', status: 'approved' },
-    { date: '2026-07-12', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' },
-    { date: '2026-07-13', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' },
-    { date: '2026-07-18', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', actualTeacherEmail: 'range-p8-cover@x', subFee: '公費代課', status: 'approved' }
+    { date: '2026-07-12', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-cover@x', actualTeacherName: '區間代課教師', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-13', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-cover@x', actualTeacherName: '區間代課教師', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-17', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-cover@x', actualTeacherName: '區間代課教師', subFee: '自費代課', status: 'approved' },
+    { date: '2026-07-18', period: 1, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-cover@x', actualTeacherName: '區間代課教師', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-12', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-p8-cover@x', actualTeacherName: '區間第八節代課教師', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-13', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-p8-cover@x', actualTeacherName: '區間第八節代課教師', subFee: '公費代課', status: 'approved' },
+    { date: '2026-07-18', period: 8, className: '701', type: 'substitution', originalTeacherEmail: 'range-owner@x', originalTeacherName: '區間原教師', actualTeacherEmail: 'range-p8-cover@x', actualTeacherName: '區間第八節代課教師', subFee: '公費代課', status: 'approved' }
   ],
   reportMonth: '2026-07',
   reportStartDate: '2026-07-13',
@@ -228,7 +228,7 @@ assert.deepEqual(invalidExplicitRangeRows, [], '明確日期區間無效時不�
 const fixedSchedules = [];
 for (let i = 0; i < 13; i += 1) {
   fixedSchedules.push({
-    teacherEmail: 'fixed@x', dayOfWeek: Math.floor(i / 7) + 1, period: (i % 7) + 1,
+    teacherEmail: 'fixed@x', teacherName: '固定教師', dayOfWeek: Math.floor(i / 7) + 1, period: (i % 7) + 1,
     className: 'B' + String(i + 1).padStart(2, '0'), attr: '基本'
   });
 }
@@ -238,13 +238,13 @@ for (let i = 0; i < 13; i += 1) {
   { dayOfWeek: 3, period: 2, className: 'O03' },
   { dayOfWeek: 3, period: 3, className: 'O04' }
 ].forEach(slot => fixedSchedules.push(Object.assign({
-  teacherEmail: 'fixed@x', attr: '一般', specialTags: '超鐘點'
+  teacherEmail: 'fixed@x', teacherName: '固定教師', attr: '一般', specialTags: '超鐘點'
 }, slot)));
 [
   { dayOfWeek: 3, period: 4, className: 'O05' },
   { dayOfWeek: 3, period: 5, className: 'O06' }
 ].forEach(slot => fixedSchedules.push(Object.assign({
-  teacherEmail: 'fixed@x', attr: '一般', specialTags: '超鐘點',
+  teacherEmail: 'fixed@x', teacherName: '固定教師', attr: '一般', specialTags: '超鐘點',
   activeFrom: '2026-06-29', activeTo: '2026-07-03'
 }, slot)));
 const fixedInput = {
@@ -287,15 +287,15 @@ const fixedSnapshotRow = window.DomainBilling.buildMonthlyReportRows({
     fixedOvertimeHours: 2, fixedOvertimeSlots: '一1、三2'
   }],
   allSchedules: [
-    { teacherEmail: 'snapshot@x', dayOfWeek: 1, period: 1, className: 'F01', attr: '一般' },
-    { teacherEmail: 'snapshot@x', dayOfWeek: 3, period: 2, className: 'F02', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'snapshot@x', dayOfWeek: 5, period: 7, className: 'N01', attr: '一般', specialTags: '超鐘點' }
+    { teacherEmail: 'snapshot@x', teacherName: '快照教師', dayOfWeek: 1, period: 1, className: 'F01', attr: '一般' },
+    { teacherEmail: 'snapshot@x', teacherName: '快照教師', dayOfWeek: 3, period: 2, className: 'F02', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'snapshot@x', teacherName: '快照教師', dayOfWeek: 5, period: 7, className: 'N01', attr: '一般', specialTags: '超鐘點' }
   ],
   substitutionRecords: [
-    { date: '2026-07-06', period: 1, className: 'F01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-public@x', subFee: '公費代課' },
-    { date: '2026-07-08', period: 2, className: 'F02', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-self@x', subFee: '自費代課' },
-    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-public-2@x', subFee: '公費代課' },
-    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', actualTeacherEmail: 'cover-self-2@x', subFee: '自費代課' }
+    { date: '2026-07-06', period: 1, className: 'F01', type: 'substitution', originalTeacherEmail: 'snapshot@x', originalTeacherName: '快照教師', actualTeacherEmail: 'cover-public@x', subFee: '公費代課' },
+    { date: '2026-07-08', period: 2, className: 'F02', type: 'substitution', originalTeacherEmail: 'snapshot@x', originalTeacherName: '快照教師', actualTeacherEmail: 'cover-self@x', subFee: '自費代課' },
+    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', originalTeacherName: '快照教師', actualTeacherEmail: 'cover-public-2@x', subFee: '公費代課' },
+    { date: '2026-07-10', period: 7, className: 'N01', type: 'substitution', originalTeacherEmail: 'snapshot@x', originalTeacherName: '快照教師', actualTeacherEmail: 'cover-self-2@x', subFee: '自費代課' }
   ],
   reportMonth: '2026-07',
   reportStartDate: '2026-07-06',
@@ -320,17 +320,17 @@ const mixedSelfPaidRows = window.DomainBilling.buildMonthlyReportRows({
     { email: 'mixed-self-overtime-cover@x', name: '超鐘自費代課人', baseHours: 16 }
   ],
   allSchedules: [
-    { teacherEmail: 'mixed-self-owner@x', dayOfWeek: 2, period: 1,
+    { teacherEmail: 'mixed-self-owner@x', teacherName: '混合自費原教師', dayOfWeek: 2, period: 1,
       className: '901', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'mixed-self-owner@x', dayOfWeek: 2, period: 6,
+    { teacherEmail: 'mixed-self-owner@x', teacherName: '混合自費原教師', dayOfWeek: 2, period: 6,
       className: '903', attr: '一般' }
   ],
   substitutionRecords: [
     { date: '2026-09-01', period: 6, className: '903', type: 'substitution',
-      originalTeacherEmail: 'mixed-self-owner@x', actualTeacherEmail: 'mixed-self-regular-cover@x',
+      originalTeacherEmail: 'mixed-self-owner@x', originalTeacherName: '混合自費原教師', actualTeacherEmail: 'mixed-self-regular-cover@x', actualTeacherName: '一般自費代課人',
       subFee: '自費代課', reason: '補休', status: 'approved' },
     { date: '2026-09-08', period: 1, className: '901', type: 'substitution',
-      originalTeacherEmail: 'mixed-self-owner@x', actualTeacherEmail: 'mixed-self-overtime-cover@x',
+      originalTeacherEmail: 'mixed-self-owner@x', originalTeacherName: '混合自費原教師', actualTeacherEmail: 'mixed-self-overtime-cover@x', actualTeacherName: '超鐘自費代課人',
       subFee: '自費代課', reason: '補休', status: 'approved' }
   ],
   reportMonth: '2026-09',
@@ -357,20 +357,20 @@ const mixedFixedRow = window.DomainBilling.buildMonthlyReportRows({
     fixedOvertimeHours: 3, fixedOvertimeSlots: '一1、一2、一3'
   }],
   allSchedules: [
-    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
-    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 2, className: 'O02', attr: '一般', specialTags: '超鐘點' },
-    { teacherEmail: 'mixed-fixed@x', dayOfWeek: 1, period: 3, className: 'O03', attr: '一般', specialTags: '超鐘點' }
+    { teacherEmail: 'mixed-fixed@x', teacherName: '混合節次教師', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
+    { teacherEmail: 'mixed-fixed@x', teacherName: '混合節次教師', dayOfWeek: 1, period: 2, className: 'O02', attr: '一般', specialTags: '超鐘點' },
+    { teacherEmail: 'mixed-fixed@x', teacherName: '混合節次教師', dayOfWeek: 1, period: 3, className: 'O03', attr: '一般', specialTags: '超鐘點' }
   ],
   substitutionRecords: [
     {
       date: '2026-07-06', period: 1, className: 'S01', type: 'substitution',
-      originalTeacherEmail: 'mixed-fixed@x', actualTeacherEmail: 'cover@x',
+      originalTeacherEmail: 'mixed-fixed@x', originalTeacherName: '混合節次教師', actualTeacherEmail: 'cover@x',
       subFee: '公費代課', reason: '公假', status: 'approved',
       courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
     },
     {
       date: '2026-07-06', period: 3, className: 'O03', type: 'substitution',
-      originalTeacherEmail: 'mixed-fixed@x', actualTeacherEmail: 'cover@x',
+      originalTeacherEmail: 'mixed-fixed@x', originalTeacherName: '混合節次教師', actualTeacherEmail: 'cover@x',
       subFee: '公費代課', reason: '公假', status: 'approved',
       courseAttr: '一般', courseSpecialTags: '超鐘點', courseIsOvertime: true, courseIsSubstitute: false
     }
@@ -395,7 +395,7 @@ assert.deepEqual([
 const substitutedFixedRow = window.DomainBilling.buildMonthlyReportRows(Object.assign({}, fixedInput, {
   substitutionRecords: [{
     date: '2026-06-24', period: 1, className: 'O02', type: 'substitution',
-    originalTeacherEmail: 'fixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課'
+    originalTeacherEmail: 'fixed@x', originalTeacherName: '固定教師', actualTeacherEmail: 'cover@x', subFee: '公費代課'
   }]
 }))[0];
 assert.deepEqual([
@@ -409,16 +409,16 @@ assert.deepEqual([
 ], [30, 1, 29, 30, 30, 1, 29], '被代課應從固定超鐘點總額扣除');
 
 const fixedSmallSchedules = [
-  { teacherEmail: 'small-fixed@x', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
-  { teacherEmail: 'small-fixed@x', dayOfWeek: 1, period: 2, className: 'S02', attr: '代課' },
-  { teacherEmail: 'small-fixed@x', dayOfWeek: 2, period: 1, className: 'S03', attr: '代課', activeFrom: '2026-06-29', activeTo: '2026-07-03' }
+  { teacherEmail: 'small-fixed@x', teacherName: '固定小鐘點', dayOfWeek: 1, period: 1, className: 'S01', attr: '代課' },
+  { teacherEmail: 'small-fixed@x', teacherName: '固定小鐘點', dayOfWeek: 1, period: 2, className: 'S02', attr: '代課' },
+  { teacherEmail: 'small-fixed@x', teacherName: '固定小鐘點', dayOfWeek: 2, period: 1, className: 'S03', attr: '代課', activeFrom: '2026-06-29', activeTo: '2026-07-03' }
 ];
 const fixedSmallRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'small-fixed@x', name: '固定小鐘點', baseHours: 0 }],
   allSchedules: fixedSmallSchedules,
   substitutionRecords: [{
     date: '2026-06-30', period: 1, className: 'S03', type: 'substitution',
-    originalTeacherEmail: 'small-fixed@x', actualTeacherEmail: 'cover@x', subFee: '公費代課'
+    originalTeacherEmail: 'small-fixed@x', originalTeacherName: '固定小鐘點', actualTeacherEmail: 'cover@x', subFee: '公費代課'
   }],
   classAwayEvents: [{
     name: '小鐘點空堂', startDate: '2026-06-08', endDate: '2026-06-12',
@@ -452,7 +452,7 @@ const substituteLeaveRow = window.DomainBilling.buildMonthlyReportRows({
     period: 1,
     className: '701',
     type: 'substitution',
-    originalTeacherName: 'SmallSub',
+    originalTeacherName: '小鐘點教師',
     actualTeacherName: 'Cover',
     subFee: '活動公費'
   }],
@@ -526,7 +526,7 @@ assert.equal(swappedRow.actualOvertime, 0);
 const swappedSmallRow = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'swapped-small@x', name: '調課小鐘點', baseHours: 0 }],
   allSchedules: [{
-    teacherEmail: 'swapped-small@x', dayOfWeek: 3, period: 6,
+    teacherEmail: 'swapped-small@x', teacherName: '調課小鐘點', dayOfWeek: 3, period: 6,
     className: '904', subject: '關思溝通成人', attr: '代課'
   }],
   schoolSwaps: [{
@@ -551,19 +551,19 @@ const exchangedSmallRows = window.DomainBilling.buildMonthlyReportRows({
     { email: 'exchange-target@x', name: '交換對方', baseHours: 16 }
   ],
   allSchedules: [
-    { teacherEmail: 'exchange-small@x', dayOfWeek: 2, period: 2, className: '705', subject: '生活科技', attr: '代課' },
-    { teacherEmail: 'exchange-target@x', dayOfWeek: 2, period: 5, className: '704', subject: '國文', attr: '一般' }
+    { teacherEmail: 'exchange-small@x', teacherName: '交換小鐘點', dayOfWeek: 2, period: 2, className: '705', subject: '生活科技', attr: '代課' },
+    { teacherEmail: 'exchange-target@x', teacherName: '交換對方', dayOfWeek: 2, period: 5, className: '704', subject: '國文', attr: '一般' }
   ],
   substitutionRecords: [
     {
       id: 'exchange-small_1', requestId: 'exchange-small', date: '2026-09-22', period: 5,
-      type: 'exchange', originalTeacherEmail: 'exchange-target@x', actualTeacherEmail: 'exchange-small@x',
+      type: 'exchange', originalTeacherEmail: 'exchange-target@x', originalTeacherName: '交換對方', actualTeacherEmail: 'exchange-small@x', actualTeacherName: '交換小鐘點',
       className: '705', subject: '生活科技', subFee: '無',
       courseAttr: '代課', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: true
     },
     {
       id: 'exchange-small_2', requestId: 'exchange-small', date: '2026-09-22', period: 2,
-      type: 'exchange', originalTeacherEmail: 'exchange-small@x', actualTeacherEmail: 'exchange-target@x',
+      type: 'exchange', originalTeacherEmail: 'exchange-small@x', originalTeacherName: '交換小鐘點', actualTeacherEmail: 'exchange-target@x', actualTeacherName: '交換對方',
       className: '704', subject: '國文', subFee: '無',
       courseAttr: '一般', courseSpecialTags: '', courseIsOvertime: false, courseIsSubstitute: false
     }
@@ -652,7 +652,7 @@ const changedSmallCourseRow = window.DomainBilling.buildMonthlyReportRows({
     expensePlan: JSON.stringify([{ day: 1, period: 1, className: '舊班', source: '資優' }])
   }],
   allSchedules: [{
-    teacherEmail: 'changed-small@x', dayOfWeek: 1, period: 1,
+    teacherEmail: 'changed-small@x', teacherName: '課表更版小鐘點教師', dayOfWeek: 1, period: 1,
     className: '新班', attr: '代課'
   }],
   substitutionRecords: [],
@@ -726,7 +726,7 @@ assert.equal(window.DomainBilling.toExcelRows([defaultJobRow])[0]['職務'], '�
 
 const reusablePeriod8Rows = window.DomainBilling.buildMonthlyReportRows({
   teachers: [{ email: 'p8@x', name: '第八節教師', baseHours: 0 }],
-  allSchedules: [{ teacherEmail: 'p8@x', dayOfWeek: 1, period: 8, className: '701', subject: '課輔' }],
+  allSchedules: [{ teacherEmail: 'p8@x', teacherName: '第八節教師', dayOfWeek: 1, period: 8, className: '701', subject: '課輔' }],
   substitutionRecords: [],
   reportMonth: '2026-07',
   reportStartDate: '2026-07-06',

@@ -32,9 +32,9 @@ vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 });
 
-const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
-const classSwapHelperStart = appSource.indexOf('const buildClassSchoolSwapChanges =');
-const classSwapHelperEnd = appSource.indexOf('const classChangeSummary =', classSwapHelperStart);
+const swapLibSource = fs.readFileSync(path.join(root, 'ui-schoolswap.js'), 'utf8');
+const classSwapHelperStart = swapLibSource.indexOf('const buildClassSchoolSwapChanges =');
+const classSwapHelperEnd = swapLibSource.indexOf('\n    return {', classSwapHelperStart);
 assert.ok(classSwapHelperStart >= 0 && classSwapHelperEnd > classSwapHelperStart, 'class school swap summary helper must remain discoverable');
 const classSwapContext = {
   window: {
@@ -52,7 +52,7 @@ const classSwapContext = {
 };
 vm.createContext(classSwapContext);
 const buildClassSchoolSwapChanges = vm.runInContext(`(() => {
-  ${appSource.slice(classSwapHelperStart, classSwapHelperEnd)}
+  ${swapLibSource.slice(classSwapHelperStart, classSwapHelperEnd)}
   return buildClassSchoolSwapChanges;
 })()`, classSwapContext);
 

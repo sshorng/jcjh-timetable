@@ -21,7 +21,6 @@ window.ExportInvigilation = (function () {
   var SPECIAL_EDUCATION_LABEL = '特教監考';
   var BLANK_CELL_MARK = '\u200B';
   var NOTE5_RE = /【[^】]*未執行的[^】]*共\s*[_\d]*\s*節，本次段考已安排\s*[_\d]*\s*節，尚有\s*[_\d]*\s*節，未執行節數將會累計於本學年度】/;
-  var _templateBuf = null;
 
   function pad2(n) {
     return String(n).padStart(2, '0');
@@ -394,12 +393,12 @@ window.ExportInvigilation = (function () {
     return window.ExcelJS || (typeof ExcelJS !== 'undefined' ? ExcelJS : null);
   }
 
+  // 範本載入走共用 template-buffer.js（版本號快取＋同頁共用；回傳拷貝，呼叫端可安心 slice）
   async function loadTemplateBuffer() {
-    if (_templateBuf) return _templateBuf;
-    var res = await fetch(TEMPLATE_URL + '?t=' + Date.now(), { cache: 'no-cache' });
-    if (!res.ok) throw new Error('無法載入監考表模板');
-    _templateBuf = await res.arrayBuffer();
-    return _templateBuf;
+    if (!window.TemplateBuffer || typeof window.TemplateBuffer.load !== 'function') {
+      throw new Error('template-buffer.js 尚未載入（請經 ensureExportInvigilation 載入匯出模組）');
+    }
+    return window.TemplateBuffer.load(TEMPLATE_URL, '無法載入監考表模板');
   }
 
   function setVal(cell, val) {
@@ -1090,7 +1089,7 @@ window.ExportInvigilation = (function () {
       || '臺北市立建成國民中學114學年度第一學期第一次段考監考表';
 
     progress('載入模板…', 0, total);
-    _templateBuf = null;
+    if (window.TemplateBuffer) window.TemplateBuffer.clear(TEMPLATE_URL);
     var tplBuf = await loadTemplateBuffer();
     var masterWb = new ExcelJSLib.Workbook();
     await masterWb.xlsx.load(tplBuf.slice(0));

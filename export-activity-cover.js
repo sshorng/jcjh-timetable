@@ -7,7 +7,6 @@ window.ExportActivityCover = (function () {
   var TEMPLATE_URL = 'templates/activity-cover-template.docx';
   var DAY_ZH = { 0: '日', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六' };
   var GRADE_ZH = { '7': '七', '8': '八', '9': '九' };
-  var _templateBuf = null;
 
   function pad2(n) {
     return String(n).padStart(2, '0');
@@ -25,7 +24,11 @@ window.ExportActivityCover = (function () {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
+  // 2C 消重：唯一實作在 date-utils.js；此處保留委派（獨立載入時仍可用內建版）
   function toLocalDateStr(d) {
+    if (window.DateUtils && typeof window.DateUtils.toLocalDateStr === 'function') {
+      return window.DateUtils.toLocalDateStr(d);
+    }
     return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   }
 
@@ -98,6 +101,9 @@ window.ExportActivityCover = (function () {
   }
 
   function isQuotaDeductFee(fee) {
+    if (typeof FeeUtils !== 'undefined' && FeeUtils && typeof FeeUtils.isQuotaDeductFee === 'function') {
+      return FeeUtils.isQuotaDeductFee(fee);
+    }
     var f = String(fee || '');
     return f === '扣額度' || f === '互代不結';
   }
@@ -592,14 +598,12 @@ window.ExportActivityCover = (function () {
     return null;
   }
 
+  // 範本載入走共用 template-buffer.js（版本號快取＋同頁共用）
   async function loadTemplateBuffer() {
-    if (_templateBuf) return _templateBuf.slice(0);
-    var url = TEMPLATE_URL + (TEMPLATE_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-    var res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('無法載入輪值通知單模板（' + res.status + '）');
-    var buf = await res.arrayBuffer();
-    _templateBuf = buf;
-    return buf.slice(0);
+    if (!window.TemplateBuffer || typeof window.TemplateBuffer.load !== 'function') {
+      throw new Error('template-buffer.js 尚未載入（請經 ensureExportActivityCover 載入匯出模組）');
+    }
+    return window.TemplateBuffer.load(TEMPLATE_URL, '無法載入輪值通知單模板');
   }
 
   function xmlEsc(s) {

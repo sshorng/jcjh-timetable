@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 會計核銷版 Excel 匯出
  *
  * 這個模組只負責兩件事：
@@ -11,9 +11,10 @@
   'use strict';
 
   var TEMPLATE_URL = 'templates/accounting-template.xlsx';
+  // Phase 1C：範本改用版本號而非 Date.now()，讓瀏覽器／CDN 可快取；換範本時才 bump 此號。
+  // 實際載入走共用 template-buffer.js，此處僅保留版本號供標題／檔名邏輯相容。
+  var TEMPLATE_VERSION = (root.TemplateBuffer && root.TemplateBuffer.TEMPLATE_VERSION) || '20261003';
   var STORAGE_KEY = 'school-substitution-accounting-periods-v1';
-  // 同一頁面內的範本不會變動，避免每次匯出都重新抓取與解析前置資料。
-  var templateBufferPromise = null;
   var FEE_DEFAULT = 455;
   var DEFAULT_EXPENSE_PLAN_FULL = '補助調整教師授課鐘點費（國教）';
   var MONEY_NUMBER_FORMAT = '#,##0';
@@ -529,10 +530,11 @@
     return String(value || '').trim().toLowerCase();
   }
 
+  // 識別一律用教師姓名；Email 僅登入用，不參與比對。
   function teacherIdentityKeys(value) {
     var values = value && typeof value === 'object'
-      ? [value.email, value.loginEmail, value.teacherEmail, value['教師Email'], value.name,
-        value.teacherName, value['教師姓名'], value.originalTeacherName, value.actualTeacherName]
+      ? [value.name, value.teacherName, value['教師姓名'],
+        value.originalTeacherName, value.actualTeacherName]
       : [value];
     var seen = {};
     return values.map(function (item) { return String(item == null ? '' : item).trim().toLowerCase(); })
@@ -879,7 +881,7 @@
       return isUsableSubstitution(record)
         && !isCombinedReturnRecord(record)
         && dateInPeriod(record.date, period)
-        && sameTeacher(record.actualTeacherEmail, source)
+        && sameTeacher(record.actualTeacherName, source)
         && isWeeklyPeriod(record.period)
         && matchesExpectedPlan(record);
     });
@@ -1191,7 +1193,7 @@
     if (!date || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
     return (schedules || []).some(function (schedule) {
-      return sameTeacher(schedule, record.originalTeacherEmail)
+      return sameTeacher(schedule, record.originalTeacherName)
         && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
         && Number(schedule.period) === sourceSlot.period
         && isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
@@ -1369,12 +1371,53 @@
     });
   }
   function leaveRecordsFor(email, records, period, schedules, schoolSwapIndex) {
-     return (records || []).filter(function (r) {
-       return isUsableSubstitution(r)
-         && dateInPeriod(r.date, period)
-         && sameTeacher(r.originalTeacherEmail, email)
-         && !isSubstituteAttributePayoutRecord(r, schedules, schoolSwapIndex);
+     return usableRecordsInPeriod(records, period, schedules || [], schoolSwapIndex).filter(function (r) {
+       return sameTeacher(r.originalTeacherName, email);
      });
+  }
+
+  /**
+   * Phase 1C：與來源無關的謂詞（isUsable／dateInPeriod／isSubstituteAttribute）只算一次。
+   * 三者皆為 (record, schedules, period) 的純函式，與「逐源 filter」逐項等價，
+   * 但把每源 O(R×課表掃描) 降為每期一次；單入口 memo 跨表共用（key 含 records／period／schedules 引用）。
+   */
+  var _periodPrefilterMemo = null;
+  function usableRecordsInPeriod(records, period, schedules, schoolSwapIndex) {
+    var periodKey = String(period && period.start || '') + '|' + String(period && period.end || '');
+    if (_periodPrefilterMemo && _periodPrefilterMemo.records === records
+        && _periodPrefilterMemo.periodKey === periodKey
+        && _periodPrefilterMemo.schedules === schedules
+        && _periodPrefilterMemo.schoolSwapIndex === schoolSwapIndex) {
+      return _periodPrefilterMemo.list;
+    }
+    var list = (records || []).filter(function (record) {
+      return isUsableSubstitution(record)
+        && dateInPeriod(record.date, period)
+        && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
+    });
+    _periodPrefilterMemo = {
+      records: records,
+      periodKey: periodKey,
+      schedules: schedules,
+      schoolSwapIndex: schoolSwapIndex,
+      list: list
+    };
+    return list;
+  }
+
+  /** 讓出主線程一個 macrotask，供 exportWorkbook 在階段之間更新進度畫面 */
+  function uiTick() {
+    if (typeof Promise === 'function') {
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }
+    return null;
+  }
+
+  /** 每 N 位來源回報一次進度（呼叫端可更新進度條；仍為同步迴圈，paint 靠階段間 uiTick） */
+  function reportExportProgress(opts, phase, done, total) {
+    try {
+      if (opts && typeof opts.onProgress === 'function') opts.onProgress({ phase: phase, done: done, total: total });
+    } catch (e) {}
   }
 
   function expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex) {
@@ -1429,7 +1472,7 @@
     if (hasCourseAttributeMetadata(record)) return isRecordOvertimeCourse(record);
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
     return (schedules || []).some(function (schedule) {
-       return sameTeacher(schedule, record.originalTeacherEmail)
+       return sameTeacher(schedule, record.originalTeacherName)
         && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
         && Number(schedule.period) === sourceSlot.period
         && isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
@@ -1439,12 +1482,9 @@
   }
 
   function chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex, teacher) {
-    var eligible = (records || []).filter(function (record) {
-      return isUsableSubstitution(record)
-        && dateInPeriod(record.date, period)
-         && sameTeacher(record.originalTeacherEmail, email)
-         && teacherEmail(record.actualTeacherEmail)
-         && !isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex);
+    var eligible = usableRecordsInPeriod(records, period, schedules || [], schoolSwapIndex).filter(function (record) {
+      return sameTeacher(record.originalTeacherName, email)
+         && teacherEmail(record.actualTeacherEmail);
     });
     // \u53ea\u6709\u539f\u8ab2\u662f\u8d85\u9418\u9ede\u624d\u6c96\u6e1b\u8d85\u9418\uff1b\u975e\u8d85\u9418\u9ede\u81ea\u8cbb\u4ee3\u8ab2\u7559\u5728\u81ea\u4ed8\u4ee3\u8ab2\u8868\u3002
     var selfRecords = eligible.filter(function (record) {
@@ -1475,7 +1515,12 @@
   function buildChargedRecordMap(opts, period, schoolSwapIndex) {
     var result = { byKey: {}, byOriginal: {} };
     var records = opts.substitutionRecords || [];
-    reportSourceRows(opts).forEach(function (source) {
+    var schedules = opts.allSchedules || [];
+    // Phase 1C：與來源無關的預篩每期只做一次，逐源只比 sameTeacher（等價、省下重複課表掃描）
+    var usableInPeriod = usableRecordsInPeriod(records, period, schedules, schoolSwapIndex);
+    var sources = reportSourceRows(opts);
+    sources.forEach(function (source, sourceIndex) {
+      if (sourceIndex % 25 === 0) reportExportProgress(opts, 'charged-map', sourceIndex, sources.length);
       var sourceTeacher = (opts.teachers || []).find(function (teacher) {
         return sameTeacher(teacher, source);
       });
@@ -1486,24 +1531,18 @@
         ? Number(source.scheduledOvertime) || 0
         : (Number(source.weeklyOvertime) || 0) * weeks;
       var chargedSourceRecords = adjunct
-        ? records.filter(function (record) {
-          return isUsableSubstitution(record)
-            && dateInPeriod(record.date, period)
-            && sameTeacher(record.originalTeacherEmail, source)
-            && teacherEmail(record.actualTeacherEmail)
-            && !isSubstituteAttributePayoutRecord(record, opts.allSchedules || [], schoolSwapIndex);
+        ? usableInPeriod.filter(function (record) {
+          return sameTeacher(record.originalTeacherName, source)
+            && teacherEmail(record.actualTeacherEmail);
         })
         : chargedSubstitutionRecords(records, opts.allSchedules, source, period, schoolSwapIndex, source);
       var chargedKeys = {};
       chargedSourceRecords.forEach(function (record) {
         chargedKeys[substitutionKey(record)] = true;
       });
-      var allSourceRecords = records.filter(function (record) {
-        return isUsableSubstitution(record)
-          && dateInPeriod(record.date, period)
-          && sameTeacher(record.originalTeacherEmail, source)
-          && teacherEmail(record.actualTeacherEmail)
-          && !isSubstituteAttributePayoutRecord(record, opts.allSchedules || [], schoolSwapIndex);
+      var allSourceRecords = usableInPeriod.filter(function (record) {
+        return sameTeacher(record.originalTeacherName, source)
+          && teacherEmail(record.actualTeacherEmail);
       });
       var sourceRecords = allSourceRecords.filter(function (record) {
         var key = substitutionKey(record);
@@ -1695,7 +1734,9 @@
     var teachersWithOvertime = {};
     var expectedPlan = (config.key === 'overtime' || config.key === 'teachingSupport')
       ? planLabel(planFilter) : null;
-    reportSourceRows(opts).forEach(function (source) {
+    var summarySources = reportSourceRows(opts);
+    summarySources.forEach(function (source, sourceIndex) {
+      if (sourceIndex % 25 === 0) reportExportProgress(opts, 'summary:' + config.key, sourceIndex, summarySources.length);
       var variants = (config.key === 'overtime' || config.key === 'teachingSupport') && expectedPlan
         ? overtimeSourceVariants(source, expectedPlan)
         : [{ row: source, allocation: null }];
@@ -1877,7 +1918,9 @@
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
     }).forEach(function (r) {
       var email = teacherEmail(r.actualTeacherEmail);
-      if (!groups[email]) groups[email] = { email: email, records: [], hours: 0, rate: feeRate(r, FEE_DEFAULT) };
+      var holder = teacherFromMap(teacherMap, r.actualTeacherEmail, r.actualTeacherName);
+      var holderName = teacherName(holder, r.actualTeacherName || '');
+      if (!groups[email]) groups[email] = { email: email, name: holderName, records: [], hours: 0, rate: feeRate(r, FEE_DEFAULT) };
       groups[email].records.push(r);
       groups[email].hours += periodCount(r, false);
       groups[email].rate = feeRate(r, groups[email].rate);
@@ -2817,27 +2860,27 @@
       });
     }
   }
+  // 範本載入走共用 template-buffer.js（版本號快取＋同頁共用）
   async function loadTemplateBuffer() {
-    if (!templateBufferPromise) {
-      templateBufferPromise = root.fetch(TEMPLATE_URL + '?t=' + Date.now(), { cache: 'no-cache' })
-        .then(function (response) {
-          if (!response.ok) throw new Error('無法載入會計範本（HTTP ' + response.status + '）');
-          return response.arrayBuffer();
-        })
-        .catch(function (error) {
-          // 失敗時允許下一次匯出重新嘗試。
-          templateBufferPromise = null;
-          throw error;
-        });
+    if (!root.TemplateBuffer || typeof root.TemplateBuffer.load !== 'function') {
+      throw new Error('template-buffer.js 尚未載入（請經 ensureExportAccounting 載入匯出模組）');
     }
-    var buffer = await templateBufferPromise;
-    return buffer && buffer.slice ? buffer.slice(0) : buffer;
+    return root.TemplateBuffer.load(TEMPLATE_URL, '無法載入會計範本');
+  }
+
+  /** 範本更新後呼叫（或 TEMPLATE_VERSION bump 後自動失效，跨頁） */
+  function clearTemplateCache() {
+    if (root.TemplateBuffer) root.TemplateBuffer.clear(TEMPLATE_URL);
   }
 
   async function exportWorkbook(opts) {
     opts = opts || {};
+    // Phase 1C：階段間讓出主線程，讓「匯出中」進度先上漆；重運算 buildExportData 本體由預篩索引加速
+    if (uiTick()) await uiTick();
+    reportExportProgress(opts, 'build-data-start', 0, 1);
     // 確認視窗前已建立過預覽時直接重用，避免確認後再次掃描全校資料。
     var data = opts.preparedData || buildExportData(opts);
+    reportExportProgress(opts, 'build-data-done', 1, 1);
     if (data.blocking && data.blocking.length) {
       throw new Error('會計匯出被阻擋：\n' + data.blocking.join('\n'));
     }
@@ -2876,6 +2919,8 @@
 
   root.ExportAccounting = {
     TEMPLATE_URL: TEMPLATE_URL,
+    TEMPLATE_VERSION: TEMPLATE_VERSION,
+    clearTemplateCache: clearTemplateCache,
     PERIOD_OPTIONS: PERIOD_OPTIONS,
     defaultPeriodSettings: defaultPeriodSettings,
     loadPeriodSettings: loadPeriodSettings,

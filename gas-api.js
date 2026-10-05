@@ -37,6 +37,39 @@ window.GasApi = (function () {
     , saveSchoolSwap: 1, deleteSchoolSwap: 1
   };
 
+  /** Phase 0 效能量測：?perf=1 或 localStorage jcjh_perf=1 時記錄每次 GAS 往返耗時 */
+  var PERF_BUFFER_LIMIT = 120;
+  var _perfRecords = [];
+  function isPerfEnabled() {
+    try {
+      if (typeof window !== 'undefined' && window.location && /[?&]perf=1/.test(window.location.search || '')) return true;
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('jcjh_perf') === '1') return true;
+    } catch (e) {}
+    return false;
+  }
+  function recordPerf(action, elapsedMs, extra) {
+    if (!isPerfEnabled()) return;
+    try {
+      _perfRecords.push({ action: action, ms: elapsedMs, ts: Date.now(), extra: extra || '' });
+      if (_perfRecords.length > PERF_BUFFER_LIMIT) _perfRecords.splice(0, _perfRecords.length - PERF_BUFFER_LIMIT);
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[perf] ' + action + ': ' + elapsedMs + 'ms' + (extra ? ' (' + extra + ')' : ''));
+      }
+    } catch (e) {}
+  }
+  function getPerfRecords() { return _perfRecords.slice(); }
+  function clearPerfRecords() { _perfRecords = []; }
+  function perfSummary() {
+    var byAction = {};
+    _perfRecords.forEach(function (r) {
+      var b = byAction[r.action] || (byAction[r.action] = { count: 0, total: 0, max: 0 });
+      b.count += 1; b.total += r.ms; if (r.ms > b.max) b.max = r.ms;
+    });
+    return Object.keys(byAction).map(function (a) {
+      return { action: a, count: byAction[a].count, avgMs: Math.round(byAction[a].total / byAction[a].count), maxMs: byAction[a].max };
+    });
+  }
+
   function decodeJwt(token) {
     try {
       const base64Url = token.split('.')[1];
@@ -513,6 +546,7 @@ window.GasApi = (function () {
           });
         } catch (eD) { /* ignore */ }
       }
+      recordPerf(action, Date.now() - t0, options.semesterId || '');
       return res;
     }
 
@@ -555,13 +589,15 @@ window.GasApi = (function () {
      * options.historyAll=true：不裁時間窗（完整學期申請）
      * options.windowDays：已結案保留天數，預設 14
      * options.requestsOnly=true：只拉申請窗＋空堂（不寫 structure，只寫 requests）
+     * options.parts：'requests' | 'teachers' | 'full'，後端對應 requestsOnly／teachersOnly（Phase 1B 瘦身）
      */
     async function fetchInitialData(options) {
       options = options || {};
       const semesterId = options.semesterId || opts.getSemesterId();
       const force = !!options.force;
       const historyAll = !!options.historyAll;
-      const requestsOnly = !!options.requestsOnly;
+      const requestsOnly = !!options.requestsOnly || options.parts === 'requests';
+      const teachersOnly = !!options.teachersOnly || options.parts === 'teachers';
       const windowDays = options.windowDays != null ? options.windowDays : 14;
 
       if (!force && !historyAll && !requestsOnly && typeof options.onStale === 'function') {
@@ -573,7 +609,10 @@ window.GasApi = (function () {
         scope: force ? 'fresh' : 'full',
         historyAll: historyAll,
         windowDays: windowDays,
-        requestsOnly: requestsOnly
+        requestsOnly: requestsOnly,
+        teachersOnly: teachersOnly,
+        // 供後端 Phase 1B parts 路由與 perf 日誌識別（舊版 GAS 忽略未知欄位）
+        parts: options.parts || (requestsOnly ? 'requests' : (teachersOnly ? 'teachers' : 'full'))
       }, { abortPrevious: true, semesterId: semesterId });
       if (historyAll) {
         // 完整歷史不覆寫預設 SWR
@@ -703,7 +742,11 @@ window.GasApi = (function () {
       parseAllowedHd,
       isEmailDomainAllowed,
       DEFAULT_ALLOWED_HD,
-      APP_VERSION
+      APP_VERSION,
+      isPerfEnabled,
+      getPerfRecords,
+      clearPerfRecords,
+      perfSummary
     };
   }
 
@@ -723,6 +766,10 @@ window.GasApi = (function () {
     parseAllowedHd,
     isEmailDomainAllowed,
     DEFAULT_ALLOWED_HD,
-    APP_VERSION
+    APP_VERSION,
+    isPerfEnabled,
+    getPerfRecords,
+    clearPerfRecords,
+    perfSummary
   };
 })();

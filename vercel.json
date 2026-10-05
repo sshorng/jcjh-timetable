@@ -1,4 +1,7 @@
 {
+  "installCommand": "npm install && npm install --prefix v2",
+  "buildCommand": "npm run build --prefix v2",
+  "outputDirectory": ".",
   "headers": [
     {
       "source": "/(.*)",

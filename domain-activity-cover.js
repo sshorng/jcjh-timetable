@@ -20,6 +20,9 @@ window.DomainActivityCover = (function () {
   var SPEND_PER_PERIOD = 1;
 
   function isQuotaDeductFee(fee) {
+    if (window.FeeUtils && typeof window.FeeUtils.isQuotaDeductFee === 'function') {
+      return window.FeeUtils.isQuotaDeductFee(fee);
+    }
     var f = String(fee || '');
     // 讀取相容舊資料「互代不結」；寫入一律用「扣額度」
     return f === QUOTA_DEDUCT_FEE || f === '互代不結';
@@ -290,17 +293,16 @@ window.DomainActivityCover = (function () {
     return isNaN(n) ? null : Math.round(n * 1000) / 1000;
   }
 
+  // 識別一律用教師姓名；Email 僅登入用，不參與比對。
   function ledgerIdentityValues(value) {
     var values = typeof value === 'object' && value !== null
-      ? [value.email, value.loginEmail, value.teacherEmail, value.name, value.teacherName,
-        value['教師Email'], value['教師姓名']]
+      ? [value.name, value.teacherName, value['教師姓名']]
       : [value];
     return values.map(function (item) { return emailKey(item); }).filter(Boolean);
   }
 
   function ledgerTeacherMatches(row, teacher) {
     var rowValues = ledgerIdentityValues({
-      email: ledgerField(row, ['teacherEmail', 'email', '教師Email']),
       name: ledgerField(row, ['name', 'teacherName', '教師姓名'])
     });
     var teacherValues = ledgerIdentityValues(teacher);

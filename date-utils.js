@@ -361,6 +361,17 @@ window.DateUtils = (function () {
     forEachCorePeriod,
     encodeTimeKey,
     decodeTimeKey,
+    decodePaperTimeKey,
     classListIncludes
   };
+
+  // 2A：紙本時間鍵解析（自 app.js 搬移；原為 DateUtils.decodeTimeKey 委派）
+  function decodePaperTimeKey(timeKey) {
+    if (typeof decodeTimeKey === 'function') return decodeTimeKey(timeKey);
+    const raw = String(timeKey || '');
+    return {
+      day: parseInt(raw.split('-')[0], 10),
+      period: parseInt(raw.split('-')[1] || raw.slice(-1), 10)
+    };
+  }
 })();

@@ -65,6 +65,46 @@ var CACHE_SCHEMA_VERSION_ = "scheduleactive1";
 var DATA_PAYLOAD_VERSION_ = "scheduleActive1";
 var SCHOOL_SWAP_SHEET_ = "全校對調";
 
+// ----------------- Phase 0 效能量測（預設關閉；指令碼屬性 PERF_LOG=true 才輸出） -----------------
+var PERF_LOG_ENABLED_ = (getConfig_("PERF_LOG", "false").toLowerCase() === "true");
+function perfNow_() { return new Date().getTime(); }
+function perfLog_(label, t0, extra) {
+  if (!PERF_LOG_ENABLED_) return;
+  try {
+    var ms = new Date().getTime() - (t0 || new Date().getTime());
+    console.log("[perf] " + String(label || "") + ": " + ms + "ms" + (extra ? " (" + String(extra) + ")" : ""));
+  } catch (e) {}
+}
+
+// ----------------- Phase 1A 寫鎖分級 -----------------
+// GAS 只有一把 ScriptLock；依 action 成本給不同等待上限與友善錯誤，
+// 避免短核准被長匯入卡死 10 秒後只拿到一句「操作過於頻繁」。
+var LOCK_WAIT_MS_IMPORT_ = 20000;   // importSchedulesBatch／importTeachersBatch：允許較久排隊
+var LOCK_WAIT_MS_APPROVAL_ = 10000; // adminApprove(Batch)／respondToBatch：維持原 10 秒
+var LOCK_WAIT_MS_DEFAULT_ = 5000;   // 其餘短寫入：快速失敗，前端可重試
+function lockWaitMsForAction_(action) {
+  var a = String(action || "");
+  if (a === "importSchedulesBatch" || a === "importTeachersBatch") return LOCK_WAIT_MS_IMPORT_;
+  if (a === "adminApprove" || a === "adminApproveBatch" || a === "adminReject" || a === "adminRejectBatch"
+      || a === "respondToRequest" || a === "respondToBatch" || a === "respondTriangleRequest"
+      || a === "submitRequestBatch" || a === "submitExchangeBatch") return LOCK_WAIT_MS_APPROVAL_;
+  return LOCK_WAIT_MS_DEFAULT_;
+}
+function acquireActionLock_(action) {
+  var lock = LockService.getScriptLock();
+  var waitMs = lockWaitMsForAction_(action);
+  try {
+    lock.waitLock(waitMs);
+  } catch (e) {
+    var a = String(action || "");
+    if (a === "importSchedulesBatch" || a === "importTeachersBatch") {
+      throw new Error("目前有其他匯入正在執行，請等待約 30 秒後再試（不會遺失已送出的資料）！");
+    }
+    throw new Error("系統忙碌中（多人同時送出），請等待 3～5 秒後再試一次！");
+  }
+  return lock;
+}
+
 function getAllowedHdList_() {
   // 系統設定可覆寫（走 mem 快取，勿每次整表）
   try {
@@ -1825,6 +1865,13 @@ function writeRowsInChunks_(sheet, startRow, headers, rows, chunkSize) {
   for (var i = 0; i < list.length; i += size) {
     var block = list.slice(i, i + size);
     sheet.getRange(startRow + i, 1, block.length, width).setValues(block);
+    // Phase 1A：長匯入每 2000 列 flush 一次，避免試算表端緩衝爆量＋降低 6 分鐘逾時風險
+    if (((i / size) + 1) % 4 === 0 && typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.flush) {
+      try { SpreadsheetApp.flush(); } catch (eFlush) {}
+    }
+  }
+  if (typeof SpreadsheetApp !== "undefined" && SpreadsheetApp.flush) {
+    try { SpreadsheetApp.flush(); } catch (eFlushEnd) {}
   }
 }
 
@@ -3838,31 +3885,13 @@ function postLedgerAndSync_(o) {
  */
 function buildTeacherPackStateFromLedger_(semesterId) {
   var sid = String(semesterId || "");
-  // 姓名鍵相容：帳本舊列的教師Email可能已轉為姓名，以教師名單建名→email 對照
-  var emailByName = {};
-  try {
-    (getSemesterTeachersCached_(sid) || []).forEach(function (t) {
-      var nm = String(t["教師姓名"] || t.name || "").trim();
-      var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
-      if (nm && em && !emailByName[nm]) emailByName[nm] = em;
-    });
-  } catch (eDir) {}
   var byEmail = {}; // em -> { bal, packs: [{packageId, eventId, eventName, remaining, firstTime, name}] }
   getQuotaLedgerRows_(sid).forEach(function (r) {
-    var em = String(r["教師Email"] || r.email || "").toLowerCase().trim();
-    // 轉換後該欄可能是姓名（無 @）：用名單對回 email；再不行用索引鍵／姓名欄
-    if (!em || em.indexOf("@") < 0) {
-      var nm0 = String(r["教師姓名"] || r.name || em || "").trim();
-      if (nm0 && emailByName[nm0]) em = emailByName[nm0];
-      else {
-        var ik = String(r["索引鍵"] || "").trim();
-        var ikName = ik.indexOf("|") >= 0 ? ik.slice(ik.indexOf("|") + 1) : "";
-        if (ikName && emailByName[ikName]) em = emailByName[ikName];
-        else if (em && emailByName[em]) em = emailByName[em];
-      }
-    }
-    if (!em || em.indexOf("@") < 0) return;
-    if (!byEmail[em]) byEmail[em] = { bal: 0, packs: {}, name: "" };
+    // 識別一律用教師姓名；Email 僅登入用，不參與比對
+    var nm = String(r["教師姓名"] || r.name || "").trim();
+    if (!nm) return;
+    var em = nm;
+    if (!byEmail[em]) byEmail[em] = { bal: 0, packs: {}, name: nm };
     var st = byEmail[em];
     var d = parseFloat(r["異動"]);
     if (isNaN(d)) d = 0;
@@ -4081,8 +4110,9 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   }
   list.forEach(function (r) {
     if (!r || !isQuotaDeductFee_(r["經費來源"])) return;
-    var em = String(r["受邀人Email"] || "").toLowerCase().trim();
-    if (!em) return;
+    // 識別一律用受邀人姓名
+    var hasWho = String(r["受邀人姓名"] || r.targetTeacherName || "").trim();
+    if (!hasWho) return;
     var requestId = String(r["申請單ID"] || r.id || "").trim();
     if (requestId && alreadySpent[requestId]) return;
     spendReqs.push(r);
@@ -4093,27 +4123,34 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
 
   var state = buildTeacherPackStateFromLedger_(sid);
   var teachersAll = getSemesterTeachersCached_(sid) || [];
+  // 識別一律用教師姓名；Email 只用於名單對帳（餘額欄）與登入
+  var emailByName = {};
   var sheetQ = {};
   teachersAll.forEach(function (t) {
-    var em = String(t["教師Email"] || t.email || "").toLowerCase().trim();
-    if (!em) return;
+    var tnm = String(t["教師姓名"] || t.name || "").trim();
+    var tem = String(t["教師Email"] || t.email || "").toLowerCase().trim();
+    if (!tnm) return;
+    if (tem && !emailByName[tnm]) emailByName[tnm] = tem;
     var sq = parseFloat(t["折抵額度"] != null ? t["折抵額度"] : t.mutualQuota);
     if (isNaN(sq) || sq < 0) sq = 0;
-    sq = Math.round(sq * 1000) / 1000;
-    sheetQ[em] = sq;
-    if (!state[em]) state[em] = { bal: sq, packList: [], name: t["教師姓名"] || t.name || "" };
-    else if (!state[em].name && (t["教師姓名"] || t.name)) state[em].name = t["教師姓名"] || t.name;
+    sheetQ[tnm] = Math.round(sq * 1000) / 1000;
+    if (!state[tnm]) state[tnm] = { bal: sheetQ[tnm], packList: [], name: tnm };
   });
+  function spendNameOf_(req) {
+    return String(req["受邀人姓名"] || req.targetTeacherName || "").trim();
+  }
 
-  // 執行期餘額／包列表（同批多筆共用）
+  // 執行期餘額／包列表（同批多筆共用；鍵為教師姓名）
   var runBal = {};
   var runPacks = {};
-  Object.keys(state).forEach(function (em) {
-    var st = state[em];
-    var b = typeof st.bal === "number" ? st.bal : (sheetQ[em] || 0);
+  var runEmail = {};
+  Object.keys(state).forEach(function (key) {
+    var st = state[key];
+    if (!key || runBal[key] != null) return;
+    var b = typeof st.bal === "number" ? st.bal : (sheetQ[key] || 0);
     if (isNaN(b) || b < 0) b = 0;
-    runBal[em] = Math.round(b * 1000) / 1000;
-    runPacks[em] = (st.packList || []).map(function (p) {
+    runBal[key] = Math.round(b * 1000) / 1000;
+    runPacks[key] = (st.packList || []).map(function (p) {
       return {
         packageId: p.packageId,
         eventId: p.eventId || "",
@@ -4121,6 +4158,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
         remaining: p.remaining || 0
       };
     });
+    if (emailByName[key]) runEmail[key] = emailByName[key];
   });
 
   var ledgerRows = [];
@@ -4133,16 +4171,16 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
   var spentRequestIds = [];
 
   spendReqs.forEach(function (req) {
-    var em = String(req["受邀人Email"] || "").toLowerCase().trim();
-    if (!em) return;
-    if (runBal[em] == null) {
-      runBal[em] = sheetQ[em] || 0;
-      runPacks[em] = [];
+    var key = spendNameOf_(req);
+    if (!key) return;
+    var em = emailByName[key] || "";
+    if (runBal[key] == null) {
+      runBal[key] = 0;
+      runPacks[key] = [];
     }
-    var bal = runBal[em];
-    var packs = runPacks[em] || [];
-    var subName = String(req["受邀人姓名"] || "").trim()
-      || (state[em] && state[em].name) || "";
+    var bal = runBal[key];
+    var packs = runPacks[key] || [];
+    var subName = key;
     var reqId = String(req["申請單ID"] || req.id || "").trim();
 
     // 選包：有手動指定優先（送出前下拉覆寫 FIFO）；否則 FIFO（有餘額 ≥1 優先）
@@ -4167,11 +4205,11 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
     // 一般扣額度須餘額 ≥ 1；空堂任務額度不足時仍可建立，改由人工安排他人還一節。
     if (bal + 1e-9 < 1) {
       if (isEmptySlotAssignmentRequest_(req)) return;
-      if (!shortMap[em]) {
-        shortMap[em] = { email: em, name: subName, short: 0, spent: 0 };
-        shortList.push(shortMap[em]);
+      if (!shortMap[key]) {
+        shortMap[key] = { email: em, name: subName, short: 0, spent: 0 };
+        shortList.push(shortMap[key]);
       }
-      shortMap[em].short += 1;
+      shortMap[key].short += 1;
       return;
     }
 
@@ -4182,13 +4220,13 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
       if (overrideMeta.eventName) meta.eventName = overrideMeta.eventName;
     }
     bal = Math.round(Math.max(0, bal - 1) * 1000) / 1000;
-    runBal[em] = bal;
-    finalBal[em] = bal;
-    touched[em] = true;
+    runBal[key] = bal;
+    if (em) finalBal[em] = bal;
+    touched[em || key] = true;
     if (pack) {
       pack.remaining = Math.round(Math.max(0, (pack.remaining || 0) - 1) * 1000) / 1000;
     }
-    if (shortMap[em]) shortMap[em].spent += 1;
+    if (shortMap[key]) shortMap[key].spent += 1;
 
     seq++;
     ledgerRows.push({
@@ -4200,7 +4238,7 @@ function spendMutualQuotaForRequests_(reqs, operatorEmail) {
       "異動": -1,
       "餘額後": bal,
       "類型": "spend",
-      "包ID": (pack && pack.packageId) || ("pkg_balance_" + em),
+      "包ID": (pack && pack.packageId) || ("pkg_balance_" + key),
       "事件ID": meta.eventId || (pack && pack.eventId) || "",
       "事件名稱": meta.eventName,
       "起日": String(req["異動日期"] || req.requestDate || "").slice(0, 10),
@@ -5856,12 +5894,15 @@ function handleReadAction_(postData) {
   if (action === "getInitialData") {
     var teachersForRole = readerTeachers;
     var personalizeOpts = { isStaff: readerIsStaff, canViewAllTimetables: !!(readerIsAdmin || readerIsStaff) };
+    var partsHint = String(reqData.parts || postData.parts || "").toLowerCase();
     var historyAllFlag = reqData.historyAll === true || reqData.historyAll === "true" || reqData.historyAll === 1
       || postData.historyAll === true || postData.historyAll === "true";
     var requestsOnlyFlag = reqData.requestsOnly === true || reqData.requestsOnly === "true" || reqData.requestsOnly === 1
-      || postData.requestsOnly === true || postData.requestsOnly === "true";
+      || postData.requestsOnly === true || postData.requestsOnly === "true"
+      || partsHint === "requests";
     var teachersOnlyFlag = reqData.teachersOnly === true || reqData.teachersOnly === "true" || reqData.teachersOnly === 1
-      || postData.teachersOnly === true || postData.teachersOnly === "true";
+      || postData.teachersOnly === true || postData.teachersOnly === "true"
+      || partsHint === "teachers";
     var windowDaysOpt = 14;
     if (reqData.windowDays != null && reqData.windowDays !== "") windowDaysOpt = reqData.windowDays;
     else if (postData.windowDays != null && postData.windowDays !== "") windowDaysOpt = postData.windowDays;
@@ -5884,13 +5925,16 @@ function handleReadAction_(postData) {
     if (requestsOnlyFlag) {
       var roSharedKey = "jcjh_reqonly_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays;
       var roShared = null;
+      var roT0 = perfNow_();
       if (!historyAllFlag && scope !== "fresh") {
         var roCached = getCacheChunked(roSharedKey);
         if (roCached) {
           try { roShared = JSON.parse(roCached); } catch (eRo) { roShared = null; }
         }
       }
+      perfLog_("getInitialData/requestsOnly cache " + (roShared ? "HIT" : "MISS"), roT0, semesterId);
       if (!roShared) {
+        var roBuildT0 = perfNow_();
         roShared = buildFullSemesterPayload_(semesterId, {
           userEmail: "",
           isAdmin: true,
@@ -5898,6 +5942,7 @@ function handleReadAction_(postData) {
           windowDays: wDays,
           requestsOnly: true
         });
+        perfLog_("getInitialData/requestsOnly build", roBuildT0, semesterId);
         if (!historyAllFlag) {
           try { putCacheChunked(roSharedKey, JSON.stringify(roShared), CACHE_TTL_REQ_); } catch (eRoPut) {}
         }
@@ -5925,19 +5970,23 @@ function handleReadAction_(postData) {
       ? ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays)
       : ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_teacher_w" + wDays);
     var fullShared = null;
+    var fullT0 = perfNow_();
     if (!historyAllFlag && scope !== "fresh") {
       var fullCached = getCacheChunked(fullSharedKey);
       if (fullCached) {
         try { fullShared = JSON.parse(fullCached); } catch (eFull) { fullShared = null; }
       }
     }
+    perfLog_("getInitialData/full cache " + (fullShared ? "HIT" : "MISS"), fullT0, semesterId);
     if (!fullShared) {
+      var fullBuildT0 = perfNow_();
       fullShared = buildFullSemesterPayload_(semesterId, {
         userEmail: "",
         isAdmin: true,
         historyAll: historyAllFlag,
         windowDays: wDays
       });
+      perfLog_("getInitialData/full build", fullBuildT0, semesterId);
       if (fullShared.settings && !fullShared.settings.allowedHd) {
         fullShared.settings.allowedHd = ALLOWED_HD_;
       }
@@ -5946,14 +5995,8 @@ function handleReadAction_(postData) {
           var ttl = (readerIsAdmin || readerIsStaff) ? CACHE_TTL_FULL_ : CACHE_TTL_TEACHER_FULL_;
           var fullSharedJson = JSON.stringify(fullShared);
           putCacheChunked(fullSharedKey, fullSharedJson, ttl);
-          // 教師／admin 底包內容相同時互寫，提高命中（共用字串，少 stringify 一次）
-          if (readerIsAdmin || readerIsStaff) {
-            putCacheChunked(
-              "jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_teacher_w" + wDays,
-              fullSharedJson,
-              CACHE_TTL_TEACHER_FULL_
-            );
-          }
+          // Phase 1B：取消 admin／teacher 雙寫，改為按需懶寫。
+          // 雙寫讓每次冷 miss 付出雙倍 put 配額；另一角色首次請求時 miss 一次即補上，命中率影響極小。
         } catch (eFullPut) {}
       }
     }
@@ -7100,8 +7143,7 @@ function doPost(e) {
       throw new Error("您的帳號不在本校教師名單中，無法操作！");
     }
 
-    const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
+    const lock = acquireActionLock_(action);
     beginDeferredMails_();
     try {
     let cacheKey = "jcjh_data_" + semesterId;

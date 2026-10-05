@@ -8,7 +8,6 @@
   'use strict';
 
   var TEMPLATE_URL = 'templates/period8-accounting-template.xlsx';
-  var templateBufferPromise = null;
   var FEE_8TH = 600;
   var DATA_START_ROW = 4;
   var TEMPLATE_TOTAL_ROW = 36;
@@ -403,20 +402,12 @@
     }
   }
 
+  // 範本載入走共用 template-buffer.js（版本號快取＋同頁共用）
   async function loadTemplateBuffer() {
-    if (!templateBufferPromise) {
-      templateBufferPromise = root.fetch(TEMPLATE_URL + '?t=' + Date.now(), { cache: 'no-cache' })
-        .then(function (response) {
-          if (!response.ok) throw new Error('無法載入第八節核銷範本（HTTP ' + response.status + '）。');
-          return response.arrayBuffer();
-        })
-        .catch(function (error) {
-          templateBufferPromise = null;
-          throw error;
-        });
+    if (!root.TemplateBuffer || typeof root.TemplateBuffer.load !== 'function') {
+      throw new Error('template-buffer.js 尚未載入（請經 ensureExportPeriod8Accounting 載入匯出模組）');
     }
-    var buffer = await templateBufferPromise;
-    return buffer && buffer.slice ? buffer.slice(0) : buffer;
+    return root.TemplateBuffer.load(TEMPLATE_URL, '無法載入第八節核銷範本');
   }
 
   async function exportWorkbook(opts) {

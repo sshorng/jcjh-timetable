@@ -14,7 +14,11 @@ window.ExportSchoolTimetable = (function () {
     return String(n).padStart(2, '0');
   }
 
+  // 2C 消重：唯一實作在 date-utils.js；此處保留委派（獨立載入時仍可用內建版）
   function toLocalDateStr(d) {
+    if (typeof window !== 'undefined' && window.DateUtils && typeof window.DateUtils.toLocalDateStr === 'function') {
+      return window.DateUtils.toLocalDateStr(d);
+    }
     return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   }
 

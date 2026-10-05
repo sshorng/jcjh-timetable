@@ -123,7 +123,11 @@ window.DomainBilling = (function () {
     return monday.toISOString().slice(0, 10);
   }
 
+  // 2C 消重：唯一實作在 date-utils.js；此處保留委派（獨立載入時仍可用內建版）
   function toLocalDateStr(d) {
+    if (typeof DateUtils !== 'undefined' && DateUtils && typeof DateUtils.toLocalDateStr === 'function') {
+      return DateUtils.toLocalDateStr(d);
+    }
     var y = d.getFullYear();
     var m = String(d.getMonth() + 1).padStart(2, '0');
     var day = String(d.getDate()).padStart(2, '0');
@@ -396,10 +400,10 @@ window.DomainBilling = (function () {
     return (left || []).some(function (value) { return !!rightSet[value]; });
   }
 
+  // 識別一律用教師姓名；Email 僅登入用，不參與比對。
   function teacherKeys(value) {
     if (value && typeof value === 'object') {
       return keyList([
-        value.email, value.loginEmail, value.teacherEmail, value['教師Email'],
         value.name, value.teacherName, value['教師姓名']
       ]);
     }
@@ -484,16 +488,12 @@ window.DomainBilling = (function () {
     }).sort(sortOvertimeSchedules);
   }
 
+  // 識別一律用教師姓名；Email 欄僅登入用，不參與比對。
   function originalTeacherKeys(record) {
     return keyList([
-      record && record.originalTeacherEmail,
       record && record.originalTeacherName,
-      record && record['原授課教師Email'],
-      record && record['原任課教師Email'],
       record && record['原授課教師姓名'],
       record && record['原任課教師姓名'],
-      record && record['申請人Email'],
-      record && record.requesterEmail,
       record && record['申請人姓名'],
       record && record.requesterName
     ]);
@@ -501,14 +501,9 @@ window.DomainBilling = (function () {
 
   function actualTeacherKeys(record) {
     return keyList([
-      record && record.actualTeacherEmail,
       record && record.actualTeacherName,
-      record && record['實際授課教師Email'],
-      record && record['代課教師Email'],
       record && record['實際授課教師姓名'],
       record && record['代課教師姓名'],
-      record && record['受邀人Email'],
-      record && record.targetTeacherEmail,
       record && record['受邀人姓名'],
       record && record.targetTeacherName
     ]);
@@ -516,7 +511,6 @@ window.DomainBilling = (function () {
 
   function scheduleTeacherKeys(schedule) {
     return teacherKeys(schedule && {
-      email: schedule.teacherEmail || schedule['教師Email'],
       teacherName: schedule.teacherName || schedule['教師姓名']
     });
   }

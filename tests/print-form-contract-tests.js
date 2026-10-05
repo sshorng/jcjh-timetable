@@ -25,9 +25,12 @@ const context = {
   isNaN
 };
 vm.createContext(context);
-const submittedBuilderStart = appSource.indexOf('const buildPaperRecordsForSubmittedRequests =');
-const submittedBuilderEnd = appSource.indexOf('const openPaperPrintDraft =', submittedBuilderStart);
-assert.ok(submittedBuilderStart >= 0 && submittedBuilderEnd > submittedBuilderStart, 'submitted paper record builder must remain discoverable');
+const exportSource = fs.readFileSync(path.join(root, 'ui-export.js'), 'utf8');
+assert.match(exportSource, /const buildPaperRecordsForSubmittedRequests =/,
+  'submitted paper record builder must remain discoverable');
+const submittedBuilderVm = { window: {} };
+vm.createContext(submittedBuilderVm);
+vm.runInContext(exportSource, submittedBuilderVm, { filename: 'ui-export.js' });
 const submittedBuilderContext = {
   teachersList: { value: [
     { loginEmail: 'owner@school.example', email: 'owner@school.example', name: '陳小華', teacherName: '陳小華' },
@@ -50,10 +53,14 @@ const submittedBuilderContext = {
   isNaN
 };
 vm.createContext(submittedBuilderContext);
-const submittedPaperRecordBuilder = vm.runInContext(`(() => {
-  ${appSource.slice(submittedBuilderStart, submittedBuilderEnd)}
-  return buildPaperRecordsForSubmittedRequests;
-})()`, submittedBuilderContext);
+const submittedPaperRecordBuilder = submittedBuilderVm.window.UiExport.create({
+  teachersList: submittedBuilderContext.teachersList,
+  isCourseAdjustmentOnlyRequest: submittedBuilderContext.isCourseAdjustmentOnlyRequest,
+  isCombinedReturnRequest: submittedBuilderContext.isCombinedReturnRequest,
+  resolveExchangeTargetCell: submittedBuilderContext.resolveExchangeTargetCell,
+  findBaseScheduleSlot: submittedBuilderContext.findBaseScheduleSlot,
+  getTeacherNameByEmail: submittedBuilderContext.getTeacherNameByEmail
+}).buildPaperRecordsForSubmittedRequests;
 const printHelperSource = fs.readFileSync(path.join(root, 'print-helper.js'), 'utf8');
 const styleSource = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
 const mobileSource = fs.readFileSync(path.join(root, 'mobile.css'), 'utf8');
@@ -200,12 +207,15 @@ assert.match(styleSource, /\.official-subject-row \.official-slot-value \{[^}]*w
 assert.match(indexSource, /title="列印此筆通知單"[^>]*@click="printSingleRequest\(\{ recordId: row\.id \}, 'Notice'\)"/);
 assert.match(context.window.getPrintPreviewCss(), /official-serial-mark \{[^}]*right: 4\.78mm;[^}]*bottom: -4\.5mm[^}]*text-align: right/);
 assert.match(styleSource, /\.official-serial-mark \{[^}]*right: 4\.78mm;[^}]*bottom: -4\.5mm[^}]*text-align: right/);
-assert.match(appSource, /data:image\/svg\+xml;charset=utf-8,['"] \+ encodeURIComponent\(svg\)/);
-assert.doesNotMatch(appSource, /createObjectURL\(svgBlob\)/);
-const combinedCandidateStart = appSource.indexOf('const findCombinedReturnCandidates =');
-const combinedCandidateEnd = appSource.indexOf('const weekScheduleGrid = computed', combinedCandidateStart);
-assert.ok(combinedCandidateStart >= 0 && combinedCandidateEnd > combinedCandidateStart, 'combined-return candidate finder must remain discoverable');
-const combinedCandidateContext = {
+  // 2A：已移至 ui-print.js；改讀模組源碼
+  const printModSource = fs.readFileSync(path.join(root, 'ui-print.js'), 'utf8');
+  assert.match(printModSource, /data:image\/svg\+xml;charset=utf-8,['"] \+ encodeURIComponent\(svg\)/);
+  assert.doesNotMatch(printModSource, /createObjectURL\(svgBlob\)/);
+  // 2A：已移至 ui-timetable.js；以 UiTimetable.create 注入同等測試樁
+  const ttSource = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+  assert.match(ttSource, /const findCombinedReturnCandidates = \(cell\) => \{/,
+    'combined-return candidate finder must remain discoverable');
+  const combinedCandidateContext = {
   window: { DomainSchedule: { isActiveOnDate: () => true } },
   allSchedules: { value: [
     { teacherEmail: 'owner@school.example', teacherName: '陳小華', dayOfWeek: 1, period: 2, className: '音樂班', subject: '音樂', specialTags: '併班' },
@@ -241,11 +251,20 @@ const combinedCandidateContext = {
   Number,
   parseInt
 };
-vm.createContext(combinedCandidateContext);
-const findCombinedReturnCandidates = vm.runInContext(`(() => {
-  ${appSource.slice(combinedCandidateStart, combinedCandidateEnd)}
-  return findCombinedReturnCandidates;
-})()`, combinedCandidateContext);
+  vm.createContext(combinedCandidateContext);
+  vm.runInContext(fs.readFileSync(path.join(root, 'domain-schedule.js'), 'utf8'), combinedCandidateContext, { filename: 'domain-schedule.js' });
+  vm.runInContext(ttSource, combinedCandidateContext, { filename: 'ui-timetable.js' });
+  const findCombinedReturnCandidates = combinedCandidateContext.window.UiTimetable.create({
+    computed: fn => ({ get value() { return fn(); } }),
+    allSchedules: combinedCandidateContext.allSchedules,
+    inputRequestDate: combinedCandidateContext.inputRequestDate,
+    currentWeekDates: combinedCandidateContext.currentWeekDates,
+    lookupTeacher: combinedCandidateContext.lookupTeacher,
+    getTeacherNameByEmail: combinedCandidateContext.getTeacherNameByEmail,
+    isSingleWeek: combinedCandidateContext.isSingleWeek,
+    isCombinedClass: combinedCandidateContext.isCombinedClass,
+    getScheduleForDate: combinedCandidateContext.getScheduleForDate
+  }).findCombinedReturnCandidates;
 const combinedCandidates = findCombinedReturnCandidates({
   teacherEmail: 'owner@school.example',
   dayOfWeek: 1,
@@ -256,14 +275,15 @@ assert.equal(combinedCandidates.map(candidate => candidate.email).sort().join(',
   assert.match(indexSource, /app\.js\?v=\d{8}-[^"]+/);
 assert.doesNotMatch(preview.documentHtml, /<script\b/i, '列印預覽 srcdoc 不應注入腳本');
 assert.doesNotMatch(appSource, /seedClassKey/, '列印預覽不應依舊版班級鍵擴展資料');
-assert.match(appSource, /const printSingleRequest = async \(req, formType = 'Notice'\)/, '單筆列印入口應存在');
-assert.match(appSource, /const requestedRecordId = req && \(req\.recordId \|\| req\.substitutionRecordId\)/, '單列列印應使用明細紀錄 ID');
-assert.match(appSource, /targetIds = \[seedRecord\.id\]/, '一般批次單列列印只能使用目前明細');
+// 2A：列印實作已移至 ui-print.js；改讀模組源碼
+assert.match(printModSource, /const printSingleRequest = async \(req, formType = 'Notice'\)/, '單筆列印入口應存在');
+assert.match(printModSource, /const requestedRecordId = req && \(req\.recordId \|\| req\.substitutionRecordId\)/, '單列列印應使用明細紀錄 ID');
+assert.match(printModSource, /targetIds = \[seedRecord\.id\]/, '一般批次單列列印只能使用目前明細');
 assert.match(printHelperSource, /const signatureSide = group && group\.isExchange \? 'original' : 'actual';/);
 assert.match(printHelperSource, /function getOfficialArrowMarkerHtml\(markerId\)/);
-assert.match(indexSource, /print-helper\.js\?v=20261003-teacher-quota-adjust2/);
+assert.match(indexSource, /print-helper\.js\?v=[^"']+/);
 assert.match(indexSource, /@click="openHistoryPrintPreview"/);
-assert.match(appSource, /window\.buildHistoryPrintRecords\(/);
+assert.match(printModSource, /window\.buildHistoryPrintRecords\(/);
 assert.match(appSource, /openPrintPreview, openHistoryPrintPreview, closePrintPreview/);
 assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
 assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
@@ -310,7 +330,7 @@ assert.match(indexSource, /v-model="pendingRequestData\.reason" :disabled="pendi
 assert.doesNotMatch(indexSource, /<option v-if="pendingRequestData\.specialFlow === 'combined_return'" value="合班回原班">/);
 assert.match(indexSource, /被代教師扣減類別/);
 assert.match(indexSource, /getApproveRiskFlags\((?:req|row)\)\.filter\(f => \(f\.level === 'warn' \|\| f\.level === 'danger'\) && f\.key !== 'chain'\)/);
-assert.match(appSource, /const returnTo = showDetailModal\.value \? 'detail' : '';/);
+assert.match(printModSource, /const returnTo = showDetailModal\.value \? 'detail' : '';/);
 assert.match(styleSource, /\.hist-actions \{[^}]*flex-wrap:\s*nowrap/);
 assert.match(mobileSource, /\.hist-actions \{[^}]*flex-direction:\s*row/);
 const previewSvg = context.window.buildPrintPreviewImageSvg(preview);

@@ -10,9 +10,7 @@ window.FeeUtils = (function () {
   var TIMETABLE_ONLY = '僅課表呈現（不結算）';
 
   function isQuotaDeductFee(fee) {
-    if (window.DomainActivityCover && window.DomainActivityCover.isQuotaDeductFee) {
-      return window.DomainActivityCover.isQuotaDeductFee(fee);
-    }
+    // 單一來源：讀取相容舊資料「互代不結」；寫入一律用「扣額度」
     var f = String(fee || '');
     return f === QUOTA || f === '互代不結';
   }

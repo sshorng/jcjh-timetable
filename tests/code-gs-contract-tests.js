@@ -9,6 +9,8 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'code.gs'), 'utf8');
 const appSource = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
+const submitSource = fs.readFileSync(path.join(root, 'ui-submit.js'), 'utf8');
+const backofficeSource = fs.readFileSync(path.join(root, 'ui-backoffice.js'), 'utf8');
 
 new vm.Script(source, { filename: 'code.gs' });
 assert.match(source, /clearStaleCacheChunksBeforePut_\(cache, key, 1\)/, '單值快取改寫時應清理舊分片');
@@ -176,8 +178,8 @@ const quotaAdjustSource = source.slice(quotaAdjustStart, quotaAdjustEnd);
 assert.match(quotaAdjustSource, /if \(!isAdmin\) throw new Error/, '手動額度調整必須限制管理員');
 assert.match(quotaAdjustSource, /appendQuotaLedgerRowsFast_\(ledgerRows\)/, '手動額度調整必須記入額度帳本');
 assert.match(quotaAdjustSource, /patchTeacherMutualQuotaColumn_\(sidAdj, finalBal\)/, '手動額度調整必須更新教師名單餘額');
-assert.match(appSource, /const saveManualQuotaAdjust = async/, '教師管理需提供手動增減額度操作');
-assert.match(appSource, /callGasApi\('updateMutualQuotas',\s*\{\s*list:/, '手動增減需呼叫額度帳本調整 API');
+assert.match(backofficeSource, /const saveManualQuotaAdjust = async/, '手動增減額度本體已移至 ui-backoffice.js');
+assert.match(backofficeSource, /callGasApi\('updateMutualQuotas',\s*\{\s*list:/, '手動增減需呼叫額度帳本調整 API');
 const scheduleKeyStart = source.indexOf('function scheduleSlotKey_');
 const scheduleKeyEnd = source.indexOf('function scheduleClassTokens_', scheduleKeyStart);
 assert.ok(scheduleKeyStart >= 0 && scheduleKeyEnd > scheduleKeyStart, 'schedule version key helpers must remain discoverable');
@@ -338,12 +340,12 @@ assert.match(source, /assertNoExchangeIncomingConflict_\(targetReq, \(getSemeste
   '單筆行政核准必須重新驗證調課衝堂');
 assert.match(source, /assertNoExchangeIncomingConflict_\(reqData\.request, \(getSemesterRequestsCached_\(semesterId, true\)\.rows \|\| \[\]\)\)/,
   '單筆直接送出必須重新驗證調課衝堂');
-const appExchangeConflictStart = appSource.indexOf('const exchangeIncomingConflict = computed(() =>');
-const appExchangeConflictEnd = appSource.indexOf('const confirmIfTargetPatrol', appExchangeConflictStart);
+const appExchangeConflictStart = submitSource.indexOf('const exchangeIncomingConflict = computed(() =>');
+const appExchangeConflictEnd = submitSource.indexOf('const confirmIfTargetPatrol', appExchangeConflictStart);
 assert.ok(appExchangeConflictStart >= 0 && appExchangeConflictEnd > appExchangeConflictStart,
   '前端調課衝堂提醒必須存在');
-assert.match(appSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /substitutionRecords\.value/);
-assert.match(appSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /allPendingRequests\.value/);
+assert.match(submitSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /substitutionRecords\.value/);
+assert.match(submitSource.slice(appExchangeConflictStart, appExchangeConflictEnd), /allPendingRequests\.value/);
 const homeroomSyncStart = source.indexOf('function syncHomeroomRecordForRequest_');
 const homeroomSyncEnd = source.indexOf('function getSemesterTeachersCached_', homeroomSyncStart);
 assert.match(source.slice(homeroomSyncStart, homeroomSyncEnd), /!homeroomRequestIsCourseAdjustmentOnly_\(requestRow\)/, '代導同步不得建立僅課務調整紀錄');
@@ -396,10 +398,12 @@ const fullDayLeaveRequest = Object.assign({}, emptySlotRequest, {
 });
 const fullDayMentorRecord = homeroomSyncContext.syncHomeroomRecordForRequest_(fullDayLeaveRequest, 'admin@school.example');
 assert.ok(fullDayMentorRecord && fullDayMentorRecord['啟用'] === 'TRUE', '一般導師整日請假仍應建立代導');
-const appHomeroomStart = appSource.indexOf('const isBillableHomeroomRecord = (record) =>');
-const appHomeroomEnd = appSource.indexOf('\n    };', appHomeroomStart);
+// 2A：isBillableHomeroomRecord 已移至 ui-homeroom.js
+const homeroomLibSource = fs.readFileSync(path.join(root, 'ui-homeroom.js'), 'utf8');
+const appHomeroomStart = homeroomLibSource.indexOf('const isBillableHomeroomRecord = (record) =>');
+const appHomeroomEnd = homeroomLibSource.indexOf('\n};', appHomeroomStart);
 assert.ok(appHomeroomStart >= 0 && appHomeroomEnd > appHomeroomStart, '代導畫面計費判斷必須存在');
-assert.match(appSource.slice(appHomeroomStart, appHomeroomEnd), /matched\.some\(isEmptySlotAssignmentRequest\)/,
+assert.match(homeroomLibSource.slice(appHomeroomStart, appHomeroomEnd), /matched\.some\(isEmptySlotAssignmentRequest\)/,
   '代導待指定清單與月度統計必須排除空堂任務');
 const manualHomeroomStart = source.indexOf('} else if (action === "saveManualHomeroomRecord")');
 const manualHomeroomEnd = source.indexOf('} else if (action === "deleteHomeroomRecord")', manualHomeroomStart);
@@ -478,11 +482,17 @@ assert.match(samePeriodAction, /saveRows\("申請單", \[samePeriodExchange\]/, 
 assert.doesNotMatch(samePeriodAction, /queueMail_|persistRequestRowsWithQuota_|syncHomeroomRecordForRequest_/, '管理員同節互換不可觸發通知、額度或代導流程');
 assert.match(source, /特殊流程": "admin_same_period_exchange"/, '同節互換需有可辨識的課表異動標記');
 assert.match(source, /if \(String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"\)[\s\S]*?markEdge\(reqDate, reqPer, reqEm, tgtEm, cls, subj\)[\s\S]*?markEdge\(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj\)/, '後端同節互換應讓雙方接手對方原班級');
-assert.match(appSource, /if \(String\(req\.specialFlow \|\| req\['特殊流程'\] \|\| ''\) === 'admin_same_period_exchange'\)/, '前端個人課表需辨識管理員同節互換');
-assert.match(appSource, /originalTeacherName: req\.requesterName,[\s\S]*?actualTeacherName: req\.targetTeacherName,[\s\S]*?className: leaveCls/, '前端應將 A 原班級改由 B 授課');
-assert.match(appSource, /originalTeacherName: req\.targetTeacherName,[\s\S]*?actualTeacherName: req\.requesterName,[\s\S]*?className: targetCls/, '前端應將 B 原班級改由 A 授課');
-assert.match(appSource, /selectActualDutyRecord\(slotSubs, em\)/, '同格多筆異動應優先保留實際代課責任');
-assert.match(appSource, /resolveSubstitutionCourse\(req, leaveCell, leaveBaseCell, emptyAssign\)/, '再辦申請不可把空堂巡堂任務當成被代課程');
-assert.match(appSource, /buildClassSubstitutionMap\(classSubstitutionRows\.value\)/, '班級課表也應使用實際代課優先的異動整理');
+// 2A：班級視圖已移至 ui-classview.js
+const classViewSource = fs.readFileSync(path.join(root, 'ui-classview.js'), 'utf8');
+assert.match(classViewSource, /if \(String\(req\.specialFlow \|\| req\['特殊流程'\] \|\| ''\) === 'admin_same_period_exchange'\)/, '前端個人課表需辨識管理員同節互換');
+assert.match(classViewSource, /originalTeacherName: requesterName,[\s\S]*?actualTeacherName: targetName,[\s\S]*?className: classValue/, '前端應將 A 原班級改由 B 授課');
+assert.match(classViewSource, /originalTeacherName: targetName,[\s\S]*?actualTeacherName: requesterName,[\s\S]*?className: targetClassValue/, '前端應將 B 原班級改由 A 授課');
+assert.match(appSource, /resolveCellFromBaseAndSubs\(\.\.\.args\)/, '細胞解析已移至 ui-timetable（經 getTimetableApi 委派）');
+const timetableSource = fs.readFileSync(path.join(root, 'ui-timetable.js'), 'utf8');
+assert.match(timetableSource, /selectActualDutyRecord\(slotSubs, em\)/, '同格多筆異動應優先保留實際代課責任');
+assert.match(timetableSource, /resolveSubstitutionCourse\(req, leaveCell, leaveBaseCell, emptyAssign\)/, '再辦申請不可把空堂巡堂任務當成被代課程');
+// 2A：classSubstitutionMap 已移至 ui-schedule.js
+const scheduleSource = fs.readFileSync(path.join(root, 'ui-schedule.js'), 'utf8');
+assert.match(scheduleSource, /buildClassSubstitutionMap\(classSubstitutionRows\.value\)/, '班級課表也應使用實際代課優先的異動整理');
 
 console.log('code.gs exchange contract tests PASS');

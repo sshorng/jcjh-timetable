@@ -57,7 +57,7 @@ assert.equal(inputRequestDate.value, '2026-10-05');
 assert.equal(showMatchModal.value, true, '管理員可由班級課表開啟代課媒合');
 assert.deepEqual(toastMessages, []);
 
-const appSource = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+const appSource = fs.readFileSync(path.join(__dirname, '..', 'ui-submit.js'), 'utf8');
 const permissionStart = appSource.indexOf('const assertCanSubmitAsLeaveTeacher =');
 const permissionEnd = appSource.indexOf('\n    };', permissionStart);
 assert.ok(permissionStart >= 0 && permissionEnd > permissionStart, '提交時教師權限驗證函式存在');

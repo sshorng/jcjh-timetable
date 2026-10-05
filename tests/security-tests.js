@@ -112,13 +112,19 @@ assert.match(gasApiSource, /AbortController/);
 assert.match(gasApiSource, /ACTION_TIMEOUT_MS/);
 assert.match(gasApiSource, /cancelAllInflight/);
 assert.match(appSource, /const _dataLoadSeq|let _dataLoadSeq/);
-assert.match(appSource, /const optimisticPatchRequestStatuses\s*=\s*\(updates\)/);
-assert.match(appSource, /ensureExportAccounting/);
-assert.match(appSource, /const classScheduleIndex = computed/);
-const classScheduleBlockStart = appSource.indexOf('const classSchedules = computed');
-const classScheduleBlockEnd = appSource.indexOf('const timetablePeriods', classScheduleBlockStart);
+// 2A：樂觀更新已移至 ui-data.js，改斷言新檔
+const uiDataSource = fs.readFileSync(path.join(root, 'ui-data.js'), 'utf8');
+assert.match(uiDataSource, /const optimisticPatchRequestStatuses\s*=\s*\(updates\)/);
+// 2A：匯出 orchestration 已移至 ui-export.js，懶載不斷言 app.js，改斷言新檔
+const uiExportSource = fs.readFileSync(path.join(root, 'ui-export.js'), 'utf8');
+assert.match(uiExportSource, /ensureExportAccounting/);
+// 2A：班級課表索引已移至 ui-schedule.js，改斷言新檔
+const uiScheduleSource = fs.readFileSync(path.join(root, 'ui-schedule.js'), 'utf8');
+assert.match(uiScheduleSource, /const classScheduleIndex = computed/);
+const classScheduleBlockStart = uiScheduleSource.indexOf('const classSchedules = computed');
+const classScheduleBlockEnd = uiScheduleSource.indexOf('const currentWeekDates = computed', classScheduleBlockStart);
 assert.ok(classScheduleBlockStart >= 0 && classScheduleBlockEnd > classScheduleBlockStart);
-assert.strictEqual(appSource.slice(classScheduleBlockStart, classScheduleBlockEnd).includes('allSchedules.value.forEach'), false);
+assert.strictEqual(uiScheduleSource.slice(classScheduleBlockStart, classScheduleBlockEnd).includes('allSchedules.value.forEach'), false);
 assert.strictEqual(/<script\s+defer\s+src=["']export-accounting\.js/i.test(indexSource), false);
 assert.strictEqual(indexSource.includes('20260814-p2'), false);
 assert.strictEqual(new Set(Array.from(indexSource.matchAll(/(?:src|href)="[^"]+\?v=([^"']+)/g), m => m[1])).size, 1);

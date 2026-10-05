@@ -158,8 +158,7 @@ window.UiSubmitHelpers = (function () {
       var d2 = new Date(String(pending.dateB).replace(/-/g, '/'));
       var diffDays = Math.abs((d2 - d1) / (1000 * 60 * 60 * 24));
       if (diffDays > 14) {
-        showToast('⚠️ 調課時間差距超過 14 天限制，請重新規劃！', 'warning');
-        return false;
+        showToast('⚠️ 提醒：調課時間差距超過 14 天，仍可送出，請確認是否要繼續。', 'warning');
       }
       if (d1.getDay() === 0 || d1.getDay() === 6 || d2.getDay() === 0 || d2.getDay() === 6) {
         showToast('⚠️ 對調日期不能為非補班日的週末放假日！', 'warning');

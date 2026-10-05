@@ -11,6 +11,14 @@ window.UiAdmin = (function () {
     var showConfirm = deps.showConfirm;
     var loading = deps.loading;
     var loadingMessage = deps.loadingMessage;
+    var showQuotaLedgerModal = deps.showQuotaLedgerModal;
+    var quotaLedgerTeacher = deps.quotaLedgerTeacher;
+    var quotaLedgerRows = deps.quotaLedgerRows;
+    var quotaLedgerLoading = deps.quotaLedgerLoading;
+    var _quotaLedgerCache = deps._quotaLedgerCache || {};
+    var QUOTA_LEDGER_CACHE_MS = deps.QUOTA_LEDGER_CACHE_MS || 180000;
+    var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
+    var isAdminRef = deps.isAdmin;
     var softRefreshInBackground = deps.softRefreshInBackground || function () {};
     var clearScheduleCache = deps.clearScheduleCache || function () {};
     var loadWeeklyData = deps.loadWeeklyData;
@@ -2521,6 +2529,73 @@ window.UiAdmin = (function () {
       }
     }
 
+    async function openQuotaLedger(t) {
+      if (!t || !t.email) return;
+      if (!isAdminRef.value) {
+        showToast('僅管理員可查看額度歷程', 'warning');
+        return;
+      }
+      if (typeof fetchMutualQuotaLedger !== 'function') {
+        showToast('額度歷程 API 未載入，請重新整理', 'error');
+        return;
+      }
+      const emKey = String(t.email).toLowerCase();
+      // 先開 modal＋顯示名單餘額，體感較快
+      showQuotaLedgerModal.value = true;
+      quotaLedgerTeacher.value = {
+        email: t.email,
+        name: t.name || t.email,
+        balance: parseFloat(t.mutualQuota) || 0,
+        sheetQuota: parseFloat(t.mutualQuota) || 0
+      };
+      const hit = _quotaLedgerCache[emKey];
+      if (hit && (Date.now() - hit.ts) < QUOTA_LEDGER_CACHE_MS) {
+        quotaLedgerRows.value = hit.rows;
+        if (hit.meta) quotaLedgerTeacher.value = hit.meta;
+        quotaLedgerLoading.value = false;
+        return;
+      }
+      // 有舊資料先顯示，背景刷新；無資料才清空＋ loading
+      const hasStale = !!(hit && hit.rows && hit.rows.length);
+      if (hasStale) {
+        quotaLedgerRows.value = hit.rows;
+        if (hit.meta) quotaLedgerTeacher.value = Object.assign({}, hit.meta, {
+          balance: parseFloat(t.mutualQuota) || hit.meta.balance,
+          sheetQuota: parseFloat(t.mutualQuota) || hit.meta.sheetQuota
+        });
+      } else {
+        quotaLedgerRows.value = [];
+      }
+      quotaLedgerLoading.value = !hasStale;
+      try {
+        const res = await fetchMutualQuotaLedger({ name: t.teacherName || t.name, limit: 50 });
+        // 後端已倒序；前端再保險排一次
+        const rows = ((res && res.ledger) || []).slice().sort((a, b) => {
+          const ta = String((a && a.time) || '').replace('T', ' ').trim();
+          const tb = String((b && b.time) || '').replace('T', ' ').trim();
+          if (tb !== ta) return tb < ta ? -1 : 1;
+          const ida = String((a && a.id) || '');
+          const idb = String((b && b.id) || '');
+          if (idb !== ida) return idb < ida ? -1 : 1;
+          return 0;
+        });
+        const meta = {
+          email: (res && res.email) || t.email,
+          name: (res && res.name) || t.name || t.email,
+          balance: res && res.balance != null ? res.balance : (parseFloat(t.mutualQuota) || 0),
+          sheetQuota: res && res.sheetQuota != null ? res.sheetQuota : (parseFloat(t.mutualQuota) || 0)
+        };
+        quotaLedgerRows.value = rows;
+        quotaLedgerTeacher.value = meta;
+        _quotaLedgerCache[emKey] = { ts: Date.now(), rows: rows, meta: meta };
+      } catch (e) {
+        console.error(e);
+        if (!hasStale) showToast('載入額度歷程失敗：' + (e && e.message ? e.message : e), 'error');
+      } finally {
+        quotaLedgerLoading.value = false;
+      }
+    };
+
     return {
       showImportTeachersModal: showImportTeachersModal,
       teacherExcelData: teacherExcelData,
@@ -2573,6 +2648,7 @@ window.UiAdmin = (function () {
       importTeachersBatch: importTeachersBatch,
       handleFileChange: handleFileChange,
       getMappingLabel: getMappingLabel,
+      openQuotaLedger: openQuotaLedger,
       openHistoryEditModal: openHistoryEditModal,
       saveHistoryEdit: saveHistoryEdit,
       onHistoryEditReasonChange: onHistoryEditReasonChange,

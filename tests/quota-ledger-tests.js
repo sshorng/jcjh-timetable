@@ -30,6 +30,10 @@ vm.runInContext(fs.readFileSync(path.join(root, 'domain-activity-cover.js'), 'ut
   filename: 'domain-activity-cover.js'
 });
 context.window.DomainActivityCover = context.window.DomainActivityCover;
+// 範本載入共用模組：與 index.html ensureTemplateBuffer() 順序一致（匯出檔之前）
+vm.runInContext(fs.readFileSync(path.join(root, 'template-buffer.js'), 'utf8'), context, {
+  filename: 'template-buffer.js'
+});
 vm.runInContext(fs.readFileSync(path.join(root, 'export-activity-cover.js'), 'utf8'), context, {
   filename: 'export-activity-cover.js'
 });
