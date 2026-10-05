@@ -308,7 +308,11 @@ const UiSubmitHelpers = (() => {
        }
     }
 
-    var baseNote = String(pending.note || '').trim();
+    // 隱私：自費／自付代課不把請假人備註寫入代課單（僅留行政代申請標籤）
+    var selfPayFee = String(finalFeeType || '').trim();
+    var baseNote = (selfPayFee === '自費代課' || selfPayFee === '自費')
+      ? ''
+      : String(pending.note || '').trim();
     var noteOut = baseNote;
     if (proxyActive) {
       var leaveNm = getTeacherNameByEmail(pending.leaveTeacher) || pending.leaveTeacher;

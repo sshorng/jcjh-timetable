@@ -1068,7 +1068,11 @@ window.UiBatchSubmit = (function () {
         ? 'pending_admin'
         : (doDirectApprove ? 'approved' : (proxyActive ? 'pending_admin' : 'pending_teacher'));
       var rows = workSlots.map(function (s, i) {
-        var base = String(note || '').trim();
+        // 隱私：自費／自付代課不把請假人備註寫入代課單（僅留行政代申請標籤）
+        var slotFee = String(feeForSlot(s, i) || '').trim();
+        var base = (slotFee === '自費代課' || slotFee === '自費')
+          ? ''
+          : String(note || '').trim();
          var noteOut = base;
          if (proxyActive) {
           var tag = '[行政代申請：' + (proxyByName || proxyByEmail) + ' 代 ' + leaveName + ']';
@@ -1092,7 +1096,7 @@ window.UiBatchSubmit = (function () {
           "請假事由": reason,
           "請假時間類型": leaveTimeType,
            "請假時間": leaveTime,
-          "經費來源": feeForSlot(s, i),
+          "經費來源": slotFee,
            "備註": noteOut,
             "狀態": batchStatus,
             "直接核准": doDirectApprove ? '是' : '',
