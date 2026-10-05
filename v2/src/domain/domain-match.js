@@ -1,0 +1,502 @@
+/**
+ * 自 v1 domain-match.js 機械移植（port-domain.cjs）：
+ * IIFE 掛載改 ESM default export；body 與 v1 逐字一致。
+ */
+import DomainSchedule from './domain-schedule.js';
+import DomainClassAway from './domain-class-away.js';
+import DateUtils from './date-utils.js';
+import DomainActivityCover from './domain-activity-cover.js';
+
+/**
+ * 媒合領域邏輯（純函式）
+ * 代課推薦排序、調課候選過濾
+ */
+const DomainMatch = (() => {
+  /**
+   * 代課空堂教師推薦
+   * @param {object} opts
+   * @param {Array} opts.teachers
+   * @param {Array} opts.allSchedules
+   * @param {string} opts.leaveEmail
+   * @param {string} opts.dateStr
+   * @param {number} opts.targetDay
+   * @param {number} opts.targetPeriod
+   * @param {string} opts.myCourse   課表格子課程名稱（如「走讀」「輔導」）→ 同課
+   * @param {string} opts.myDomain   請假教師名單科目（可多科：國文、輔導）→ 推導需求科
+   * @param {string} opts.mySubject  相容舊參數：若未傳 myCourse 則當課程名稱
+   * @param {string} opts.myClass
+   * @param {function} opts.getScheduleForDate(email, dateStr, period, day)
+   */
+  function extractGrade(className) {
+    var s = String(className || '');
+    // 701 / 7年1班 / 七01 → 取 7、8、9
+    var m = s.match(/[789]/);
+    if (m) return m[0];
+    if (/七/.test(s)) return '7';
+    if (/八/.test(s)) return '8';
+    if (/九/.test(s)) return '9';
+    return '';
+  }
+
+  /** 解析多科：國文、輔導／國文,輔導／國文；輔導 */
+  function parseSubjects(raw) {
+    return String(raw || '')
+      .split(/[、,，;；/／|｜\s]+/)
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+  }
+
+  var GENERIC_COURSE_REGEX = /^(專題探究|專題|走讀|閱讀|閱讀素養|彈性|彈性課程|校訂|校訂課程|班會|週會|班週會|社團|社團活動|自主學習|自習|早自習|午休|導師時間)$/;
+
+  function isGenericCourse(name) {
+    if (!name) return false;
+    return GENERIC_COURSE_REGEX.test(String(name).trim());
+  }
+
+  function normalizeSubjectToken(raw) {
+    return String(raw || '').trim().toLowerCase().replace(/[\s\-_]/g, '');
+  }
+
+  function areSubjectsCompatible(subjA, subjB) {
+    if (!subjA || !subjB) return false;
+    var a = normalizeSubjectToken(subjA);
+    var b = normalizeSubjectToken(subjB);
+    if (!a || !b) return false;
+    return a === b;
+  }
+
+  function subjectListHas(list, token) {
+    if (!token) return false;
+    var t = String(token).trim();
+    return (list || []).some(function (s) { return s === t; });
+  }
+
+  function rankSubstitutionCandidates(opts) {
+    const teachers = opts.teachers || [];
+    const allSchedules = opts.allSchedules || [];
+    const leaveEmail = opts.leaveEmail;
+    const dateStr = opts.dateStr;
+    const targetDay = opts.targetDay;
+    const targetPeriod = opts.targetPeriod;
+    // 同課：課表課程名稱；同科：本堂「需求科」（非請假老師全部專長）
+    const myCourse = String(opts.myCourse != null ? opts.myCourse : (opts.mySubject || '')).trim();
+    const leaveDomains = parseSubjects(opts.myDomain || '');
+    const myClass = String(opts.myClass || '').trim();
+    const myGrade = extractGrade(myClass);
+    const getScheduleForDate = opts.getScheduleForDate;
+
+    function normalizedTeacherKey(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function teacherKeys(t) {
+      return [t && t.email, t && t.teacherEmail, t && t.teacherName, t && t.name, t && t.loginEmail]
+        .map(normalizedTeacherKey)
+        .filter(Boolean);
+    }
+
+    function scheduleKeys(s) {
+      return [s && s.teacherEmail, s && s.teacherName, s && s['教師Email'], s && s['教師姓名']]
+        .map(normalizedTeacherKey)
+        .filter(Boolean);
+    }
+
+    function appendUniqueSubjects(list, raw) {
+      parseSubjects(raw).forEach(function (subject) {
+        if (list.indexOf(subject) < 0) list.push(subject);
+      });
+    }
+
+    // 教師名單通常只有主要科目，第二科可能只存在有效課表中。
+    const scheduleSubjectsByTeacher = Object.create(null);
+    const knownDomains = new Set();
+    teachers.forEach(function (t) {
+      var rosterDomains = parseSubjects(t.subject || t['授課科目'] || t['任課科目']);
+      rosterDomains.forEach(function (subject) {
+        if (!isGenericCourse(subject)) knownDomains.add(subject);
+      });
+    });
+    leaveDomains.forEach(function (s) {
+      if (!isGenericCourse(s)) knownDomains.add(s);
+    });
+
+    allSchedules.forEach(function (s) {
+      if (!s) return;
+      if (DomainSchedule && DomainSchedule.isActiveOnDate
+          && !DomainSchedule.isActiveOnDate(s, dateStr)) return;
+      var scheduleSubject = s.subject || s['科目'] || '';
+      if (scheduleSubject && !isGenericCourse(scheduleSubject)) {
+        knownDomains.add(scheduleSubject);
+        scheduleKeys(s).forEach(function (key) {
+          if (!scheduleSubjectsByTeacher[key]) scheduleSubjectsByTeacher[key] = [];
+          appendUniqueSubjects(scheduleSubjectsByTeacher[key], scheduleSubject);
+        });
+      }
+    });
+
+    // 本堂需求科：格子是標準領域名就用格子；否則回退請假老師名單第一科
+    var demandDomain = '';
+    if (myCourse && !isGenericCourse(myCourse) && knownDomains.has(myCourse)) {
+      demandDomain = myCourse;
+    } else if (leaveDomains.length) {
+      demandDomain = leaveDomains[0];
+    }
+    if (!demandDomain && /英資/.test(myClass)) {
+      demandDomain = '英語資優';
+    } else if (!demandDomain && /數資/.test(myClass)) {
+      demandDomain = '數理資優';
+    }
+
+    // 同班／同課：單次掃課表
+    const sameClassTeachers = new Set();
+    const sameCourseTeachers = new Set();
+    allSchedules.forEach(function (s) {
+      if (!s || !s.teacherEmail) return;
+      if (DomainSchedule && DomainSchedule.isActiveOnDate
+          && !DomainSchedule.isActiveOnDate(s, dateStr)) return;
+      if (myClass && String(s.className || '') === myClass) {
+        sameClassTeachers.add(s.teacherEmail);
+      }
+      if (myCourse && String(s.subject || '').trim() === myCourse) {
+        if (myGrade) {
+          if (extractGrade(s.className) === myGrade) sameCourseTeachers.add(s.teacherEmail);
+        } else if (String(s.className || '') === myClass) {
+          sameCourseTeachers.add(s.teacherEmail);
+        }
+      }
+    });
+
+    // 外出班級：該節原課班級在外出名單中 → 視為可互代空堂（釋出）
+    var awaySet = {};
+    (opts.awayClasses || []).forEach(function (c) {
+      var k = String(c || '').trim();
+      if (k) awaySet[k] = true;
+    });
+    var hasAway = Object.keys(awaySet).length > 0;
+
+    function isAwayPeriodAllowed(period) {
+      var awayStartDate = String(opts.awayStartDate || '').slice(0, 10);
+      var awayEndDate = String(opts.awayEndDate || '').slice(0, 10);
+      if (awayStartDate && dateStr < awayStartDate) return false;
+      if (awayEndDate && dateStr > awayEndDate) return false;
+      if (opts.awayStartPeriod == null || opts.awayStartPeriod === ''
+          || opts.awayEndPeriod == null || opts.awayEndPeriod === '') return true;
+      if (DomainClassAway && DomainClassAway.eventAppliesToPeriod) {
+        return DomainClassAway.eventAppliesToPeriod({
+          startDate: opts.awayStartDate || dateStr,
+          endDate: opts.awayEndDate || dateStr,
+          startPeriod: String(opts.awayStartPeriod),
+          endPeriod: String(opts.awayEndPeriod)
+        }, period, dateStr, opts.awayEndDate || opts.awayStartDate || dateStr);
+      }
+      return true;
+    }
+
+    function isCellAwayReleased(cell, period) {
+      if (!cell || cell.isSubstituted) return false;
+      // 空堂事件班：邏輯視同空堂（畫面淡化）
+      if (cell.isClassAway) return true;
+      var cn = String(cell.className || '').trim();
+      return !!(hasAway && cn && awaySet[cn] && isAwayPeriodAllowed(period));
+    }
+
+    function isPatrolSlot(cell) {
+      return !!(DomainSchedule && DomainSchedule.isPatrolCell && DomainSchedule.isPatrolCell(cell));
+    }
+
+    function isFreeAtPeriod(email, period) {
+      var cell = getScheduleForDate(email, dateStr, period, targetDay);
+      if (cell === null || cell.isSubstituted) return { free: true, released: false, cell: cell };
+      // 巡堂：可當空堂排入，但不算真衝堂
+      if (isPatrolSlot(cell)) return { free: true, released: false, cell: cell, isPatrol: true };
+      if (isCellAwayReleased(cell, period)) return { free: true, released: true, cell: cell };
+      return { free: false, released: false, cell: cell };
+    }
+
+    // P2：先只查目標節（1 次／人），空堂候選再掃完整課表節次算當日負荷
+    const freeAtTarget = [];
+    const todayCountMap = {};
+    const releasedMap = {};
+    const workloadPeriods = DateUtils && typeof DateUtils.getTimetablePeriods === 'function'
+      ? DateUtils.getTimetablePeriods()
+      : [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+    var leaveKey = String(leaveEmail || '').toLowerCase().trim();
+    var targetP = parseInt(targetPeriod, 10);
+    teachers.forEach(function (t) {
+      if (!t.email || String(t.email).toLowerCase().trim() === leaveKey) return;
+      var freeInfo = isFreeAtPeriod(t.email, targetP);
+      if (!(freeInfo && freeInfo.free)) return;
+      freeAtTarget.push(t);
+      releasedMap[t.email] = !!freeInfo.released;
+    });
+    freeAtTarget.forEach(function (t) {
+      var periodsBusy = 0;
+      // 當日負荷包含早自習（0）、一般節次（1–8）與午休（45）。
+      for (var pi = 0; pi < workloadPeriods.length; pi++) {
+        var p = workloadPeriods[pi];
+        var cell = getScheduleForDate(t.email, dateStr, p, targetDay);
+        var awayRel = isCellAwayReleased(cell, p);
+        var patrol = isPatrolSlot(cell);
+        if (cell && !cell.isSubstituted && !awayRel && !patrol) periodsBusy++;
+      }
+      todayCountMap[t.email] = periodsBusy;
+    });
+
+    const list = freeAtTarget.map(function (t) {
+      var rosterDomains = parseSubjects(t.subject || t['授課科目'] || t['任課科目']);
+      var candDomains = rosterDomains.slice();
+      teacherKeys(t).forEach(function (key) {
+        (scheduleSubjectsByTeacher[key] || []).forEach(function (subject) {
+          if (candDomains.indexOf(subject) < 0) candDomains.push(subject);
+        });
+      });
+      var isSameCourse = sameCourseTeachers.has(t.email);
+      var isSameSubject = false;
+      var isPrimarySubject = false;
+      var subjectMatchRank = 0;
+      // 支援多科：收齊 demandDomain + 請假教師全部科目，候選人命中任一即算同科
+      var effectiveDemands = [];
+      if (demandDomain && effectiveDemands.indexOf(demandDomain) < 0) effectiveDemands.push(demandDomain);
+      leaveDomains.forEach(function (d) {
+        if (d && !isGenericCourse(d) && effectiveDemands.indexOf(d) < 0) effectiveDemands.push(d);
+      });
+      if (effectiveDemands.length > 0) {
+        candDomains.forEach(function (candSubj) {
+          effectiveDemands.forEach(function (dd) {
+            if (areSubjectsCompatible(candSubj, dd)) {
+              isSameSubject = true;
+              var isDemandExact = demandDomain && normalizeSubjectToken(dd) === normalizeSubjectToken(demandDomain);
+              var inRoster = rosterDomains.some(function (r) {
+                return areSubjectsCompatible(r, dd);
+              });
+              var isRosterPrimary = rosterDomains.length > 0
+                && areSubjectsCompatible(rosterDomains[0], dd);
+              var rank = isDemandExact
+                ? (isRosterPrimary ? 4 : (inRoster ? 3 : 2))
+                : (isRosterPrimary ? 2 : 1);
+              if (rank > subjectMatchRank) {
+                subjectMatchRank = rank;
+                if (isRosterPrimary) isPrimarySubject = true;
+              }
+            }
+          });
+        });
+      }
+      var isSameClass = sameClassTeachers.has(t.email);
+      var isReleasedByAway = !!releasedMap[t.email];
+      // 僅活動互代：外出班釋出往上排（+100）；一般調代課當空堂即可，不特別優先
+      var preferReleased = !!(opts.preferReleasedByAway || opts.activityMode);
+      var score = (preferReleased && isReleasedByAway ? 100 : 0)
+        + (isSameCourse ? 4 : 0) + (isSameSubject ? 2 : 0) + (isSameClass ? 1 : 0);
+      // 活動模式經費建議委派 DomainActivityCover（若尚未載入則內建後備）
+      var suggestedFee = '';
+      if (opts.activityMode) {
+        if (DomainActivityCover && DomainActivityCover.suggestedFee) {
+          suggestedFee = DomainActivityCover.suggestedFee(isReleasedByAway, true);
+        } else {
+          suggestedFee = isReleasedByAway ? '扣額度' : '活動公費';
+        }
+      }
+      return Object.assign({}, t, {
+        todayPeriodCount: todayCountMap[t.email] || 0,
+        isSameCourse: isSameCourse,
+        isSameSubject: isSameSubject,
+        isPrimarySubject: isPrimarySubject,
+        subjectMatchRank: subjectMatchRank,
+        isSameClass: isSameClass,
+        isReleasedByAway: isReleasedByAway,
+        suggestedFee: suggestedFee,
+        demandDomain: demandDomain,
+        score: score
+      });
+    });
+
+    // 排序：活動互代才把「外出班釋出」置頂；一般只看分數／當日課少
+    var preferReleased = !!(opts.preferReleasedByAway || opts.activityMode);
+    list.sort(function (a, b) {
+      if (preferReleased) {
+        var ra = a.isReleasedByAway ? 1 : 0;
+        var rb = b.isReleasedByAway ? 1 : 0;
+        if (rb !== ra) return rb - ra;
+      }
+      return b.score - a.score
+        || (b.subjectMatchRank || 0) - (a.subjectMatchRank || 0)
+        || a.todayPeriodCount - b.todayPeriodCount;
+    });
+    return list;
+  }
+
+  /** 該格是否可視為空堂（無課／調出被代／巡堂／空堂事件／外出班釋出） */
+  function isSlotFreeForMatch(cell, awaySet) {
+    if (!cell || cell.isSubstituted) return true;
+    if (DomainSchedule && DomainSchedule.isPatrolCell
+        && DomainSchedule.isPatrolCell(cell)) return true;
+    if (cell.isClassAway) return true;
+    var cn = String(cell.className || '').trim();
+    if (cn && awaySet && awaySet[cn]) return true;
+    return false;
+  }
+
+  function isPullOutSlot(cellOrSched) {
+    if (!cellOrSched) return false;
+    if (DomainSchedule && DomainSchedule.isPullOutCell
+        && DomainSchedule.isPullOutCell(cellOrSched)) {
+      return true;
+    }
+    if (DomainSchedule && DomainSchedule.isPullOutAttr
+        && DomainSchedule.isPullOutAttr(cellOrSched.attr)) {
+      return true;
+    }
+    return String(cellOrSched.specialTags || cellOrSched['特殊標記'] || '')
+      .split(/[、,，;；/／|｜\s]+/).some(function (value) {
+        return String(value || '').trim() === '抽離';
+      });
+  }
+
+  /**
+   * 調課候選（同班、雙方空堂）
+   * 外出班／空堂事件釋出可作為老師的空堂，但被取消的課不可作為交換標的
+   * 抽離僅可與抽離互調；一般課不可與抽離調課
+   */
+  function listExchangeCandidates(opts) {
+    const allSchedules = opts.allSchedules || [];
+    const cls = opts.className || '';
+    const leaveTeacher = String(opts.leaveEmail || '').trim();
+    if (!leaveTeacher) return [];
+    const leaveDate = opts.leaveDate;
+    const leavePeriod = opts.leavePeriod;
+    const leaveDay = opts.leaveDay;
+    const weekDates = opts.weekDates || []; // index 0 = Mon
+    const getScheduleForDate = opts.getScheduleForDate;
+    const getTeacherNameByEmail = opts.getTeacherNameByEmail;
+    const isSingleWeek = opts.isSingleWeek;
+    var awaySet = {};
+    (opts.awayClasses || []).forEach(function (c) {
+      var k = String(c || '').trim();
+      if (k) awaySet[k] = true;
+    });
+
+    // 請假節是否為抽離（優先用 leaveCell／leaveAttr，否則從課表推）
+    var leaveIsPullOut = false;
+    if (opts.leaveIsPullOut != null) {
+      leaveIsPullOut = !!opts.leaveIsPullOut;
+    } else if (opts.leaveCell) {
+      leaveIsPullOut = isPullOutSlot(opts.leaveCell);
+    } else if (opts.leaveAttr != null) {
+      leaveIsPullOut = isPullOutSlot({ attr: opts.leaveAttr });
+    } else if (typeof getScheduleForDate === 'function' && leaveTeacher && leaveDate) {
+      leaveIsPullOut = isPullOutSlot(
+        getScheduleForDate(leaveTeacher, leaveDate, leavePeriod, leaveDay)
+      );
+    }
+
+    function classMatches(schedClass, targetCls) {
+      if (DateUtils && typeof DateUtils.classListIncludes === 'function') {
+        return DateUtils.classListIncludes(schedClass, targetCls);
+      }
+      return String(schedClass || '') === String(targetCls || '');
+    }
+    function isScheduleActiveForExchange(schedule, dateStr) {
+      if (DomainSchedule && DomainSchedule.isActiveOnDate
+          && !DomainSchedule.isActiveOnDate(schedule, dateStr)) {
+        return false;
+      }
+      var attr = String(schedule && schedule.attr || '').trim();
+      if ((attr === '單週' || attr === '雙週') && typeof isSingleWeek === 'function') {
+        var single = !!isSingleWeek(dateStr);
+        return attr === '單週' ? single : !single;
+      }
+      return true;
+    }
+    const classSchedules = allSchedules.filter(function (s) {
+      return classMatches(s.className, cls) && s.teacherEmail !== leaveTeacher
+        && isScheduleActiveForExchange(s, weekDates[s.dayOfWeek - 1]);
+    });
+    const res = [];
+    var leaveP = parseInt(leavePeriod, 10);
+    var leaveIsEarly = leaveP === 0 || (DateUtils && DateUtils.isEarlyPeriod
+      && DateUtils.isEarlyPeriod(leavePeriod));
+    var leaveIsLunch = leaveP === 45 || (DateUtils && DateUtils.isLunchPeriod
+      && DateUtils.isLunchPeriod(leavePeriod));
+
+    classSchedules.forEach(function (sched) {
+      // 抽離 ↔ 僅抽離；一般 ↔ 僅非抽離
+      var targetIsPullOut = isPullOutSlot(sched);
+      if (leaveIsPullOut !== targetIsPullOut) return;
+
+      const schedTimeKey = sched.dayOfWeek + '-' + sched.period;
+      const schedDate = weekDates[sched.dayOfWeek - 1];
+      if (!schedDate) return;
+
+      const ownerCell = getScheduleForDate(sched.teacherEmail, schedDate, sched.period, sched.dayOfWeek);
+      // 週課表仍保留事件當天的原課；已釋出的課並沒有實際課程可交換。
+      if (ownerCell && ownerCell.isClassAway) return;
+      var actualEmail = sched.teacherEmail;
+      var actualName = sched.teacherName;
+      if (ownerCell && ownerCell.isSubstituted && ownerCell.subRecord) {
+        actualEmail = ownerCell.subRecord.actualTeacherEmail;
+        actualName = getTeacherNameByEmail(actualEmail);
+      }
+      if (actualEmail === leaveTeacher) return;
+
+      const cellAtTarget = getScheduleForDate(leaveTeacher, schedDate, sched.period, sched.dayOfWeek);
+      const isRequesterFreeAtTarget = isSlotFreeForMatch(cellAtTarget, awaySet);
+      const cellAtLeave = getScheduleForDate(actualEmail, leaveDate, leavePeriod, leaveDay);
+      const isTargetFreeAtLeave = isSlotFreeForMatch(cellAtLeave, awaySet);
+
+      var schedP = parseInt(sched.period, 10);
+      var schedIsEarly = schedP === 0 || (DateUtils && DateUtils.isEarlyPeriod
+        && DateUtils.isEarlyPeriod(sched.period));
+      var schedIsLunch = schedP === 45 || (DateUtils && DateUtils.isLunchPeriod
+        && DateUtils.isLunchPeriod(sched.period));
+      // 第8節只對第8；早自習與午休各自對應；一般 1–7 互對
+      if (leaveP === 8 && schedP !== 8) return;
+      if (leaveP !== 8 && schedP === 8) return;
+      if (leaveIsEarly !== schedIsEarly) return;
+      if (leaveIsLunch !== schedIsLunch) return;
+
+      if (isRequesterFreeAtTarget && isTargetFreeAtLeave) {
+        res.push({
+          teacherEmail: actualEmail,
+          teacherName: actualName,
+          dayOfWeek: sched.dayOfWeek,
+          period: sched.period,
+          periodKey: schedTimeKey,
+          subject: sched.subject,
+          className: sched.className,
+          attr: sched.attr || '',
+          isPullOut: targetIsPullOut,
+          restriction: sched.restriction || '',
+          freeByAway: !!(
+            (cellAtTarget && (cellAtTarget.isClassAway || (awaySet[String(cellAtTarget.className || '').trim()])))
+            || (cellAtLeave && (cellAtLeave.isClassAway || (awaySet[String(cellAtLeave.className || '').trim()])))
+          )
+        });
+      }
+    });
+    // 綁課／特殊課程往後排（仍可選，但優先推一般課）
+    res.sort(function (a, b) {
+      var ra = (a.restriction === 'restricted' || a.restriction === '限制') ? 1 : 0;
+      var rb = (b.restriction === 'restricted' || b.restriction === '限制') ? 1 : 0;
+      if (ra !== rb) return ra - rb;
+      var da = parseInt(a.dayOfWeek, 10) || 0;
+      var db = parseInt(b.dayOfWeek, 10) || 0;
+      if (da !== db) return da - db;
+      return (parseInt(a.period, 10) || 0) - (parseInt(b.period, 10) || 0);
+    });
+    return res;
+  }
+
+  return {
+    rankSubstitutionCandidates: rankSubstitutionCandidates,
+    listExchangeCandidates: listExchangeCandidates,
+    parseSubjects: parseSubjects,
+    isSlotFreeForMatch: isSlotFreeForMatch,
+    isPullOutSlot: isPullOutSlot,
+    areSubjectsCompatible: areSubjectsCompatible,
+    isGenericCourse: isGenericCourse
+  };
+})();
+
+
+export default DomainMatch;

@@ -1,0 +1,583 @@
+import assert from 'node:assert/strict';
+import { test } from 'vitest';
+import DomainActivityCover from '../src/domain/domain-activity-cover.js';
+import { ExportActivityCover } from '../src/modules/export-activity-cover.js';
+import { ExportInvigilation } from '../src/modules/export-invigilation-recovered.js';
+
+const domain = DomainActivityCover;
+const exporter = ExportActivityCover;
+const invigilation = ExportInvigilation;
+
+test('quota ledger tests（v1 移植）', () => {
+  const smallPeriodQuotaRows = domain.buildQuotaRecalcRows({
+    teachers: [{ email: 'small-period@example.test', name: '小鐘點老師', mutualQuota: 0 }],
+    awayClasses: ['901'],
+    startDate: '2026-10-05',
+    endDate: '2026-10-05',
+    allSchedules: [
+      { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 1, className: '901', attr: '一般' },
+      { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 2, className: '901', attr: '代課' },
+      { teacherEmail: 'small-period@example.test', dayOfWeek: 1, period: 3, className: '901', isSubstitute: true }
+    ]
+  });
+  assert.equal(smallPeriodQuotaRows[0].releasedSlots, 1, '發放額度應排除代課屬性與小鐘點旗標課格');
+  assert.equal(smallPeriodQuotaRows[0].released, 1, '小鐘點空堂未授課另扣，不應重複取得額度');
+  const ledgerRows = [
+    {
+      name: '甲老師', time: '2026-10-05 09:00:00', delta: 3, balanceAfter: 3,
+      type: 'earn', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    },
+    {
+      name: '甲老師', time: '2026-10-10 09:00:00', delta: -1, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-trip-甲', eventId: 'evt_sub', eventName: '代課',
+      requestId: 'legacy-exam-row'
+    },
+    {
+      name: '甲老師', time: '2026-10-20 09:00:00', delta: -1, balanceAfter: 1,
+      type: 'spend', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      requestId: 'trip-1-request'
+    },
+    {
+      name: '乙老師', time: '2026-10-05 09:00:00', delta: 1, balanceAfter: 1,
+      type: 'earn', packageId: 'pkg-trip-乙', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    }
+  ];
+
+  const exam = domain.buildLedgerExamStats({
+    ledgerRows,
+    teacher: { name: '甲老師' },
+    requests: [],
+    rangeDates: ['2026-10-10'],
+    startDate: '2026-10-10',
+    endDate: '2026-10-10'
+  });
+  assert.equal(exam.before, 3, '段考前餘額應為 3');
+  assert.equal(exam.used, 1, '段考應扣 1');
+  assert.equal(exam.remaining, 2, '段考後餘額應為 2，不應被後續畢旅扣用污染');
+
+  const requests = [
+    {
+      id: 'trip-1-request', status: 'approved', requestDate: '2026-10-20', requestPeriod: 1,
+      subFee: '扣額度', requesterName: '帶隊老師', targetTeacherName: '甲老師',
+      className: '901', subject: '國文', note: '九年級畢旅 2026-10-05～2026-10-20'
+    },
+    {
+      id: 'trip-2-request', status: 'approved', requestDate: '2026-10-20', requestPeriod: 2,
+      subFee: '活動公費', requesterName: '帶隊老師', targetTeacherEmail: 'b@example.test',
+      className: '902', subject: '數學', note: '九年級畢旅 2026-10-05～2026-10-20'
+    }
+  ];
+  const pages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests,
+    teachers: [
+      { email: 'a@example.test', name: '甲老師' },
+      { email: 'b@example.test', name: '乙老師' }
+    ],
+    teacherDemands: [
+      { email: 'a@example.test', name: '甲老師', releasedSlots: 3 },
+      { email: 'b@example.test', name: '乙老師', releasedSlots: 1 }
+    ],
+    ledgerRows,
+    requireActivityHint: true
+  });
+  assert.equal(pages.length, 2, '應依實際代課教師產生兩頁');
+  assert.equal(pages[0].name, '甲老師');
+  assert.equal(pages[1].name, '乙老師');
+  assert.equal(pages[0].matrix.demand, 2, '活動頁共有應取事件第一天扣除此前使用後的餘額');
+  assert.equal(pages[0].matrix.arranged, 1, '活動頁只應計選定日期內的活動包扣用');
+  assert.equal(pages[0].matrix.remaining, 1);
+  assert.equal(pages[1].matrix.demand, 1);
+  assert.equal(pages[1].matrix.arranged, 0);
+  assert.equal(pages[0].matrix.grid['2026-10-20'][1].length, 1);
+  assert.equal(pages[0].matrix.grid['2026-10-20'][2].length, 0, '不同教師的申請不可串頁');
+  assert.equal(pages[1].matrix.grid['2026-10-20'][2].length, 1);
+
+  const allChangePages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests,
+    teachers: [
+      { email: 'a@example.test', name: '甲老師' },
+      { email: 'b@example.test', name: '乙老師' }
+    ],
+    teacherDemands: [
+      { email: 'a@example.test', name: '甲老師', releasedSlots: 3 },
+      { email: 'b@example.test', name: '乙老師', releasedSlots: 1 }
+    ],
+    ledgerRows,
+    showAllChanges: true,
+    requireActivityHint: true
+  });
+  assert.equal(allChangePages[0].matrix.grid['2026-10-20'][1].length, 1);
+  assert.equal(allChangePages[0].matrix.grid['2026-10-20'][2].length, 1, '甲老師頁也應列出乙老師的異動課程');
+  assert.equal(allChangePages[1].matrix.grid['2026-10-20'][1].length, 1, '乙老師頁也應列出甲老師的異動課程');
+  assert.equal(allChangePages[1].matrix.grid['2026-10-20'][2].length, 1);
+  assert.equal(allChangePages[0].matrix.demand, 2, '列出全部異動不可改變個人額度統計');
+  assert.equal(allChangePages[0].matrix.remaining, 1);
+
+  const idMatchedPages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests: [{
+      id: 'trip-3-request', status: 'approved', requestDate: '2026-10-20', requestPeriod: 3,
+      subFee: '活動公費', targetTeacherName: '丙老師', className: '903', subject: '英文'
+    }],
+    activityRequestIds: ['trip-3-request'],
+    teachers: [{ email: 'c@example.test', name: '丙老師' }],
+    teacherDemands: [{ email: 'c@example.test', name: '丙老師', releasedSlots: 1 }],
+    requireActivityHint: true
+  });
+  assert.equal(idMatchedPages.length, 1, '事件 ID 對應的代課不可因備註沒有活動名稱而漏列');
+  assert.equal(idMatchedPages[0].name, '丙老師');
+
+  const activityPages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests,
+    teachers: [
+      { email: 'a@example.test', name: '甲老師' },
+      { email: 'b@example.test', name: '乙老師' },
+      { email: 'c@example.test', name: '丙老師' }
+    ],
+    teacherDemands: [
+      { email: 'a@example.test', name: '甲老師', releasedSlots: 3 },
+      { email: 'b@example.test', name: '乙老師', releasedSlots: 1 },
+      { email: 'c@example.test', name: '丙老師', releasedSlots: 0 }
+    ],
+    ledgerRows,
+    requireActivityHint: true
+  });
+  assert.equal(
+    activityPages.map(page => page.name).join(','),
+    '甲老師,乙老師',
+    '輪值通知單只應產生有異動課程的代課教師頁'
+  );
+
+  const outOfOrderLedgerRows = [
+    {
+      name: '甲老師', time: '2026-10-01 09:00:00', delta: 3, balanceAfter: 3,
+      type: 'earn', packageId: 'pkg-order', eventId: 'trip-order', eventName: '校外活動',
+      startDate: '2026-10-01'
+    },
+    {
+      name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-order', eventId: 'empty-duty', eventName: '空堂任務',
+      requestId: 'duty-late', startDate: '2026-10-20'
+    },
+    {
+      name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 1,
+      type: 'spend', packageId: 'pkg-order', eventId: 'exam-duty', eventName: '空堂任務',
+      requestId: 'duty-exam', startDate: '2026-10-10'
+    }
+  ];
+  const outOfOrderExam = domain.buildLedgerExamStats({
+    ledgerRows: outOfOrderLedgerRows,
+    teacher: { name: '甲老師' },
+    requests: [
+      { id: 'duty-late', requestDate: '2026-10-20', requestPeriod: 1, reason: '空堂排班', note: '空堂輪值' },
+      { id: 'duty-exam', requestDate: '2026-10-10', requestPeriod: 2, reason: '空堂排班', note: '段考監考' }
+    ],
+    rangeDates: ['2026-10-10'],
+    startDate: '2026-10-10',
+    endDate: '2026-10-10'
+  });
+  assert.deepEqual(
+    { before: outOfOrderExam.before, used: outOfOrderExam.used, remaining: outOfOrderExam.remaining },
+    { before: 3, used: 1, remaining: 2 },
+    '監考額度應按勤務日期計算，不應被較早輸入的晚日期輪值搶先'
+  );
+  assert.equal(outOfOrderExam.entries[0].requestId, 'duty-exam');
+
+  const sameSlotPriority = domain.buildLedgerExamStats({
+    ledgerRows: [
+      { name: '甲老師', time: '2026-10-01 09:00:00', delta: 2, balanceAfter: 2, type: 'earn', startDate: '2026-10-01' },
+      { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 1, type: 'spend', requestId: 'same-empty', startDate: '2026-10-15' },
+      { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 0, type: 'spend', requestId: 'same-exam', startDate: '2026-10-15' }
+    ],
+    teacher: { name: '甲老師' },
+    requests: [
+      { id: 'same-empty', requestDate: '2026-10-15', requestPeriod: 2, note: '空堂輪值' },
+      { id: 'same-exam', requestDate: '2026-10-15', requestPeriod: 2, note: '段考監考' }
+    ],
+    rangeDates: ['2026-10-15'],
+    startDate: '2026-10-15',
+    endDate: '2026-10-15'
+  });
+  assert.equal(
+    Array.from(sameSlotPriority.entries, row => row.requestId).join(','),
+    'same-exam,same-empty',
+    '同日同節應固定監考優先'
+  );
+
+  const slashDateOrder = domain.buildChronologicalLedgerStats({
+    ledgerRows: [
+      { name: '甲老師', time: '2026-10-01 09:00:00', delta: 4, balanceAfter: 4, type: 'earn',
+        eventId: 'trip-order', eventName: '畢旅', startDate: '2026/10/14' },
+      { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 3, type: 'spend',
+        eventId: 'trip-order', eventName: '畢旅', requestId: 'trip-date', startDate: '2026/10/14' },
+      { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 2, type: 'spend',
+        eventId: 'evt_exam', eventName: '段考監考', requestId: 'exam-date', startDate: '2026/10/12' }
+    ],
+    teacher: { name: '甲老師' },
+    requests: [
+      { id: 'trip-date', requestDate: '2026/10/14', requestPeriod: 1 },
+      { id: 'exam-date', requestDate: '2026/10/12', requestPeriod: 1, note: '段考監考' }
+    ],
+    rangeDates: ['2026-10-12', '2026-10-14']
+  });
+  assert.equal(
+    slashDateOrder.timeline.filter(item => item.entry.type === 'spend')
+      .map(item => item.entry.requestId).join(','),
+    'exam-date,trip-date',
+    '斜線日期也必須按實際勤務日期排序，段考應先於畢旅'
+  );
+
+  const earnedBeforeFutureActivity = domain.buildLedgerExamStats({
+    ledgerRows: [
+      { name: '甲老師', time: '2026-10-01 09:00:00', delta: 3, balanceAfter: 3, type: 'earn',
+        packageId: 'pkg-trip-future', eventId: 'trip-future', eventName: '畢旅', startDate: '2026-10-14' },
+      { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 2, type: 'spend',
+        packageId: 'pkg-trip-future', eventId: 'evt_exam', eventName: '段考監考', requestId: 'exam-before-trip' },
+      { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 1, type: 'spend',
+        packageId: 'pkg-trip-future', eventId: 'trip-future', eventName: '畢旅', requestId: 'trip-after-exam' }
+    ],
+    teacher: { name: '甲老師' },
+    requests: [
+      { id: 'exam-before-trip', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' },
+      { id: 'trip-after-exam', requestDate: '2026-10-14', requestPeriod: 1, note: '畢旅代課' }
+    ],
+    rangeDates: ['2026-10-12', '2026-10-13'],
+    startDate: '2026-10-12',
+    endDate: '2026-10-13'
+  });
+  assert.deepEqual(
+    { before: earnedBeforeFutureActivity.before, used: earnedBeforeFutureActivity.used, remaining: earnedBeforeFutureActivity.remaining },
+    { before: 3, used: 1, remaining: 2 },
+    '額度發放時間早於段考時，即使活動起日較晚，段考共有與尚有仍須正確'
+  );
+
+  const examFirstDayRemaining = domain.buildLedgerExamStats({
+    ledgerRows: [
+      { name: '甲老師', time: '2026-10-01 09:00:00', delta: 4, balanceAfter: 4, type: 'earn', startDate: '2026-10-01' },
+      { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 3, type: 'spend', requestId: 'before-exam' },
+      { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 2, type: 'spend', requestId: 'on-exam' }
+    ],
+    teacher: { name: '甲老師' },
+    requests: [
+      { id: 'before-exam', requestDate: '2026-10-10', requestPeriod: 1, note: '空堂輪值' },
+      { id: 'on-exam', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' }
+    ],
+    rangeDates: ['2026-10-12', '2026-10-13'],
+    startDate: '2026-10-12',
+    endDate: '2026-10-13'
+  });
+  assert.deepEqual(
+    { before: examFirstDayRemaining.before, used: examFirstDayRemaining.used, remaining: examFirstDayRemaining.remaining },
+    { before: 3, used: 1, remaining: 2 },
+    '監考數字應以段考第一天開始前已扣用後的剩餘額度為共有'
+  );
+  const activityDateStats = domain.buildLedgerActivityStats({
+    ledgerRows,
+    teacher: { name: '甲老師' },
+    eventId: 'trip-1',
+    rangeDates: ['2026-10-20'],
+    demand: 3
+  });
+  assert.deepEqual(
+    { demand: activityDateStats.demand, arranged: activityDateStats.arranged, remaining: activityDateStats.remaining },
+    { demand: 2, arranged: 1, remaining: 1 },
+    '活動額度應以事件第一天剩餘額度為共有，再計算事件期間扣用'
+  );
+
+  const activityFirstDayRemaining = domain.buildLedgerActivityStats({
+    ledgerRows: [
+      { name: '甲老師', time: '2026-10-01 09:00:00', delta: 3, balanceAfter: 3,
+        type: 'earn', packageId: 'pkg-empty-first-day', eventId: 'empty-event', eventName: '空堂事件', startDate: '2026-10-14' },
+      { name: '甲老師', time: '2026-10-02 09:00:00', delta: -1, balanceAfter: 2,
+        type: 'spend', packageId: 'pkg-empty-first-day', eventId: 'evt_exam', eventName: '段考監考', requestId: 'before-empty' },
+      { name: '甲老師', time: '2026-10-03 09:00:00', delta: -1, balanceAfter: 1,
+        type: 'spend', packageId: 'pkg-empty-first-day', eventId: 'empty-event', eventName: '空堂事件', requestId: 'on-empty' }
+    ],
+    teacher: { name: '甲老師' },
+    eventId: 'empty-event',
+    eventName: '空堂事件',
+    requests: [
+      { id: 'before-empty', requestDate: '2026-10-12', requestPeriod: 1, note: '段考監考' },
+      { id: 'on-empty', requestDate: '2026-10-14', requestPeriod: 1, note: '空堂事件' }
+    ],
+    rangeDates: ['2026-10-14'],
+    demand: 3
+  });
+  assert.deepEqual(
+    { demand: activityFirstDayRemaining.demand, arranged: activityFirstDayRemaining.arranged, remaining: activityFirstDayRemaining.remaining },
+    { demand: 2, arranged: 1, remaining: 1 },
+    '空堂事件第一天應先抓到此前已扣用的剩餘堂數'
+  );
+
+  const pageXml = '<w:document><w:body><w:p><w:r><w:t>page</w:t></w:r></w:p>'
+    + '<w:sectPr><w:pgSz w:w="11906"/></w:sectPr></w:body></w:document>';
+  const joinedXml = exporter.joinPageDocuments(pageXml, [pageXml, pageXml]);
+  assert.equal((joinedXml.match(/w:type="page"/g) || []).length, 1, '教師頁之間應只有一個分頁符');
+  assert.equal((joinedXml.match(/<w:sectPr/g) || []).length, 1, '合併後只能保留最後一個 section 設定');
+
+  const invigExam = invigilation.buildExamQuotaStats({
+    ledgerRows,
+    teacher: { name: '甲老師', mutualQuota: 0 },
+    requests: [],
+    rangeDates: ['2026-10-10'],
+    startDate: '2026-10-10',
+    endDate: '2026-10-10'
+  });
+  assert.deepEqual(
+    { before: invigExam.before, used: invigExam.used, remaining: invigExam.remaining },
+    { before: 3, used: 1, remaining: 2 },
+    '監考表應使用帳本歷程的段考三欄'
+  );
+  const invigFallback = invigilation.buildExamQuotaStats({
+    ledgerRows: [],
+    teacher: { name: '乙老師', mutualQuota: 2 },
+    requests: [{ status: 'approved', subFee: '扣額度', targetTeacherName: '乙老師', reason: '空堂排班', requestDate: '2026-10-10' }],
+    startDate: '2026-10-10',
+    endDate: '2026-10-10'
+  });
+  assert.deepEqual(
+    { before: invigFallback.before, used: invigFallback.used, remaining: invigFallback.remaining },
+    { before: 3, used: 1, remaining: 2 },
+    '無帳本歷程時應能用教師姓名回退計算空堂扣額度'
+  );
+  const invigZeroQuotaPatrol = invigilation.buildExamQuotaStats({
+    ledgerRows: [],
+    ledgerHistoryComplete: true,
+    teacher: { name: '丙老師', mutualQuota: 0 },
+    requests: [{
+      status: 'approved',
+      subFee: '扣額度',
+      targetTeacherName: '丙老師',
+      reason: '空堂排班',
+      subject: '段考巡堂',
+      requestDate: '2026-10-10'
+    }],
+    rangeDates: ['2026-10-10'],
+    startDate: '2026-10-10',
+    endDate: '2026-10-10'
+  });
+  assert.deepEqual(
+    { before: invigZeroQuotaPatrol.before, used: invigZeroQuotaPatrol.used, remaining: invigZeroQuotaPatrol.remaining },
+    { before: 0, used: 0, remaining: 0 },
+    '完整帳本中沒有實際扣款時，段考巡堂不可被回退計為額度使用'
+  );
+
+  const printTarget = {};
+  invigilation.copyPrintSettings({
+    pageSetup: {
+      printArea: "'114-1-1'!$A$1:$X$48",
+      orientation: 'portrait',
+      paperSize: 12,
+      scale: 60
+    }
+  }, printTarget);
+  assert.equal(printTarget.pageSetup.printArea, '$A$1:$X$48');
+  assert.equal(printTarget.pageSetup.fitToPage, true);
+  assert.equal(printTarget.pageSetup.fitToWidth, 1);
+  assert.equal(printTarget.pageSetup.fitToHeight, 1);
+  assert.equal(printTarget.pageSetup.orientation, 'portrait');
+
+  const fontCell = {
+    style: {
+      font: { name: '標楷體', size: 15 },
+      border: { right: { style: 'thick', color: { argb: 'FF000000' } } }
+    },
+    value: null
+  };
+  const borderBefore = JSON.stringify(fontCell.style.border);
+  invigilation.applyChangeFonts(
+    { getCell: () => fontCell },
+    null,
+    { slots: 1, teacherRowStart: 9, teacherRowEnd: 9 }
+  );
+  assert.equal(JSON.stringify(fontCell.style.border), borderBefore, '監考表套字型不可改模板框線');
+
+  const noteCell = {
+    address: 'A48',
+    value: '備註【未執行的課務共_____節，本次段考已安排_____節，尚有____節，未執行節數將會累計於本學年度】',
+    style: {
+      font: { name: 'Calibri', size: 18, bold: true },
+      border: { bottom: { style: 'thick', color: { argb: 'FF000000' } } }
+    }
+  };
+  const noteBorderBefore = JSON.stringify(noteCell.style.border);
+  const labelCell = {
+    address: 'Y1',
+    value: null,
+    style: {
+      font: { name: '標楷體', size: 10 },
+      border: { bottom: { style: 'thin', color: { argb: 'FF000000' } } }
+    }
+  };
+  const labelBorderBefore = JSON.stringify(labelCell.style.border);
+  const headerFooter = {};
+  invigilation.personalizeValues({
+    headerFooter,
+    getCell: (row, col) => row === 48 && col === 1 ? noteCell : labelCell
+  }, { noteRow: 48 }, '甲老師', 6, 1, 5);
+  assert.equal(noteCell.style.font.size, 17, '第48列備註字型應稍微縮小');
+  assert.equal(JSON.stringify(noteCell.style.border), noteBorderBefore, '第48列縮字不可改模板框線');
+  assert.equal(labelCell.style.font.size, 16, '教師標籤字型應放大為 16pt');
+  assert.equal(labelCell.style.font.bold, true, '教師標籤應使用粗體');
+  assert.equal(labelCell.style.font.underline, 'single', '教師標籤應加底線');
+  assert.equal(JSON.stringify(labelCell.style.border), labelBorderBefore, '分發標籤放大不可改模板框線');
+  assert.equal(headerFooter.oddHeader, '&L&B&16&U教師：甲老師', '列印頁首教師標籤應醒目');
+  assert.equal(headerFooter.evenHeader, '&L&B&16&U教師：甲老師', '偶數頁頁首教師標籤應醒目');
+
+  const blankGridCells = new Map();
+  const blankGridWorksheet = {
+    getCell: (row, col) => {
+      const address = String.fromCharCode(64 + col) + row;
+      if (!blankGridCells.has(address)) blankGridCells.set(address, { address, value: null });
+      return blankGridCells.get(address);
+    }
+  };
+  blankGridCells.set('C9', { address: 'C9', value: '既有內容' });
+  blankGridCells.set('D9', { address: 'D9', value: null, isMerged: true, master: { address: 'C9' } });
+  const markedBlankGridCells = invigilation.ensureBlankGridCells(
+    blankGridWorksheet,
+    { teacherRowStart: 9, teacherRowEnd: 9 }
+  );
+  assert.ok(markedBlankGridCells > 0, '教師資料區的空白格應寫入不可見空白字元');
+  assert.equal(blankGridCells.get('A9').value, '​');
+  assert.equal(blankGridCells.get('C9').value, '既有內容');
+  assert.equal(blankGridCells.get('D9').value, null, '合併追隨格不可寫入內容');
+
+  console.log('quota ledger tests PASS');
+});
+
+test('quota ledger DOCX export（v1 移植）', async () => {
+  // v1 用 vm 沙箱樁 JSZip／fetch／document；v2 直接用 ESM import，
+  // 全域樁打在 globalThis（setup 已令 window＝globalThis），測完還原。
+  const requests = [
+    {
+      id: 'trip-1-request', status: 'approved', requestDate: '2026-10-20', requestPeriod: 1,
+      subFee: '扣額度', requesterName: '帶隊老師', targetTeacherName: '甲老師',
+      className: '901', subject: '國文', note: '九年級畢旅 2026-10-05～2026-10-20'
+    },
+    {
+      id: 'trip-2-request', status: 'approved', requestDate: '2026-10-20', requestPeriod: 2,
+      subFee: '活動公費', requesterName: '帶隊老師', targetTeacherEmail: 'b@example.test',
+      className: '902', subject: '數學', note: '九年級畢旅 2026-10-05～2026-10-20'
+    }
+  ];
+  const ledgerRows = [
+    {
+      name: '甲老師', time: '2026-10-05 09:00:00', delta: 3, balanceAfter: 3,
+      type: 'earn', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    },
+    {
+      name: '甲老師', time: '2026-10-10 09:00:00', delta: -1, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-trip-甲', eventId: 'evt_sub', eventName: '代課',
+      requestId: 'legacy-exam-row'
+    },
+    {
+      name: '甲老師', time: '2026-10-20 09:00:00', delta: -1, balanceAfter: 1,
+      type: 'spend', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      requestId: 'trip-1-request'
+    },
+    {
+      name: '乙老師', time: '2026-10-05 09:00:00', delta: 1, balanceAfter: 1,
+      type: 'earn', packageId: 'pkg-trip-乙', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    }
+  ];
+  const cells = Array.from({ length: 9 }, (_, index) => {
+    const token = index === 0 ? '{{DATE}}' : (index === 1 ? '{{DOW}}' : '');
+    return '<w:tc><w:p><w:r><w:t>' + token + '</w:t></w:r></w:p></w:tc>';
+  }).join('');
+  const templateXml = '<w:document><w:body>'
+    + '<w:p><w:r><w:t>{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單</w:t></w:r></w:p>'
+    + '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>header</w:t></w:r></w:p></w:tc></w:tr>'
+    + '<w:tr>' + cells + '</w:tr></w:tbl>'
+    + '<w:p><w:r><w:t>{{NOTE_P8}}</w:t></w:r></w:p>'
+    + '<w:p><w:r><w:t>【未執行的課務依比例共{{DEMAND}}節，本次輪值安排{{ARRANGED}}節，尚有{{REMAINING}}節】</w:t></w:r></w:p>'
+    + '<w:sectPr><w:pgSz w:w="11906"/></w:sectPr></w:body></w:document>';
+  let generatedXml = '';
+  const fakeZip = {
+    loadAsync: async function () {
+      return {
+        file: function (name, value) {
+          if (arguments.length === 1) return { async: async function () { return templateXml; } };
+          if (name === 'word/document.xml') generatedXml = value;
+        },
+        generateAsync: async function () { return new ArrayBuffer(0); }
+      };
+    }
+  };
+  const anchor = { click: function () {} };
+  const prevJSZip = globalThis.JSZip;
+  const prevFetch = globalThis.fetch;
+  const prevDocument = globalThis.document;
+  const prevCreateObjectURL = globalThis.URL.createObjectURL;
+  const prevRevokeObjectURL = globalThis.URL.revokeObjectURL;
+  globalThis.JSZip = fakeZip;
+  globalThis.fetch = async function () {
+    return { ok: true, arrayBuffer: async function () { return new ArrayBuffer(0); } };
+  };
+  globalThis.document = {
+    createElement: function () { return anchor; },
+    body: { appendChild: function () {}, removeChild: function () {} }
+  };
+  globalThis.URL.createObjectURL = function () { return 'blob:test'; };
+  globalThis.URL.revokeObjectURL = function () {};
+  try {
+    const result = await exporter.exportWord({
+      startDate: '2026-10-05',
+      endDate: '2026-10-20',
+      activityName: '九年級畢旅',
+      eventId: 'trip-1',
+      requests,
+      demand: 4,
+      teachers: [
+        { email: 'a@example.test', name: '甲老師' },
+        { email: 'b@example.test', name: '乙老師' }
+      ],
+      teacherDemands: [
+        { email: 'a@example.test', name: '甲老師', releasedSlots: 3 },
+        { email: 'b@example.test', name: '乙老師', releasedSlots: 1 }
+      ],
+      ledgerRows,
+      includeCoveredTeacherPages: true,
+      requireActivityHint: true
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.pageCount, 3);
+    assert.equal(result.dutyPageCount, 2);
+    assert.equal(result.coveredPageCount, 1);
+    assert.equal((generatedXml.match(/w:type="page"/g) || []).length, 2);
+    assert.equal((generatedXml.match(/<w:tbl>/g) || []).length, 3);
+    assert.equal((generatedXml.match(/<w:sectPr/g) || []).length, 1);
+    assert.match(generatedXml, /輪值：甲老師/);
+    assert.match(generatedXml, /輪值：乙老師/);
+    assert.match(generatedXml, /被代課：帶隊老師/);
+    assert.match(generatedXml, /w:fill="D9D9D9"/);
+    assert.equal((generatedXml.match(/未執行的課務依比例/g) || []).length, 2);
+    assert.doesNotMatch(generatedXml, /\{\{[A-Z0-9_]+\}\}/);
+    console.log('quota ledger DOCX export test PASS');
+  } finally {
+    if (prevJSZip === undefined) delete globalThis.JSZip; else globalThis.JSZip = prevJSZip;
+    globalThis.fetch = prevFetch;
+    if (prevDocument === undefined) delete globalThis.document; else globalThis.document = prevDocument;
+    globalThis.URL.createObjectURL = prevCreateObjectURL;
+    globalThis.URL.revokeObjectURL = prevRevokeObjectURL;
+  }
+});

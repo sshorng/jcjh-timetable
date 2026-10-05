@@ -1,0 +1,384 @@
+/**
+ * 自 v1 date-utils.js 機械移植（port-domain.cjs）：
+ * IIFE 掛載改 ESM default export；body 與 v1 逐字一致。
+ */
+
+/**
+ * 日期／節次純工具 (date-utils.js)
+ */
+const DateUtils = (() => {
+  function toLocalDateStr(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+
+  function getTodayString() {
+    return toLocalDateStr(new Date());
+  }
+
+  function getWeekDayText(d) {
+    const days = { 1: '一', 2: '二', 3: '三', 4: '四', 5: '五' };
+    return days[d] || '';
+  }
+
+  function formatDateMMDD(dateStr) {
+    if (!dateStr) return '';
+    const parts = String(dateStr).split('-');
+    if (parts.length < 3) return dateStr;
+    return parts[1] + '/' + parts[2];
+  }
+
+  function parseDateOnly(value) {
+    const parts = String(value == null ? '' : value).slice(0, 10).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(function (n) { return !Number.isFinite(n); })) return null;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+    return date;
+  }
+
+  function shiftMonthKey(month, offset) {
+    const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return '';
+    const date = new Date(Number(match[1]), Number(match[2]) - 1 + (Number(offset) || 0), 1);
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+  }
+
+  function mondayOfWeek(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    result.setDate(result.getDate() - (day === 0 ? 6 : day - 1));
+    return result;
+  }
+
+  function fridayOfWeek(date) {
+    const result = mondayOfWeek(date);
+    result.setDate(result.getDate() + 4);
+    return result;
+  }
+
+  /** 以曆月所屬週的週一至週五建立名目結算區間。 */
+  function getAccountingPeriodForMonth(month) {
+    const match = String(month || '').match(/^(\d{4})-(\d{2})$/);
+    if (!match) return { start: '', end: '' };
+    const year = Number(match[1]);
+    const monthIndex = Number(match[2]) - 1;
+    const first = new Date(year, monthIndex, 1);
+    const last = new Date(year, monthIndex + 1, 0);
+    return {
+      start: toLocalDateStr(mondayOfWeek(first)),
+      end: toLocalDateStr(fridayOfWeek(last))
+    };
+  }
+
+  function nextMondayAfter(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    let days = (8 - day) % 7;
+    if (!days) days = 7;
+    result.setDate(result.getDate() + days);
+    return result;
+  }
+
+  function previousFridayBefore(date) {
+    const result = new Date(date);
+    const day = result.getDay();
+    let days = (day - 5 + 7) % 7;
+    if (!days) days = 7;
+    result.setDate(result.getDate() - days);
+    return result;
+  }
+
+  /** 依目前區間切換相鄰月份，並把相鄰區間的重疊週切除。 */
+  function shiftAccountingPeriod(currentPeriod, targetMonth, direction) {
+    const nominal = getAccountingPeriodForMonth(targetMonth);
+    const currentStart = parseDateOnly(currentPeriod && currentPeriod.start);
+    const currentEnd = parseDateOnly(currentPeriod && currentPeriod.end);
+    if (!nominal.start || !nominal.end || !currentStart || !currentEnd) return nominal;
+
+    let start = parseDateOnly(nominal.start);
+    let end = parseDateOnly(nominal.end);
+    if (Number(direction) >= 0) {
+      start = nextMondayAfter(currentEnd);
+      const nominalStart = parseDateOnly(nominal.start);
+      if (start < nominalStart) start = nominalStart;
+    } else {
+      end = previousFridayBefore(currentStart);
+      const nominalEnd = parseDateOnly(nominal.end);
+      if (end > nominalEnd) end = nominalEnd;
+    }
+    if (start > end) return nominal;
+    return { start: toLocalDateStr(start), end: toLocalDateStr(end) };
+  }
+
+  /**
+   * 課表節次列：0＝早自習，45＝午休；1～8 保留原節次。
+   */
+  var EARLY_PERIOD = 0;
+  var LUNCH_PERIOD = 45;
+  var TIMETABLE_PERIODS = [EARLY_PERIOD, 1, 2, 3, 4, LUNCH_PERIOD, 5, 6, 7, 8];
+
+  function getTimetablePeriods() {
+    return TIMETABLE_PERIODS.slice();
+  }
+
+  function isLunchPeriod(p) {
+    var n = parseInt(p, 10);
+    return n === LUNCH_PERIOD;
+  }
+
+  function isEarlyPeriod(p) {
+    return parseInt(p, 10) === EARLY_PERIOD;
+  }
+
+  /** 解析節次：0／早自習、1–8、45／午休／午／lunch */
+  function parsePeriod(raw) {
+    if (raw == null || raw === '') return NaN;
+    var s = String(raw).trim();
+    if (/^(早自習|早讀|晨間|晨間工作|morning|early)$/i.test(s)) return EARLY_PERIOD;
+    if (/^(午休|午|lunch|LUNCH)$/i.test(s)) return LUNCH_PERIOD;
+    if (s === '0') return EARLY_PERIOD;
+    if (s === '45') return LUNCH_PERIOD;
+    var n = parseInt(s, 10);
+    if (n === LUNCH_PERIOD) return LUNCH_PERIOD;
+    if (n === EARLY_PERIOD) return EARLY_PERIOD;
+    if (!isNaN(n) && n >= 1 && n <= 8) return n;
+    return NaN;
+  }
+  /** 檢查節次是否為系統支援的固定節次。 */
+  function isValidPeriod(p) {
+    var n = parsePeriod(p);
+    return !isNaN(n) && (n === EARLY_PERIOD || n === LUNCH_PERIOD || (n >= 1 && n <= 8));
+  }
+
+  /** 顯示用節次標籤 */
+  function getPeriodLabel(p) {
+    var n = parseInt(p, 10);
+    if (n === EARLY_PERIOD) return '早自習';
+    if (n === LUNCH_PERIOD) return '午休';
+    if (!isNaN(n) && n >= 1 && n <= 8) return String(n);
+    return String(p == null ? '' : p);
+  }
+
+  /** 「第N節」文案（午休不寫「第」） */
+  function formatPeriodText(p) {
+    var n = parseInt(p, 10);
+    if (n === EARLY_PERIOD) return '早自習';
+    if (n === LUNCH_PERIOD) return '午休';
+    if (!isNaN(n) && n >= 1 && n <= 8) return '第' + n + '節';
+    return String(p == null ? '' : p);
+  }
+
+  function getPeriodTimeSpan(p) {
+    // 建成國中課堂時間表（含午休抽離／特教／資優）
+    const times = {
+      0: '07:40-08:30',
+      1: '08:30-09:15',
+      2: '09:25-10:10',
+      3: '10:20-11:05',
+      4: '11:15-12:00',
+      45: '12:35-13:15',
+      5: '13:20-14:05',
+      6: '14:15-15:00',
+      7: '15:15-16:00',
+      8: '16:10-16:55'
+    };
+    var n = parseInt(p, 10);
+    return times[n] || times[p] || '';
+  }
+
+  /**
+   * 併班：班級欄可填多班（701、702／701/702／701,702）
+   * 回傳淨化後的班級字串陣列
+   */
+  function parseCombinedClasses(raw) {
+    if (raw == null || raw === '') return [];
+    if (Array.isArray(raw)) {
+      return raw.map(function (x) { return String(x || '').trim(); })
+        .filter(function (x) { return x && !/^0+$/.test(x); });
+    }
+    return String(raw)
+      .split(/[、,，/／|｜\s]+/)
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return s && !/^0+$/.test(s); });
+  }
+
+  /** 顯示用：多班以頓號連接 */
+  function formatClassName(raw) {
+    var list = parseCombinedClasses(raw);
+    return list.join('、');
+  }
+
+  function isCombinedClass(raw) {
+    return parseCombinedClasses(raw).length > 1;
+  }
+
+  /** 迴圈用：優先課表全節次（含午休） */
+  function forEachTimetablePeriod(fn) {
+    var list = getTimetablePeriods();
+    for (var i = 0; i < list.length; i++) fn(list[i], i);
+  }
+
+  /** 僅 1–8（連堂／大鐘點等不計午休） */
+  function forEachCorePeriod(fn) {
+    for (var p = 1; p <= 8; p++) fn(p);
+  }
+
+  /**
+   * 星期+節次鍵：一律「日-節」（如 1-4、2-45）
+   * 勿用字串拼接 day+period（午休 45 會變成 145，slice 解析錯）
+   */
+  function encodeTimeKey(dayOfWeek, period) {
+    var d = parseInt(dayOfWeek, 10);
+    var p = parsePeriod(period);
+    if (isNaN(d) || isNaN(p)) return '';
+    return d + '-' + p;
+  }
+
+  function decodeTimeKey(key) {
+    var s = String(key == null ? '' : key).trim();
+    if (!s) return { day: NaN, period: NaN };
+    // 新格式 day-period
+    if (s.indexOf('-') >= 0) {
+      var parts = s.split('-');
+      return {
+        day: parseInt(parts[0], 10),
+        period: parsePeriod(parts[1])
+      };
+    }
+    // 舊格式：一位星期 + 一位節次（1–8）
+    if (/^[1-5][1-8]$/.test(s)) {
+      return { day: parseInt(s.charAt(0), 10), period: parseInt(s.charAt(1), 10) };
+    }
+    // 舊格式誤接午休：145 → 1 + 45
+    if (/^[1-5]45$/.test(s)) {
+      return { day: parseInt(s.charAt(0), 10), period: LUNCH_PERIOD };
+    }
+    return { day: NaN, period: NaN };
+  }
+
+  /** 班級字串是否包含目標班（併班 701、702 含 701） */
+  function classListIncludes(classField, targetClass) {
+    var target = String(targetClass || '').trim();
+    if (!target) return false;
+    var list = parseCombinedClasses(classField);
+    if (!list.length) return String(classField || '').trim() === target;
+    return list.indexOf(target) !== -1;
+  }
+
+  /** 取得 dateStr 所在週一至週五的 YYYY-MM-DD 陣列 */
+  function getWeekDatesFrom(dateStr) {
+    const dates = [];
+    const current = new Date(String(dateStr).indexOf('T') >= 0 ? dateStr : dateStr + 'T00:00:00');
+    if (Number.isNaN(current.getTime())) {
+      const fallback = new Date(String(dateStr).replace(/-/g, '/'));
+      return getWeekDatesFromDate(fallback);
+    }
+    return getWeekDatesFromDate(current);
+  }
+
+  function getWeekDatesFromDate(current) {
+    const dates = [];
+    const day = current.getDay();
+    const mondayDiff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(current);
+    monday.setDate(current.getDate() + mondayDiff);
+    for (let i = 0; i < 5; i++) {
+      const next = new Date(monday);
+      next.setDate(monday.getDate() + i);
+      dates.push(toLocalDateStr(next));
+    }
+    return dates;
+  }
+
+  /** 結算日期區間包含的週數；同一個週一至週日只算一週。 */
+  function countWeeksInRange(startDate, endDate) {
+    function parseDateOnly(value) {
+      var parts = String(value == null ? '' : value).slice(0, 10).split('-').map(Number);
+      if (parts.length !== 3 || parts.some(function (n) { return !Number.isFinite(n); })) return null;
+      var date = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+      return date;
+    }
+    var start = parseDateOnly(startDate);
+    var end = parseDateOnly(endDate);
+    if (!start || !end || start > end) return 0;
+    var weeks = {};
+    var cursor = new Date(start);
+    while (cursor <= end) {
+      var monday = new Date(cursor);
+      var day = monday.getDay();
+      monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
+      weeks[toLocalDateStr(monday)] = true;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return Object.keys(weeks).length;
+  }
+
+  /** 依原課日期、目標星期與週次偏移，計算調課目標日期。 */
+  function getExchangeTargetDate(dateStr, timeKey, weekOffset) {
+    const dateParts = String(dateStr || '').slice(0, 10).split('-').map(Number);
+    const targetDay = decodeTimeKey(timeKey).day;
+    if (dateParts.length !== 3 || dateParts.some(function (value) { return !Number.isFinite(value); })
+        || !Number.isInteger(targetDay) || targetDay < 1 || targetDay > 5) {
+      return '';
+    }
+    const sourceDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+    if (sourceDate.getFullYear() !== dateParts[0]
+        || sourceDate.getMonth() !== dateParts[1] - 1
+        || sourceDate.getDate() !== dateParts[2]) {
+      return '';
+    }
+    const sourceDay = sourceDate.getDay() === 0 ? 7 : sourceDate.getDay();
+    const offset = Number(weekOffset) || 0;
+    sourceDate.setDate(sourceDate.getDate() + targetDay - sourceDay + offset * 7);
+    return toLocalDateStr(sourceDate);
+  }
+
+  return {
+    toLocalDateStr,
+    getTodayString,
+    getWeekDayText,
+    formatDateMMDD,
+    shiftMonthKey,
+    getAccountingPeriodForMonth,
+    shiftAccountingPeriod,
+    getPeriodTimeSpan,
+    getWeekDatesFrom,
+    getWeekDatesFromDate,
+    countWeeksInRange,
+    getExchangeTargetDate,
+    TIMETABLE_PERIODS,
+    LUNCH_PERIOD,
+    getTimetablePeriods,
+    EARLY_PERIOD,
+    isLunchPeriod,
+    isEarlyPeriod,
+    parsePeriod,
+    isValidPeriod,
+    getPeriodLabel,
+    formatPeriodText,
+    parseCombinedClasses,
+    formatClassName,
+    isCombinedClass,
+    forEachTimetablePeriod,
+    forEachCorePeriod,
+    encodeTimeKey,
+    decodeTimeKey,
+    decodePaperTimeKey,
+    classListIncludes
+  };
+
+  // 2A：紙本時間鍵解析（自 app.js 搬移；原為 DateUtils.decodeTimeKey 委派）
+  function decodePaperTimeKey(timeKey) {
+    if (typeof decodeTimeKey === 'function') return decodeTimeKey(timeKey);
+    const raw = String(timeKey || '');
+    return {
+      day: parseInt(raw.split('-')[0], 10),
+      period: parseInt(raw.split('-')[1] || raw.slice(-1), 10)
+    };
+  }
+})();
+
+export default DateUtils;

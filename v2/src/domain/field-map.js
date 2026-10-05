@@ -1,0 +1,1213 @@
+/**
+ * 自 v1 field-map.js 機械移植（port-domain.cjs）：
+ * IIFE 掛載改 ESM default export；body 與 v1 逐字一致。
+ */
+import DomainClassAway from './domain-class-away.js';
+
+/**
+ * 前後端欄位對照層 (field-map.js)
+ * Sheets 存中文欄位；前端用英文 camelCase。
+ * 讀取時支援別名（相容舊表頭 / 新表頭）。
+ */
+const FieldMap = (() => {
+  const SPECIAL_FLOW_COMBINED_RETURN = 'combined_return';
+  const SPECIAL_FLOW_COMBINED_RETURN_LABEL = '合班回原班';
+
+  function normalizeSpecialFlow(raw) {
+    const value = String(raw == null ? '' : raw).trim();
+    if (!value) return '';
+    if (value.toLowerCase() === SPECIAL_FLOW_COMBINED_RETURN
+        || value === SPECIAL_FLOW_COMBINED_RETURN_LABEL) {
+      return SPECIAL_FLOW_COMBINED_RETURN;
+    }
+    return value;
+  }
+
+  function isCombinedReturn(rowOrValue) {
+    const raw = rowOrValue && typeof rowOrValue === 'object'
+      ? pick(rowOrValue, ['特殊流程', 'specialFlow'])
+      : rowOrValue;
+    return normalizeSpecialFlow(raw) === SPECIAL_FLOW_COMBINED_RETURN;
+  }
+
+  function pick(row, keys) {
+    if (!row) return undefined;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (Object.prototype.hasOwnProperty.call(row, k) && row[k] !== undefined && row[k] !== null && row[k] !== '') {
+        return row[k];
+      }
+    }
+    for (let j = 0; j < keys.length; j++) {
+      const k2 = keys[j];
+      if (Object.prototype.hasOwnProperty.call(row, k2) && row[k2] !== undefined && row[k2] !== null) {
+        return row[k2];
+      }
+    }
+    return undefined;
+  }
+
+  function alias(obj, property, getter) {
+    Object.defineProperty(obj, property, {
+      configurable: true,
+      enumerable: false,
+      get: getter
+    });
+    return obj;
+  }
+
+  function asBool(v) {
+    if (v === true || v === 1) return true;
+    const s = String(v == null ? '' : v).trim().toLowerCase();
+    return s === 'true' || s === '1' || s === '是' || s === '紙本';
+  }
+
+  function isCourseAdjustmentOnly(row) {
+    const raw = pick(row, ['僅課務調整', 'courseAdjustmentOnly']);
+    if (raw === true || raw === 1) return true;
+    const normalized = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === '是' || normalized === 'yes') return true;
+    return String(pick(row, ['請假事由', 'reason']) || '').trim() === '課務調整';
+  }
+
+  function asInt(v, fallback) {
+    // 明確允許 0（基本鐘點打 0 就是 0，不可被預設蓋掉）
+    if (v === undefined || v === null || v === '') return fallback;
+    if (v === 0 || v === '0') return 0;
+    const n = parseInt(v, 10);
+    return Number.isNaN(n) ? fallback : n;
+  }
+
+  function asTimestamp(v) {
+    if (v === undefined || v === null || v === '') return '';
+    if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+      return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0')
+        + ' ' + String(v.getHours()).padStart(2, '0') + ':' + String(v.getMinutes()).padStart(2, '0') + ':' + String(v.getSeconds()).padStart(2, '0');
+    }
+    return String(v).trim();
+  }
+
+  function asDateStr(v) {
+    if (v === undefined || v === null || v === '') return '';
+    if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+      return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+    }
+    const raw = String(v).trim().split(/[T ]/)[0].replace(/\//g, '-');
+    const match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!match) return raw.slice(0, 10);
+    return match[1] + '-' + String(match[2]).padStart(2, '0') + '-' + String(match[3]).padStart(2, '0');
+  }
+
+  /** 折抵額度使用數值格式；發放規則為一節一額度 */
+  function asFloat(v, fallback) {
+    if (v === undefined || v === null || v === '') return fallback;
+    if (v === 0 || v === '0') return 0;
+    const n = parseFloat(v);
+    if (Number.isNaN(n)) return fallback;
+    return Math.round(n * 1000) / 1000;
+  }
+
+  const FIXED_OVERTIME_PERIOD_ORDER = [0, 1, 2, 3, 4, 45, 5, 6, 7];
+  const FIXED_OVERTIME_DAY_TEXT = ['', '一', '二', '三', '四', '五'];
+
+  function fixedOvertimeDayNumber(raw) {
+    const value = String(raw == null ? '' : raw).trim()
+      .replace(/^星期|^週/, '').replace(/日$/, '');
+    const map = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5 };
+    if (map[value]) return map[value];
+    const n = parseInt(value, 10);
+    return n >= 1 && n <= 5 ? n : 0;
+  }
+
+  function fixedOvertimePeriodNumber(raw) {
+    const value = String(raw == null ? '' : raw).trim()
+      .replace(/^第\s*/, '').replace(/節$/, '');
+    if (value === '早自習') return 0;
+    if (value === '午休') return 45;
+    const n = parseInt(value, 10);
+    return n === 0 || n === 45 || (n >= 1 && n <= 7) ? n : NaN;
+  }
+
+  function fixedOvertimeSlotFromValue(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const day = fixedOvertimeDayNumber(value.dayOfWeek != null ? value.dayOfWeek
+        : (value.day != null ? value.day : value['星期']));
+      const period = fixedOvertimePeriodNumber(value.period != null ? value.period : value['節次']);
+      if (day && Number.isFinite(period)) return { dayOfWeek: day, period: period };
+      return null;
+    }
+    let text = String(value == null ? '' : value).trim();
+    if (!text) return null;
+    text = text.replace(/^固定超鐘點[:：]/, '').trim();
+    let match = text.match(/^(?:星期|週)?([一二三四五1-5])\s*(?:第\s*)?(早自習|午休|45|[0-7])\s*節?$/);
+    if (!match) match = text.match(/^([1-5])\s*[|:/-]\s*(早自習|午休|45|[0-7])\s*節?$/);
+    if (!match) return null;
+    const day = fixedOvertimeDayNumber(match[1]);
+    const period = fixedOvertimePeriodNumber(match[2]);
+    return day && Number.isFinite(period) ? { dayOfWeek: day, period: period } : null;
+  }
+
+  function fixedOvertimeSlotKey(slot) {
+    return String(slot.dayOfWeek) + '|' + String(slot.period);
+  }
+
+  function fixedOvertimeSlotLabel(slot) {
+    const day = FIXED_OVERTIME_DAY_TEXT[Number(slot.dayOfWeek)] || '';
+    const period = Number(slot.period);
+    const periodText = period === 0 ? '早自習' : (period === 45 ? '午休' : String(period));
+    return day + periodText;
+  }
+
+  /** 解析教師學期固定超鐘點節次，標準顯示格式為「一2、三5」。 */
+  function parseFixedOvertimeSlots(raw) {
+    let values = raw;
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (!text) values = [];
+      else {
+        try {
+          const parsed = JSON.parse(text);
+          values = Array.isArray(parsed) ? parsed : text;
+        } catch (e) {
+          values = text.split(/[、,，;；\n]+/);
+        }
+      }
+    }
+    if (!Array.isArray(values)) values = [values];
+    const seen = {};
+    return values.map(fixedOvertimeSlotFromValue).filter(function (slot) {
+      if (!slot) return false;
+      const key = fixedOvertimeSlotKey(slot);
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).sort(function (left, right) {
+      return Number(left.dayOfWeek) - Number(right.dayOfWeek)
+        || FIXED_OVERTIME_PERIOD_ORDER.indexOf(Number(left.period))
+          - FIXED_OVERTIME_PERIOD_ORDER.indexOf(Number(right.period));
+    });
+  }
+
+  function serializeFixedOvertimeSlots(raw) {
+    return parseFixedOvertimeSlots(raw).map(fixedOvertimeSlotLabel).join('、');
+  }
+
+  function fixedOvertimeSetting(row) {
+    const rawHours = pick(row, ['超鐘點節數', 'fixedOvertimeHours', 'overtimeHours']);
+    const rawSlots = pick(row, ['超鐘點節次', 'fixedOvertimeSlots', 'fixedOvertimeSlotsText', 'overtimeSlots']);
+    const slots = parseFixedOvertimeSlots(rawSlots);
+    const hasHours = rawHours !== undefined && rawHours !== null && String(rawHours).trim() !== '';
+    const hasSlots = rawSlots !== undefined && rawSlots !== null
+      && (Array.isArray(rawSlots) ? rawSlots.length > 0 : String(rawSlots).trim() !== '');
+    const configured = row && row.fixedOvertimeConfigured !== undefined
+      ? row.fixedOvertimeConfigured === true
+      : (hasHours || hasSlots);
+    const hours = hasHours ? asInt(rawHours, -1) : slots.length;
+    const valid = configured && hours >= 0 && hours <= 40 && slots.length === hours;
+    return {
+      configured: configured,
+      valid: valid,
+      hours: hours >= 0 ? hours : 0,
+      slots: slots,
+      slotKeys: slots.map(function (slot) { return fixedOvertimeSlotKey(slot); }),
+      slotsText: slots.map(fixedOvertimeSlotLabel).join('、'),
+      error: !configured ? '' : (hours < 0 || hours > 40
+        ? '超鐘點節數須介於 0 至 40 節'
+        : (slots.length !== hours ? '超鐘點節數須與固定節次數量一致' : ''))
+    };
+  }
+
+  function mapSemester(s) {
+    return {
+      id: pick(s, ['學期代號', 'id']),
+      name: pick(s, ['學期名稱', 'name']),
+      startDate: pick(s, ['開始日期', 'startDate']) || '',
+      endDate: pick(s, ['結束日期', 'endDate']) || '',
+      isDefault: asBool(pick(s, ['是否預設', 'isDefault']))
+    };
+  }
+
+  function mapClassAwayEvent(e) {
+    // 試算表常把單一「901」存成數字、或把清單弄成 0／日期；交給 DomainClassAway 淨化
+    const classesRaw = pick(e, ['班級清單', 'classes', 'classList']);
+    let classes = [];
+    if (DomainClassAway && DomainClassAway.parseClassList) {
+      classes = DomainClassAway.parseClassList(classesRaw);
+    } else if (Array.isArray(classesRaw)) {
+      classes = classesRaw.map(function (x) { return String(x == null ? '' : x).trim(); }).filter(function (x) { return x && !/^0+$/.test(x); });
+    } else if (classesRaw !== undefined && classesRaw !== null && classesRaw !== '') {
+      if (typeof classesRaw === 'number' && (!classesRaw || classesRaw < 1)) {
+        classes = [];
+      } else {
+        classes = String(classesRaw)
+          .split(/[,，、;\s]+/)
+          .map(function (x) { return String(x || '').trim(); })
+          .filter(function (x) { return x && !/^0+$/.test(x); });
+      }
+    }
+    const dca = DomainClassAway;
+    const scopeRaw = pick(e, ['適用範圍', 'scope', 'awayScope']);
+    const periodRaw = pick(e, ['停課節次', 'periods', 'period', 'awayPeriod']);
+    const scope = dca && dca.normalizeScope
+      ? dca.normalizeScope(scopeRaw)
+      : (/^(all|school|全校)/i.test(String(scopeRaw == null ? '' : scopeRaw).trim()) ? 'all' : 'classes');
+    const normalizedPeriods = dca && dca.normalizePeriods
+      ? dca.normalizePeriods(periodRaw)
+      : (function () {
+        const raw = String(periodRaw == null ? '' : periodRaw).trim();
+        if (!raw || /^(all|\*|全部|全部節次|全天|全日)$/i.test(raw)) return ['all'];
+        return raw.split(/[,，、;；|｜/／]+/).map(function (part) {
+          const text = String(part || '').trim();
+          if (text === '早自習' || text === '早讀' || text === '晨讀') return '0';
+          const match = text.match(/(?:第\s*)?(\d+)\s*(?:節)?/);
+          const n = match ? parseInt(match[1], 10) : NaN;
+          return Number.isInteger(n) && (n === 45 || (n >= 0 && n <= 8)) ? String(n) : '';
+        }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
+      })();
+    const periods = normalizedPeriods.length ? normalizedPeriods : ['all'];
+    const period = dca && dca.normalizePeriod
+      ? dca.normalizePeriod(periodRaw)
+      : (periods.indexOf('all') >= 0 || !periods.length ? 'all' : periods.join(','));
+    const startPeriodRaw = pick(e, ['起始節次', '起點節次', 'startPeriod']);
+    const endPeriodRaw = pick(e, ['結束節次', '終點節次', 'endPeriod']);
+    let rule = String(pick(e, ['鐘點規則', 'billingRule']) || 'keep').toLowerCase();
+    if (rule === '調降' || rule === 'reduce') rule = 'reduce';
+    else rule = 'keep';
+    // 日期欄若被 Sheets 轉成 Date，轉回 YYYY-MM-DD
+    function asDateStr(v) {
+      if (v === undefined || v === null || v === '') return '';
+      if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
+        const y = v.getFullYear();
+        const m = String(v.getMonth() + 1).padStart(2, '0');
+        const d = String(v.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+      }
+      return String(v).trim().slice(0, 10);
+    }
+    return {
+      id: String(pick(e, ['事件ID', 'id']) || ''),
+      semesterId: String(pick(e, ['學期代號', 'semesterId']) || ''),
+      name: String(pick(e, ['事件名稱', 'name']) || ''),
+      startDate: asDateStr(pick(e, ['起日', 'startDate'])),
+      endDate: asDateStr(pick(e, ['迄日', 'endDate'])),
+      startPeriod: startPeriodRaw == null || startPeriodRaw === '' ? '' : String(startPeriodRaw).trim(),
+      endPeriod: endPeriodRaw == null || endPeriodRaw === '' ? '' : String(endPeriodRaw).trim(),
+      classes: classes,
+      scope: scope,
+      period: period,
+      periods: periods,
+      billingRule: rule,
+      forMutual: asBool(pick(e, ['可進互代', 'forMutual'])),
+      enabled: pick(e, ['啟用', 'enabled']) === undefined || pick(e, ['啟用', 'enabled']) === null || pick(e, ['啟用', 'enabled']) === ''
+        ? true
+        : asBool(pick(e, ['啟用', 'enabled'])),
+      note: String(pick(e, ['備註', 'note']) || '')
+    };
+  }
+
+  function mapSchoolSwap(row) {
+    function dateText(value) {
+      if (value === undefined || value === null || value === '') return '';
+      if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+        return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
+      }
+      return String(value).trim().slice(0, 10);
+    }
+    const dateA = dateText(pick(row, ['日期A', 'dateA']));
+    const dateB = dateText(pick(row, ['日期B', 'dateB']));
+    const periodA = asInt(pick(row, ['節次A', 'periodA']), null);
+    const periodB = asInt(pick(row, ['節次B', 'periodB']), null);
+    return {
+      id: String(pick(row, ['對調ID', 'id', 'swapId']) || ''),
+      semesterId: String(pick(row, ['學期代號', 'semesterId']) || ''),
+      name: String(pick(row, ['事件名稱', 'name', 'title']) || '全校對調'),
+      dateA: dateA,
+      dayA: asInt(pick(row, ['星期A', 'dayA']), 0),
+      periodA: periodA,
+      dateB: dateB,
+      dayB: asInt(pick(row, ['星期B', 'dayB']), 0),
+      periodB: periodB,
+      enabled: pick(row, ['啟用', 'enabled']) === undefined || pick(row, ['啟用', 'enabled']) === null || pick(row, ['啟用', 'enabled']) === ''
+        ? true
+        : asBool(pick(row, ['啟用', 'enabled'])),
+      createdAt: String(pick(row, ['建立時間', 'createdAt']) || ''),
+      updatedAt: String(pick(row, ['更新時間', 'updatedAt']) || ''),
+      note: String(pick(row, ['備註', 'note']) || '')
+    };
+  }
+
+  /** 系統角色正規化：admin／staff／teacher */
+  function normalizeRole(raw) {
+    const s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!s) return 'teacher';
+    if (s === 'admin' || s.indexOf('管理') >= 0 || s.indexOf('教學組') >= 0
+        || s.indexOf('主管') >= 0 || s === 'administrator') return 'admin';
+    if (s === 'staff' || s === '行政' || s.indexOf('行政') >= 0 || s === 'clerk') return 'staff';
+    if (s === 'teacher' || s.indexOf('教師') >= 0 || s.indexOf('老師') >= 0) return 'teacher';
+    return 'teacher';
+  }
+
+  /** 教學組職務具最高權限；相容舊資料只填職務的教師列。 */
+  function normalizeTeacherRole(rawRole, jobTitle) {
+    if (String(jobTitle == null ? '' : jobTitle).trim().indexOf('教學組') >= 0) return 'admin';
+    return normalizeRole(rawRole || 'teacher');
+  }
+
+  /**
+   * 超鐘點經費配置共用格式：教師名單的單一儲存格存 JSON 陣列。
+   * 舊資料若是一般文字，視為該教師所有超鐘點的單一來源。
+   */
+  function normalizeExpenseSource(raw) {
+    return String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  }
+
+  function expensePlanName(raw) {
+    const text = normalizeExpenseSource(raw);
+    if (!text || text === '預設' || text === '未分配') {
+      return { raw: text, short: '預設', full: '預設', explicit: false };
+    }
+    const match = text.match(/^\[([^\]]+)\]\s*(.+)$/);
+    if (!match) return { raw: text, short: text, full: text, explicit: false };
+    const short = normalizeExpenseSource(match[1]);
+    const full = normalizeExpenseSource(match[2]);
+    if (!short || !full) return { raw: text, short: text, full: text, explicit: false };
+    return { raw: text, short: short, full: full, explicit: true };
+  }
+
+  function expenseSourceShort(raw) {
+    return expensePlanName(raw).short;
+  }
+
+  function expenseSourceFull(raw) {
+    return expensePlanName(raw).full;
+  }
+
+  function expenseSourceKey(raw) {
+    const source = expenseSourceShort(raw);
+    return !source || source === '預設' || source === '未分配' ? '預設' : source;
+  }
+
+  function expenseClassTokens(raw) {
+    return String(raw == null ? '' : raw).trim()
+      .split(/[,，、\/／;；|｜\s]+/)
+      .map(function (value) { return value.trim(); })
+      .filter(function (value) { return value && !/^0+$/.test(value); });
+  }
+
+  function expenseClassesOverlap(left, right) {
+    const leftTokens = expenseClassTokens(left);
+    const rightTokens = expenseClassTokens(right);
+    if (!leftTokens.length || !rightTokens.length) return true;
+    return leftTokens.some(function (value) { return rightTokens.indexOf(value) >= 0; });
+  }
+
+  function isExpensePeriod(value) {
+    const period = parseInt(value, 10);
+    return period === 0 || period === 45 || (period >= 1 && period <= 8);
+  }
+
+  function normalizeExpenseSlot(item, inheritedSource) {
+    if (!item || typeof item !== 'object') return null;
+    const source = normalizeExpenseSource(inheritedSource || item.source || item.plan
+      || item['經費來源'] || item['支出計畫'] || item['計畫']);
+    const day = parseInt(item.day !== undefined ? item.day
+      : (item.dayOfWeek !== undefined ? item.dayOfWeek : item['星期']), 10);
+    const period = parseInt(item.period !== undefined ? item.period : item['節次'], 10);
+    const className = String(item.className !== undefined ? item.className
+      : (item['班級'] !== undefined ? item['班級'] : '')).trim();
+    // 留白來源是合法值，結算層會將其視為預設經費；不可因留白丟掉整個課格。
+    if (!Number.isFinite(day) || day < 1 || day > 7 || !isExpensePeriod(period)) return null;
+    return { day: day, period: period, className: className, source: source };
+  }
+
+  function parseExpensePlan(value) {
+    const empty = { mode: 'empty', slots: [], legacySource: '', invalid: false, invalidCount: 0 };
+    if (Array.isArray(value)) value = JSON.stringify(value);
+    const text = String(value == null ? '' : value).trim();
+    if (!text) return empty;
+
+    let raw;
+    if (text.charAt(0) !== '[') {
+      return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
+    }
+    try {
+      raw = JSON.parse(text);
+    } catch (e) {
+      if (/^\[[^\]]+\]\s*\S/.test(text)) {
+        return { mode: 'legacy', slots: [], legacySource: normalizeExpenseSource(text), invalid: false, invalidCount: 0 };
+      }
+      return { mode: 'invalid', slots: [], legacySource: '', invalid: true, invalidCount: 1 };
+    }
+    if (!Array.isArray(raw)) {
+      return { mode: 'invalid', slots: [], legacySource: '', invalid: true, invalidCount: 1 };
+    }
+
+    const slots = [];
+    const seen = {};
+    let invalidCount = 0;
+    raw.forEach(function (item) {
+      if (item && Array.isArray(item.slots)) {
+        const inherited = item.source || item.plan || item['經費來源'] || item['支出計畫'] || item['計畫'];
+        item.slots.forEach(function (slot) {
+          const normalized = normalizeExpenseSlot(slot, inherited);
+          if (!normalized) {
+            invalidCount += 1;
+            return;
+          }
+          const key = normalized.day + '|' + normalized.period + '|' + normalized.className;
+          if (seen[key]) {
+            invalidCount += 1;
+            return;
+          }
+          seen[key] = true;
+          slots.push(normalized);
+        });
+        return;
+      }
+      const normalized = normalizeExpenseSlot(item);
+      if (!normalized) {
+        invalidCount += 1;
+        return;
+      }
+      const key = normalized.day + '|' + normalized.period + '|' + normalized.className;
+      if (seen[key]) {
+        invalidCount += 1;
+        return;
+      }
+      seen[key] = true;
+      slots.push(normalized);
+    });
+    return {
+      mode: 'slots',
+      slots: slots,
+      legacySource: '',
+      invalid: invalidCount > 0,
+      invalidCount: invalidCount
+    };
+  }
+
+  function expensePlanSourceForSlot(value, slot) {
+    const result = resolveExpenseSource(value, slot || {});
+    return result.canAutoAllocate ? result.source : '';
+  }
+
+  function expenseSourceScheduleList(value) {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    return value ? [value] : [];
+  }
+
+  function expenseSourceSlotValue(slot, key, fallbackKey) {
+    if (!slot) return '';
+    return slot[key] !== undefined ? slot[key] : slot[fallbackKey];
+  }
+
+  function expenseSourceClassName(slot) {
+    return String(expenseSourceSlotValue(slot, 'className', '班級') == null
+      ? '' : expenseSourceSlotValue(slot, 'className', '班級')).trim();
+  }
+
+  function expenseSourceResolutionBase(context, day, period, className) {
+    const ctx = context || {};
+    return {
+      source: '',
+      status: 'missing',
+      origin: 'none',
+      explicit: false,
+      canAutoAllocate: false,
+      teacherKey: String(ctx.teacherKey || '').trim(),
+      semesterId: String(ctx.semesterId || '').trim(),
+      day: day,
+      period: period,
+      className: className,
+      candidates: [],
+      effectiveSchedules: [],
+      conflict: null
+    };
+  }
+
+  /**
+   * 統一解析教師課格的經費來源。
+   * 快照是歷史依據；傳入 effectiveSchedule 時，會檢查快照班級是否仍對得上課表。
+   * 不同來源、格式錯誤或班級衝突一律不可自動分表。
+   */
+  function resolveExpenseSource(value, context) {
+    const ctx = context || {};
+    const parsed = value && value.mode ? value : parseExpensePlan(value);
+    const scheduleContextProvided = Object.prototype.hasOwnProperty.call(ctx, 'effectiveSchedule');
+    const effectiveSchedules = expenseSourceScheduleList(ctx.effectiveSchedule);
+    const scheduleForSlot = effectiveSchedules.filter(function (schedule) {
+      const day = parseInt(expenseSourceSlotValue(schedule, 'day', 'dayOfWeek'), 10);
+      const period = parseInt(schedule.period, 10);
+      return (!Number.isFinite(parseInt(ctx.day, 10)) || day === parseInt(ctx.day, 10))
+        && (!Number.isFinite(parseInt(ctx.period, 10)) || period === parseInt(ctx.period, 10));
+    });
+    const day = parseInt(ctx.day !== undefined ? ctx.day
+      : (scheduleForSlot[0] ? expenseSourceSlotValue(scheduleForSlot[0], 'day', 'dayOfWeek') : ''), 10);
+    const period = parseInt(ctx.period !== undefined ? ctx.period
+      : (scheduleForSlot[0] ? scheduleForSlot[0].period : ''), 10);
+    const className = ctx.className !== undefined
+      ? expenseSourceClassName(ctx)
+      : expenseSourceClassName(scheduleForSlot[0]);
+    const result = expenseSourceResolutionBase(ctx, day, period, className);
+    result.effectiveSchedules = scheduleForSlot;
+
+    if (parsed.mode === 'legacy') {
+      result.source = parsed.legacySource;
+      result.status = 'legacy';
+      result.origin = 'legacy';
+      result.explicit = !!parsed.legacySource;
+      result.canAutoAllocate = !!parsed.legacySource;
+      return result;
+    }
+    if (parsed.mode === 'empty') {
+      result.source = '預設';
+      result.status = 'implicit-default';
+      result.origin = 'implicit-default';
+      result.explicit = false;
+      result.canAutoAllocate = true;
+      return result;
+    }
+    if (parsed.mode !== 'slots' || parsed.invalid) {
+      result.status = 'invalid';
+      result.origin = 'invalid';
+      result.conflict = { code: 'INVALID_EXPENSE_PLAN', reason: 'expense-plan-format' };
+      return result;
+    }
+
+    const candidates = parsed.slots.filter(function (item) {
+      return item.day === day && item.period === period;
+    });
+    result.candidates = candidates.slice();
+    if (!candidates.length) {
+      // 未列出的課格等同留白，直接採用預設經費，不產生警告或阻擋。
+      result.source = '預設';
+      result.status = 'implicit-default';
+      result.origin = 'implicit-default';
+      result.explicit = false;
+      result.canAutoAllocate = true;
+      return result;
+    }
+
+    const exact = candidates.filter(function (item) {
+      return expenseClassesOverlap(item.className, className);
+    });
+    const sources = [];
+    exact.forEach(function (item) {
+      const source = expenseSourceKey(item.source);
+      if (sources.indexOf(source) < 0) sources.push(source);
+    });
+    if (sources.length > 1) {
+      result.status = 'ambiguous';
+      result.origin = 'snapshot-ambiguous';
+      result.conflict = {
+        code: 'SNAPSHOT_SOURCE_AMBIGUOUS',
+        reason: 'multiple-sources-for-slot',
+        snapshot: candidates.slice()
+      };
+      return result;
+    }
+
+    const snapshotSources = [];
+    candidates.forEach(function (item) {
+      const source = expenseSourceKey(item.source);
+      if (snapshotSources.indexOf(source) < 0) snapshotSources.push(source);
+    });
+    if (snapshotSources.length !== 1) {
+      result.status = 'ambiguous';
+      result.origin = 'snapshot-ambiguous';
+      result.conflict = {
+        code: 'SNAPSHOT_SOURCE_AMBIGUOUS',
+        reason: 'multiple-sources-for-slot',
+        snapshot: candidates.slice()
+      };
+      return result;
+    }
+
+    const sourceKey = snapshotSources[0];
+    const sourceItem = candidates.find(function (item) {
+      return expenseSourceKey(item.source) === sourceKey;
+    });
+    const source = sourceItem ? normalizeExpenseSource(sourceItem.source) : sourceKey;
+    result.source = source;
+    result.explicit = sourceKey !== '預設';
+    if (!scheduleContextProvided || !scheduleForSlot.length) {
+      result.status = 'resolved';
+      result.origin = 'snapshot-only';
+      result.canAutoAllocate = true;
+      return result;
+    }
+
+    const hasClassBoundSnapshot = candidates.some(function (item) {
+      return String(item.className || '').trim() !== '' && expenseSourceKey(item.source) !== '預設';
+    });
+    const scheduleMatchesSnapshot = scheduleForSlot.some(function (schedule) {
+      return candidates.some(function (item) {
+        return expenseClassesOverlap(item.className, expenseSourceClassName(schedule));
+      });
+    });
+    if (!scheduleMatchesSnapshot && hasClassBoundSnapshot) {
+      result.source = '';
+      result.status = 'conflict';
+      result.origin = 'snapshot-schedule-conflict';
+      result.conflict = {
+        code: 'SNAPSHOT_SCHEDULE_MISMATCH',
+        reason: 'class-mismatch',
+        snapshot: candidates.slice(),
+        schedule: scheduleForSlot.slice()
+      };
+      return result;
+    }
+
+    result.status = hasClassBoundSnapshot ? 'resolved' : 'snapshot-unbound';
+    result.origin = hasClassBoundSnapshot ? 'snapshot-exact' : 'snapshot-unbound';
+    result.canAutoAllocate = true;
+    return result;
+  }
+
+  function expensePlanSources(value) {
+    const parsed = value && value.mode ? value : parseExpensePlan(value);
+    const sources = [];
+    if (parsed.mode === 'legacy' && parsed.legacySource) return [expenseSourceShort(parsed.legacySource)];
+    (parsed.slots || []).forEach(function (item) {
+      const source = expenseSourceShort(item.source || '預設');
+      if (sources.indexOf(source) < 0) sources.push(source);
+    });
+    return sources;
+  }
+
+  function serializeExpensePlanSlots(slots) {
+    const normalized = [];
+    const seen = {};
+    (slots || []).forEach(function (slot) {
+      const item = normalizeExpenseSlot(slot);
+      if (!item) return;
+      const key = item.day + '|' + item.period + '|' + item.className;
+      if (seen[key]) return;
+      seen[key] = true;
+      normalized.push(item);
+    });
+    return JSON.stringify(normalized);
+  }
+
+  function formatExpensePlanSummary(value) {
+    const parsed = value && value.mode ? value : parseExpensePlan(value);
+    if (parsed.mode === 'legacy') return expenseSourceShort(parsed.legacySource || '預設');
+    if (parsed.mode !== 'slots') return parsed.invalid ? '配置格式錯誤' : '預設';
+    const counts = {};
+    const order = [];
+    (parsed.slots || []).forEach(function (item) {
+      const source = expenseSourceShort(item.source || '預設');
+      if (!counts[source]) {
+        counts[source] = 0;
+        order.push(source);
+      }
+      counts[source] += 1;
+    });
+    return order.length ? order.map(function (source) {
+      return source + '（' + counts[source] + '節）';
+    }).join('、') : '預設';
+  }
+
+  function normalizeSpecialTags(raw) {
+    const aliases = {
+      '合班': '併班',
+      '綁班': '綁課',
+      '綁課': '綁課',
+      '併班': '併班',
+      '抽離': '抽離',
+      '超鐘點': '超鐘點',
+      '實支': '實支',
+      '預排': '預排'
+    };
+    const seen = {};
+    return String(raw == null ? '' : raw)
+      .split(/[,，、;；\/／|｜\n]+/)
+      .map(function (value) { return aliases[String(value || '').trim()] || String(value || '').trim(); })
+      .filter(function (value) {
+        if (!value || seen[value]) return false;
+        seen[value] = true;
+        return true;
+      })
+      .join('、');
+  }
+
+  function hasScheduleSpecialTag(rowOrValue, tag) {
+    const raw = rowOrValue && typeof rowOrValue === 'object'
+      ? pick(rowOrValue, ['特殊標記', 'specialTags', 'specialTagsText'])
+      : rowOrValue;
+    return normalizeSpecialTags(raw).split('、').filter(Boolean).indexOf(String(tag || '').trim()) >= 0;
+  }
+
+  /** 課堂的兩個可疊加標記：抽離影響課表／調課，超鐘點影響結算。 */
+  function isOvertimeSchedule(row) {
+    if (!row) return false;
+    if (row.isOvertime === true) return true;
+    const attr = String(pick(row, ['課堂屬性', 'attr']) || '').trim();
+    return attr.indexOf('超鐘點') >= 0 || hasScheduleSpecialTag(row, '超鐘點');
+  }
+
+  function isPullOutSchedule(row) {
+    if (!row) return false;
+    if (row.isPullOut === true) return true;
+    const attr = String(pick(row, ['課堂屬性', 'attr']) || '').trim();
+    return attr.indexOf('抽離') >= 0 || hasScheduleSpecialTag(row, '抽離');
+  }
+
+  function isRestrictedScheduleValue(raw) {
+    const value = String(raw == null ? '' : raw).trim().toLowerCase();
+    return value === 'restricted' || value === '限制' || value === '綁課' || value === '綁班'
+      || value.indexOf('綁') >= 0 || value.indexOf('限制') >= 0
+      || value === 'y' || value === 'yes' || value === '是' || value === 'true';
+  }
+
+  function mapTeacher(t) {
+    const loginEmail = String(pick(t, ['教師Email', 'loginEmail', 'email']) || '').trim().toLowerCase();
+    const name = pick(t, ['教師姓名', 'teacherName', 'name']) || '';
+    const jobTitle = String(pick(t, ['職務', '職稱', 'jobTitle']) || '');
+    const fixedOvertime = fixedOvertimeSetting(t);
+    return {
+      loginEmail: loginEmail,
+      // Email is retained only as the roster login field; domain keys use teacherName.
+      email: name,
+      teacherName: name,
+      name: name,
+      subject: pick(t, ['授課科目', '任課科目', 'subject']) || '',
+      jobTitle: jobTitle,
+      expensePlan: String(pick(t, ['鐘點支出計畫', '鐘點支出來源', '支出計畫', '計畫', 'expensePlan', 'plan']) || '').trim(),
+      role: normalizeTeacherRole(pick(t, ['系統角色', 'role']), jobTitle),
+      baseHours: asInt(pick(t, ['基本鐘點', 'baseHours']), 16),
+      // 折抵額度：釋出 1 節＝1；扣額度須滿 1 才扣 1
+      mutualQuota: asFloat(pick(t, ['折抵額度', 'mutualQuota']), 0),
+      fixedOvertimeHours: fixedOvertime.hours,
+      fixedOvertimeSlots: fixedOvertime.slotKeys,
+      fixedOvertimeSlotsText: fixedOvertime.slotsText,
+      fixedOvertimeConfigured: fixedOvertime.configured,
+      fixedOvertimeValid: fixedOvertime.valid,
+      fixedOvertimeConfigError: fixedOvertime.error
+    };
+  }
+
+  function mapSchedule(s) {
+    let cn = pick(s, ['班級', 'className']);
+    if (cn !== undefined && cn !== null && cn !== '') {
+      cn = String(cn).trim();
+      // 過濾 Sheets 污染：0 / 000
+      if (/^0+$/.test(cn)) cn = '';
+    } else {
+      cn = '';
+    }
+    let subj = String(pick(s, ['科目', 'subject']) || '').trim();
+    const rawAttr = String(pick(s, ['課堂屬性', 'attr']) || '').trim();
+    let attr = rawAttr;
+    const specialTags = normalizeSpecialTags(pick(s, ['特殊標記', 'specialTags', 'specialTagsText']) || '');
+    const specialTagList = specialTags.split('、').filter(Boolean);
+    const attrHasOvertime = rawAttr.indexOf('超鐘點') >= 0;
+    const attrHasPullOut = rawAttr.indexOf('抽離') >= 0;
+    const attrHasPatrol = rawAttr.indexOf('巡堂') >= 0;
+    // 基礎課表常見：科目或班級寫「巡堂」、屬性空白 → 正規成 attr=巡堂
+    const isPatrol = attrHasPatrol || cn.indexOf('巡堂') >= 0 || subj.indexOf('巡堂') >= 0;
+    const isOvertime = !isPatrol && (attrHasOvertime || specialTagList.indexOf('超鐘點') >= 0);
+    const isPullOut = !isPatrol && (attrHasPullOut || specialTagList.indexOf('抽離') >= 0);
+    if (isPatrol) {
+      attr = '巡堂';
+      cn = '';
+      subj = '';
+    } else if (isPullOut) {
+      // 抽離是課堂型態；超鐘點只保留在特殊標記，兩者可同時成立。
+      attr = '抽離';
+    } else {
+      // 舊列若曾把超鐘點寫在課堂屬性，讀取時也先還原成基礎屬性。
+      if (attrHasOvertime) {
+        attr = attr.replace(/超鐘點/g, '').replace(/[+＋、,，;；/／|｜\s]+/g, '').trim();
+      }
+      if (!attr || attr === '基本') attr = '一般';
+      if ((attr === '一般' || attr === '基本') && specialTagList.indexOf('實支') >= 0) attr = '實支';
+      else if ((attr === '一般' || attr === '基本') && specialTagList.indexOf('預排') >= 0) attr = '預排';
+    }
+    const mapped = {
+      id: pick(s, ['課表ID', 'id']),
+      teacherName: pick(s, ['教師姓名', 'teacherName']) || '',
+      dayOfWeek: asInt(pick(s, ['星期', 'dayOfWeek']), 0),
+      period: asInt(pick(s, ['節次', 'period']), 0),
+      className: cn,
+      subject: subj,
+      attr: attr,
+      isOvertime: isOvertime,
+      isSubstitute: !isPatrol && attr === '代課',
+      isPullOut: isPullOut,
+      activeFrom: asDateStr(pick(s, ['啟用起日', '啟用開始日', 'activeFrom', 'activationStartDate', 'effectiveStartDate'])),
+      activeTo: asDateStr(pick(s, ['啟用迄日', '啟用結束日', 'activeTo', 'activationEndDate', 'effectiveEndDate'])),
+      restriction: (function () {
+        const raw = pick(s, ['調課限制', 'restriction']) || '';
+        return isRestrictedScheduleValue(raw) || specialTagList.indexOf('綁課') >= 0 ? 'restricted' : raw;
+      })(),
+      specialTags: specialTags,
+      isPreplanned: attr === '預排' || specialTagList.indexOf('預排') >= 0
+    };
+    alias(mapped, 'teacherEmail', function () { return mapped.teacherName; });
+    return mapped;
+  }
+
+  function mapSubstitution(sub) {
+    const mapped = {
+      id: pick(sub, ['紀錄ID', 'id']),
+      date: asDateStr(pick(sub, ['異動日期', 'date'])),
+      period: asInt(pick(sub, ['節次', 'period']), 0),
+      originalTeacherName: pick(sub, ['原授課教師姓名', '原任課教師姓名', '原導師姓名', 'originalTeacherName']) || '',
+      actualTeacherName: pick(sub, ['\u5be6\u969b\u6388\u8ab2\u6559\u5e2b\u59d3\u540d', '\u4ee3\u8ab2\u6559\u5e2b\u59d3\u540d', 'actualTeacherName']) || '',
+      className: String(pick(sub, ['班級', 'className']) || ''),
+      subject: pick(sub, ['科目', 'subject']) || '',
+      requestId: pick(sub, ['申請單ID', 'requestId']) || '',
+      type: pick(sub, ['異動類型', 'type']),
+      specialFlow: normalizeSpecialFlow(pick(sub, ['特殊流程', 'specialFlow'])),
+      printed: asBool(pick(sub, ['是否已印', 'printed'])),
+      subFee: pick(sub, ['經費來源', 'subFee']) || '',
+      reason: pick(sub, ['請假事由', 'reason']) || '',
+      courseAdjustmentOnly: isCourseAdjustmentOnly(sub),
+      note: pick(sub, ['備註', 'note']) || '',
+      leaveTimeType: pick(sub, ['請假時間類型', 'leaveTimeType']) || '',
+      leaveTime: pick(sub, ['請假時間', 'leaveTime', 'timeRange']) || '',
+      isEmptySlotAssign: (function () {
+        const reason = String(pick(sub, ['請假事由', 'reason']) || '').trim();
+        const note = String(pick(sub, ['備註', 'note']) || '');
+        return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0 || sub.isEmptySlotAssign === true;
+      })()
+    };
+    alias(mapped, 'originalTeacherEmail', function () { return mapped.originalTeacherName; });
+    alias(mapped, 'actualTeacherEmail', function () { return mapped.actualTeacherName; });
+    return mapped;
+  }
+
+  /** 狀態：中文表頭／舊別名 → 英文碼（前端過濾用） */
+  function normalizeRequestStatus(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    const en = s.toLowerCase();
+    if (en === 'pending_teacher' || en === 'pending_admin' || en === 'approved'
+        || en === 'rejected' || en === 'admin_rejected' || en === 'cancelled' || en === 'withdrawn') {
+      return en;
+    }
+    const map = {
+      '待受邀人簽核': 'pending_teacher',
+      '待行政審核': 'pending_admin',
+      '送交教學組': 'pending_admin',
+      '已核准': 'approved',
+      '核准生效': 'approved',
+      '受邀人已拒絕': 'rejected',
+      '行政已退回': 'admin_rejected',
+      '行政駁回': 'admin_rejected',
+      '已取消': 'cancelled',
+      '已撤銷': 'cancelled',
+      '已撤回': 'withdrawn'
+    };
+    return map[s] || s;
+  }
+
+  function normalizeRequestType(raw) {
+    const value = String(raw == null ? '' : raw).trim();
+    const lower = value.toLowerCase();
+    if (lower === 'triangle' || value === '三角調') return 'triangle';
+    if (lower === 'exchange' || value === '對調') return 'exchange';
+    if (lower === 'substitution' || value === '代課') return 'substitution';
+    return value;
+  }
+
+  function mapRequest(r) {
+    const targetDay = pick(r, ['對調目標星期', 'targetDayOfWeek']);
+    const targetPeriod = pick(r, ['對調目標節次', 'targetPeriod']);
+    const paperFlowRaw = pick(r, ['紙本流程', 'paperFlow', 'isPaperFlow']);
+    const directApproveRaw = pick(r, ['直接核准', '是否直接核准', 'directApprove']);
+    const createdAtRaw = pick(r, ['建立時間', 'createdAt', '建立日期', '申請時間', '申請日期', 'createdDate', 'requestCreatedAt', 'created_at', 'timestamp']);
+    const updatedAtRaw = pick(r, ['更新時間', 'updatedAt', 'updated_at']);
+    const mapped = {
+      id: pick(r, ['申請單ID', 'id']),
+      serial: pick(r, ['單號', 'serial']),
+      batchId: pick(r, ['批次ID', 'batchId']) || '',
+      status: normalizeRequestStatus(pick(r, ['狀態', 'status'])),
+      paperFlow: asBool(paperFlowRaw),
+      paperFlowSpecified: paperFlowRaw !== undefined && paperFlowRaw !== null
+        && String(paperFlowRaw).trim() !== '',
+      requesterName: pick(r, ['申請人姓名', 'requesterName']),
+      targetTeacherName: pick(r, ['受邀人姓名', 'targetTeacherName']),
+      actualTeacherName: pick(r, ['實際授課教師姓名', 'actualTeacherName']) || '',
+      className: String(pick(r, ['班級', 'className']) || ''),
+      subject: pick(r, ['科目', 'subject']) || '',
+      requestDate: asDateStr(pick(r, ['異動日期', 'requestDate'])),
+      requestPeriodDay: asInt(pick(r, ['異動星期', 'requestPeriodDay']), null),
+      requestPeriod: asInt(pick(r, ['異動節次', 'requestPeriod']), null),
+      type: normalizeRequestType(pick(r, ['異動類型', 'type'])),
+      specialFlow: normalizeSpecialFlow(pick(r, ['特殊流程', 'specialFlow'])),
+      targetDate: asDateStr(pick(r, ['對調目標日期', 'targetDate'])),
+      targetDayOfWeek: targetDay === undefined || targetDay === null || targetDay === '' ? null : asInt(targetDay, null),
+      targetPeriod: targetPeriod === undefined || targetPeriod === null || targetPeriod === '' ? null : asInt(targetPeriod, null),
+      targetClassName: String(pick(r, ['對調目標班級', 'targetClassName']) || ''),
+      targetSubject: pick(r, ['對調目標科目', 'targetSubject']) || '',
+      subFee: pick(r, ['經費來源', 'subFee']) || '',
+      reason: pick(r, ['請假事由', 'reason']) || '',
+      courseAdjustmentOnly: isCourseAdjustmentOnly(r),
+      leaveTimeType: pick(r, ['請假時間類型', 'leaveTimeType']) || '',
+      leaveTime: pick(r, ['請假時間', 'leaveTime', 'timeRange']) || '',
+      note: pick(r, ['備註', 'note']) || '',
+      printed: asBool(pick(r, ['是否已印', 'printed'])),
+      createdAt: asTimestamp(createdAtRaw),
+      updatedAt: asTimestamp(updatedAtRaw),
+      triangleId: String(pick(r, ['三角調ID', 'triangleId']) || ''),
+      triangleLegIndex: asInt(pick(r, ['三角腳次', 'triangleLegIndex']), null),
+      triangleConsentStatus: String(pick(r, ['三角同意狀態', 'triangleConsentStatus']) || ''),
+      triangleConsentAt: asTimestamp(pick(r, ['三角同意時間', 'triangleConsentAt'])),
+      triangleGroupStatus: normalizeRequestStatus(pick(r, ['三角組狀態', 'triangleGroupStatus']) || ''),
+      // 舊資料仍以備註標記相容；新資料使用獨立欄位，不污染備註。
+      directApprove: (function () {
+        if (asBool(directApproveRaw)) return true;
+        const n = String(pick(r, ['備註', 'note']) || '');
+        return n.indexOf('[直接核准]') >= 0 || r.directApprove === true;
+      })(),
+      // 行政代申請：代申請人 Email；備註 [行政代申請…] 備援
+      proxyByName: String(pick(r, ['代申請人姓名', 'proxyByName']) || ''),
+      isProxySubmit: (function () {
+        if (r.isProxySubmit === true || r.proxySubmit === true) return true;
+        const em = pick(r, ['代申請人Email', 'proxyByEmail', 'proxySubmitBy']);
+        if (em || pick(r, ['代申請人姓名', 'proxyByName'])) return true;
+        const n = String(pick(r, ['備註', 'note']) || '');
+        return n.indexOf('[行政代申請') >= 0;
+      })(),
+      isEmptySlotAssign: (function () {
+        if (r.isEmptySlotAssign === true) return true;
+        const reason = String(pick(r, ['請假事由', 'reason']) || '').trim();
+        const note = String(pick(r, ['備註', 'note']) || '');
+        return reason === '空堂排班' || note.indexOf('[空堂排班]') >= 0;
+      })()
+    };
+    alias(mapped, 'requesterEmail', function () { return mapped.requesterName || ''; });
+    alias(mapped, 'targetTeacherEmail', function () { return mapped.targetTeacherName || ''; });
+    alias(mapped, 'proxyByEmail', function () { return mapped.proxyByName || ''; });
+    return mapped;
+  }
+
+  /** 前端 → Sheets：教師寫入列（同時寫入授課科目/任課科目別名，相容舊表頭） */
+  function teacherToSheet(t, semesterId) {
+    const subject = t.subject || t["授課科目"] || t["任課科目"] || '';
+    const jobTitle = t.jobTitle || t["職務"] || t["職稱"] || "";
+    const rawExpensePlan = t.expensePlan !== undefined ? t.expensePlan
+      : (t["鐘點支出計畫"] !== undefined ? t["鐘點支出計畫"]
+        : (t["鐘點支出來源"] !== undefined ? t["鐘點支出來源"] : (t["計畫"] || "")));
+    const expensePlan = Array.isArray(rawExpensePlan)
+      ? serializeExpensePlanSlots(rawExpensePlan)
+      : String(rawExpensePlan == null ? '' : rawExpensePlan).trim();
+    const quota = t.mutualQuota !== undefined ? t.mutualQuota
+      : (t["折抵額度"] !== undefined ? t["折抵額度"] : 0);
+    const fixedOvertime = fixedOvertimeSetting(t);
+    return {
+      "學期代號": semesterId || t.semesterId || '',
+      "教師Email": t.loginEmail || t["教師Email"] || t.email,
+      "教師姓名": t.name || t["教師姓名"],
+      "授課科目": subject,
+      "任課科目": subject,
+      "職務": jobTitle,
+      "鐘點支出計畫": expensePlan,
+      "系統角色": normalizeTeacherRole(t.role || t["系統角色"], jobTitle),
+      "基本鐘點": (function () {
+        if (t.baseHours === 0 || t.baseHours === '0') return 0;
+        if (t.baseHours !== undefined && t.baseHours !== null && t.baseHours !== '') {
+          const n = parseInt(t.baseHours, 10);
+          return Number.isNaN(n) ? 16 : n;
+        }
+        if (t["基本鐘點"] === 0 || t["基本鐘點"] === '0') return 0;
+        if (t["基本鐘點"] !== undefined && t["基本鐘點"] !== null && t["基本鐘點"] !== '') {
+          const n2 = parseInt(t["基本鐘點"], 10);
+          return Number.isNaN(n2) ? 16 : n2;
+        }
+        return 16;
+      })(),
+      "折抵額度": parseInt(quota, 10) || 0,
+      "超鐘點節數": fixedOvertime.configured ? fixedOvertime.hours : '',
+      "超鐘點節次": fixedOvertime.configured ? fixedOvertime.slotsText : ''
+    };
+  }
+
+  /** 代導紀錄：Sheets → 前端 */
+  function mapHomeroomRecord(r) {
+    const mapped = {
+      id: String(pick(r, ['代導紀錄ID', 'id']) || ''),
+      semesterId: String(pick(r, ['學期代號', 'semesterId']) || ''),
+      sourceRequestId: String(pick(r, ['來源申請單ID', 'sourceRequestId']) || ''),
+      originalTeacherName: String(pick(r, ['原導師姓名', 'originalTeacherName']) || ''),
+      className: String(pick(r, ['班級', 'className']) || ''),
+      date: String(pick(r, ['代導日期', 'date']) || '').slice(0, 10),
+      leaveTimeType: String(pick(r, ['請假時間類型', 'leaveTimeType']) || ''),
+      leaveTime: String(pick(r, ['請假時間', 'leaveTime', 'timeRange']) || ''),
+      actualTeacherName: String(pick(r, ['代導教師姓名', 'actualTeacherName']) || ''),
+      periodCount: asFloat(pick(r, ['代導節數', 'periodCount']), 1),
+      feeAmount: asFloat(pick(r, ['鐘點費', 'feeAmount']), 455),
+      status: String(pick(r, ['狀態', 'status']) || ''),
+      enabled: pick(r, ['啟用', 'enabled']) === undefined || pick(r, ['啟用', 'enabled']) === '' ? true : asBool(pick(r, ['啟用', 'enabled'])),
+      createdAt: String(pick(r, ['建立時間', 'createdAt']) || ''),
+      updatedAt: String(pick(r, ['更新時間', 'updatedAt']) || ''),
+      operatorName: String(pick(r, ['操作者', 'operatorName']) || ''),
+      note: String(pick(r, ['備註', 'note']) || '')
+    };
+    alias(mapped, 'originalTeacherEmail', function () { return mapped.originalTeacherName; });
+    alias(mapped, 'actualTeacherEmail', function () { return mapped.actualTeacherName; });
+    alias(mapped, 'operatorEmail', function () { return mapped.operatorName; });
+    return mapped;
+  }
+
+  /** 前端 → Sheets：調代課紀錄寫入列（同時寫入原授課/原任課別名） */
+  function substitutionToSheet(opts) {
+    const original = opts.originalTeacherName || opts.originalTeacherEmail;
+    return {
+      "學期代號": opts.semesterId,
+      "紀錄ID": opts.id,
+      "申請單ID": opts.requestId,
+      "異動日期": opts.date,
+      "節次": opts.period,
+      "原授課教師姓名": original,
+      "原任課教師姓名": original,
+      "實際授課教師姓名": opts.actualTeacherName || opts.actualTeacherEmail,
+      "班級": opts.className,
+      "科目": opts.subject,
+      "異動類型": opts.type,
+      "特殊流程": normalizeSpecialFlow(opts.specialFlow),
+      "經費來源": opts.subFee || '無',
+      "請假事由": opts.reason || '',
+      "請假時間類型": opts.leaveTimeType || '',
+      "請假時間": opts.leaveTime || '',
+      "是否已印": opts.printed === true || opts.printed === 'TRUE' ? 'TRUE' : 'FALSE',
+      "備註": opts.note || ''
+    };
+  }
+
+  const STATUS_TEXT = {
+    pending_teacher: '待受邀確認',
+    pending_admin: '送交教學組',
+    approved: '核准生效',
+    rejected: '不成立',
+    admin_rejected: '行政駁回',
+    cancelled: '已撤銷',
+    withdrawn: '已撤回'
+  };
+
+  function getStatusText(status) {
+    return STATUS_TEXT[status] || status;
+  }
+
+  /**
+   * 將 GAS / 網路錯誤轉成可讀中文
+   * @param {any} err
+   * @param {string} [action]
+   */
+  function formatGasError(err, action) {
+    const raw = err && err.message ? String(err.message) : String(err || '未知錯誤');
+    const cleaned = raw
+      .replace(/^Error:\s*/i, '')
+      .replace(/^Exception:\s*/i, '')
+      .trim();
+
+    const actionLabel = {
+      submitRequest: '送出申請',
+      respondToRequest: '簽核回應',
+      adminApprove: '行政核准',
+      adminApproveBatch: '批次行政核准',
+      adminRejectBatch: '批次行政駁回',
+      getMatchCandidates: '智慧媒合',
+      getMutualQuotaLedger: '額度歷程',
+      adminReject: '行政駁回',
+      cancelRequest: '撤回申請',
+      deleteSubstitutionRecord: '撤銷異動',
+      saveTeacher: '儲存教師',
+      deleteTeacher: '刪除教師',
+      saveScheduleCell: '儲存課表',
+      clearScheduleCell: '清除課表',
+      importSchedulesBatch: '匯入課表',
+      importTeachersBatch: '匯入教師',
+      saveSemester: '儲存學期',
+      deleteSemester: '刪除學期',
+      setDefaultSemester: '設定預設學期',
+      saveClassAwayEvent: '儲存空堂事件',
+      deleteClassAwayEvent: '刪除空堂事件',
+      saveHistoryEdit: '編輯歷史紀錄',
+      backupTeacherExpensePlans: '備份教師經費來源',
+      batchMarkPrinted: '標記已列印',
+      saveMailSettings: '儲存系統設定',
+      getInitialData: '載入資料'
+    }[action] || (action || '操作');
+
+    // 課表驗證失敗是資料衝突／欄位錯誤，不是登入失效；保留後端原訊息供管理員處理。
+    if (/課表(?:匯入)?資料驗證失敗|同一星期與節次只能安排一位巡堂教師|啟用期間重疊|啟用起日|啟用迄日|課表新版本/.test(cleaned)) {
+      return actionLabel + '失敗：' + cleaned;
+    }
+    if (/登入憑證已過期|登入驗證失敗|Google 登入驗證失敗|身分認證\s*Token|aud 不符|id_token|Token/i.test(cleaned)) {
+      return '登入憑證已過期或無效，請重新登入後再試。';
+    }
+    if (/Failed to fetch|NetworkError|網路連線失敗|Load failed/i.test(cleaned)) {
+      return '無法連線至伺服器，請檢查網路後再試。';
+    }
+    if (/無管理員權限/.test(cleaned)) {
+      return '此操作需要管理員權限。';
+    }
+    if (/找不到該申請單|找不到此申請單|找不到該紀錄/.test(cleaned)) {
+      return cleaned;
+    }
+    if (/無權/.test(cleaned)) {
+      return cleaned;
+    }
+    if (/未定義的 POST Action/.test(cleaned)) {
+      return '後端尚未支援此操作，請確認 code.gs 已部署最新版。';
+    }
+    if (/主要資料庫 GAS API 網址尚未設定/.test(cleaned)) {
+      return cleaned;
+    }
+
+    return actionLabel + '失敗：' + cleaned;
+  }
+
+  return {
+    SPECIAL_FLOW_COMBINED_RETURN,
+    SPECIAL_FLOW_COMBINED_RETURN_LABEL,
+    pick,
+    asBool,
+    isCourseAdjustmentOnly,
+    asInt,
+    asFloat,
+    normalizeRole,
+    normalizeTeacherRole,
+    normalizeExpenseSource,
+    expensePlanName,
+    expenseSourceShort,
+    expenseSourceFull,
+    expenseClassesOverlap,
+    parseExpensePlan,
+    resolveExpenseSource,
+    expensePlanSourceForSlot,
+    expensePlanSources,
+    serializeExpensePlanSlots,
+    formatExpensePlanSummary,
+    normalizeSpecialFlow,
+    isCombinedReturn,
+    normalizeRequestStatus,
+       mapSemester,
+       mapClassAwayEvent,
+       mapSchoolSwap,
+    mapTeacher,
+     parseFixedOvertimeSlots,
+     serializeFixedOvertimeSlots,
+     fixedOvertimeSetting,
+    normalizeSpecialTags,
+    hasScheduleSpecialTag,
+    isOvertimeSchedule,
+    isPullOutSchedule,
+    isRestrictedScheduleValue,
+    mapSchedule,
+    mapSubstitution,
+    mapHomeroomRecord,
+    mapRequest,
+    teacherToSheet,
+    substitutionToSheet,
+    getStatusText,
+    formatGasError,
+    STATUS_TEXT
+  };
+})();
+
+
+export default FieldMap;

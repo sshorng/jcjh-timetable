@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>建成國中線上課表系統 v2</title>
+  <!-- R-v2接線：沿用 v1 靜態資源（CSS＋第三方庫 CDN；版本與 v1 index.html 一致） -->
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./mobile.css">
+  <link rel="stylesheet" href="./onboarding-tour.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="print-area" style="display: none;"></div>
+  <div id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg">
+      <div id="confirm-box">
+        <div id="confirm-title">請確認</div>
+        <div id="confirm-msg"></div>
+        <div id="confirm-accounting-period-wrap" aria-label="會計匯出期間">
+          <div id="confirm-accounting-period-title">會計匯出設定（六類共用，期間預設整月，可調整）</div>
+          <div id="confirm-accounting-period-fields">
+            <div>
+              <label for="confirm-accounting-period-start">起日</label>
+              <input id="confirm-accounting-period-start" type="date" class="form-input" data-autofocus>
+            </div>
+            <div>
+              <label for="confirm-accounting-period-end">迄日</label>
+              <input id="confirm-accounting-period-end" type="date" class="form-input">
+            </div>
+  
+            <button id="confirm-accounting-period-reset" type="button" class="btn btn-sm btn-outline-secondary">恢復本月整月</button>
+          </div>
+        </div>
+        <div id="confirm-note-wrap">
+          <label for="confirm-note">備註（選填）</label>
+          <input id="confirm-note" type="text" class="form-input" placeholder="備註（選填）">
+        </div>
+        <div id="confirm-actions">
+          <button id="confirm-cancel">取消</button>
+          <button id="confirm-ok">確認</button>
+        </div>
+      </div>
+    </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
