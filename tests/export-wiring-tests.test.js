@@ -54,9 +54,11 @@ test('export wiring（v2 接線迴歸）', () => {
   assert.match(shell, /accounts\.google\.com\/gsi\/client/, '需載入 GSI 登入庫');
   assert.match(shell, /href="\.\/style\.css"/, '需載入 style.css');
   assert.match(shell, /href="\.\/mobile\.css"/, '需載入 mobile.css');
-  assert.match(shell, /exceljs@4\.4\.0/, '需載入 ExcelJS CDN');
-  assert.match(shell, /jszip@3\.10\.1/, '需載入 JSZip CDN');
-  assert.match(shell, /xlsx@0\.18\.5/, '需載入 XLSX CDN');
+  assert.doesNotMatch(shell, /cdn\.jsdelivr\.net/, '殼層不應再載入 CDN（改 npm＋懶載）');
+  const vendorSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'vendor-libs.js'), 'utf8');
+  assert.match(vendorSource, /import\('exceljs'\)/, 'ExcelJS 應動態引入');
+  assert.match(vendorSource, /import\('jszip'\)/, 'JSZip 應動態引入');
+  assert.match(vendorSource, /import\('xlsx'\)/, 'XLSX 應動態引入');
 
   console.log('export wiring tests PASS');
 });

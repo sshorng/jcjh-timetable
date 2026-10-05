@@ -75,8 +75,8 @@ test('http smoke tests（v2：dist 靜態殼層）', async () => {
     assert.match(root.body.toString('utf8'), /<title>建成國中線上課表系統/);
     assert.match(root.body.toString('utf8'), /application-name" content="JCJH Timetable"/);
     assert.match(root.body.toString('utf8'), /src="\/src\/main.js"|assets\/index-[^"']+\.js/);
-    assert.match(root.body.toString('utf8'), /exceljs@4\.4\.0/);
-    assert.match(root.body.toString('utf8'), /jszip@3\.10\.1/);
+    // 第三方庫走 npm＋import() 懶載：殼層不可再有 CDN（版本鎖在 package.json＋lock）
+    assert.doesNotMatch(root.body.toString('utf8'), /cdn\.jsdelivr\.net/, '殼層不應再載入 CDN');
     assert.match(root.body.toString('utf8'), /accounts\.google\.com\/gsi\/client/);
     assert.equal(root.headers['cache-control'], 'no-cache');
 
@@ -85,6 +85,12 @@ test('http smoke tests（v2：dist 靜態殼層）', async () => {
       assert.equal(res.status, 200, asset + ' 應隨 dist 發布');
       assert.ok(res.body.length > 0, asset + ' 不可為空');
     }
+    // 懶載分包：vendor libs 應獨立成 chunk（首屏不含，匯出時才抓）
+    const assets = fs.readdirSync(path.join(dist, 'assets')).filter((f) => f.endsWith('.js'));
+    assert.ok(assets.some((f) => /^xlsx-/.test(f)), 'xlsx 應獨立分包：' + assets.join(','));
+    assert.ok(assets.some((f) => /^exceljs/i.test(f)), 'exceljs 應獨立分包');
+    assert.ok(assets.some((f) => /^jszip/i.test(f)), 'jszip 應獨立分包');
+    assert.ok(assets.some((f) => /^index-/.test(f)), '主包應存在');
     const nf = await request(server, '/nope-missing');
     assert.equal(nf.status, 404);
     console.log('http smoke tests PASS');

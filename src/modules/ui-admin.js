@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { ensureXlsx } from './vendor-libs.js';
 /**
  * 自 v1 ui-admin.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -642,13 +643,11 @@ const UiAdmin = (() => {
         XLSX.writeFile(wb, '課表匯入範本_長表.xlsx');
          showToast('已下載姓名鍵課表長表範本（含巡堂列）', 'success');
       };
-      if (typeof window.ensureXlsx === 'function') {
-        window.ensureXlsx().then(doDownload).catch(function () {
-          showToast('Excel 模組載入失敗', 'error');
-        });
-      } else {
-        doDownload();
-      }
+      ensureXlsx().then(doDownload).catch(function () {
+
+        showToast('Excel 模組載入失敗', 'error');
+
+      });
     }
 
     /** 匯出目前本學期課表（長表，可改完再匯回） */
@@ -701,13 +700,11 @@ const UiAdmin = (() => {
         XLSX.writeFile(wb, '目前課表_' + sid + '.xlsx');
         showToast('已匯出目前課表共 ' + rows.length + ' 節', 'success');
       };
-      if (typeof window.ensureXlsx === 'function') {
-        window.ensureXlsx().then(doDownload).catch(function () {
-          showToast('Excel 模組載入失敗', 'error');
-        });
-      } else {
-        doDownload();
-      }
+      ensureXlsx().then(doDownload).catch(function () {
+
+        showToast('Excel 模組載入失敗', 'error');
+
+      });
     }
 
     async function importSchedules() {
@@ -1935,7 +1932,7 @@ const UiAdmin = (() => {
       var reader = new FileReader();
       reader.onload = async function (evt) {
         try {
-          if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+          await ensureXlsx();
         } catch (err) {
           showToast('Excel 模組載入失敗', 'error');
           return;
@@ -2214,7 +2211,7 @@ const UiAdmin = (() => {
       var reader = new FileReader();
       reader.onload = async function (evt) {
         try {
-          if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+          await ensureXlsx();
         } catch (err) {
           showToast('Excel 模組載入失敗', 'error');
           return;

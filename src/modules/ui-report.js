@@ -1,4 +1,5 @@
 import { computed, watch, nextTick } from 'vue';
+import { ensureExcelJS, ensureJSZip, ensureXlsx } from './vendor-libs.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -221,7 +222,7 @@ const calculateMonthlyReport = async () => {
 const exportReportToExcel = async () => {
   try {
     await ensureBillingReady();
-    if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+    await ensureXlsx();
   } catch (e) {
     showToast('Excel 模組載入失敗', 'error');
     return;
@@ -374,9 +375,7 @@ const exportSchoolTimetableWord = async () => {
 
 const ensureActivityCoverReady = async () => {
   // R-v2接線：ExportActivityCover 靜態 import 常駐；JSZip 走 CDN 全域（見 v2/index.html）
-  if (typeof window.ensureJSZip === 'function') {
-    await window.ensureJSZip();
-  }
+  await ensureJSZip();
   if (!ExportActivityCover || !ExportActivityCover.exportWord) {
     throw new Error('輪值通知單匯出模組尚未載入');
   }
@@ -410,13 +409,9 @@ const buildDefaultInvigilationTitle = () => {
 
 const ensureInvigilationExportReady = async () => {
   // R-v2接線：ExportInvigilation 靜態 import 常駐；ExcelJS／JSZip 走 CDN 全域（見 v2/index.html）
-  if (typeof window.ensureExcelJS === 'function') {
-    await window.ensureExcelJS();
-  }
+  await ensureExcelJS();
   // 多份分發打 ZIP 用
-  if (typeof window.ensureJSZip === 'function') {
-    try { await window.ensureJSZip(); } catch (eZ) { /* 單份可不需 */ }
-  }
+  try { await ensureJSZip(); } catch (eZ) { /* 單份可不需 */ }
   await ensureDAC();
   if (!ExportInvigilation || !ExportInvigilation.exportWorkbook) {
     throw new Error('監考表匯出模組尚未載入');

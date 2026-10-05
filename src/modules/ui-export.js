@@ -6,6 +6,7 @@ import DomainBilling from '../domain/domain-billing.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
+import { ensureExcelJS } from './vendor-libs.js';
 // R-v2接線：匯出模組改靜態 ESM（v1 走 window＋ensure* script 懶載；
 // ExcelJS／JSZip 仍走 CDN 全域，見 v2/index.html）
 import { ExportActivityCover } from './export-activity-cover.js';
@@ -26,9 +27,7 @@ const UiExport = (() => {
     deps = deps || {};
     var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
     async function ensureBillingReady() {
-      if (typeof window.ensureDomainBilling === 'function') {
-        await window.ensureDomainBilling();
-      }
+      // R-v2接線：DomainBilling 靜態 import 常駐
       if (!DomainBilling) throw new Error('大鐘點模組未載入');
     }
     async function fetchQuotaLedgerHistoryForExport() {
@@ -547,7 +546,7 @@ const UiExport = (() => {
       try {
         const readyTasks = [ensureBillingReady()];
         // R-v2接線：ExportAccounting 靜態 import 常駐；ExcelJS 走 CDN 全域
-        if (typeof window.ensureExcelJS === 'function') readyTasks.push(window.ensureExcelJS());
+        readyTasks.push(ensureExcelJS());
         await Promise.all(readyTasks);
         if (!ExportAccounting || !ExportAccounting.buildExportData || !ExportAccounting.exportWorkbook) {
           throw new Error('會計匯出模組未載入');
@@ -632,7 +631,7 @@ const UiExport = (() => {
       try {
         const readyTasks = [ensurePeriod8Ready()];
         // R-v2接線：ExportPeriod8Accounting 靜態 import 常駐；ExcelJS 走 CDN 全域
-        if (typeof window.ensureExcelJS === 'function') readyTasks.push(window.ensureExcelJS());
+        readyTasks.push(ensureExcelJS());
         await Promise.all(readyTasks);
         if (!ExportPeriod8Accounting || !ExportPeriod8Accounting.buildExportData
             || !ExportPeriod8Accounting.exportWorkbook) {
