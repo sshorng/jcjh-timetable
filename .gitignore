@@ -1,20 +1,13 @@
-# 本機／部署雜項（勿忽略 code.gs — 後端必須進版控）
+node_modules/
+dist/
+dist-map/
+.vercel/
+v1-backup/
 .DS_Store
 Thumbs.db
 *.log
 .env
 .env.*
-node_modules/
-.vercel/
-.clasp.json
-.clasprc.json
-
-# Google 捷徑檔（非原始碼）
-*.gsheet
 *.gdoc
 *.gslides
-
-# 編輯器暫存
-*.swp
-*~
-*.tmp
+*.gsheet

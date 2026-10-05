@@ -1,18 +1,23 @@
 {
-  "name": "jcjh-timetable",
-  "version": "1.0.0",
+  "name": "jcjh-timetable-v2",
   "private": true,
-  "description": "建成國中線上課表系統（純靜態前端 + GAS 後端）",
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "node dev-server.js",
-    "pretest": "node tests/same-period-swap-ui-tests.js",
-    "test": "node tests/run-domain-tests.js && node tests/class-away-ui-tests.js && node tests/class-timetable-admin-tests.js && node tests/batch-exchange-ui-tests.js && node tests/quota-ledger-tests.js && node tests/timetable-resolve-tests.js && node tests/module-deps-tests.js && node tests/data-layer-tests.js && node tests/backoffice-tests.js && node tests/match-panel-tests.js && node tests/homeroom-tests.js && node tests/setup-vue-tests.js && node tests/factory-scope-tests.js && node tests/setup-smoke-tests.js && node tests/template-binding-tests.js && node tests/invigilation-export-contract-tests.js && node tests/match-subject-tests.js && node tests/triangle-tests.js && node tests/timetable-only-fee-tests.js && node tests/billing-data-shape-tests.js && node tests/export-accounting-tests.js && node tests/period8-roster-tests.js && node tests/period8-accounting-tests.js && node tests/ui-admin-import-tests.js && node tests/name-key-contract-tests.js && node tests/api-contract-tests.js && node tests/http-smoke-tests.js && node tests/patrol-contract-tests.js && node tests/period-contract-tests.js && node tests/exchange-week-contract-tests.js && node tests/schedule-bridge-contract-tests.js && node tests/school-swap-contract-tests.js && node tests/paper-flow-contract-tests.js && node tests/print-form-contract-tests.js && node tests/code-gs-contract-tests.js && node tests/cache-contract-tests.js && node tests/teacher-login-cache-tests",
-    "test:security": "node tests/security-tests.js && node tests/permission-tests.js",
-    "check": "node --check app.js && node --check app-shell-utils.js && node --check gas-api.js && node --check field-map.js && node --check name-key-contract.js && node --check domain-school-swap.js && node --check domain-schedule.js && node --check domain-triangle.js && node --check domain-match.js && node --check domain-class-away.js && node --check domain-billing.js && node --check domain-activity-cover.js && node --check date-utils.js && node --check ui-timetable.js && node --check ui-activity.js && node --check ui-admin.js && node --check export-accounting.js && node --check export-period8-accounting.js && node --check export-activity-cover.js && node --check tests/name-key-contract-tests.js && node --check tests/match-subject-tests.js && node --check tests/triangle-tests.js && node --check tests/timetable-only-fee-tests.js && node --check tests/billing-data-shape-tests.js && node --check tests/export-accounting-tests.js && node --check tests/period8-roster-tests.js && node --check tests/period8-accounting-tests.js && node --check tests/ui-admin-import-tests.js && node --check tests/exchange-week-contract-tests.js && node --check tests/paper-flow-contract-tests.js && node --check tests/print-form-contract-tests.js && node --check tests/code-gs-contract-tests.js && node --check tests/cache-contract-tests.js && node --check tests/template-binding-tests.js && node --check tests/teacher-login-cache-tests.js && node --check tests/quota-ledger-tests.js && node --check tests/invigilation-export-contract-tests.js && node --check dev-server.js && node --check tests/security-tests.js && node --check tests/permission-tests.js && node --check tests/api-contract-tests.js && node --check tests/http-smoke-tests.js && node --check tests/patrol-contract-tests.js && node --check tests/period-contract-tests.js && node --check tests/schedule-bridge-contract-tests.js && node --check tests/school-swap-contract-tests.js && node --check ui-request.js && node --check ui-approval.js && node --check export-invigilation-recovered.js && node --check print-helper.js && node --check onboarding-tour.js && node --check template-buffer.js && node --check ui-mutual.js && node --check ui-line-template.js && node --check ui-list-helpers.js && node --check ui-calendar.js && node --check ui-style.js && node --check ui-history.js && node --check ui-export.js && node --check ui-classview.js && node --check ui-submit.js && node --check ui-data.js && node --check ui-backoffice.js && node --check ui-match.js && node --check ui-report.js && node --check ui-print.js && node --check ui-interaction.js && node --check ui-homeroom.js && node --check ui-auth.js && node --check ui-proxy.js && node --check ui-schedule.js && node --check ui-sync.js && node --check ui-schoolswap.js && node --check ui-tour.js && node --check tests/timetable-resolve-tests.js && node --check tests/setup-smoke-tests.js && node --check tests/module-deps-tests.js && node --check tests/data-layer-tests.js && node --check tests/backoffice-tests.js && node --check tests/match-panel-tests.js && node --check tests/homeroom-tests.js && node --check tests/setup-vue-tests.js && node --check tests/factory-scope-tests.js",
-    "test:permissions": "node tests/permission-tests.js",
-    "test:contract": "node tests/api-contract-tests.js && node tests/http-smoke-tests.js && node tests/exchange-week-contract-tests.js && node tests/schedule-bridge-contract-tests.js && node tests/school-swap-contract-tests.js"
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e:boot": "npm run build && node scripts/e2e-boot-check.cjs"
+  },
+  "dependencies": {
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13"
   },
   "devDependencies": {
-    "vue": "^3.5.16"
+    "@vitejs/plugin-vue": "^5.2.1",
+    "happy-dom": "^15.7.4",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
   }
 }
