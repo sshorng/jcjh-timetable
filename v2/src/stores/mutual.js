@@ -415,7 +415,8 @@ const getMutualPanelApi = () => {
       if (!showCompareModal.value) return;
       const p = pendingRequestData.value;
       if (!p || p.mode !== 'substitution' || storeToRefs(useTimetableStore()).isPeriod8FeeLocked.value) return;
-      if (p.subFee === QUOTA_DEDUCT_FEE) {
+        // R-v2接線：v1 此為 setup 常數（= FeeUtils.QUOTA），移植漏接；改直引已 import 的 FeeUtils
+        if (p.subFee === FeeUtils.QUOTA) {
         useMatchStore().fetchQuotaPackPreview();
       } else {
         storeToRefs(useMatchStore()).quotaPackPreview.value = [];

@@ -1102,7 +1102,9 @@ const UiTimetable = (() => {
             || parseInt(schedule.period, 10) !== sourcePeriod) return;
 
         const scheduleClass = String(schedule.className || '').trim();
-        const scheduleTags = getScheduleSpecialTags(schedule);
+        // R-v2接線：v1 此處裸引用跨檔全域（production 無此全域，會 ReferenceError；
+        // v1 測試靠 vm context 蒙混過關）。v2 改走已 import 的 UiLineTemplate。
+        const scheduleTags = UiLineTemplate.getScheduleSpecialTags(schedule);
         const isCombined = isCombinedClassFn(scheduleClass) || scheduleTags.includes('併班');
         // 音樂班等特殊班級的名稱不會與八、九年級班名重疊，不能用班名交集判斷。
         if (!isCombined) return;

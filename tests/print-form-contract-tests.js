@@ -287,9 +287,11 @@ assert.match(printModSource, /window\.buildHistoryPrintRecords\(/);
 assert.match(appSource, /openPrintPreview, openHistoryPrintPreview, closePrintPreview/);
 assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
 assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
-assert.match(indexSource, /class="teacher-email-cell"/);
-assert.match(styleSource, /\.teacher-email-cell \{[^}]*overflow-wrap: anywhere/);
-assert.match(mobileSource, /\.teacher-email-cell \{[^}]*overflow-wrap: anywhere/);
+// 87862ac 教師管理改版：email 欄移除，改 fixed-layout custom-table＋colgroup；
+// 折行保證改由各欄 inline overflow-wrap:anywhere 承接，不再經 .teacher-email-cell。
+assert.doesNotMatch(indexSource, /teacher-email-cell/, '舊信箱欄應已移除，不留死 markup');
+assert.match(indexSource, /table class="custom-table"[\s\S]*?v-for="t in teachersListDetails"/, '教師管理改用 fixed-layout 表格渲染教師列');
+assert.match(indexSource, /overflow-wrap:anywhere/, '欄位折行保證仍在（inline 形式）');
 assert.match(indexSource, /<title>建成國中線上課表系統<\/title>/);
 assert.match(indexSource, /application-name" content="JCJH Timetable"/);
 assert.equal((indexSource.match(/class="mini-grid-date"/g) || []).length, 12, '對照頁一般與左右兩張跨週課表都應顯示日期');

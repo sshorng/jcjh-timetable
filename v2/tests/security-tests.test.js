@@ -1,0 +1,317 @@
+import { fileURLToPath } from 'node:url';
+import assert from 'node:assert';
+import { test } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { generateFormHtml, buildExchangeRouteHtml } from '../src/modules/print-helper.js';
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+test('security tests（v1 移植）', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const root = path.join(here, '..', '..');
+  const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'data.js'), 'utf8');
+  const gasApiSource = fs.readFileSync(path.join(here, '..', 'src', 'api', 'gas-client.js'), 'utf8');
+  const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+  const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
+  const invigilationSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'export-invigilation-recovered.js'), 'utf8');
+  const printHelperSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'print-helper.js'), 'utf8');
+  const styleSource = fs.readFileSync(path.join(here, '..', 'public', 'style.css'), 'utf8');
+  const vercelConfig = JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'vercel.json'), 'utf8'));
+
+  // v1 dev-server 路徑穿越測試不移植：v2 無 dev-server（Vite dev＋Vercel 靜態部署，遍歷防護由宿主層承接）。
+  assert.match(invigilationSource, /copySheetValuesAndStyles/);
+  assert.match(invigilationSource, /copySheetValuesAndStyles\(tempSheet, targetSheet, master\)/);
+  assert.match(invigilationSource, /mergeCellsWithoutStyle/);
+  assert.match(invigilationSource, /setCellFontPreservingStyle/);
+  assert.match(printHelperSource, /function escapePrintHtml/);
+  const printXssPayload = '<img src=x onerror="alert(1)"><script>alert(2)</script>&"';
+  const printFixtureContext = {
+    getTeacherNameByEmail: () => printXssPayload,
+    getTeacherSubjectByEmail: () => printXssPayload,
+    getWeekDayText: day => ['日', '一', '二', '三', '四', '五', '六'][day] || '',
+    allSchedules: { value: [] }
+  };
+  const printOutput = generateFormHtml({
+    isExchange: false,
+    serials: [printXssPayload],
+    leaveEmails: ['leave@example.com'],
+    subEmail: 'sub@example.com',
+    reasons: [printXssPayload],
+    subFee: printXssPayload,
+    note: printXssPayload,
+    periods: [{
+      date: '2026-08-17',
+      num: 1,
+      cls: printXssPayload,
+      sub: printXssPayload,
+      leaveEmail: 'leave@example.com',
+      reason: printXssPayload,
+      subFee: printXssPayload
+    }]
+  }, 'Admin', printFixtureContext);
+  const exchangeOutput = generateFormHtml({
+    isExchange: true,
+    serials: [printXssPayload],
+    reason: printXssPayload,
+    note: printXssPayload,
+    records: [
+      {
+        originalTeacherEmail: 'teacher-a@example.com',
+        actualTeacherEmail: 'teacher-b@example.com',
+        date: '2026-08-17',
+        period: 1,
+        className: printXssPayload,
+        subject: printXssPayload
+      },
+      {
+        originalTeacherEmail: 'teacher-b@example.com',
+        actualTeacherEmail: 'teacher-a@example.com',
+        date: '2026-08-18',
+        period: 2,
+        className: printXssPayload,
+        subject: printXssPayload
+      }
+    ]
+  }, 'Admin', printFixtureContext);
+  const routeOutput = buildExchangeRouteHtml({
+    nameA: printXssPayload,
+    nameB: printXssPayload,
+    dateA: printXssPayload,
+    dateB: printXssPayload,
+    classA: printXssPayload,
+    classB: printXssPayload,
+    subjectA: printXssPayload,
+    subjectB: printXssPayload
+  });
+  const executablePrintMarkup = /<(?:script|img)\b|<[^>]+\bon(?:error|load)\s*=/i;
+  assert.ok(printOutput.includes('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;'));
+  assert.ok(printOutput.includes('&lt;script&gt;alert(2)&lt;/script&gt;'));
+  assert.strictEqual(executablePrintMarkup.test(printOutput), false);
+  assert.strictEqual(executablePrintMarkup.test(exchangeOutput), false);
+  assert.strictEqual(executablePrintMarkup.test(routeOutput), false);
+  const vercelCsp = vercelConfig.headers[0].headers.find(h => h.key === 'Content-Security-Policy');
+  assert.ok(vercelCsp && vercelCsp.value.includes('googleusercontent.com'));
+  assert.match(gasApiSource, /AbortController/);
+  assert.match(gasApiSource, /ACTION_TIMEOUT_MS/);
+  assert.match(gasApiSource, /cancelAllInflight/);
+  assert.match(dataStoreSource, /const _dataLoadSeq|let _dataLoadSeq/, '資料載入序號應存在（v2 在 data store）');
+  // 2A：樂觀更新已移至 ui-data.js，改斷言新檔
+  const uiDataSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-data.js'), 'utf8');
+  assert.match(uiDataSource, /const optimisticPatchRequestStatuses\s*=\s*\(updates\)/);
+  // 2A：匯出 orchestration 已移至 ui-export.js，懶載不斷言 app.js，改斷言新檔
+  const uiExportSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-export.js'), 'utf8');
+  assert.match(uiExportSource, /import ExportAccounting from '.\/export-accounting\.js'/, '會計匯出應靜態引入（v2 無 ensure* loader）');
+  // 2A：班級課表索引已移至 ui-schedule.js，改斷言新檔
+  const uiScheduleSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-schedule.js'), 'utf8');
+  assert.match(uiScheduleSource, /const classScheduleIndex = computed/);
+  const classScheduleBlockStart = uiScheduleSource.indexOf('const classSchedules = computed');
+  const classScheduleBlockEnd = uiScheduleSource.indexOf('const currentWeekDates = computed', classScheduleBlockStart);
+  assert.ok(classScheduleBlockStart >= 0 && classScheduleBlockEnd > classScheduleBlockStart);
+  assert.strictEqual(uiScheduleSource.slice(classScheduleBlockStart, classScheduleBlockEnd).includes('allSchedules.value.forEach'), false);
+  assert.strictEqual(/<script\s+defer\s+src=["']export-accounting\.js/i.test(indexSource), false);
+  assert.strictEqual(indexSource.includes('20260814-p2'), false);
+    assert.strictEqual(new Set(Array.from(indexSource.matchAll(/(?:src|href)="[^"]+\?v=([^"]+?)"/g), m => m[1])).size, 0, 'v2 無 ?v 手工版號（Vite hash 取代）');
+  assert.match(indexSource, /class="loading-overlay"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(shellSource, /id="toast-container"[^>]*role="status"[^>]*aria-live="polite"/, 'toast 容器應在殼層');
+  assert.match(shellSource, /id="confirm-overlay"[^>]*role="dialog"[^>]*aria-modal="true"/, '確認框應在殼層');
+  assert.match(indexSource, /:aria-current="activeTab === 'timetable'/);
+  assert.match(indexSource, /class="class-timetable-layout"[^>]*role="region"/);
+  assert.match(styleSource, /:where\(button, a, input, select, textarea\):focus-visible/);
+  assert.match(styleSource, /班級課表多堂課[\s\S]*?\.class-timetable \.grid-cell-class[\s\S]*?height: auto;[\s\S]*?max-height: none;[\s\S]*?overflow: visible;/);
+
+  const scriptProperties = {};
+  global.PropertiesService = {
+    getScriptProperties() {
+      return {
+        getProperty(key) {
+          return Object.prototype.hasOwnProperty.call(scriptProperties, key) ? scriptProperties[key] : null;
+        }
+      };
+    }
+  };
+  const activeSpreadsheet = {};
+  let activeSpreadsheetCalls = 0;
+  global.SpreadsheetApp = {
+    getActiveSpreadsheet() {
+      activeSpreadsheetCalls += 1;
+      return activeSpreadsheet;
+    }
+  };
+  const cacheStore = new Map();
+  const cacheStats = { putAll: 0, getAll: 0, removeAll: 0 };
+  const fakeCache = {
+    get(key) { return cacheStore.has(key) ? cacheStore.get(key) : null; },
+    put(key, value) { cacheStore.set(key, String(value)); },
+    getAll(keys) {
+      cacheStats.getAll += 1;
+      const out = {};
+      keys.forEach(key => { if (cacheStore.has(key)) out[key] = cacheStore.get(key); });
+      return out;
+    },
+    putAll(values) {
+      cacheStats.putAll += 1;
+      Object.keys(values).forEach(key => cacheStore.set(key, String(values[key])));
+    },
+    remove(key) { cacheStore.delete(key); },
+    removeAll(keys) {
+      cacheStats.removeAll += 1;
+      keys.forEach(key => cacheStore.delete(key));
+    }
+  };
+  global.CacheService = { getScriptCache() { return fakeCache; } };
+  vm.runInThisContext(fs.readFileSync(path.join(here, '..', '..', 'code.gs'), 'utf8'), { filename: 'code.gs' });
+
+  assert.strictEqual(getSpreadsheet(), activeSpreadsheet);
+  assert.strictEqual(getSpreadsheet(), activeSpreadsheet);
+  assert.strictEqual(activeSpreadsheetCalls, 1);
+  _requestSpreadsheet_ = null;
+  _requestSpreadsheetKey_ = '';
+  scriptProperties.DEPLOYMENT_ENV = 'production';
+  assert.throws(() => getSpreadsheet(), /找不到可用的試算表/);
+  scriptProperties.ALLOW_ACTIVE_SPREADSHEET_FALLBACK = 'true';
+  assert.strictEqual(getSpreadsheet(), activeSpreadsheet);
+  delete scriptProperties.ALLOW_ACTIVE_SPREADSHEET_FALLBACK;
+  delete scriptProperties.DEPLOYMENT_ENV;
+  _requestSpreadsheet_ = null;
+  _requestSpreadsheetKey_ = '';
+  assert.strictEqual(getSpreadsheet(), activeSpreadsheet);
+  assert.strictEqual(getActiveSpreadsheetFallbackDefault_(), 'true');
+  const validScheduleRows = [
+    { '學期代號': '115-1', '課表ID': 'sched-701', '教師Email': 'teacher@school.example', '教師姓名': '王老師', '星期': 1, '節次': 1, '班級': '701', '科目': '國文', '課堂屬性': '一般', '調課限制': '' },
+    { '學期代號': '115-1', '課表ID': 'sched-702', '教師Email': 'teacher@school.example', '教師姓名': '王老師', '星期': 1, '節次': 1, '班級': '702', '科目': '國文', '課堂屬性': '一般', '調課限制': '' }
+  ];
+  const validationResult = validateScheduleImportRows_(validScheduleRows, '115-1');
+  assert.strictEqual(validationResult.count, 2);
+  assert.strictEqual(validationResult.versionable, true);
+  assert.throws(
+    () => validateScheduleImportRows_([validScheduleRows[0], Object.assign({}, validScheduleRows[0], { '課表ID': 'sched-duplicate' })], '115-1'),
+    /同一教師／時段／班級／科目重複/
+  );
+  assert.throws(
+    () => validateScheduleImportRows_([Object.assign({}, validScheduleRows[0], { '教師Email': 'invalid-email' })], '115-1'),
+    /教師Email不正確/
+  );
+  const patrolRow = {
+    '學期代號': '115-1', '課表ID': 'sched-patrol', '教師Email': 'patrol@school.example',
+    '教師姓名': '巡堂老師', '星期': 2, '節次': 3, '班級': '', '科目': '', '課堂屬性': '巡堂'
+  };
+  assert.strictEqual(validateScheduleImportRows_([patrolRow], '115-1').count, 1);
+  assert.throws(
+    () => validateScheduleImportRows_([patrolRow, Object.assign({}, patrolRow, { '課表ID': 'sched-patrol-2', '教師Email': 'patrol2@school.example' })], '115-1'),
+    /同一星期與節次只能安排一位巡堂教師/
+  );
+  const snapshotValueWrites = [];
+  const fakeSnapshotSheet = {
+    clearContents() {},
+    getRange() {
+      return {
+        setValues(values) { snapshotValueWrites.push(values); return this; },
+        setFontWeight() { return this; },
+        setBackground() { return this; }
+      };
+    }
+  };
+  writeScheduleSnapshotSheet_(fakeSnapshotSheet, ['欄A', '欄B'], [['值A', '值B']]);
+  assert.strictEqual(snapshotValueWrites[0][0][0], '欄A');
+  assert.strictEqual(snapshotValueWrites[1][0][1], '值B');
+  const backupResult = writeScheduleImportBackupSheet_(fakeSnapshotSheet, ['欄A'], [['值A']], 'sched-test', '115-1', '教師課表');
+  assert.strictEqual(backupResult.version, 'sched-test');
+  assert.strictEqual(snapshotValueWrites[2][0][0], '備份版本');
+  assert.strictEqual(snapshotValueWrites[3][0][0], 'sched-test');
+  const deletedRanges = [];
+  deleteSheetRowsDescending_({
+    deleteRows(start, count) { deletedRanges.push([start, count]); }
+  }, [2, 3, 5, 7, 8, 8]);
+  assert.deepStrictEqual(deletedRanges, [[7, 2], [5, 1], [2, 2]]);
+  const generationBefore = getCacheGeneration_('data', '115-1');
+  assert.strictEqual(getCacheGeneration_('data', '115-1'), generationBefore);
+  const generationAfter = bumpCacheGeneration_('data', '115-1');
+  assert.notStrictEqual(generationAfter, generationBefore);
+  const generationBeforeInvalidation = getCacheGeneration_('data', '115-1');
+  invalidateRequestCaches_('115-1');
+  assert.notStrictEqual(getCacheGeneration_('data', '115-1'), generationBeforeInvalidation);
+  setScheduleImportState_('115-1', 'writing');
+  assert.strictEqual(getScheduleImportState_('115-1'), 'writing');
+  assert.strictEqual(isScheduleImportInProgress_(), true);
+  assert.throws(() => setScheduleImportState_('115-2', 'writing'), /已有課表匯入/);
+  assert.throws(() => assertScheduleReadable_(), /課表匯入處理中/);
+  assert.throws(() => getTableData('教師課表'), /課表匯入處理中/);
+  clearScheduleImportState_('115-1');
+  assert.strictEqual(getScheduleImportState_('115-1'), '');
+  assert.strictEqual(isScheduleImportInProgress_(), false);
+  const largeCacheValue = 'x'.repeat(180 * 1024);
+  putCacheChunked('security-cache', largeCacheValue, 60);
+  assert.strictEqual(getCacheChunked('security-cache'), largeCacheValue);
+  assert.ok(cacheStats.putAll > 0);
+  assert.ok(cacheStats.getAll > 0);
+  removeCacheChunkedMany_(['security-cache']);
+  assert.strictEqual(getCacheChunked('security-cache'), null);
+  assert.ok(cacheStats.removeAll > 0);
+  const schoolSwapA = {
+    '學期代號': '115-1', '對調ID': 'swap-a', '日期A': '2026-08-17', '星期A': 1, '節次A': 1,
+    '日期B': '2026-08-18', '星期B': 2, '節次B': 2, '啟用': 'TRUE'
+  };
+  const schoolSwapSameSemester = Object.assign({}, schoolSwapA, {
+    '對調ID': 'swap-b', '日期A': '2026-08-19', '星期A': 3, '節次A': 1,
+    '日期B': '2026-08-18', '星期B': 2, '節次B': 2
+  });
+  const schoolSwapOtherSemester = Object.assign({}, schoolSwapSameSemester, {
+    '對調ID': 'swap-c', '學期代號': '115-2'
+  });
+  assert.throws(
+    () => assertSchoolSwapNoConflict_(schoolSwapSameSemester, [schoolSwapA]),
+    /啟用中的全校對調時段重疊/
+  );
+  assert.doesNotThrow(() => assertSchoolSwapNoConflict_(schoolSwapOtherSemester, [schoolSwapA]));
+  const resolvedSchoolSwap = resolveSchoolSwapSlot_([schoolSwapA], '2026-08-17', 1, 1);
+  assert.strictEqual(resolvedSchoolSwap.dayOfWeek, 2);
+  assert.strictEqual(resolvedSchoolSwap.period, 2);
+  const patrolSchedules = [
+    { '教師Email': 'patrol@example.edu.tw', '星期': 1, '節次': 1, '課堂屬性': '巡堂' },
+    { '教師Email': 'patrol@example.edu.tw', '星期': 2, '節次': 2, '班級': '702', '科目': '數學' }
+  ];
+  const patrolSwapAtA = resolveSchoolSwapSlotForTeacher_([schoolSwapA], '2026-08-17', 1, 1, patrolSchedules, 'patrol@example.edu.tw');
+  assert.strictEqual(patrolSwapAtA.dayOfWeek, 1);
+  assert.strictEqual(patrolSwapAtA.period, 1);
+  assert.strictEqual(patrolSwapAtA.row, null);
+  const patrolSwapAtB = resolveSchoolSwapSlotForTeacher_([schoolSwapA], '2026-08-18', 2, 2, patrolSchedules, 'patrol@example.edu.tw');
+  assert.strictEqual(patrolSwapAtB.dayOfWeek, 2);
+  assert.strictEqual(patrolSwapAtB.period, 2);
+  assert.strictEqual(patrolSwapAtB.row, null);
+  assert.strictEqual(resolveTeacherRole_('unknown@school.example', []), '');
+  assert.strictEqual(rowKeyForSheet_('教師名單', { '學期代號': '115-1', '教師Email': 'Teacher@School.Example' }, '教師Email'), '115-1|teacher@school.example');
+  assert.strictEqual(translateStatusToEn('已核准'), 'approved');
+  assert.throws(() => assertRequestState_({ '狀態': 'approved' }, 'adminApprove'), /無法執行/);
+  assert.strictEqual(escapeHtml_('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+  assert.strictEqual(trustedSystemUrl_('https://attacker.example/phishing'), 'https://jcjh-timetable.vercel.app/');
+
+  getTableData = function (sheetName) {
+    if (sheetName === '學期設定') return [{ '學期代號': '115-1', '是否預設': 'TRUE' }];
+    return [];
+  };
+  scanRequestsFromSheet_ = function () { return { allCount: 0, rows: [] }; };
+  getSemesterRequestsCached_('115-1', false, 15);
+  assert.ok(Array.from(cacheStore.keys()).some(key => /^jcjh_req_115-1_.*_w15/.test(key)));
+  setScheduleImportState_('115-1', 'writing');
+  assert.throws(() => getSemesterSchedulesCached_('115-1'), /課表匯入處理中/);
+  clearScheduleImportState_('115-1');
+  getSemesterSchedulesCached_ = function () {
+    return [{ '課表ID': 'real-schedule', '教師Email': 'teacher@school.example', '教師姓名': '王老師', '星期': 1, '節次': 1, '班級': '701', '科目': '國文' }];
+  };
+  getSemesterTeachersCached_ = function () {
+    return [{ '學期代號': '115-1', '教師Email': 'teacher@school.example', '教師姓名': '王老師', '授課科目': '國文' }];
+  };
+  getSemesterRequestsCached_ = function () {
+    return { rows: [{ '學期代號': '115-1', '申請單ID': 'real-request', '狀態': 'approved', '申請人Email': 'leave@school.example', '申請人姓名': '李老師', '受邀人Email': 'teacher@school.example', '受邀人姓名': '王老師', '班級': '701', '科目': '國文', '異動日期': '2026-08-17', '異動星期': 1, '異動節次': 1, '異動類型': 'substitution' }] };
+  };
+  getSemesterClassAwayCached_ = function () { return []; };
+  const publicPayload = buildPublicClassPayload_('115-1', '701');
+  const publicJson = JSON.stringify(publicPayload);
+  assert.strictEqual(publicJson.includes('@'), false);
+  assert.strictEqual(publicJson.includes('real-request'), false);
+  assert.strictEqual(publicPayload.schedules[0]['教師Email'], undefined);
+
+  console.log('security tests PASS');
+
+});

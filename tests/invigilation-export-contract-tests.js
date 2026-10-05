@@ -191,8 +191,14 @@ const courseMatrix = buildTeacherMatrix(
 );
 assert.deepEqual(
   courseMatrix.left.concat(courseMatrix.right).map(teacher => teacher.name),
-  ['有課老師'],
-  '完全沒有課務的教師不應出現在監考表'
+  ['完全沒課老師', '有課老師'],
+  '68c9dd8 起：完全沒有課務的教師保留空白列（分發表空白不影響班級巡檢）'
+);
+assert.ok(
+  courseMatrix.left.concat(courseMatrix.right)
+    .find(teacher => teacher.name === '完全沒課老師')
+    .slots.every(slot => String(slot.text || '').trim() === ''),
+  '無課教師列應全為空白格'
 );
 
 const virtualCourseMatrix = buildTeacherMatrix(
@@ -211,10 +217,19 @@ const virtualCourseMatrix = buildTeacherMatrix(
 const virtualCourseTeachers = virtualCourseMatrix.left.concat(virtualCourseMatrix.right);
 assert.deepEqual(
   virtualCourseTeachers.map(teacher => teacher.name),
-  ['資優班兼原班教師'],
-  '段考時只教資優虛擬班的教師視為空堂，不列入監考表'
+  ['只教資優班教師', '資優班兼原班教師'],
+  '68c9dd8 起：只教資優虛擬班的教師視為空堂，保留空白列（不再剔除）'
 );
-assert.equal(virtualCourseTeachers[0].slots[0].text, '701', '併班中的虛擬班應清除並保留實體班級');
+assert.ok(
+  virtualCourseTeachers.find(teacher => teacher.name === '只教資優班教師')
+    .slots.every(slot => String(slot.text || '').trim() === ''),
+  '資優虛擬班空堂列應全為空白格'
+);
+assert.equal(
+  virtualCourseTeachers.find(teacher => teacher.name === '資優班兼原班教師').slots[0].text,
+  '701',
+  '併班中的虛擬班應清除並保留實體班級'
+);
 
 const virtualDutyMatrix = buildTeacherMatrix(
   [{ email: 'duty@example.com', name: '資優班勤務教師' }],
@@ -238,7 +253,7 @@ const endedCourseMatrix = buildTeacherMatrix(
   null,
   []
 );
-assert.equal(endedCourseMatrix.total, 0, '選取區段外已終止的課程不可出現在監考表');
+assert.equal(endedCourseMatrix.total, 1, '68c9dd8 起：選取區段外已終止的課程保留空白列（主表另以勾選名單過濾，見 734e57b）');
 
 const endedPatrolMatrix = buildTeacherMatrix(
   [{ email: 'ended-patrol@example.com', name: '已終止巡堂教師' }],
@@ -248,7 +263,7 @@ const endedPatrolMatrix = buildTeacherMatrix(
   null,
   [{ teacherEmail: 'ended-patrol@example.com', dayOfWeek: 1, period: 1, attr: '巡堂', activeTo: '2026-09-20' }]
 );
-assert.equal(endedPatrolMatrix.total, 0, '選取區段外已終止的巡堂不可透過備援出現在監考表');
+assert.equal(endedPatrolMatrix.total, 1, '68c9dd8 起：選取區段外已終止的巡堂保留空白列（主表另以勾選名單過濾，見 734e57b）');
 
 function coverageTeacher(name, text) {
   return {

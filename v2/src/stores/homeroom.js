@@ -81,6 +81,8 @@ const getHomeroomApi = () => {
         isMutualCover: storeToRefs(useTourStore()).isMutualCover, mutualAwayClasses: storeToRefs(useTourStore()).mutualAwayClasses, batchSlots: storeToRefs(useTourStore()).batchSlots, QUOTA_DEDUCT_FEE: useTourStore().QUOTA_DEDUCT_FEE, lookupTeacher: useDataStore().lookupTeacher,
         isPeriod8FeeLocked: storeToRefs(useTimetableStore()).isPeriod8FeeLocked, ACTIVITY_PUBLIC_FEE: useTourStore().ACTIVITY_PUBLIC_FEE, batchSubFee: storeToRefs(useTourStore()).batchSubFee,
         isCourseAdjustmentOnlyRequest: useSessionStore().isCourseAdjustmentOnlyRequest, isEmptySlotAssignmentRequest: useSessionStore().isEmptySlotAssignmentRequest,
+        // R-線上除錯：currentMonthHomeroomRecords→isBillableHomeroomRecord 讀 substitutionRecords.value，缺件即炸
+        substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords,
       });
       return _homeroomApi;
     };

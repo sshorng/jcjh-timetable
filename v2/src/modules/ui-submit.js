@@ -82,6 +82,9 @@ const UiSubmit = (() => {
     var batchSlots = deps.batchSlots;
     var batchAssignMode = deps.batchAssignMode;
     var isBatchExchangeFlow = deps.isBatchExchangeFlow;
+    // R-v2接線：v1 此二名為跨檔裸引用（production 無此全域）；v2 改 deps 注入（submit store 接 UiBatchPanel）
+    var selectBatchSlotForMatch = deps.selectBatchSlotForMatch;
+    var isBatchMatchFlow = deps.isBatchMatchFlow;
     var getTeacherNameByEmail = deps.getTeacherNameByEmail;
     var batchSelectMode = deps.batchSelectMode;
     var DAC = deps.DAC;
