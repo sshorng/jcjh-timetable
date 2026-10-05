@@ -417,7 +417,14 @@
   "isHistoryLeaveRestricted",
   "isHistoryExchangeRestricted",
   "initImmediateTimetable1",
-  "initImmediateTimetable2"
+  "initImmediateTimetable2",
+  "TEACHERS_PAGE_SIZE_DEFAULT",
+  "teachersPageSize",
+  "teachersPage",
+  "teachersTotalPages",
+  "teachersNeedPager",
+  "pagedTeachersListDetails",
+  "changeTeachersPage"
  ],
  "match": [
   "batchExchangePreviewSlotKey",

@@ -721,5 +721,12 @@
  "getBatchGroupStatusText": "pure:UiListHelpers",
  "getBatchGroupStatusClass": "pure:UiListHelpers",
  "getStatusText": "pure:UiListHelpers",
- "isTriangleRequest": "pure:UiListHelpers"
+ "isTriangleRequest": "pure:UiListHelpers",
+ "pagedTeachersListDetails": "timetable",
+ "teachersPage": "timetable",
+ "teachersPageSize": "timetable",
+ "teachersTotalPages": "timetable",
+ "teachersNeedPager": "timetable",
+ "changeTeachersPage": "timetable",
+ "TEACHERS_PAGE_SIZE_DEFAULT": "timetable"
 }

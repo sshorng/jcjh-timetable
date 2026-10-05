@@ -19,18 +19,33 @@ export function fitSingleLineText(el) {
 
 export const autofitDirective = {
   mounted: function (el) {
-    var raf = function () { fitSingleLineText(el); };
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(raf);
-    else raf();
+    // R-效能：同一幀多次觸發（掛載＋RO＋updated 連打）合併為一次量測，
+    // 避免渲染風暴時反覆強制同步排版
+    var scheduled = false;
+    var run = function () {
+      scheduled = false;
+      fitSingleLineText(el);
+    };
+    var schedule = function () {
+      if (scheduled) return;
+      scheduled = true;
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+      else run();
+    };
+    el.__autofitSchedule = schedule;
+    schedule();
     try {
       if (typeof ResizeObserver === 'function') {
-        var ro = new ResizeObserver(function () { fitSingleLineText(el); });
+        var ro = new ResizeObserver(function () { schedule(); });
         ro.observe(el);
         el.__autofitRo = ro;
       }
     } catch (e) { /* ignore */ }
   },
-  updated: function (el) { fitSingleLineText(el); },
+  updated: function (el) {
+    if (typeof el.__autofitSchedule === 'function') el.__autofitSchedule();
+    else fitSingleLineText(el);
+  },
   unmounted: function (el) {
     try { if (el.__autofitRo) el.__autofitRo.disconnect(); } catch (e) { /* ignore */ }
   }

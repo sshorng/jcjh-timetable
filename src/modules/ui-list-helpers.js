@@ -279,6 +279,25 @@ const UiListHelpers = (() => {
     return Object.keys(serverRow).some(key => localRow[key] !== serverRow[key]);
   }
 
+  // 通用分頁（純函式；教師管理大表分頁用，不動原始陣列）
+  function clampPage(page, totalPages) {
+    const total = Math.max(1, parseInt(totalPages, 10) || 1);
+    const p = parseInt(page, 10) || 1;
+    return Math.min(Math.max(1, p), total);
+  }
+  function paginateList(list, page, pageSize) {
+    const rows = Array.isArray(list) ? list : [];
+    const size = Math.max(1, parseInt(pageSize, 10) || 1);
+    const totalPages = Math.max(1, Math.ceil(rows.length / size));
+    const p = clampPage(page, totalPages);
+    return {
+      rows: rows.slice((p - 1) * size, p * size),
+      page: p,
+      totalPages: totalPages,
+      total: rows.length
+    };
+  }
+
   // —— 以下為 2A 第五批：名稱處理（自 app.js verbatim 搬移，純函式） ——
 
   function extractNameFromFormatted(str) {
@@ -315,7 +334,9 @@ const UiListHelpers = (() => {
     stampIsNewer: stampIsNewer,
     serverRequestChangesLocal: serverRequestChangesLocal,
     isAdminDirectRequest: isAdminDirectRequest,
-    extractNameFromFormatted: extractNameFromFormatted
+    extractNameFromFormatted: extractNameFromFormatted,
+    clampPage: clampPage,
+    paginateList: paginateList
   };
 })();
 
