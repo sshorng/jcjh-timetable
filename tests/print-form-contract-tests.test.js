@@ -272,9 +272,10 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
   // 87862ac 教師管理改版：email 欄移除，改 fixed-layout custom-table＋colgroup；
   // 折行保證改由各欄 inline overflow-wrap:anywhere 承接，不再經 .teacher-email-cell。
-  assert.doesNotMatch(indexSource, /teacher-email-cell/, '舊信箱欄應已移除，不留死 markup');
-  assert.match(indexSource, /table class="custom-table"[\s\S]*?v-for="t in teachersListDetails"/, '教師管理改用 fixed-layout 表格渲染教師列');
-  assert.match(indexSource, /overflow-wrap:anywhere/, '欄位折行保證仍在（inline 形式）');
+  const teachersTableSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'TeachersTable.vue'), 'utf8');
+  assert.doesNotMatch(teachersTableSource, /teacher-email-cell/, '舊信箱欄應已移除，不留死 markup');
+  assert.match(teachersTableSource, /table class="custom-table"[\s\S]*?v-for="t in pagedTeachersListDetails"/, '教師管理改用 fixed-layout 表格渲染教師列（含分頁）');
+  assert.match(teachersTableSource, /overflow-wrap:anywhere/, '欄位折行保證仍在（inline 形式）');
   assert.match(shellSource, /<title>建成國中線上課表系統/, '殼層標題應為建成國中線上課表系統');
   assert.match(shellSource, /application-name" content="JCJH Timetable"/, 'PWA application-name 應保留');
   assert.equal((indexSource.match(/class="mini-grid-date"/g) || []).length, 12, '對照頁一般與左右兩張跨週課表都應顯示日期');

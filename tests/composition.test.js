@@ -31,8 +31,22 @@ test('composition：映射名皆為其 store 實際回傳成員', () => {
   }
   expect(bad).toEqual([]);
 });
+function allTemplates() {
+  // App.vue＋components/*.vue 樣板聚合（R6 拆分後仍全量檢查）
+  const parts = [appSrc.slice(0, appSrc.indexOf('<script setup>'))];
+  const compDir = path.join(here, '..', 'src', 'components');
+  if (fs.existsSync(compDir)) {
+    for (const f of fs.readdirSync(compDir).filter((x) => x.endsWith('.vue'))) {
+      const src = fs.readFileSync(path.join(compDir, f), 'utf8');
+      const t0 = src.indexOf('<template>');
+      const t1 = src.lastIndexOf('</template>');
+      if (t0 >= 0 && t1 > t0) parts.push(src.slice(t0, t1));
+    }
+  }
+  return parts.join('\n');
+}
 test('composition：模板用到的 store 成員全數有綁（防 not defined on instance）', () => {
-  const tpl = appSrc.slice(0, appSrc.indexOf('<script setup>'));
+  const tpl = allTemplates();
   const tplUsed = new Set();
   const stripQ = (s) => s.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/`(?:[^`\\]|\\.)*`/g, '``');
   for (const m of tpl.matchAll(/v-[a-z-]+(?:=[^\s>]+)?="([^"]*)"|:([a-zA-Z][\w-]*)(?:\.[a-z]+)*="([^"]*)"|@[\w.-]+="([^"]*)"|\{\{\s*([\s\S]*?)\s*\}\}/g)) {

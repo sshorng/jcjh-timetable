@@ -112,7 +112,8 @@ test('security tests（v1 移植）', () => {
   assert.strictEqual(/<script\s+defer\s+src=["']export-accounting\.js/i.test(indexSource), false);
   assert.strictEqual(indexSource.includes('20260814-p2'), false);
     assert.strictEqual(new Set(Array.from(indexSource.matchAll(/(?:src|href)="[^"]+\?v=([^"]+?)"/g), m => m[1])).size, 0, 'v2 無 ?v 手工版號（Vite hash 取代）');
-  assert.match(indexSource, /class="loading-overlay"[^>]*role="status"[^>]*aria-live="polite"/);
+  const loadingOverlaySource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'LoadingOverlay.vue'), 'utf8');
+  assert.match(loadingOverlaySource, /class="loading-overlay"[^>]*role="status"[^>]*aria-live="polite"/, '載入遮罩無障礙屬性（元件化後在此）');
   assert.match(shellSource, /id="toast-container"[^>]*role="status"[^>]*aria-live="polite"/, 'toast 容器應在殼層');
   assert.match(shellSource, /id="confirm-overlay"[^>]*role="dialog"[^>]*aria-modal="true"/, '確認框應在殼層');
   assert.match(indexSource, /:aria-current="activeTab === 'timetable'/);
