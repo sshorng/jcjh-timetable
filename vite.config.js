@@ -8,7 +8,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    chunkSizeWarningLimit: 600
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // framework 單獨成 chunk：版本穩定，快取命中率高；app 碼異動不影響它
+        manualChunks: {
+          vendor: ['vue', 'pinia']
+        }
+      }
+    }
   },
   test: {
     environment: 'node',
