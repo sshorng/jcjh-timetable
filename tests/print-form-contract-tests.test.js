@@ -12,6 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
 // 詳情 modal 已抽為 components/DetailModal.vue（模板聚合見 composition.test.js）
 const detailModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'DetailModal.vue'), 'utf8');
+const overtimePlanModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'OvertimePlanModal.vue'), 'utf8');
 const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
 const exportSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-export.js'), 'utf8');
 
@@ -269,7 +270,7 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(indexSource, /@click="openHistoryPrintPreview"/);
   assert.match(printModSource, /[^.]buildHistoryPrintRecords\(/, '歷史列印轉換應直引（v2 無 window 掛載）');
   assert.match(outputStoreSource, /openPrintPreview,[\s\S]*?openHistoryPrintPreview,[\s\S]*?closePrintPreview/, '列印預覽三入口應在 output store 暴露');
-  assert.match(indexSource, /:disabled="loading" @click="saveOvertimePlan"/);
+  assert.match(overtimePlanModalSource, /:disabled="loading" @click="saveOvertimePlan"/);
   assert.doesNotMatch(indexSource, /overtimePlanRows\.some\(row => !row\.source\)/);
   // 87862ac 教師管理改版：email 欄移除，改 fixed-layout custom-table＋colgroup；
   // 折行保證改由各欄 inline overflow-wrap:anywhere 承接，不再經 .teacher-email-cell。

@@ -2821,93 +2821,22 @@
         </div>
       </div>
       <!-- 三角調：三位教師課表預覽 -->
-      <div v-if="showSamePeriodSwapModal" class="modal-overlay" @click.self="closeSamePeriodSwapModal">
-        <div class="modal-card same-period-swap-modal-card" style="max-width:680px;">
-          <div class="modal-header">
-            <div>
-              <h3>管理員同節互換</h3>
-              <div class="same-period-swap-subtitle">選擇同一時段的另一位任課教師</div>
-            </div>
-            <button type="button" class="btn-close" @click="closeSamePeriodSwapModal" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body same-period-swap-body">
-            <div class="same-period-swap-context">
-              <span class="same-period-swap-context-time">{{ samePeriodSwapSource.date }}　{{ formatPeriodText(samePeriodSwapSource.period) }}</span>
-              <span class="same-period-swap-context-divider"></span>
-              <strong>{{ samePeriodSwapSource.teacherName }}</strong>
-              <span class="same-period-swap-context-course">{{ samePeriodSwapSource.cell.className }}　{{ samePeriodSwapSource.cell.subject }}</span>
-            </div>
-            <section class="same-period-swap-picker">
-              <div class="same-period-swap-picker-heading">
-                <div>
-                  <strong>同時段可互換</strong>
-                  <span>{{ samePeriodSwapFilteredCandidates.length }} 位</span>
-                </div>
-                <span class="same-period-swap-sort-hint">按班級排序</span>
-              </div>
-              <label class="same-period-swap-search">
-                <span aria-hidden="true">⌕</span>
-                <input
-                  type="search"
-                  v-model="samePeriodSwapSearchQuery"
-                  placeholder="搜尋班級、科目或教師姓名"
-                  aria-label="搜尋互換教師"
-                >
-                <button v-if="samePeriodSwapSearchQuery" type="button" aria-label="清除搜尋" @click="samePeriodSwapSearchQuery = ''">×</button>
-              </label>
-              <div v-if="samePeriodSwapFilteredCandidates.length" class="same-period-swap-list">
-                <button
-                  v-for="candidate in samePeriodSwapFilteredCandidates"
-                  :key="'same-period-swap-' + candidate.key"
-                  type="button"
-                  class="same-period-swap-option"
-                  :class="{ 'is-selected': samePeriodSwapTargetKey === candidate.key }"
-                  :aria-pressed="samePeriodSwapTargetKey === candidate.key"
-                  @click="samePeriodSwapTargetKey = candidate.key"
-                >
-                  <span class="same-period-swap-class-badge" :style="getClassBadgeStyle(candidate.className)">{{ candidate.className }}</span>
-                  <span class="same-period-swap-option-course">
-                    <strong>{{ candidate.subject }}</strong>
-                    <span v-if="candidate.isPullOut" class="same-period-swap-tag is-pullout">抽離</span>
-                    <span v-if="candidate.restriction === 'restricted' || candidate.restriction === '限制'" class="same-period-swap-tag is-restricted">綁課</span>
-                  </span>
-                  <span class="same-period-swap-option-teacher">{{ candidate.name }}</span>
-                  <span class="same-period-swap-option-check" aria-hidden="true">✓</span>
-                </button>
-              </div>
-              <div v-else-if="samePeriodSwapCandidates.length" class="same-period-swap-empty">
-                <span class="same-period-swap-empty-icon">⌕</span>
-                <strong>找不到符合的教師</strong>
-                <span>試試班級、科目或姓名的其他關鍵字。</span>
-              </div>
-              <div v-else class="same-period-swap-empty">
-                <span class="same-period-swap-empty-icon">↔</span>
-                <strong>目前沒有可互換的教師</strong>
-                <span>此時段需有另一位教師正在教授可互換的課程。</span>
-              </div>
-            </section>
-            <div v-if="samePeriodSwapSelectedCandidate" class="same-period-swap-preview">
-              <div class="same-period-swap-preview-grid">
-                <div class="same-period-swap-preview-side">
-                  <span class="same-period-swap-preview-label">{{ samePeriodSwapSource.teacherName }}改上</span>
-                  <strong><span class="same-period-swap-preview-class">{{ samePeriodSwapSelectedCandidate.className }}</span>{{ samePeriodSwapSelectedCandidate.subject }}</strong>
-                </div>
-                <span class="same-period-swap-preview-arrow" aria-hidden="true">⇄</span>
-                <div class="same-period-swap-preview-side">
-                  <span class="same-period-swap-preview-label">{{ samePeriodSwapSelectedCandidate.name }}改上</span>
-                  <strong><span class="same-period-swap-preview-class">{{ samePeriodSwapSource.cell.className }}</span>{{ samePeriodSwapSource.cell.subject }}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer same-period-swap-actions">
-            <button type="button" class="btn btn-primary" :disabled="samePeriodSwapSaving || !samePeriodSwapSelectedCandidate" @click="saveSamePeriodSwap">
-              {{ samePeriodSwapSaving ? '儲存中…' : '確認並套用' }}
-            </button>
-            <button type="button" class="btn btn-secondary" :disabled="samePeriodSwapSaving" @click="closeSamePeriodSwapModal">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 同節互調 modal → components/SamePeriodSwapModal.vue -->
+    <SamePeriodSwapModal
+      v-if="showSamePeriodSwapModal"
+      :same-period-swap-source="samePeriodSwapSource"
+      :same-period-swap-filtered-candidates="samePeriodSwapFilteredCandidates"
+      :same-period-swap-selected-candidate="samePeriodSwapSelectedCandidate"
+      :same-period-swap-saving="samePeriodSwapSaving"
+      :format-period-text="formatPeriodText"
+      v-model:same-period-swap-search-query="samePeriodSwapSearchQuery"
+      :same-period-swap-target-key="samePeriodSwapTargetKey"
+      :same-period-swap-candidates="samePeriodSwapCandidates"
+      :close-same-period-swap-modal="closeSamePeriodSwapModal"
+      :get-class-badge-style="getClassBadgeStyle"
+      :save-same-period-swap="saveSamePeriodSwap"
+      @close="closeSamePeriodSwapModal"
+    />
     <!-- 三角調三人課表預覽 modal → components/TrianglePreviewModal.vue -->
     <TrianglePreviewModal
       v-if="showTriangleTimetablePreview"
@@ -3449,29 +3378,15 @@
       </div>
 
       <!-- LINE 訊息編輯器：列表／詳情開啟後可先修改再複製或傳送 -->
-      <div v-if="showLineMessageModal" class="modal-overlay" data-tour="line-message-modal" @click.self="showLineMessageModal = false">
-        <div class="modal-card" style="max-width:620px;">
-          <div class="modal-header">
-            <h3>💬 {{ lineMessageTitle }}</h3>
-            <button class="btn-close" @click="showLineMessageModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="font-size:0.85rem;line-height:1.5;color:var(--text-secondary);margin:0 0 10px;">可先修改訊息內容，再複製或開啟 LINE。</p>
-            <textarea
-              v-model="lineMessageText"
-              class="form-input"
-              rows="12"
-              autofocus
-              style="width:100%;font-family:monospace;font-size:0.82rem;background:#fff;border:1px solid #d1fae5;border-radius:6px;padding:8px;resize:vertical;line-height:1.5;"
-            ></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="copyEditedLineMessage">📋 複製</button>
-            <button type="button" class="btn btn-success" style="background:#06c755;border-color:#05b04b;" @click="sendEditedLineMessage">💬 傳送</button>
-            <button type="button" class="btn btn-secondary" @click="showLineMessageModal = false">關閉</button>
-          </div>
-        </div>
-      </div>
+    <!-- LINE 訊息編輯 modal → components/LineMessageModal.vue -->
+    <LineMessageModal
+      v-if="showLineMessageModal"
+      :line-message-title="lineMessageTitle"
+      v-model:line-message-text="lineMessageText"
+      :copy-edited-line-message="copyEditedLineMessage"
+      :send-edited-line-message="sendEditedLineMessage"
+      @close="showLineMessageModal = false"
+    />
 
       <!-- 3.3 成功提示與 LINE 訊息複製對話框 (successModal) -->
       <div v-if="showSuccessModal" class="modal-overlay" data-tour="success-modal" @click.self="showSuccessModal = false">
@@ -3628,254 +3543,48 @@
     />
 
       <!-- 批次匯入教師 Modal -->
-      <div v-if="showImportTeachersModal" class="modal-overlay" @click.self="showImportTeachersModal = false">
-        <div class="modal-card" style="max-width: 650px;">
-          <div class="modal-header">
-            <h3>📥 批次匯入教師名單 (Excel)</h3>
-            <button class="btn-close" @click="showImportTeachersModal = false">&times;</button>
-          </div>
-          
-          <div class="modal-body p-20">
-            <div style="margin-bottom: 20px;">
-              <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
-                  請上傳教師名單 Excel。以 Email 為登入帳號唯一鍵更新／新增。<strong>姓名、Email 為必填</strong>，任教科目可留白（行政或尚未分科教師仍會保留）。其他課表與申請資料一律以教師姓名連接。
-              </p>
-              
-              <div style="display: flex; gap: 12px; align-items: center; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 16px;">
-                <input type="file" @change="handleTeacherExcelChange" accept=".xlsx, .xls">
-              </div>
-
-              <!-- 欄位映射對照區 (當上傳檔案後顯示) -->
-              <div v-if="teacherExcelData.length > 0" class="card" style="background: #f8fafc; padding: 16px; margin-bottom: 16px; border-color: var(--border-color);">
-                <h4 style="font-size: 0.9rem; margin-bottom: 12px; font-weight: 600; color: var(--text-primary);">📊 欄位對應設定</h4>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
-                  <div class="form-group mb-0">
-                    <label class="form-label text-xs">教師姓名 *</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.name">
-                      <option value="">--請選擇--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                  <div class="form-group mb-0">
-                    <label class="form-label text-xs">帳號 Email *</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.email">
-                      <option value="">--請選擇--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                  <div class="form-group mb-0">
-                      <label class="form-label text-xs">任教科目（選填）</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.subject">
-                      <option value="">--請選擇--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                  <div class="form-group mb-0">
-                    <label class="form-label text-xs">職務（選填）</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.jobTitle">
-                      <option value="">--無／不填--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                  <div class="form-group mb-0">
-                     <label class="form-label text-xs">基本鐘點（選填）</label>
-                    <select class="form-select btn-input-sm" v-model="teacherMappingFields.baseHours">
-                      <option value="">--預設 16 節--</option>
-                      <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                    </select>
-                  </div>
-                   <div class="form-group mb-0">
-                      <label class="form-label text-xs">系統角色（選填）</label>
-                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.role">
-                       <option value="">--預設一般教師--</option>
-                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                     </select>
-                   </div>
-                   <div class="form-group mb-0">
-                     <label class="form-label text-xs">固定超鐘點節數（選填）</label>
-                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.fixedOvertimeHours">
-                       <option value="">--未設定--</option>
-                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                     </select>
-                   </div>
-                   <div class="form-group mb-0">
-                     <label class="form-label text-xs">固定超鐘點節次（選填）</label>
-                     <select class="form-select btn-input-sm" v-model="teacherMappingFields.fixedOvertimeSlots">
-                       <option value="">--未設定--</option>
-                       <option v-for="h in teacherExcelHeaders" :key="h" :value="h">{{ h }}</option>
-                     </select>
-                   </div>
-                </div>
-
-                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px;">
-                  已載入 {{ teacherExcelData.length }} 列。請確認欄位後先「預覽」，再確認匯入。
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                  <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:0.82rem;" @click="runTeacherImportPreview">預覽（不寫入）</button>
-                </div>
-                <div v-if="teacherImportPreview" class="success-hint-box">
-                  <div class="fw-700-mb-6">預覽結果</div>
-                  <div>有效 <strong>{{ teacherImportPreview.ok }}</strong> 人（新增 {{ teacherImportPreview.newN }}／更新 {{ teacherImportPreview.updateN }}）　·　略過 {{ teacherImportPreview.skipped }} 列</div>
-                  <div v-if="teacherImportPreview.sampleRows && teacherImportPreview.sampleRows.length" class="mt-8-ok">
-                    範例：{{ teacherImportPreview.sampleRows.join('；') }}
-                  </div>
-                  <div v-if="teacherImportPreview.skipList && teacherImportPreview.skipList.length" class="mt-10-warn">
-                    <div class="fw-600-mb-6">略過清單（共 {{ teacherImportPreview.skipList.length }} 列）</div>
-                    <div style="max-height:200px;overflow-y:auto;border:1px solid #fde68a;border-radius:8px;background:#fffbeb;padding:8px 10px;">
-                      <table class="table-amber-sm">
-                        <thead>
-                          <tr class="th-amber-left">
-                            <th class="p-4-6">列</th>
-                            <th class="p-4-6">缺什麼</th>
-                            <th class="p-4-6">原因</th>
-                            <th class="p-4-6">內容</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="(s, si) in teacherImportPreview.skipList" :key="si" class="td-amber-top">
-                             <td class="p-5-6-nowrap">{{ s.line || '無' }}</td>
-                             <td style="padding:5px 6px;font-weight:600;">{{ s.missing || '無' }}</td>
-                            <td class="p-5-6">{{ s.reason }}</td>
-                             <td class="p-5-6-amber">{{ s.snippet || '無' }}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showImportTeachersModal = false">取消</button>
-            <button 
-              class="btn btn-primary" 
-               :disabled="!teacherExcelData.length || !teacherMappingFields.name || !teacherMappingFields.email || !teacherImportPreview || !teacherImportPreview.ok"
-              @click="importTeachersBatch"
-            >
-              確認匯入（{{ teacherImportPreview && teacherImportPreview.ok ? teacherImportPreview.ok : 0 }} 人）
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- 批次匯入教師 modal → components/ImportTeachersModal.vue -->
+    <ImportTeachersModal
+      v-if="showImportTeachersModal"
+      :teacher-excel-data="teacherExcelData"
+      :teacher-import-preview="teacherImportPreview"
+      v-model:teacher-mapping-fields="teacherMappingFields"
+      :teacher-excel-headers="teacherExcelHeaders"
+      :handle-teacher-excel-change="handleTeacherExcelChange"
+      :run-teacher-import-preview="runTeacherImportPreview"
+      :import-teachers-batch="importTeachersBatch"
+      @close="showImportTeachersModal = false"
+    />
 
       <!-- 4. 教師新增/編輯的 Modal -->
-      <div v-if="showTeacherModal" class="modal-overlay" @click.self="showTeacherModal = false">
-        <div class="modal-card max-w-440">
-          <div class="modal-header">
-            <h3>{{ teacherModalMode === 'add' ? '➕ 新增教師帳號' : '✏️ 編輯教師資料' }}</h3>
-            <button class="btn-close" @click="showTeacherModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-               <label class="form-label">教師 Email（登入帳號）</label>
-              <input type="email" class="form-input" placeholder="例如: teacher@school.edu.tw" v-model="teacherForm.email" :disabled="teacherModalMode === 'edit'">
-            </div>
-            <div class="form-group">
-              <label class="form-label">教師姓名</label>
-              <input type="text" class="form-input" placeholder="陳大明" v-model="teacherForm.name">
-            </div>
-            <div class="form-group">
-              <label class="form-label">授課科目</label>
-              <input type="text" class="form-input" placeholder="國文" v-model="teacherForm.subject">
-            </div>
-            <div class="form-group">
-                <label class="form-label">職務（含「導師」即列入代導費；「兼課」列入兼課教師鐘點；「教支人員＋本土語」依計畫分表；「共聘」使用預設）</label>
-              <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師" v-model="teacherForm.jobTitle">
-            </div>
-             <div class="form-group">
-                 <label class="form-label">超鐘點／代課（小鐘點）支出計畫（格式：[簡稱]全稱）</label>
-                <template v-if="isExpensePlanSlotConfig(teacherForm.expensePlan)">
-                 <div style="padding:8px 10px;border:1px solid var(--border-color);border-radius:6px;background:var(--surface-muted,#f8fafc);font-size:0.82rem;">
-                   {{ getExpensePlanSummary(teacherForm.expensePlan) }}
-                   <button v-if="overtimePlanTeacher" type="button" class="btn btn-secondary" style="display:block;margin-top:7px;padding:4px 8px;font-size:0.75rem;" @click="showTeacherModal = false; openOvertimePlanModal(overtimePlanTeacher)">編輯課格來源</button>
-                 </div>
-               </template>
-               <template v-else>
-                  <input type="text" class="form-input" list="accounting-plan-options" maxlength="80" placeholder="例如：[公代]公費代課鐘點費；留白＝預設經費" v-model="teacherForm.expensePlan">
-                 <datalist id="accounting-plan-options">
-                   <option v-for="plan in accountingPlanOptions" :key="'accounting-plan-' + plan" :value="plan"></option>
-                 </datalist>
-               </template>
-                 <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">畫面與工作表頁籤使用簡稱，Excel 標題使用全稱；超鐘點與代課（小鐘點）會依計畫拆表。</span>
-             </div>
-            <div class="form-group">
-              <label class="form-label">系統角色</label>
-              <select class="form-select" v-model="teacherForm.role">
-                <option value="teacher">一般教師</option>
-                <option value="staff">行政</option>
-                <option value="admin">教學組</option>
-              </select>
-            </div>
-             <div class="form-group">
-              <label class="form-label">基本授課鐘點（基鐘）</label>
-               <input type="number" class="form-input" placeholder="導師為12節、專任為16節" v-model.number="teacherForm.baseHours">
-             </div>
-             <div class="form-group" style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">
-               <label class="form-label">本學期固定超鐘點設定</label>
-               <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-                 <input type="number" class="form-input" min="0" max="40" step="1" placeholder="節數" style="max-width:110px;" v-model.number="teacherForm.fixedOvertimeHours">
-                 <span style="font-size:0.82rem;">節／週</span>
-                 <button type="button" class="btn btn-secondary" style="padding:5px 8px;font-size:0.75rem;" @click="fillFixedOvertimeFromCurrentSchedule">從目前課表帶入</button>
-               </div>
-               <input type="text" class="form-input" placeholder="例如：一2、三5、五午休" v-model="teacherForm.fixedOvertimeSlots">
-               <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">節數必須與節次數量一致。儲存後固定於本學期，不會因放假、最後完整週或臨時調課改變；留白代表尚未設定。</span>
-             </div>
-             <div class="form-group">
-              <label class="form-label">折抵額度（可用餘額）</label>
-              <input type="number" class="form-input" min="0" step="1" placeholder="0" v-model.number="teacherForm.mutualQuota">
-              <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">可用餘額以整數節數計。一般課表釋出 1 節＝1（不含代課小鐘點）；小鐘點未授課依月報另扣。扣額度須滿 1 才扣 1。建議用活動面板「＋發放額度」；手動改會寫入帳本調整列。</span>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="saveTeacher">儲存</button>
-            <button class="btn btn-secondary" @click="showTeacherModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 教師新增／編輯 modal → components/TeacherModal.vue -->
+    <TeacherModal
+      v-if="showTeacherModal"
+      :teacher-modal-mode="teacherModalMode"
+      :get-expense-plan-summary="getExpensePlanSummary"
+      v-model:teacher-form="teacherForm"
+      :overtime-plan-teacher="overtimePlanTeacher"
+      :accounting-plan-options="accountingPlanOptions"
+      :is-expense-plan-slot-config="isExpensePlanSlotConfig"
+      :open-overtime-plan-modal="openOvertimePlanModal"
+      :fill-fixed-overtime-from-current-schedule="fillFixedOvertimeFromCurrentSchedule"
+      :save-teacher="saveTeacher"
+      @close="showTeacherModal = false"
+    />
 
       <!-- 4.1. 超鐘點課格經費來源設定 Modal -->
-      <div v-if="showOvertimePlanModal" class="modal-overlay" @click.self="showOvertimePlanModal = false">
-        <div class="modal-card" style="max-width:760px;">
-          <div class="modal-header">
-             <h3>💰 設定超鐘點／代課（小鐘點）經費來源{{ overtimePlanTeacher ? '：' + overtimePlanTeacher.name : '' }}</h3>
-            <button class="btn-close" @click="showOvertimePlanModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-             <p v-if="overtimePlanUsesFixedSlots" style="margin:0 0 12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;">
-               超鐘點課格直接依教師前面設定的「固定超鐘點節次」，不再判定日期；已儲存的代課（小鐘點）來源也會保留快照，不因日後課表變更而移動，並依日期、節次與班級分配至會計 Excel 的對應工作表。
-             </p>
-             <p v-else style="margin:0 0 12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;">
-               尚未設定固定超鐘點，代課（小鐘點）首次設定時取結算最後一天仍有效的課格；儲存後會保留經費來源快照，不因日後課表變更而移動。
-             </p>
-             <div v-if="!overtimePlanUsesFixedSlots" style="margin:-4px 0 12px;padding:8px 10px;border-radius:6px;background:#eff6ff;color:#1d4ed8;font-size:0.78rem;">
-               判斷日期：結算最後一天 {{ overtimePlanPeriodEnd || '未設定' }}
-             </div>
-            <div v-if="!overtimePlanRows.length" class="empty-state" style="padding:24px 12px;">
-               目前固定超鐘點或代課小鐘點快照沒有可設定的課格。
-            </div>
-            <div v-else style="display:flex;flex-direction:column;gap:8px;">
-              <div v-for="row in overtimePlanRows" :key="row.key" style="display:grid;grid-template-columns:70px 78px minmax(90px,1fr) minmax(180px,1fr);align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-muted,#f8fafc);">
-                 <span style="font-weight:700;">{{ ['日','一','二','三','四','五','六','日'][row.day] || row.day }}</span>
-                <span>{{ row.period === 0 ? '早自習' : (row.period === 45 ? '午休' : '第' + row.period + '節') }}</span>
-                   <span>{{ row.className || (row.kind === 'fixed' ? '目前課表無對應班級' : '未指定班級') }}<small v-if="row.subject" style="display:block;color:var(--text-muted);">{{ row.subject }}</small><small v-if="row.activeFrom || row.activeTo" style="display:block;color:var(--text-muted);">有效：{{ row.activeFrom || '學期起' }}～{{ row.activeTo || '學期迄' }}</small><small v-if="row.sourceStatus === 'conflict'" style="display:block;color:#b45309;line-height:1.5;">⚠ 快照班級與目前課表不一致，目前：{{ row.currentClassName || '未指定' }} <button type="button" class="btn btn-sm btn-outline-warning" style="padding:1px 5px;font-size:0.68rem;" @click.stop="row.className = row.currentClassName">採用目前課表班級</button></small><small v-else-if="row.sourceStatus === 'missing' || row.sourceStatus === 'ambiguous' || row.sourceStatus === 'invalid'" style="display:block;color:#b91c1c;">⚠ {{ row.sourceStatus === 'ambiguous' ? '同一節有多個來源' : (row.sourceStatus === 'invalid' ? '來源格式錯誤' : '尚未找到唯一經費來源') }}</small></span>
-                 <input type="text" class="form-input" list="overtime-expense-source-options" maxlength="80" placeholder="例如：[公代]公費代課鐘點費；留白＝預設經費" v-model="row.source">
-              </div>
-            </div>
-            <datalist id="overtime-expense-source-options">
-               <option v-for="source in getOvertimeExpenseSourceOptions()" :key="'overtime-source-' + source" :value="source"></option>
-            </datalist>
-            <div style="margin-top:12px;font-size:0.75rem;color:var(--text-muted);">
-               可輸入 `[簡稱]全稱`；摘要與工作表頁籤顯示簡稱，Excel 標題使用全稱。留白代表預設經費。已設定 {{ overtimePlanRows.filter(row => row.source).length }}／{{ overtimePlanRows.length }} 個課格。
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" :disabled="loading" @click="saveOvertimePlan">儲存來源設定</button>
-            <button class="btn btn-secondary" @click="showOvertimePlanModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 超鐘點計畫 modal → components/OvertimePlanModal.vue -->
+    <OvertimePlanModal
+      v-if="showOvertimePlanModal"
+      :overtime-plan-teacher="overtimePlanTeacher"
+      :overtime-plan-period-end="overtimePlanPeriodEnd"
+      v-model:overtime-plan-rows="overtimePlanRows"
+      :overtime-plan-uses-fixed-slots="overtimePlanUsesFixedSlots"
+      :loading="loading"
+      :get-overtime-expense-source-options="getOvertimeExpenseSourceOptions"
+      :save-overtime-plan="saveOvertimePlan"
+      @close="showOvertimePlanModal = false"
+    />
 
       <!-- 4.1b. 教師經費來源檢查與整理 Modal -->
     <!-- 教師經費來源檢查 modal → components/ExpenseAuditModal.vue -->
@@ -3889,97 +3598,28 @@
     />
 
       <!-- 4.1a. 學期新增/編輯 Modal -->
-      <div v-if="showSemesterModal" class="modal-overlay" @click.self="showSemesterModal = false">
-        <div class="modal-card max-w-440">
-          <div class="modal-header">
-            <h3>{{ semesterModalMode === 'add' ? '📅 新增學期' : '✏️ 編輯學期' }}</h3>
-            <button class="btn-close" @click="showSemesterModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label class="form-label">學期代號</label>
-              <input type="text" class="form-input" placeholder="例如 114-2" v-model="semesterForm.id" :disabled="semesterModalMode === 'edit'">
-              <span class="text-xs-muted-70">用於 Firestore 資料夾命名，設定後不可修改</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">學期名稱（顯示用）</label>
-              <input type="text" class="form-input" placeholder="例如 114學年度第2學期" v-model="semesterForm.name">
-            </div>
-            <div class="form-group">
-              <label class="form-label">學期開始日期</label>
-              <input type="date" class="form-input" v-model="semesterForm.startDate">
-            </div>
-            <div class="form-group">
-              <label class="form-label">學期結束日期</label>
-              <input type="date" class="form-input" v-model="semesterForm.endDate">
-            </div>
-            <p style="font-size:0.75rem;color:var(--text-muted);margin:0;">九年級畢業／畢旅請至「空堂事件」設定。</p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="saveSemester">{{ semesterModalMode === 'add' ? '建立學期' : '儲存修改' }}</button>
-            <button class="btn btn-secondary" @click="showSemesterModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 學期新增／編輯 modal → components/SemesterModal.vue -->
+    <SemesterModal
+      v-if="showSemesterModal"
+      :semester-modal-mode="semesterModalMode"
+      v-model:semester-form="semesterForm"
+      :save-semester="saveSemester"
+      @close="showSemesterModal = false"
+    />
 
       <!-- 全校日期節次對調 Modal -->
-      <div v-if="showSchoolSwapModal" class="modal-overlay" @click.self="showSchoolSwapModal = false">
-        <div class="modal-card" style="max-width:620px;">
-          <div class="modal-header">
-            <h3>{{ schoolSwapModalMode === 'add' ? '新增全校對調' : '編輯全校對調' }}</h3>
-            <button type="button" class="btn-close" @click="showSchoolSwapModal = false" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
-            <div class="form-group m-0">
-              <label class="form-label">對調名稱 *</label>
-              <input type="text" class="form-input" v-model="schoolSwapForm.name" maxlength="80">
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-              <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:12px;">
-                <strong style="display:block;margin-bottom:8px;color:#1d4ed8;">端點 A</strong>
-                <div class="form-group m-0">
-                  <label class="form-label">日期</label>
-                  <input type="date" class="form-input" v-model="schoolSwapForm.dateA">
-                </div>
-                <div class="text-xs-muted-78" style="margin:5px 0 9px;">{{ schoolSwapWeekdayText(schoolSwapForm.dateA) }}</div>
-                <div class="form-group m-0">
-                  <label class="form-label">節次</label>
-                  <select class="form-select" v-model.number="schoolSwapForm.periodA">
-                    <option v-for="p in timetablePeriods" :key="'swap-a-'+p" :value="p">{{ formatPeriodText(p) }}</option>
-                  </select>
-                </div>
-              </div>
-              <div style="border:1px solid #c4b5fd;background:#f5f3ff;border-radius:10px;padding:12px;">
-                <strong style="display:block;margin-bottom:8px;color:#6d28d9;">端點 B</strong>
-                <div class="form-group m-0">
-                  <label class="form-label">日期</label>
-                  <input type="date" class="form-input" v-model="schoolSwapForm.dateB">
-                </div>
-                <div class="text-xs-muted-78" style="margin:5px 0 9px;">{{ schoolSwapWeekdayText(schoolSwapForm.dateB) }}</div>
-                <div class="form-group m-0">
-                  <label class="form-label">節次</label>
-                  <select class="form-select" v-model.number="schoolSwapForm.periodB">
-                    <option v-for="p in timetablePeriods" :key="'swap-b-'+p" :value="p">{{ formatPeriodText(p) }}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <label style="display:flex;align-items:center;gap:8px;font-size:0.86rem;">
-              <input type="checkbox" class="chk-md" v-model="schoolSwapForm.enabled">
-              啟用這筆對調
-            </label>
-            <div class="form-group m-0">
-              <label class="form-label">備註</label>
-              <input type="text" class="form-input" v-model="schoolSwapForm.note" maxlength="300">
-            </div>
-            <p style="margin:0;font-size:0.76rem;color:var(--text-muted);line-height:1.5;">系統會再次檢查學期範圍、週一至週五、日期與星期一致，以及啟用時段是否重疊。</p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" :disabled="schoolSwapSaving" @click="saveSchoolSwap">{{ schoolSwapSaving ? '儲存中…' : '儲存' }}</button>
-            <button type="button" class="btn btn-secondary" :disabled="schoolSwapSaving" @click="showSchoolSwapModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 校對調 modal → components/SchoolSwapModal.vue -->
+    <SchoolSwapModal
+      v-if="showSchoolSwapModal"
+      :school-swap-modal-mode="schoolSwapModalMode"
+      :school-swap-saving="schoolSwapSaving"
+      :school-swap-weekday-text="schoolSwapWeekdayText"
+      :format-period-text="formatPeriodText"
+      v-model:school-swap-form="schoolSwapForm"
+      :timetable-periods="timetablePeriods"
+      :save-school-swap="saveSchoolSwap"
+      @close="showSchoolSwapModal = false"
+    />
 
       <!-- 空堂事件 Modal -->
       <div v-if="showClassAwayModal" class="modal-overlay" @click.self="showClassAwayModal = false">
@@ -4316,216 +3956,53 @@
       <!-- 新手導覽：懶載入 onboarding-tour.js（不佔殼 DOM） -->
 
       <!-- 5. 基礎課表編輯的 Modal -->
-      <div v-if="showScheduleEditModal" class="modal-overlay" @click.self="showScheduleEditModal = false">
-        <div class="modal-card" style="max-width: 400px;">
-          <div class="modal-header">
-            <h3>✏️ 編輯基礎課表課堂</h3>
-            <button class="btn-close" @click="showScheduleEditModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div style="background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.85rem; border: 1px solid var(--border-color);">
-              <p><strong>授課教師</strong>：{{ scheduleForm.teacherName }}</p>
-              <p><strong>授課時段</strong>：星期{{ getWeekDayText(scheduleForm.dayOfWeek) }} {{ formatPeriodText(scheduleForm.period) }}</p>
-            </div>
-            <div class="form-group">
-              <label class="form-label">授課班級</label>
-              <input type="text" class="form-input" placeholder="702 或併班 701、702" v-model="scheduleForm.className">
-              <span class="text-xs-muted-70">併班可填多班：701、702 或 701/702（本土語、特教／資優抽離等）</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">授課科目</label>
-              <input type="text" class="form-input" placeholder="國文" v-model="scheduleForm.subject">
-            </div>
-            <div class="form-group">
-              <label class="form-label">課程屬性</label>
-              <div v-if="scheduleForm._entries && scheduleForm._entries.length >= 1" class="mb-10">
-                <span style="font-size:0.82rem;color:var(--text-secondary);display:block;margin-bottom:6px;">
-                  {{ scheduleForm._entries.length > 1 ? '此節有多筆資料，請選擇要編輯或清空的項目：' : '此節課堂（可清空為空堂）：' }}
-                </span>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                  <button
-                    type="button"
-                    class="btn btn-sm-14"
-                    :class="scheduleForm.id === e.id ? 'btn-primary' : 'btn-secondary'"
-                    v-for="e in scheduleForm._entries"
-                    :key="e.id"
-                     @click="pickScheduleAttr(e.id || e.attr || '一般')"
-                  >
-                     {{ getScheduleAttrLabel(e) }}：{{ e.className }} {{ e.subject }}
-                     （{{ e.activeFrom || '學期起' }}～{{ e.activeTo || '學期迄' }}）
-                   </button>
-                   <button type="button" class="btn btn-secondary btn-sm-14" @click="pickScheduleAttr('__new__')">＋建立新版本</button>
-                </div>
-              </div>
-               <select class="form-select" v-model="scheduleForm.attr" @change="normalizeScheduleFormFlags">
-                 <option value="一般">一般（計鐘點）</option>
-                  <option value="代課">代課（小鐘點；未授課扣除）</option>
-                 <option value="巡堂">巡堂（不計鐘點、不可調課、可當空堂）</option>
-                <option v-if="parseInt(scheduleForm.period, 10) === 8" value="單週">單週（僅第8節課輔）</option>
-                <option v-if="parseInt(scheduleForm.period, 10) === 8" value="雙週">雙週（僅第8節課輔）</option>
-                <option v-if="parseInt(scheduleForm.period, 10) === 8" value="課輔">課輔（第8節每週）</option>
-                 <option value="抽離">抽離（不進班級課表；計週鐘點；可另勾綁課）</option>
-               </select>
-               <label class="form-label" style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
-                 <input type="checkbox" class="chk-box-16" v-model="scheduleForm.overtime"
-                   :disabled="parseInt(scheduleForm.period, 10) === 8 || scheduleForm.attr === '巡堂' || scheduleForm.attr === '代課'"
-                   @change="normalizeScheduleFormFlags">
-                 <span>超鐘點（計入超鐘點結算，可與抽離並存）</span>
-               </label>
-             </div>
-            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-              <input type="checkbox" id="chk-restricted-course" v-model="scheduleForm.restriction" true-value="restricted" false-value="" class="chk-box-16">
-              <label for="chk-restricted-course" class="form-label m-0">綁課／特殊課程，調課前跳提醒（抽離課也可勾）</label>
-            </div>
-            <div class="form-group">
-              <label class="form-label">啟用期間（選填）</label>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <input type="date" class="form-input" v-model="scheduleForm.activeFrom" :min="semesterStartDate || undefined" :max="semesterEndDate || undefined" aria-label="啟用起日">
-                <input type="date" class="form-input" v-model="scheduleForm.activeTo" :min="semesterStartDate || undefined" :max="semesterEndDate || undefined" aria-label="啟用迄日">
-              </div>
-              <span class="text-xs-muted-70">起日／迄日皆空白＝整個學期有效。建立新版本時請填啟用起日，舊版本會保留並自動結束於前一天。</span>
-            </div>
-          </div>
-          <div class="modal-footer" style="flex-direction: column; gap: 8px;">
-            <div style="display: flex; gap: 12px; width: 100%;">
-              <button class="btn btn-primary flex-1" @click="saveScheduleCell">儲存</button>
-              <button class="btn btn-secondary flex-1" @click="showScheduleEditModal = false">取消</button>
-            </div>
-              <button 
-              v-if="scheduleForm.id || (scheduleForm._entries && scheduleForm._entries.length)"
-              class="btn btn-danger" 
-              style="width: 100%; background: rgba(239, 68, 68, 0.05); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.1);"
-              @click="clearScheduleCell"
-            >
-              🗑️ 清空此筆課堂{{ scheduleForm._entries && scheduleForm._entries.length > 1 ? '（目前選取）' : '（設為空堂）' }}
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- 基礎課表編輯 modal → components/ScheduleEditModal.vue -->
+    <ScheduleEditModal
+      v-if="showScheduleEditModal"
+      :get-week-day-text="getWeekDayText"
+      :format-period-text="formatPeriodText"
+      :get-schedule-attr-label="getScheduleAttrLabel"
+      v-model:schedule-form="scheduleForm"
+      :semester-start-date="semesterStartDate"
+      :semester-end-date="semesterEndDate"
+      :pick-schedule-attr="pickScheduleAttr"
+      :normalize-schedule-form-flags="normalizeScheduleFormFlags"
+      :save-schedule-cell="saveScheduleCell"
+      :clear-schedule-cell="clearScheduleCell"
+      @close="showScheduleEditModal = false"
+    />
 
       <!-- 空堂排班 Modal（扣額度；預設不寄信；班級可選） -->
-      <div v-if="showEmptySlotModal" class="modal-overlay" @click.self="closeEmptySlotModal">
-        <div class="modal-card" role="dialog" aria-modal="true" aria-label="空堂排班" style="max-width:440px;">
-          <div class="modal-header">
-            <h3>📌 空堂排班</h3>
-            <button type="button" class="btn-close" @click="closeEmptySlotModal" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
-            <p style="margin:0;font-size:0.8rem;color:var(--text-secondary);line-height:1.45;">
-              將任務排入老師的<strong>空堂</strong>，經費固定<strong>扣額度</strong>，預設<strong>不寄信</strong>。常用於段考巡堂等。
-            </p>
-            <div style="background:#f8fafc;border:1px solid var(--border-color);border-radius:8px;padding:10px 12px;font-size:0.85rem;">
-              <div><strong>{{ emptySlotForm.teacherName }}</strong>
-                <span class="text-xs-muted-78" >（額度 {{ emptySlotForm.quota }}）</span>
-              </div>
-              <div style="margin-top:4px;color:var(--text-secondary);">
-                 {{ formatDateMMDD(emptySlotForm.dateStr) }}({{ getWeekDayText(emptySlotForm.dayOfWeek) }}) {{ formatPeriodText(emptySlotForm.period) }}
-              </div>
-            </div>
-            <div v-if="emptySlotQuotaZero" style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:0.8rem;color:#b91c1c;">
-              ⚠️ 折抵額度為 0：仍可送出，但請安排<strong>由他人還一節</strong>。
-            </div>
-            <div class="form-group m-0" >
-              <label class="form-label">任務名稱 *</label>
-              <input type="text" class="form-input" v-model="emptySlotForm.taskName" placeholder="例如：段考巡堂、考場巡堂" maxlength="40">
-            </div>
-            <div class="form-group m-0" >
-              <label class="form-label">班級（選填）</label>
-              <input type="text" class="form-input" v-model="emptySlotForm.className" placeholder="可不填；要綁班再填，如 701" maxlength="20">
-            </div>
-            <div class="form-group m-0" >
-              <label class="form-label">備註（選填）</label>
-              <input type="text" class="form-input" v-model="emptySlotForm.note" placeholder="可空白" maxlength="80">
-            </div>
-            <p style="margin:0;font-size:0.72rem;color:var(--text-muted);">
-              送出＝直接核准寫入課表　·　扣 1 折抵額度　·　不寄系統信
-            </p>
-          </div>
-          <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;">
-            <button type="button" class="btn btn-secondary" @click="closeEmptySlotModal">取消</button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              :disabled="isSubmitting || loading"
-              @click="executeEmptySlotAssign"
-            >確認排入並扣額度</button>
-          </div>
-        </div>
-      </div>
+    <!-- 空堂任務 modal → components/EmptySlotModal.vue -->
+    <EmptySlotModal
+      v-if="showEmptySlotModal"
+      :format-date-m-m-d-d="formatDateMMDD"
+      :get-week-day-text="getWeekDayText"
+      :format-period-text="formatPeriodText"
+      v-model:empty-slot-form="emptySlotForm"
+      :empty-slot-quota-zero="emptySlotQuotaZero"
+      :is-submitting="isSubmitting"
+      :loading="loading"
+      :close-empty-slot-modal="closeEmptySlotModal"
+      :execute-empty-slot-assign="executeEmptySlotAssign"
+      @close="closeEmptySlotModal"
+    />
 
       <!-- 手動新增代導費 Modal -->
-      <div v-if="showManualHomeroomModal" class="modal-overlay" @click.self="showManualHomeroomModal = false">
-        <div class="modal-card" role="dialog" aria-modal="true" aria-label="手動新增代導費" style="max-width:480px;">
-          <div class="modal-header">
-            <h3>➕ 手動新增代導費</h3>
-            <button type="button" class="btn-close" @click="showManualHomeroomModal = false" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
-            <p style="margin:0;font-size:0.82rem;color:var(--text-secondary);line-height:1.45;">
-               僅供導師整日請假、系統未自動產生代課單時補建代導費；純課務調整或不到一天請假不列入代導鐘點費。
-            </p>
-
-            <div class="form-group m-0" >
-              <label class="form-label">請假導師 *</label>
-              <select class="form-select" v-model="manualHomeroomForm.leaveEmail" @change="onManualHomeroomLeaveTeacherChange">
-                <option value="">請選擇原導師…</option>
-                 <option v-for="t in homeroomTeachersList" :key="'manual-hr-t-'+t.email" :value="t.email">
-                  {{ t.name }}（{{ t.jobTitle }}）
-                </option>
-              </select>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div class="form-group m-0" >
-                <label class="form-label">代導日期 *</label>
-                <input type="date" class="form-input" v-model="manualHomeroomForm.date">
-              </div>
-              <div class="form-group m-0" >
-                <label class="form-label">請假時間類型</label>
-                <select class="form-select" v-model="manualHomeroomForm.leaveTimeType">
-                  <option value="全天">全天</option>
-                  <option value="上午">上午</option>
-                  <option value="下午">下午</option>
-                  <option value="自訂">自訂</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-group m-0" >
-              <label class="form-label">請假時間區間</label>
-              <input type="text" class="form-input" v-model="manualHomeroomForm.leaveTime" placeholder="例如：08:00~16:00">
-              <small style="display:block;margin-top:5px;color:var(--text-muted);">此處只補建整日請假代導費；純課務調整、上午／下午或不足全天請回調代課申請處理。</small>
-            </div>
-
-            <div class="form-group m-0" >
-              <label class="form-label">代導教師（選填，留空為待指定）</label>
-              <input 
-                type="text" 
-                class="form-input" 
-                style="width:100%;padding:6px 10px;font-size:0.82rem;" 
-                 placeholder="搜尋或選擇代導教師"
-                list="dl-manual-cover-teachers"
-                :value="getTeacherNameByEmail(manualHomeroomForm.actualTeacherEmail)"
-                @input="onManualCoverTeacherInput($event.target.value)"
-              >
-              <datalist id="dl-manual-cover-teachers">
-                <option v-for="t in teachersListDetails" :key="'man-opt-'+t.email" :value="t.name + '（' + (t.subject || '教師') + '）'"></option>
-              </datalist>
-            </div>
-
-            <div class="form-group m-0" >
-              <label class="form-label">備註（選填）</label>
-              <input type="text" class="form-input" v-model="manualHomeroomForm.note" placeholder="例如：導師無課請假手動補建">
-            </div>
-          </div>
-          <div class="modal-footer" style="margin-top:10px;">
-            <button type="button" class="btn btn-secondary" :disabled="homeroomRecordsLoading || loading" @click="showManualHomeroomModal = false">取消</button>
-            <button type="button" class="btn btn-primary" :disabled="homeroomRecordsLoading || loading || !manualHomeroomForm.leaveEmail || !manualHomeroomForm.date" @click="saveManualHomeroomRecord">
-              {{ homeroomRecordsLoading || loading ? '⏳ 儲存中...' : '💾 建立代導紀錄' }}
-            </button>
-          </div>
-        </div>
-      </div>
+    <!-- 手動導師代課 modal → components/ManualHomeroomModal.vue -->
+    <ManualHomeroomModal
+      v-if="showManualHomeroomModal"
+      :homeroom-records-loading="homeroomRecordsLoading"
+      :loading="loading"
+      v-model:manual-homeroom-form="manualHomeroomForm"
+      :homeroom-teachers-list="homeroomTeachersList"
+      :teachers-list-details="teachersListDetails"
+      :on-manual-homeroom-leave-teacher-change="onManualHomeroomLeaveTeacherChange"
+      :get-teacher-name-by-email="getTeacherNameByEmail"
+      :on-manual-cover-teacher-input="onManualCoverTeacherInput"
+      :save-manual-homeroom-record="saveManualHomeroomRecord"
+      @close="showManualHomeroomModal = false"
+    />
 
       <!-- 折抵額度歷程 Modal（後台教師管理） -->
     <!-- 額度歷程 modal → components/QuotaLedgerModal.vue -->
@@ -4541,46 +4018,16 @@
     />
 
       <!-- 管理員手動增減額度 -->
-      <div v-if="showQuotaAdjustModal" class="modal-overlay" @click.self="closeManualQuotaAdjust">
-        <div class="modal-card" style="max-width:440px;">
-          <div class="modal-header">
-            <div>
-              <h3>± 手動調整折抵額度</h3>
-              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px;">
-                {{ quotaAdjustForm.name }}　目前餘額 {{ quotaAdjustForm.balance }} 節
-              </div>
-            </div>
-            <button type="button" class="btn-close" :disabled="quotaAdjustSaving" @click="closeManualQuotaAdjust" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-              <div class="form-group" style="margin:0;">
-                <label class="form-label">調整方式</label>
-                <select class="form-select" v-model="quotaAdjustForm.direction">
-                  <option value="add">增加額度</option>
-                  <option value="subtract">扣除額度</option>
-                </select>
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label class="form-label">節數</label>
-                <input type="number" class="form-input" min="1" step="1" v-model.number="quotaAdjustForm.amount">
-              </div>
-            </div>
-            <div class="form-group" style="margin:0;">
-              <label class="form-label">備註（選填）</label>
-              <input type="text" class="form-input" maxlength="200" placeholder="例：補登活動額度、人工更正" v-model="quotaAdjustForm.note">
-            </div>
-            <div style="padding:9px 11px;border:1px solid #ddd6fe;background:#f5f3ff;border-radius:8px;font-size:0.84rem;">
-              調整後餘額：<strong>{{ quotaAdjustPreview }}</strong> 節
-            </div>
-            <p style="margin:0;color:var(--text-muted);font-size:0.74rem;line-height:1.5;">調整會同步更新教師名單，並在額度帳本留下管理員、異動節數與備註。</p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-primary" :disabled="quotaAdjustSaving" @click="saveManualQuotaAdjust">{{ quotaAdjustSaving ? '儲存中…' : '確認調整' }}</button>
-            <button type="button" class="btn btn-secondary" :disabled="quotaAdjustSaving" @click="closeManualQuotaAdjust">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 手動調整額度 modal → components/QuotaAdjustModal.vue -->
+    <QuotaAdjustModal
+      v-if="showQuotaAdjustModal"
+      :quota-adjust-preview="quotaAdjustPreview"
+      :quota-adjust-saving="quotaAdjustSaving"
+      v-model:quota-adjust-form="quotaAdjustForm"
+      :close-manual-quota-adjust="closeManualQuotaAdjust"
+      :save-manual-quota-adjust="saveManualQuotaAdjust"
+      @close="closeManualQuotaAdjust"
+    />
 
     </div>
 
@@ -4592,6 +4039,17 @@ import { onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
+import TeacherModal from './components/TeacherModal.vue';
+import ImportTeachersModal from './components/ImportTeachersModal.vue';
+import SchoolSwapModal from './components/SchoolSwapModal.vue';
+import ScheduleEditModal from './components/ScheduleEditModal.vue';
+import ManualHomeroomModal from './components/ManualHomeroomModal.vue';
+import SemesterModal from './components/SemesterModal.vue';
+import QuotaAdjustModal from './components/QuotaAdjustModal.vue';
+import EmptySlotModal from './components/EmptySlotModal.vue';
+import SamePeriodSwapModal from './components/SamePeriodSwapModal.vue';
+import OvertimePlanModal from './components/OvertimePlanModal.vue';
+import LineMessageModal from './components/LineMessageModal.vue';
 import QuotaLedgerModal from './components/QuotaLedgerModal.vue';
 import ExpenseAuditModal from './components/ExpenseAuditModal.vue';
 import BatchPrintPromptModal from './components/BatchPrintPromptModal.vue';
