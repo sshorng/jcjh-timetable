@@ -6,6 +6,7 @@ import { readFirstSheetRows, downloadJsonSheets, excelSerialToDate } from './exc
 import DateUtils from '../domain/date-utils.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import FieldMap from '../domain/field-map.js';
+import { UiSubmitHelpers } from './ui-request.js';
 
 /**
  * ui-admin.js：後台匯入／教師 CRUD／課表格編輯／歷史編輯（方案甲殼瘦身 B）
@@ -50,6 +51,10 @@ const UiAdmin = (() => {
       return ref(init);
     }
     var showImportTeachersModal = useRef('showImportTeachersModal', false);
+    var showExceptionComposer = useRef('showExceptionComposer', false);
+    function openExceptionComposer() {
+      showExceptionComposer.value = true;
+    }
     var teacherExcelData = useRef('teacherExcelData', []);
     var teacherExcelHeaders = useRef('teacherExcelHeaders', []);
     var teacherMappingFields = useRef('teacherMappingFields', {
@@ -2533,8 +2538,133 @@ const UiAdmin = (() => {
       }
     };
 
+    /**
+     * 特例調代送單（管理員＋事由）：沿用標準送單建構子，directApprove 直核、
+     * skipNotify 靜默、isAdminException 走後端特例分支（跳過衝堂斷言）。
+     * form: { aSlot, bSlot, needSub, subSlot:{teacherEmail,dateStr,period,fee}, reason }
+     */
+    function exceptionTimeKey(dateStr, period) {
+      var d = new Date(String(dateStr || '').replace(/-/g, '/'));
+      var dow = d.getDay();
+      var day = Number.isNaN(d.getTime()) ? '' : (dow === 0 ? 7 : dow);
+      return day + '-' + parseInt(period, 10);
+    }
+    function findExceptionCoverSlot(teacherEmail, dateStr, period) {
+      var em = String(teacherEmail || '').trim().toLowerCase();
+      var d = new Date(String(dateStr || '').replace(/-/g, '/'));
+      if (!em || Number.isNaN(d.getTime())) return null;
+      var dow = d.getDay() === 0 ? 7 : d.getDay();
+      var p = parseInt(period, 10);
+      return ((allSchedules && allSchedules.value) || []).find(function (s) {
+        return String((s && (s.teacherEmail || s.email)) || '').trim().toLowerCase() === em
+          && parseInt(s.dayOfWeek, 10) === dow
+          && parseInt(s.period, 10) === p;
+      }) || null;
+    }
+    function exceptionId(prefix) {
+      return 'req_exc_' + Date.now().toString(36) + '_' + prefix + Math.random().toString(36).slice(2, 6);
+    }
+    function exceptionSerial(prefix) {
+      return prefix + (1000 + Math.floor(Math.random() * 9000));
+    }
+    async function submitAdminException(form) {
+      if (!isAdminRef || !isAdminRef.value) throw new Error('特例建單僅限教學組管理員');
+      form = form || {};
+      var reason = String(form.reason || '').trim();
+      if (!reason) throw new Error('請填寫事由');
+      var a = form.aSlot || {};
+      var b = form.bSlot || {};
+      if (!a.teacherEmail || !b.teacherEmail) throw new Error('請選定雙方教師');
+      if (String(a.teacherEmail).trim().toLowerCase() === String(b.teacherEmail).trim().toLowerCase()) {
+        throw new Error('雙方須為不同教師');
+      }
+      if (!a.className || !b.className) throw new Error('雙方課堂須有基礎課程');
+      var needSub = !!form.needSub;
+      var sub = form.subSlot || {};
+      if (needSub && (!sub.teacherEmail || !sub.dateStr || sub.period === '' || sub.period == null)) {
+        throw new Error('代課段資料不完整');
+      }
+      var submitDepsBase = {
+        currentSemester: currentSemester,
+        getTeacherNameByEmail: getTeacherNameByEmail,
+        isAdmin: isAdminRef,
+        directApproveMode: { value: true },
+        paperFlow: { value: false },
+        isMutualCover: { value: false },
+        PERIOD8_FEE: '第8節代課',
+        ACTIVITY_PUBLIC_FEE: '活動公費',
+        TIMETABLE_ONLY_FEE: '僅課表呈現（不結算）',
+        activeCell: { value: null },
+        DAC: function () { return null; },
+        shouldProxySubmitForLeave: function () { return false; },
+        isProxySubmitActive: function () { return false; }
+      };
+      function buildLeg(pending, serialPrefix) {
+        var built = UiSubmitHelpers.buildSubmitPayload(
+          Object.assign({ pendingRequestData: { value: pending } }, submitDepsBase),
+          exceptionId(serialPrefix), exceptionSerial(serialPrefix));
+        built.payload.directApprove = true;
+        built.payload.isAdminException = true;
+        built.payload.exceptionReason = reason;
+        built.payload.skipNotify = true;
+        built.newRequest.directApprove = true;
+        built.newRequest.isAdminException = true;
+        built.newRequest.exceptionReason = reason;
+        return built;
+      }
+      var serials = [];
+      var exPending = {
+        mode: 'exchange',
+        leaveTeacher: a.teacherEmail,
+        subTeacher: b.teacherEmail,
+        cls: a.className,
+        subject: a.subject,
+        date: a.dateStr,
+        timeKey: exceptionTimeKey(a.dateStr, a.period),
+        dateB: b.dateStr,
+        timeB: exceptionTimeKey(b.dateStr, b.period),
+        subBClass: b.className,
+        subB: b.subject,
+        reason: reason,
+        subFee: '無',
+        note: ''
+      };
+      var exBuilt = buildLeg(exPending, 'SWP');
+      await callGasApi('submitRequest', exBuilt.payload);
+      serials.push(exBuilt.newRequest['單號']);
+      if (needSub) {
+        var cover = findExceptionCoverSlot(a.teacherEmail, sub.dateStr, sub.period);
+        if (!cover) throw new Error('代課格在 A 課表無基礎課程');
+        var subPending = {
+          mode: 'substitution',
+          leaveTeacher: a.teacherEmail,
+          subTeacher: sub.teacherEmail,
+          cls: cover.className,
+          subject: cover.subject,
+          date: sub.dateStr,
+          timeKey: exceptionTimeKey(sub.dateStr, sub.period),
+          reason: reason,
+          subFee: sub.fee,
+          note: ''
+        };
+        var subBuilt = buildLeg(subPending, 'SUB');
+        await callGasApi('submitRequest', subBuilt.payload);
+        serials.push(subBuilt.newRequest['單號']);
+      }
+      showToast('特例單已直接核准建單' + (serials.length > 1 ? '（調課＋代課共 2 筆）' : '') + '，經費照系統計算', 'success');
+      try {
+        if (typeof loadWeeklyData === 'function') await loadWeeklyData();
+      } catch (eRefresh) { /* ignore */ }
+      return { ok: true, serials: serials };
+    }
     return {
+      showExceptionComposer: showExceptionComposer,
+      openExceptionComposer: openExceptionComposer,
+      submitAdminException: submitAdminException,
       showImportTeachersModal: showImportTeachersModal,
+      showExceptionComposer: showExceptionComposer,
+      openExceptionComposer: openExceptionComposer,
+      submitAdminException: submitAdminException,
       teacherExcelData: teacherExcelData,
       teacherExcelHeaders: teacherExcelHeaders,
       teacherMappingFields: teacherMappingFields,

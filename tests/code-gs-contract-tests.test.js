@@ -505,6 +505,11 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   const pubEventMap = pubSource.slice(pubSource.indexOf('.map(function (event)', pubEventBase));
   assert.ok(pubEventMap.includes('"事件名稱"'), '公開事件應保留顯示欄');
   assert.ok(!/"備註":/.test(pubEventMap), '公開事件不可外送備註欄（管理員自由填寫）');
+  // 特例建單（管理員＋事由）：強制標記，跳過調課衝堂斷言，其餘規則照走
+  assert.match(source, /isAdminExceptionOne = isAdmin && \(reqData\.isAdminException === true/, '特例旗標僅管理員有效');
+  assert.match(source, /if \(!exceptionReasonOne\) throw new Error\('特例建單必須填寫事由！'\)/, '特例建單事由必填');
+  assert.match(source, /reqData\.request\["特殊流程"\] = "admin_exception"/, '特例單強制標記特殊流程');
+  assert.match(source, /if \(!isAdminExceptionOne\) \{\s*\n\s*assertNoExchangeIncomingConflict_/, '特例單跳過衝堂斷言（一般單仍擋）');
 
   console.log('code.gs exchange contract tests PASS');
 
