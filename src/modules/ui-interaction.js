@@ -5,6 +5,7 @@ import { installModalA11y, showConfirm } from '../ui/toast.js';
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
  */
 import DomainSchedule from '../domain/domain-schedule.js';
+import DateUtils from '../domain/date-utils.js';
 
 /**
  * ui-interaction.js — 互動（modal 無障礙／點格／班級連結）（從 app.js 抽出，2A）
@@ -154,8 +155,13 @@ const paintMatchSourceDom = () => {
 const applyClassViewFromUrl = () => {
   const urlParams = new URLSearchParams(window.location.search);
   // 唯讀深連結：?class=701（相容舊式 ?view=class&class=701）
-  const cls = String(urlParams.get('class') || urlParams.get('cls') || '').trim();
+  let cls = String(urlParams.get('class') || urlParams.get('cls') || '').trim();
   if (!cls) return false;
+  // 併班不設獨立視圖：舊連結 ?class=703、704 導向首個單班（課程本就併入各單班顯示）
+  if (DateUtils && DateUtils.isCombinedClass && DateUtils.isCombinedClass(cls)) {
+    const parts = DateUtils.parseCombinedClasses(cls);
+    if (parts.length) cls = parts[0];
+  }
   classReadonlyMode.value = true;
   pendingClassView.value = cls;
   activeTab.value = 'class';
@@ -391,7 +397,12 @@ const showDetailForRecord = (recId, requestId) => {
 
 const resolvePendingClassView = () => {
   if (!pendingClassView.value) return;
-  const target = String(pendingClassView.value).trim();
+  let target = String(pendingClassView.value).trim();
+  // 併班不設獨立視圖（按鈕已隱藏）：舊值導向首個單班
+  if (DateUtils && DateUtils.isCombinedClass && DateUtils.isCombinedClass(target)) {
+    const parts = DateUtils.parseCombinedClasses(target);
+    if (parts.length) target = parts[0];
+  }
   const list = classList.value || [];
   const matched = list.find(c => String(c) === target)
     || list.find(c => String(c).toLowerCase() === target.toLowerCase())

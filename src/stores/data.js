@@ -404,8 +404,13 @@ export const useDataStore = defineStore('data', () => {
       return a ? a.dataUpdatedLabel.value : '';
     });
     const selectClassForView = (className) => {
-      const cls = String(className || '').trim();
+      let cls = String(className || '').trim();
       if (!cls) return;
+      // 併班不設獨立視圖（按鈕已隱藏）：導向首個單班
+      if (DateUtils && DateUtils.isCombinedClass && DateUtils.isCombinedClass(cls)) {
+        const parts = DateUtils.parseCombinedClasses(cls);
+        if (parts.length) cls = parts[0];
+      }
       storeToRefs(useMutualStore()).selectedClass.value = cls;
       if (storeToRefs(useSessionStore()).user.value && storeToRefs(useTimetableStore()).classUsesPublicData.value) {
         loadPublicClassData(cls).catch(function () {});
