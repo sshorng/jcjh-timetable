@@ -1,4 +1,3 @@
-import { ref } from 'vue';
 /**
  * 自 v1 ui-list-helpers.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -89,6 +88,19 @@ const UiListHelpers = (() => {
     return parseTimeMs(getRequestApplicationStamp(r));
   }
 
+  /** 核准時間戳：更新時間優先（核准即刷新更新時間），缺則退回申請時間 */
+  function getRequestApprovalStamp(request) {
+    const updated = firstRequestTimestamp(request, [
+      'updatedAt', '更新時間', 'updated_at', 'approvedAt', '核准時間', 'approvalTime'
+    ]);
+    if (updated) return updated;
+    return getRequestApplicationStamp(request);
+  }
+
+  function requestApprovalTimeMs(r) {
+    return parseTimeMs(getRequestApprovalStamp(r));
+  }
+
   function sortListRowsDesc(a, b) {
     const ga = requestGroupKey(a);
     const gb = requestGroupKey(b);
@@ -116,6 +128,28 @@ const UiListHelpers = (() => {
     arr.forEach(r => {
       const g = requestGroupKey(r);
       const t = requestTimeMs(r);
+      if (!groupMax[g] || t > groupMax[g]) groupMax[g] = t;
+    });
+    return arr.sort((a, b) => {
+      const ga = requestGroupKey(a);
+      const gb = requestGroupKey(b);
+      if (ga !== gb) {
+        const ta = groupMax[ga] || 0;
+        const tb = groupMax[gb] || 0;
+        if (tb !== ta) return tb - ta;
+        return String(gb).localeCompare(String(ga));
+      }
+      return sortListRowsDesc(a, b);
+    });
+  }
+
+  /** 歷史紀錄：依「核准時間（更新時間）」倒序；同組內維持日期→節次正序 */
+  function sortRequestListByApprovalDesc(list) {
+    const arr = (list || []).slice();
+    const groupMax = {};
+    arr.forEach(r => {
+      const g = requestGroupKey(r);
+      const t = requestApprovalTimeMs(r);
       if (!groupMax[g] || t > groupMax[g]) groupMax[g] = t;
     });
     return arr.sort((a, b) => {
@@ -311,13 +345,16 @@ const UiListHelpers = (() => {
     requestTimestampText: requestTimestampText,
     firstRequestTimestamp: firstRequestTimestamp,
     getRequestApplicationStamp: getRequestApplicationStamp,
+    getRequestApprovalStamp: getRequestApprovalStamp,
     formatRequestApplicationDate: formatRequestApplicationDate,
     serialRoot: serialRoot,
     parseTimeMs: parseTimeMs,
     requestGroupKey: requestGroupKey,
     requestTimeMs: requestTimeMs,
+    requestApprovalTimeMs: requestApprovalTimeMs,
     sortListRowsDesc: sortListRowsDesc,
     sortRequestListDesc: sortRequestListDesc,
+    sortRequestListByApprovalDesc: sortRequestListByApprovalDesc,
     sortRequestsDesc: sortRequestsDesc,
     isTriangleRequest: isTriangleRequest,
     collapseTriangleRows: collapseTriangleRows,

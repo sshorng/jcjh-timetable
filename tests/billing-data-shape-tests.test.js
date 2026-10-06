@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import FieldMap from '../src/domain/field-map.js';
-import DomainSchoolSwap from '../src/domain/domain-school-swap.js';
-import DateUtils from '../src/domain/date-utils.js';
-import DomainSchedule from '../src/domain/domain-schedule.js';
-import DomainClassAway from '../src/domain/domain-class-away.js';
 import DomainBilling from '../src/domain/domain-billing.js';
 
 test('billing data shape tests（v1 移植）', () => {

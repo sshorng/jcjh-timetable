@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import DomainClassAway from '../src/domain/domain-class-away.js';
-import FieldMap from '../src/domain/field-map.js';
-import { UiClassAwayAdmin, UiMutualBridge, UiBatchSubmit, UiBatchPanel } from '../src/modules/ui-activity.js';
+import { UiClassAwayAdmin, UiMutualBridge } from '../src/modules/ui-activity.js';
 
 test('class away ui tests（v1 移植）', () => {
   const savedRows = [];

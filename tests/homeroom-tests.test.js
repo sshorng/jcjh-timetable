@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import path from 'node:path';
 import { UiHomeroom } from '../src/modules/ui-homeroom.js';
 
 test('homeroom tests（v1 移植）', () => {

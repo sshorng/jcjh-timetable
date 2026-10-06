@@ -8554,7 +8554,7 @@ function doPost(e) {
           // 核准規則與代課一致：管理員勾選直接核准即生效；紙本／代送走行政核准；其餘待對方同意
           var directApproveRow = isAdmin && reqData.directApprove === true;
           var proxyRow = !isSelf && !directApproveRow && (isAdmin || exchangeBatchCanProxy);
-          if (!isSelf && !directApproveRow && !exchangeBatchCanProxy) {
+          if (!isSelf && !directApproveRow && !exchangeBatchCanProxy && !isAdmin) {
             throw new Error("您無權代表此申請人發起調課！");
           }
           var paperRequested = isPaperFlowValue_(row.paperFlow !== undefined ? row.paperFlow : row["紙本流程"])

@@ -1,4 +1,3 @@
-import { ref } from 'vue';
 /**
  * 自 v1 export-invigilation-recovered.js 機械移植（port-modules2.cjs，標準 IIFE）：
  * body 與 v1 逐字一致。

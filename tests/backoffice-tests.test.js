@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import path from 'node:path';
 import { UiBackoffice } from '../src/modules/ui-backoffice.js';
 
 test('backoffice tests（v1 移植）', () => {

@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-schedule.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。

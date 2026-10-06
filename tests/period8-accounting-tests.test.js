@@ -1,9 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import DateUtils from '../src/domain/date-utils.js';
-import DomainSchedule from '../src/domain/domain-schedule.js';
-import DomainClassAway from '../src/domain/domain-class-away.js';
-import DomainBilling from '../src/domain/domain-billing.js';
 import ExportPeriod8Accounting from '../src/modules/export-period8-accounting.js';
 
 test('period8 accounting tests（v1 移植）', () => {

@@ -1,10 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import DateUtils from '../src/domain/date-utils.js';
-import FieldMap from '../src/domain/field-map.js';
-import DomainSchedule from '../src/domain/domain-schedule.js';
-import { UiListHelpers } from '../src/modules/ui-list-helpers.js';
-import { UiLineTemplate } from '../src/modules/ui-line-template.js';
 import { UiTimetable } from '../src/modules/ui-timetable.js';
 
 test('timetable resolve tests（v1 移植）', () => {

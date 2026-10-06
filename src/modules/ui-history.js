@@ -250,13 +250,17 @@ const UiHistory = (() => {
           requestPeriod: leavePeriod,
           createdAt: createdAtFull,
           createdDate,
+          // 核准時間＝申請單更新時間（核准即刷新）；缺則退回申請時間
+          updatedAt: (matchedReq && (matchedReq.updatedAt || matchedReq['更新時間'])) || rec.updatedAt || rec['更新時間'] || createdAtFull,
           targetDate,
           targetPeriod,
           targetClassName,
           targetSubject
         };
       });
-      return UiListHelpers.sortRequestListDesc(mapped);
+      // 歷史紀錄依核准時間倒序（更新時間優先）
+      const sorter = UiListHelpers.sortRequestListByApprovalDesc || UiListHelpers.sortRequestListDesc;
+      return sorter(mapped);
     });
     // 歷史紀錄按週/月篩選
     const getWeekStart = (dateStr) => {

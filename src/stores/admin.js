@@ -2,7 +2,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import { UiAdmin } from '../modules/ui-admin.js';
-import { UiHistory } from '../modules/ui-history.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
 import { useDataStore } from './data.js';

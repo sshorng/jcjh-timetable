@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import FieldMap from '../src/domain/field-map.js';
 import { UiAdmin } from '../src/modules/ui-admin.js';
 
 test('ui admin import tests（v1 移植）', () => {
