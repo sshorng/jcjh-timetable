@@ -58,7 +58,8 @@ test('export wiring（v2 接線迴歸）', () => {
   const vendorSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'vendor-libs.js'), 'utf8');
   assert.match(vendorSource, /import\('exceljs'\)/, 'ExcelJS 應動態引入');
   assert.match(vendorSource, /import\('jszip'\)/, 'JSZip 應動態引入');
-  assert.match(vendorSource, /import\('xlsx'\)/, 'XLSX 應動態引入');
+  assert.doesNotMatch(vendorSource, /import\('xlsx'\)/, 'XLSX 已移除（SheetJS HIGH 漏洞無修補版，改走 ExcelJS）');
+  assert.doesNotMatch(vendorSource, /ensureXlsx/, 'ensureXlsx 應一併移除');
 
   console.log('export wiring tests PASS');
 });

@@ -44,7 +44,7 @@ export default [
         confirm: 'readonly',
         globalThis: 'readonly',
         // vendor-libs.js 經 npm＋import() 懶載後掛到全域的運行期三方庫
-        XLSX: 'readonly',
+        // （XLSX 已移除：SheetJS HIGH 漏洞無修補版，讀寫改走 ExcelJS）
         JSZip: 'readonly',
         ExcelJS: 'readonly'
       }

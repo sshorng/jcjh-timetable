@@ -1,4 +1,4 @@
-import { ensureXlsx } from './vendor-libs.js';
+import { readFirstSheetRows, downloadJsonSheets, excelSerialToDate } from './excel-io.js';
 /**
  * 自 v1 ui-admin.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -149,11 +149,12 @@ const UiAdmin = (() => {
         return raw.getFullYear() + '-' + String(raw.getMonth() + 1).padStart(2, '0')
           + '-' + String(raw.getDate()).padStart(2, '0');
       }
-      if (typeof raw === 'number' && window.XLSX && window.XLSX.SSF && window.XLSX.SSF.parse_date_code) {
-        var excelDate = window.XLSX.SSF.parse_date_code(raw);
-        if (excelDate && excelDate.y && excelDate.m && excelDate.d) {
-          return String(excelDate.y) + '-' + String(excelDate.m).padStart(2, '0')
-            + '-' + String(excelDate.d).padStart(2, '0');
+      if (typeof raw === 'number') {
+        // 未套日期格式的儲存格會以 1900 序列進來（ExcelJS 不再經 SSF）
+        var serialDate = excelSerialToDate(raw);
+        if (serialDate) {
+          return serialDate.getUTCFullYear() + '-' + String(serialDate.getUTCMonth() + 1).padStart(2, '0')
+            + '-' + String(serialDate.getUTCDate()).padStart(2, '0');
         }
       }
       var text = String(raw).trim().split(/[T ]/)[0].replace(/\//g, '-');
@@ -537,11 +538,6 @@ const UiAdmin = (() => {
     }
 
     function downloadScheduleTemplate() {
-      var doDownload = function () {
-        if (typeof XLSX === 'undefined') {
-          showToast('Excel 模組未載入', 'error');
-          return;
-        }
         var rows = [
           {
             '教師姓名': '王小明',
@@ -616,26 +612,15 @@ const UiAdmin = (() => {
              '啟用迄日': ''
            }
         ];
-        var ws = XLSX.utils.json_to_sheet(rows);
-        var wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '課表長表');
-        XLSX.writeFile(wb, '課表匯入範本_長表.xlsx');
+        downloadJsonSheets([{ name: '課表長表', rows: rows }], '課表匯入範本_長表.xlsx').then(function () {
          showToast('已下載姓名鍵課表長表範本（含巡堂列）', 'success');
-      };
-      ensureXlsx().then(doDownload).catch(function () {
-
+      }).catch(function () {
         showToast('Excel 模組載入失敗', 'error');
-
       });
     }
 
     /** 匯出目前本學期課表（長表，可改完再匯回） */
     function downloadCurrentSchedules() {
-      var doDownload = function () {
-        if (typeof XLSX === 'undefined') {
-          showToast('Excel 模組未載入', 'error');
-          return;
-        }
         var rows = (allSchedules.value || []).map(function (s) {
             var restrict = s.restriction === 'restricted' || s.restriction === '限制' ? '綁課' : (s.restriction || '');
             var isPullOut = isPullOutScheduleEntry(s);
@@ -672,17 +657,11 @@ const UiAdmin = (() => {
           if (a['星期'] !== b['星期']) return (parseInt(a['星期'], 10) || 0) - (parseInt(b['星期'], 10) || 0);
           return (parseInt(a['節次'], 10) || 0) - (parseInt(b['節次'], 10) || 0);
         });
-        var ws = XLSX.utils.json_to_sheet(rows);
-        var wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '目前課表');
         var sid = currentSemester.value || 'semester';
-        XLSX.writeFile(wb, '目前課表_' + sid + '.xlsx');
+        downloadJsonSheets([{ name: '目前課表', rows: rows }], '目前課表_' + sid + '.xlsx').then(function () {
         showToast('已匯出目前課表共 ' + rows.length + ' 節', 'success');
-      };
-      ensureXlsx().then(doDownload).catch(function () {
-
+      }).catch(function () {
         showToast('Excel 模組載入失敗', 'error');
-
       });
     }
 
@@ -1893,20 +1872,13 @@ const UiAdmin = (() => {
       if (!file) return;
       var reader = new FileReader();
       reader.onload = async function (evt) {
+        var sheetData = [];
         try {
-          await ensureXlsx();
+          sheetData = await readFirstSheetRows(evt.target.result);
         } catch (err) {
-          showToast('Excel 模組載入失敗', 'error');
+          showToast('Excel 解析失敗', 'error');
           return;
         }
-        if (typeof XLSX === 'undefined') {
-          showToast('Excel 模組未載入', 'error');
-          return;
-        }
-        var data = evt.target.result;
-        var workbook = XLSX.read(data, { type: 'binary' });
-        var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        var sheetData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
         if (sheetData.length > 0) {
           teacherExcelHeaders.value = Object.keys(sheetData[0]);
           teacherExcelData.value = sheetData;
@@ -1954,7 +1926,7 @@ const UiAdmin = (() => {
           showToast('已載入 ' + sheetData.length + ' 列，請確認欄位後按「預覽」', 'info');
         }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     }
 
     function parseTeacherImportRows() {
@@ -2172,20 +2144,13 @@ const UiAdmin = (() => {
       if (!file) return;
       var reader = new FileReader();
       reader.onload = async function (evt) {
+        var sheetData = [];
         try {
-          await ensureXlsx();
+          sheetData = await readFirstSheetRows(evt.target.result);
         } catch (err) {
-          showToast('Excel 模組載入失敗', 'error');
+          showToast('Excel 解析失敗', 'error');
           return;
         }
-        if (typeof XLSX === 'undefined') {
-          showToast('Excel 模組未載入', 'error');
-          return;
-        }
-        var data = evt.target.result;
-        var workbook = XLSX.read(data, { type: 'binary' });
-        var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        var sheetData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
         if (sheetData.length > 0) {
           excelHeaders.value = Object.keys(sheetData[0]);
          excelData.value = sheetData;
@@ -2237,7 +2202,7 @@ const UiAdmin = (() => {
           showToast('已載入 ' + sheetData.length + ' 列，請確認欄位對應後按「預覽」', 'info');
         }
       };
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     }
 
     function getMappingLabel(key) {

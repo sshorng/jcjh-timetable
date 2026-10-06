@@ -87,7 +87,7 @@ test('http smoke tests（v2：dist 靜態殼層）', async () => {
     }
     // 懶載分包：vendor libs 應獨立成 chunk（首屏不含，匯出時才抓）
     const assets = fs.readdirSync(path.join(dist, 'assets')).filter((f) => f.endsWith('.js'));
-    assert.ok(assets.some((f) => /^xlsx-/.test(f)), 'xlsx 應獨立分包：' + assets.join(','));
+    assert.ok(!assets.some((f) => /^xlsx-/i.test(f)), 'xlsx 已移除，不可再有分包：' + assets.join(','));
     assert.ok(assets.some((f) => /^exceljs/i.test(f)), 'exceljs 應獨立分包');
     assert.ok(assets.some((f) => /^jszip/i.test(f)), 'jszip 應獨立分包');
     assert.ok(assets.some((f) => /^index-/.test(f)), '主包應存在');

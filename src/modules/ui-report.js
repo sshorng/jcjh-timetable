@@ -1,5 +1,5 @@
-import { computed, watch, nextTick } from 'vue';
-import { ensureExcelJS, ensureJSZip, ensureXlsx } from './vendor-libs.js';
+import { ensureExcelJS, ensureJSZip } from './vendor-libs.js';
+import { downloadJsonSheets } from './excel-io.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -222,27 +222,20 @@ const calculateMonthlyReport = async () => {
 const exportReportToExcel = async () => {
   try {
     await ensureBillingReady();
-    await ensureXlsx();
   } catch (e) {
     showToast('Excel 模組載入失敗', 'error');
     return;
   }
-  if (typeof XLSX === 'undefined') {
-    showToast('Excel 模組未載入', 'error');
-    return;
-  }
   await calculateMonthlyReport();
   const data = DomainBilling.toExcelRows(monthlyReportData.value);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-   const rangeLabel = `${reportStartDate.value}_${reportEndDate.value}`;
-   XLSX.utils.book_append_sheet(wb, ws, `${rangeLabel}大鐘點1-7午休`);
-   if (DomainBilling.toPeriod8ExcelRows) {
-     const p8 = DomainBilling.toPeriod8ExcelRows({
-       preparedPayout: monthlyReportData.value && monthlyReportData.value.period8Payout,
-       reportMonth: reportMonth.value,
-       reportStartDate: reportStartDate.value,
-       reportEndDate: reportEndDate.value,
+  const rangeLabel = `${reportStartDate.value}_${reportEndDate.value}`;
+  const sheets = [{ name: `${rangeLabel}大鐘點1-7午休`, rows: data }];
+  if (DomainBilling.toPeriod8ExcelRows) {
+    const p8 = DomainBilling.toPeriod8ExcelRows({
+      preparedPayout: monthlyReportData.value && monthlyReportData.value.period8Payout,
+      reportMonth: reportMonth.value,
+      reportStartDate: reportStartDate.value,
+      reportEndDate: reportEndDate.value,
       allSchedules: allSchedules.value,
       substitutionRecords: substitutionRecords.value,
       classAwayEvents: classAwayEvents.value,
@@ -250,10 +243,13 @@ const exportReportToExcel = async () => {
       getTeacherNameByEmail,
       isSingleWeek
     });
-     const ws8 = XLSX.utils.json_to_sheet(p8.length ? p8 : [{ "日期": "", "說明": "本期無第8節應發或空堂列" }]);
-     XLSX.utils.book_append_sheet(wb, ws8, `${rangeLabel}第8節明細`);
-   }
-    XLSX.writeFile(wb, `全校大鐘點早自習1-7午休與第8節費_${rangeLabel}.xlsx`);
+    sheets.push({ name: `${rangeLabel}第8節明細`, rows: p8.length ? p8 : [{ "日期": "", "說明": "本期無第8節應發或空堂列" }] });
+  }
+  try {
+    await downloadJsonSheets(sheets, `全校大鐘點早自習1-7午休與第8節費_${rangeLabel}.xlsx`);
+  } catch (e) {
+    showToast('Excel 模組載入失敗', 'error');
+  }
 };
 
 const filteredSchoolExportTeachers = computed(() => {
