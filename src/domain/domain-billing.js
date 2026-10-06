@@ -470,11 +470,6 @@ const DomainBilling = (() => {
     return String(parseInt(day, 10)) + '|' + String(parseInt(period, 10));
   }
 
-  function fixedOvertimeSlotMatches(teacher, day, period) {
-    var setting = fixedOvertimeSetting(teacher);
-    return setting.configured && setting.valid
-      && setting.slotKeys.indexOf(fixedOvertimeSlotKey(day, period)) >= 0;
-  }
 
   function fixedOvertimeScheduleSlotsForDates(teacherIdentity, schedules, dates, slotKeys) {
     var weekDates = Array.isArray(dates) ? dates : [];
@@ -677,12 +672,6 @@ const DomainBilling = (() => {
     return { source: '', status: 'invalid', origin: 'invalid', explicit: false, canAutoAllocate: false };
   }
 
-  function sourceForOvertimeSchedule(teacher, schedule, effectiveSchedule) {
-    var resolution = arguments.length >= 3
-      ? expenseSourceResolutionForSchedule(teacher, schedule, effectiveSchedule)
-      : expenseSourceResolutionForSchedule(teacher, schedule);
-    return resolution && resolution.canAutoAllocate ? String(resolution.source || '').trim() : '';
-  }
 
   function expenseClassNamesOverlap(left, right) {
     if (FieldMap && FieldMap.expenseClassesOverlap) {
@@ -701,12 +690,6 @@ const DomainBilling = (() => {
     return dayText + periodText;
   }
 
-  function scheduleIsInWeek(schedule, dates) {
-    var day = parseInt(schedule && (schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期']), 10);
-    return (dates || []).some(function (dateStr) {
-      return day === dayOfWeekFromDate(dateStr) && isScheduleActiveOnDate(schedule, dateStr);
-    });
-  }
 
   function sortOvertimeSchedules(left, right) {
     return (parseInt(left && (left.dayOfWeek != null ? left.dayOfWeek : left['星期']), 10) || 0)
@@ -1385,18 +1368,6 @@ const DomainBilling = (() => {
     return fee !== '扣額度' && fee !== '互代不結' && fee !== '第8節代課';
   }
 
-  function smallCourseSourceSchedule(record, schedules, schoolSwapIndex) {
-    var originalKeys = originalTeacherKeys(record);
-    var slot = resolveBillingSlot(record, schoolSwapIndex);
-    var candidates = (schedules || []).filter(function (schedule) {
-      return hasCommonKey(originalKeys, scheduleTeacherKeys(schedule))
-        && isSubstituteScheduleSlot(schedule)
-        && isScheduleActiveOnDate(schedule, recordDate(record));
-    });
-    return candidates.find(function (schedule) {
-      return scheduleDay(schedule) === slot.dayOfWeek && schedulePeriod(schedule) === slot.period;
-    }) || candidates[0] || null;
-  }
 
   function smallCourseDetailResolution(record, schedules, teachers, schoolSwapIndex) {
     var originalKeys = originalTeacherKeys(record);
@@ -1418,12 +1389,6 @@ const DomainBilling = (() => {
     }, candidates);
   }
 
-  function smallCourseDetailSource(record, schedules, teachers, schoolSwapIndex) {
-    var resolution = smallCourseDetailResolution(record, schedules, teachers, schoolSwapIndex);
-    return resolution && resolution.canAutoAllocate
-      ? normalizeExpenseSource(resolution.source || DEFAULT_EXPENSE_SOURCE)
-      : '';
-  }
 
   function teacherDisplayName(value, teachers) {
     var keys = teacherKeys(value);

@@ -570,25 +570,10 @@ const DomainActivityCover = (() => {
     };
   }
 
-  function ledgerEntryInRange(entry, opts) {
-    opts = opts || {};
-    var date = entry && entry.date;
-    if (!date) return false;
-    var dates = opts.rangeDates || opts.dates;
-    if (Array.isArray(dates) && dates.length) {
-      return dates.map(normalizeDate).indexOf(date) >= 0;
-    }
-    return isDateInRange(date, opts.startDate, opts.endDate);
-  }
-
   function isLedgerSpend(entry) {
     return !!entry && entry.type === 'spend' && entry.delta < 0;
   }
 
-  function isExamLedgerSpend(entry, opts) {
-    // 段考欄位只看選定日期內的實際扣額度，不受事件名、備註或申請單格式影響。
-    return isLedgerSpend(entry) && ledgerEntryInRange(entry, opts);
-  }
 
   /**
    * 由帳本歷程重建段考備註三欄。

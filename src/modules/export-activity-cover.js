@@ -191,10 +191,6 @@ const ExportActivityCover = (() => {
     ].map(emailKey).filter(Boolean);
   }
 
-  function requestMatchesTeacher(request, teacher) {
-    return requestMatchesPageTeacher(request, teacher, 'duty');
-  }
-
   function requestMatchesPageTeacher(request, teacher, role) {
     if (!teacher) return true;
     var target = role === 'covered'

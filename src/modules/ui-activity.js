@@ -1,4 +1,3 @@
-import { ref, computed } from 'vue';
 /**
  * 自 v1 ui-activity.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -1434,13 +1433,6 @@ const UiBatchPanel = (() => {
           .forEach(function (el) { el.classList.remove('is-batch-selected'); });
       } catch (e) { /* ignore */ }
     }
-    function repaintAllBatchSlotDom() {
-      clearBatchSlotDom();
-      (batchSlots.value || []).forEach(function (s) {
-        if (s) paintBatchSlotCell(s.teacherEmail, s.dateStr, s.period, true);
-      });
-    }
-
     function clearBatchSlots() {
       batchSlots.value = [];
       batchSubTeacher.value = '';

@@ -65,12 +65,6 @@ const DomainMatch = (() => {
     return a === b;
   }
 
-  function subjectListHas(list, token) {
-    if (!token) return false;
-    var t = String(token).trim();
-    return (list || []).some(function (s) { return s === t; });
-  }
-
   function rankSubstitutionCandidates(opts) {
     const teachers = opts.teachers || [];
     const allSchedules = opts.allSchedules || [];

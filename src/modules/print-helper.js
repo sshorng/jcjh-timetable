@@ -70,13 +70,6 @@ function getPaperSignatureText(group, teacherKey, fallbackName) {
   return String(map[key] != null ? map[key] : (map[name.toLowerCase()] || '')).trim();
 }
 
-function getPaperGroupSignatureText(group, names) {
-  const list = (names || []).map(function (name) {
-    return getPaperSignatureText(group, name, name);
-  }).filter(Boolean);
-  return list.join('、');
-}
-
 function uniquePrintValues(values) {
   const seen = new Set();
   return (values || []).map(value => String(value == null ? '' : value).trim()).filter(value => {
@@ -379,7 +372,6 @@ function getPrintSignatureText(group, rows, ctx, getName, showTeacherName) {
 
 const OFFICIAL_COL_WIDTHS = Object.freeze([417, 400, 172, 137, 416, 461, 232, 708, 75, 1014, 74, 680, 261, 608, 407, 302, 851]);
 const OFFICIAL_DAY_COLS = Object.freeze([3, 3, 1, 3, 2]);
-const OFFICIAL_GRID_TOP_MM = 43.43;
 const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
 

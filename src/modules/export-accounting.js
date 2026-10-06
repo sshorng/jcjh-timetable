@@ -1341,16 +1341,6 @@ const __root = {
       return date && all.indexOf(date) === index;
     }).join('、');
   }
-  function accountingClassParts(value) {
-    return String(value == null ? '' : value)
-      .trim()
-      .split(/[、,，/／|｜\s]+/)
-      .map(function (part) { return part.replace(/班$/, '').trim(); })
-      .filter(function (part) {
-        return part && !/^0+$/.test(part) && part !== '巡堂';
-      });
-  }
-
   function fallbackReportRow(teacher, allSchedules, period) {
     var email = teacherEmail(teacher && teacher.email);
     var schedules = (allSchedules || []).filter(function (s) {

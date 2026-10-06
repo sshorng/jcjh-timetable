@@ -1,4 +1,3 @@
-import { ref } from 'vue';
 import { ensureXlsx } from './vendor-libs.js';
 /**
  * 自 v1 ui-admin.js 機械移植（port-modules.cjs）：
@@ -1088,17 +1087,6 @@ const UiAdmin = (() => {
       return isOvertimeScheduleEntry(schedule) ? attr + '＋超鐘點' : attr;
     }
 
-    function overtimePeriodLabel(period) {
-      var p = parseInt(period, 10);
-      if (p === 0) return '早自習';
-      if (p === 45) return '午休';
-      return p ? '第' + p + '節' : '';
-    }
-
-    function overtimeWeekdayLabel(day) {
-      return ['日', '一', '二', '三', '四', '五', '六', '日'][parseInt(day, 10)] || '';
-    }
-
     function getOvertimeExpenseSourceOptions() {
       var seen = {};
       var list = [];
@@ -1113,12 +1101,6 @@ const UiAdmin = (() => {
         }
         });
       return list;
-    }
-
-    function expenseSourceForSchedule(teacher, schedule) {
-      var resolution = expenseResolutionForSchedule(teacher, schedule);
-      return resolution && resolution.canAutoAllocate && resolution.status !== 'implicit-default'
-        ? resolution.source : '';
     }
 
     function expenseResolutionForSchedule(teacher, schedule, effectiveSchedule) {
