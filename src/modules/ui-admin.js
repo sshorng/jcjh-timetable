@@ -43,26 +43,6 @@ const UiAdmin = (() => {
     var accountingPeriod = deps.accountingPeriod;
     var reportMonth = deps.reportMonth;
 
-    var executeOptimisticAction = deps.executeOptimisticAction || async function (opts) {
-      opts = opts || {};
-      var snapshot = null;
-      if (typeof opts.optimistic === 'function') snapshot = opts.optimistic();
-      try {
-        var res = typeof opts.apiCall === 'function' ? await opts.apiCall() : null;
-        if (typeof opts.onSuccess === 'function') opts.onSuccess(res);
-        if (opts.successMessage) showToast(opts.successMessage, 'success', 3000);
-        return res;
-      } catch (err) {
-        console.error('背景同步失敗：', err);
-        if (typeof opts.rollback === 'function') opts.rollback(snapshot);
-        var errMsg = err && err.message ? String(err.message) : String(err || '未知錯誤');
-        var title = opts.errorTitle || '⚠️ 背景同步失敗警示';
-        var msg = (opts.errorMessagePrefix ? (opts.errorMessagePrefix + '：\n\n') : '') + errMsg + '\n\n（系統已嘗試還原本地資料，請檢查網路或數據後再試。）';
-        await showConfirm(msg, title, { alertOnly: true });
-        throw err;
-      }
-    };
-
     // 可注入既有 ref（app.js lazy 載入時共用同一組 ref，模板不需重建）
     function useRef(key, init) {
       var existing = deps[key];

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import path from 'node:path';
 import { UiMatch } from '../src/modules/ui-match.js';
 
 test('match panel tests（v1 移植）', () => {
@@ -42,7 +41,7 @@ test('match panel tests（v1 移植）', () => {
     // R14：媒合抽屜 DOM 簇 deps（測試樁；DOM 相關呼叫皆有 try 守衛）
     activeCell: ref(null), matchShowNoTeacherWarning: ref(false), matchEmptyReasons: ref(null),
     showMatchModal: ref(false), getExchangeWeekDates: () => [], exchangeWeekOffset: ref(0),
-    formatDateMMDD: (s) => String(s || ''), toLocalDateStr: (d) => '2026-09-07',
+    formatDateMMDD: (s) => String(s || ''), toLocalDateStr: () => '2026-09-07',
   };
   const api = UiMatch.create(deps);
   assert.equal(typeof window.__quotaPackCacheBust, 'function', 'bust 應由 create 註冊');

@@ -21,7 +21,6 @@ import { UiSubmit } from '../src/modules/ui-submit.js';
 import { UiCalendar } from '../src/modules/ui-calendar.js';
 import { useBackofficeStore } from '../src/stores/backoffice.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(here, '..', '..');
 const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
 if (!globalThis.location) globalThis.location = { origin: 'https://school.example', pathname: '/index.html' };
 
@@ -911,7 +910,6 @@ function runCalendarFallbackContractTest() {
     endIso: '20260904T085000',
     details: '測試事件'
   });
-  const showToastStub = (...args) => toasts.push(args);
   globalThis.window = {
     open: () => null,
     location: { href: 'https://school.example/index.html' },
@@ -1008,9 +1006,6 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
      // 2A：isMutualRec 已隨 personalChanges 移至 ui-history.js（具名匯出供測）
      const histSource = fs.readFileSync(path.join(here, '../src/modules/ui-history.js'), 'utf8');
      assert.match(histSource, /const isMutualRec = \(r\) => \{/, '個人異動互代判斷函式必須存在');
-     const histDeps = {
-              String
-     };
                const isMutualRec = UiHistory.create({
        computed: () => ({}),
        isQuotaDeductFee: fee => String(fee || '') === '扣額度' || String(fee || '') === '互代不結'

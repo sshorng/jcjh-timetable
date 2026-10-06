@@ -516,7 +516,6 @@ const UiSubmitHelpers = (() => {
     var consecAlertsA = deps.consecAlertsA;
     var consecAlertsB = deps.consecAlertsB;
     var isMutualCover = deps.isMutualCover;
-    var assignMutualDraftFromMatch = deps.assignMutualDraftFromMatch;
     var PERIOD8_FEE = deps.PERIOD8_FEE;
     var pendingRequestData = deps.pendingRequestData;
     var showMatchModal = deps.showMatchModal;

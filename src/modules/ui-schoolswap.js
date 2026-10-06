@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-schoolswap.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -17,7 +16,6 @@ import { showToast, showConfirm } from '../ui/toast.js';
 const UiSchoolSwap = (() => {
   function create(deps) {
     deps = deps || {};
-    var computed = deps.computed;
     var callGasApi = deps.callGasApi;
     var currentWeekDates = deps.currentWeekDates;
     var schoolSwapModalMode = deps.schoolSwapModalMode;
@@ -28,7 +26,6 @@ const UiSchoolSwap = (() => {
     var softRefreshInBackground = deps.softRefreshInBackground;
     var schoolSwapWeekdayNumber = deps.schoolSwapWeekdayNumber;
     var schoolSwapSaving = deps.schoolSwapSaving;
-    var isSingleWeek = deps.isSingleWeek;
 
 const openAddSchoolSwapModal = () => {
   const dates = currentWeekDates.value || [];

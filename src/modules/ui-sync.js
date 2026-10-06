@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 import { GasApi } from '../api/gas-client.js';
 /**
  * 自 v1 ui-sync.js 機械移植（port-modules.cjs）：
@@ -15,8 +14,6 @@ const UiSync = (() => {
   function create(deps) {
     deps = deps || {};
     var serverRequestChangesLocal = deps.serverRequestChangesLocal;
-    var computed = deps.computed;
-    var callGasApi = deps.callGasApi;
     var user = deps.user;
     var fetchPendingOnly = deps.fetchPendingOnly;
     var currentSemester = deps.currentSemester;

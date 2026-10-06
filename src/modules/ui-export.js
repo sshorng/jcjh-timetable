@@ -57,7 +57,6 @@ const UiExport = (() => {
     var resolveExchangeTargetCell = deps.resolveExchangeTargetCell;
     var findBaseScheduleSlot = deps.findBaseScheduleSlot;
     var isCourseAdjustmentOnlyRequest = deps.isCourseAdjustmentOnlyRequest;
-    var paperFlow = deps.paperFlow;
     var schoolExportStart = deps.schoolExportStart;
     var schoolExportEnd = deps.schoolExportEnd;
     var buildDefaultInvigilationTitle = deps.buildDefaultInvigilationTitle;

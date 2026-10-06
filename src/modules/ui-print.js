@@ -65,7 +65,6 @@ const UiPrint = (() => {
     var mutualDrafts = deps.mutualDrafts;
     var mutualNote = deps.mutualNote;
     var ensurePrintReady = deps.ensurePrintReady;
-    var paperFlow = deps.paperFlow;
     var addEventToCalendar = deps.addEventToCalendar;
 
 const generateFormHtml = (g, currentType) => {

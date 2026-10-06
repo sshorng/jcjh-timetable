@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-proxy.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -36,9 +35,6 @@ const UiProxy = (() => {
     var parseTeacherSubjects = deps.parseTeacherSubjects;
     var searchQuery = deps.searchQuery;
     var selectedSubject = deps.selectedSubject;
-    var canViewAllTimetables = deps.canViewAllTimetables;
-    var isMutualCover = deps.isMutualCover;
-    var proxySubmitEnabled = deps.proxySubmitEnabled;
 
 const canOperateOnTeacherEmail = (teacherEmail) => {
   if (!user.value) return false;

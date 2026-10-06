@@ -37,7 +37,7 @@ function parseDeps(file) {
 }
 
 function findCycles(graph) {
-  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const GRAY = 1, BLACK = 2;
   const color = new Map();
   const stack = [];
   const cycles = [];

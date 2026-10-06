@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-classview.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -33,7 +32,6 @@ const UiClassView = (() => {
     var selectedClass = deps.selectedClass;
     var selectedClassWeekDates = deps.selectedClassWeekDates;
     var classSubstitutionRows = deps.classSubstitutionRows;
-    var getWeekDayText = deps.getWeekDayText;
     var formatDateMMDD = deps.formatDateMMDD;
     var isQuotaDeductFee = deps.isQuotaDeductFee;
     var formatPeriodText = deps.formatPeriodText;
@@ -96,7 +94,6 @@ const UiClassView = (() => {
         if (isExchangeLikeRequest(subRecord)) {
         const peer = substitutionRecords.value.find(r => r.requestId === reqId && r.id !== subRecord.id);
         if (peer) {
-          const isSub1 = String(subRecord.id).endsWith('_1');
           const isSub2 = String(subRecord.id).endsWith('_2');
 
            if (isSub2) {

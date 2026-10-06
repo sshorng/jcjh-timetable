@@ -145,5 +145,11 @@ test('api contract tests（v1 移植，GAS 傳輸層）', async () => {
     allTeachers: true
   });
 
+  // 還原全域樁，避免污染同進程其他測試檔
+  globalThis.sessionStorage = prevSessionStorage;
+  globalThis.fetch = prevFetch;
+  globalThis.atob = prevAtob;
+  globalThis.location = prevLocation;
+
   console.log('api contract tests PASS');
 });

@@ -22,7 +22,6 @@ const KEYWORDS = new Set((
   'let,static,enum,await,async,get,set,of,yield,as,from'
 ).split(','));
 
-const W = 'A-Za-z_\\u4e00-\\u9fff\\u3400-\\u4dbf';
 // 狀態機剝除：註解／字串／模板（含嵌套 ${}）／正則一律換成空白（保留換行）。
 // 取代前面一串各自有死角的正則。
 function stripNoise(src) {
@@ -31,7 +30,6 @@ function stripNoise(src) {
   const n = src.length;
   const pushChunk = (s) => { out.push(s.replace(/[^\n]/g, ' ')); };
   // 行註解放最後處理（此时字串／模板／正則已清，殘留 // 必為註解；//前不限空白）
-  const isWord = (c) => /[\w$]/.test(c);
   // 回頭找上一個有效字元（跳空白／註解不計，只求近似）
   const prevSig = (pos) => {
     let j = pos - 1;

@@ -41,18 +41,6 @@ const DomainBilling = (() => {
       .filter(Boolean);
   }
 
-  function homeroomIsCourseAdjustmentOnly(record, substitutionRecords) {
-    if (isCourseAdjustmentOnlyRecord(record)) return true;
-    var ids = homeroomSourceRequestIds(record);
-    if (!ids.length) return false;
-    var matched = (substitutionRecords || []).filter(function (request) {
-      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
-      return requestId && ids.indexOf(requestId) >= 0;
-    });
-    return matched.length === ids.length && matched.length > 0
-      && matched.every(isCourseAdjustmentOnlyRecord);
-  }
-
   function isEmptySlotAssignmentRecord(record) {
     if (!record) return false;
     if (record.isEmptySlotAssign === true) return true;
@@ -1851,9 +1839,6 @@ const DomainBilling = (() => {
 
     var startDay = range.start;
     var endDay = range.end;
-    var weekdays = hasExplicitRange
-      ? listWeekdaysInRange(startDay, endDay)
-      : listWeekdaysInMonth(reportMonth);
     var monthlyRecords = (opts.substitutionRecords || []).filter(function (r) {
       if (!isActiveSubstitutionRecord(r)) return false;
       var date = recordDate(r);

@@ -269,7 +269,6 @@ const DateUtils = (() => {
 
   /** 取得 dateStr 所在週一至週五的 YYYY-MM-DD 陣列 */
   function getWeekDatesFrom(dateStr) {
-    const dates = [];
     const current = new Date(String(dateStr).indexOf('T') >= 0 ? dateStr : dateStr + 'T00:00:00');
     if (Number.isNaN(current.getTime())) {
       const fallback = new Date(String(dateStr).replace(/-/g, '/'));

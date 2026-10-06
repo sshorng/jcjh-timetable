@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-submit.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -97,7 +96,6 @@ const UiSubmit = (() => {
     var mutualDrafts = deps.mutualDrafts;
     var isAdmin = deps.isAdmin;
     var isQuotaDeductFee = deps.isQuotaDeductFee;
-    var isTimetableOnlyFee = deps.isTimetableOnlyFee;
     var buildLineInviteText = deps.buildLineInviteText;
     var successModalTitle = deps.successModalTitle;
     var successModalMessage = deps.successModalMessage;
@@ -107,7 +105,6 @@ const UiSubmit = (() => {
     var successActionRequests = deps.successActionRequests;
     var successFlowMode = deps.successFlowMode;
     var notificationsSuppressed = deps.notificationsSuppressed;
-    var openPaperPrintDraft = deps.openPaperPrintDraft;
     var openPaperPrintDraftFromCompare = deps.openPaperPrintDraftFromCompare;
     var openPaperPrintDraftForSubmittedRequests = deps.openPaperPrintDraftForSubmittedRequests;
     var canStaffProxySubmit = deps.canStaffProxySubmit;
@@ -129,7 +126,6 @@ const UiSubmit = (() => {
     var paperFlow = deps.paperFlow;
     var toLocalDateStr = deps.toLocalDateStr;
     var lookupTeacher = deps.lookupTeacher;
-    var getTeacherSubjectByEmail = deps.getTeacherSubjectByEmail;
 
     const runComparePreparation = async (mode, targetEmail, periodIdVal = '', subjectVal = '', classVal = '', isBatchCandidatePreview = false) => {
       if (!UiSubmitHelpers || !UiSubmitHelpers.prepCompare) {

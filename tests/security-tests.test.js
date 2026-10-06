@@ -5,11 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { generateFormHtml, buildExchangeRouteHtml } from '../src/modules/print-helper.js';
-const here = path.dirname(fileURLToPath(import.meta.url));
 
 test('security tests（v1 移植）', () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const root = path.join(here, '..', '..');
   const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'data.js'), 'utf8');
   const gasApiSource = fs.readFileSync(path.join(here, '..', 'src', 'api', 'gas-client.js'), 'utf8');
   const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');

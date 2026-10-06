@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 import { GasApi } from '../api/gas-client.js';
 /**
  * 自 v1 ui-data.js 機械移植（port-modules.cjs）：
@@ -597,7 +596,7 @@ const applyClassPayload = (res, className) => {
   classViewClassAwayEvents.value = (res.classAwayEvents || []).map(e => FieldMap.mapClassAwayEvent(e));
 };
 
-const preflightGoogleLogin = async (payload) => {
+const preflightGoogleLogin = async (_payload) => {
   try {
     const res = await fetchMetaData({ semesterId: currentSemester.value, force: true });
     if (!res || res.success === false || !['admin', 'staff', 'teacher'].includes(String(res.userRole || ''))) {

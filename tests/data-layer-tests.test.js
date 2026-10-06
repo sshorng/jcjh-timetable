@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import path from 'node:path';
 import { UiData } from '../src/modules/ui-data.js';
 
 test('data layer tests（v1 移植）', () => {
@@ -97,8 +96,6 @@ test('data layer tests（v1 移植）', () => {
   assert.equal(deps.substitutionRecords.value.length, 0, 'sig 未變應略過 convert');
 
   // saveClientSettings 純提示
-  let toasted = '';
-  const ctx2 = Object.assign({}, deps);
   const api2 = UiData.create(Object.assign({}, deps, {}));
   assert.equal(typeof api2.saveClientSettings, 'function');
 

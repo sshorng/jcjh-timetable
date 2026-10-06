@@ -1,4 +1,3 @@
-import { ref, computed } from 'vue';
 /**
  * 自 v1 ui-backoffice.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -16,48 +15,7 @@ import { showToast, showConfirm } from '../ui/toast.js';
 const UiBackoffice = (() => {
   function create(deps) {
     deps = deps || {};
-    var ref = deps.ref;
-    var callGasApiWithProgress = deps.callGasApiWithProgress;
-    var clearScheduleCache = deps.clearScheduleCache;
-    var quotaLedgerTeacher = deps.quotaLedgerTeacher;
-    var quotaLedgerRows = deps.quotaLedgerRows;
-    var quotaLedgerLoading = deps.quotaLedgerLoading;
     var _quotaLedgerCache = deps._quotaLedgerCache;
-    var QUOTA_LEDGER_CACHE_MS = deps.QUOTA_LEDGER_CACHE_MS;
-    var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
-    var semesterStartDate = deps.semesterStartDate;
-    var semesterEndDate = deps.semesterEndDate;
-    var leaveReasonOptions = deps.leaveReasonOptions;
-    var getHistoryEditDefaultSubFee = deps.getHistoryEditDefaultSubFee;
-    var historyEditForm = deps.historyEditForm;
-    var showHistoryEditModal = deps.showHistoryEditModal;
-    var requestsList = deps.requestsList;
-    var showImportTeachersModal = deps.showImportTeachersModal;
-    var teacherExcelData = deps.teacherExcelData;
-    var teacherExcelHeaders = deps.teacherExcelHeaders;
-    var teacherMappingFields = deps.teacherMappingFields;
-    var teacherImportPreview = deps.teacherImportPreview;
-    var showScheduleEditModal = deps.showScheduleEditModal;
-    var scheduleForm = deps.scheduleForm;
-    var showTeacherModal = deps.showTeacherModal;
-    var teacherModalMode = deps.teacherModalMode;
-    var teacherForm = deps.teacherForm;
-    var showOvertimePlanModal = deps.showOvertimePlanModal;
-    var overtimePlanTeacher = deps.overtimePlanTeacher;
-    var overtimePlanRows = deps.overtimePlanRows;
-    var overtimePlanPeriodEnd = deps.overtimePlanPeriodEnd;
-    var overtimePlanUsesFixedSlots = deps.overtimePlanUsesFixedSlots;
-    var showTeacherExpenseAuditModal = deps.showTeacherExpenseAuditModal;
-    var teacherExpenseAuditRows = deps.teacherExpenseAuditRows;
-    var teacherExpenseAuditSummary = deps.teacherExpenseAuditSummary;
-    var accountingPeriod = deps.accountingPeriod;
-    var reportMonth = deps.reportMonth;
-    var accountingPlanOptions = deps.accountingPlanOptions;
-    var excelData = deps.excelData;
-    var excelHeaders = deps.excelHeaders;
-    var mappingFields = deps.mappingFields;
-    var importPreview = deps.importPreview;
-    var bindFlagModal = deps.bindFlagModal;
     var callGasApi = deps.callGasApi;
     var computed = deps.computed;
     var loading = deps.loading;

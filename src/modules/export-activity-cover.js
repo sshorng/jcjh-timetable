@@ -442,7 +442,6 @@ const ExportActivityCover = (() => {
 
     // 可選：備註／事由需含活動關鍵字（事件名）才入表
     var activityHint = String(opts.activityName || opts.activity || '').trim();
-    var requireActivityHint = !!opts.requireActivityHint && !!activityHint;
 
     // grid[date][period] = [{ className, leaveName, subName, subject, fee }]
     var grid = {};

@@ -1,4 +1,4 @@
-import { computed, nextTick } from 'vue';
+import { nextTick } from 'vue';
 /**
  * 自 v1 ui-tour.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -14,8 +14,6 @@ import { showToast } from '../ui/toast.js';
 const UiTour = (() => {
   function create(deps) {
     deps = deps || {};
-    var computed = deps.computed;
-    var callGasApi = deps.callGasApi;
     var activeTab = deps.activeTab;
     var showMatchModal = deps.showMatchModal;
     var inputRequestDate = deps.inputRequestDate;
@@ -32,7 +30,6 @@ const UiTour = (() => {
     var getTodayString = deps.getTodayString;
     var user = deps.user;
     var openPaperPrintDraft = deps.openPaperPrintDraft;
-    var paperFlow = deps.paperFlow;
     var showPrintPreviewModal = deps.showPrintPreviewModal;
     var closePrintPreview = deps.closePrintPreview;
     var paperPrintDraft = deps.paperPrintDraft;
@@ -54,7 +51,6 @@ const UiTour = (() => {
     var classReadonlyMode = deps.classReadonlyMode;
     var getTeacherNameByEmail = deps.getTeacherNameByEmail;
     var getScheduleForDate = deps.getScheduleForDate;
-    var showOnboarding = deps.showOnboarding;
     var activeCell = deps.activeCell;
     var closeMatchModal = deps.closeMatchModal;
     let _tourDemoCellCache = null; // 重用示範格，少重算／少重複 API

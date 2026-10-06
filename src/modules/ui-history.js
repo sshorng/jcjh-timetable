@@ -1,4 +1,3 @@
-import { computed } from 'vue';
 /**
  * 自 v1 ui-history.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -399,7 +398,7 @@ const UiHistory = (() => {
         return v ? `${mmdd}(${day}) 第${period}節 ${v} ${className}${subject}` : `${mmdd}(${day}) 第${period}節 ${className}${subject}`;
       };
 
-      const fmtPeerSlot = (dateStr, period) => {
+      const fmtPeerSlot = (dateStr, _period) => {
         const mmdd = DateUtils.formatDateMMDD(dateStr);
         const dow = new Date(dateStr.replace(/-/g, '/')).getDay();
         const day = DateUtils.getWeekDayText(dow);
@@ -561,7 +560,7 @@ const UiHistory = (() => {
                   date: endpoint.date,
                   period: endpoint.period,
                   classLine: fmtClassLine(endpoint.date, endpoint.period, className || (attr === '巡堂' ? '巡堂' : ''), subject, ''),
-                  desc: `🔁 全校對調：${row.name}（原${DateUtils.formatDateMMDD(endpoint.sourceDate)} ${formatPeriodText(endpoint.sourcePeriod)}）`,
+                  desc: `🔁 全校對調：${row.name}（原${DateUtils.formatDateMMDD(endpoint.sourceDate)} ${DateUtils.formatPeriodText(endpoint.sourcePeriod)}）`,
                   serial: row.id || 'SWAP',
                   isPast: endpoint.date < todayStr,
                   statusClass: 'tag-blue',

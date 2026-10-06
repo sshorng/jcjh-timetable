@@ -413,11 +413,7 @@ const DomainClassAway = (() => {
     if (!/^\d{4}-\d{2}$/.test(ym)) return [];
     var y = parseInt(ym.slice(0, 4), 10);
     var m = parseInt(ym.slice(5, 7), 10) - 1;
-    var d = new Date(y, m, 1);
-    var dow = d.getDay();
-    var monDiff = dow === 0 ? 1 : (dow === 1 ? 0 : 8 - dow);
-    // 若 1 號已是週一 monDiff=0；若週日則下週一；其餘推到下一個週一
-    // 更正：月內第一個週一
+    // 月內第一個週一：逐日推進
     var first = new Date(y, m, 1);
     while (first.getDay() !== 1) {
       first.setDate(first.getDate() + 1);

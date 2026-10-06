@@ -1,4 +1,3 @@
-import { ref, computed } from 'vue';
 /**
  * 自 v1 ui-timetable.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -43,7 +42,6 @@ const UiTimetable = (() => {
     var isMutualCover = deps.isMutualCover;
     var DAC = deps.DAC;
     var isMutualActivitySlotInRange = deps.isMutualActivitySlotInRange;
-    var getMutualDraftAt = deps.getMutualDraftAt;
     var mutualAwayClasses = deps.mutualAwayClasses;
     var mutualActivityStart = deps.mutualActivityStart;
     var mutualActivityEnd = deps.mutualActivityEnd;
@@ -502,7 +500,6 @@ const UiTimetable = (() => {
     var lookupTeacher2 = deps.lookupTeacher || function () { return null; };
     var isCombinedClassFn = deps.isCombinedClass || function () { return false; };
     var notificationsSuppressed = deps.notificationsSuppressed || { value: false };
-    var paperFlow = deps.paperFlow;
     var openLineMessageEditor = deps.openLineMessageEditor || function () {};
     var getLineHandledSlot = deps.getLineHandledSlot
       || (typeof window !== 'undefined' && UiLineTemplate && UiLineTemplate.getLineHandledSlot)
@@ -510,7 +507,8 @@ const UiTimetable = (() => {
     var isPaperFlowRequest = deps.isPaperFlowRequest || function () { return false; };
     var isProxySubmitRequest = deps.isProxySubmitRequest || function () { return false; };
     var watchFn = deps.watch || function () {};
-    var showToastFn = (typeof showToast === 'function') ? showToast : function () {};
+    // v2 無 showToast 全域，一律走 deps 注入；未注入則為空操作
+    var showToastFn = deps.showToast || function () {};
 
     const triangleTeacherKey = (value) => String(value || '').trim().toLowerCase();
     const triangleSlotKey = (slot) => {
@@ -2503,8 +2501,6 @@ const UiTimetable = (() => {
       var matchDisplayCount = matchDeps.matchDisplayCount;
       var matchShowNoTeacherWarning = matchDeps.matchShowNoTeacherWarning;
       var recommendedTeachers = matchDeps.recommendedTeachers;
-      var QUOTA_DEDUCT_FEE = matchDeps.QUOTA_DEDUCT_FEE;
-      var ACTIVITY_PUBLIC_FEE = matchDeps.ACTIVITY_PUBLIC_FEE;
 
       recommendationLoading.value = true;
       matchMode.value = 'substitution';

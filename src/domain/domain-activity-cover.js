@@ -843,7 +843,7 @@ const DomainActivityCover = (() => {
    * remaining ≥ 1 → 扣額度；否則 → 活動公費
    * 第8節請用 resolveActivityFee（計畫經費，不走額度）
    */
-  function feeByReleaseBalance(remainingBefore, isReleasedThisSlot) {
+  function feeByReleaseBalance(remainingBefore, _isReleasedThisSlot) {
     if (canSpendQuota(remainingBefore)) return QUOTA_DEDUCT_FEE;
     return ACTIVITY_PUBLIC_FEE;
   }
@@ -1010,7 +1010,7 @@ const DomainActivityCover = (() => {
   }
 
   /** 送出後是否應扣折抵額度：經費為「扣額度」即扣 */
-  function shouldDeductQuota(fee, activityMode) {
+  function shouldDeductQuota(fee, _activityMode) {
     return isQuotaDeductFee(fee);
   }
 

@@ -791,7 +791,6 @@ const UiMutualSubmit = (() => {
             );
           }
           var batchId = 'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-          var leaveEmail = chunk[0].leaveEmail;
           var leaveName = chunk[0].leaveName;
           var stamp = Date.now();
           var serialRoot = 'SUB' + (1000 + Math.floor(Math.random() * 9000));

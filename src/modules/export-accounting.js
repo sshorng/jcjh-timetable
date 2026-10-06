@@ -774,14 +774,6 @@ const __root = {
     return sourcePlan || allocationPlan || '';
   }
 
-  function noteDates(records) {
-    return (records || []).map(function (record) {
-      return shortDate(record.date);
-    }).filter(Boolean).filter(function (date, index, all) {
-      return all.indexOf(date) === index;
-    }).join('、');
-  }
-
   function notePeriodCount(records) {
     return (records || []).reduce(function (sum, record) {
       return sum + periodCount(record, false);
@@ -1015,18 +1007,6 @@ const __root = {
       .filter(Boolean);
   }
 
-  function homeroomIsCourseAdjustmentOnly(record, substitutionRecords) {
-    if (isCourseAdjustmentOnlyRecord(record)) return true;
-    var ids = sourceRequestIds(record);
-    if (!ids.length) return false;
-    var matched = (substitutionRecords || []).filter(function (request) {
-      var requestId = String(request && (request.requestId || request.id || request['申請單ID']) || '').trim();
-      return requestId && ids.indexOf(requestId) >= 0;
-    });
-    return matched.length === ids.length && matched.length > 0
-      && matched.every(isCourseAdjustmentOnlyRecord);
-  }
-
   function homeroomTimeRangeBounds(raw) {
     var s = String(raw == null ? '' : raw).trim()
       .replace(/[～—–]/g, '~').replace(/\s*至\s*/g, '~').replace(/\s*-\s*/g, '~');
@@ -1115,16 +1095,6 @@ const __root = {
       .filter(Boolean)
       .join('\n')
       .trim();
-  }
-
-  function isPublic(record) {
-    if (isTimetableOnlyRecord(record)) return false;
-    var fee = subFee(record);
-    var why = reason(record);
-    if (['\u516c\u8cbb\u4ee3\u8ab2', '\u5b78\u6821\u79fb\u64a5', '\u6d3b\u52d5\u516c\u8cbb', '\u516c\u8cbb', '\u4ee3\u8ab2\u8cbb'].indexOf(fee) >= 0) return true;
-    if (['\u81ea\u8cbb\u4ee3\u8ab2', '\u81ea\u8cbb'].indexOf(fee) >= 0) return false;
-    if (/\u516c\u5047\u81ea\u7406|\u4e8b\u5047|\u75c5\u5047|\u88dc\u4f11/.test(why)) return false;
-    return true;
   }
 
   function isSelfPaidRecord(record) {

@@ -11,7 +11,7 @@ test('mount：App 掛載不報錯、首屏有內容', async () => {
   const errors = [];
   try {
     const app = createV2App();
-    app.config.warnHandler = (msg, trace) => { warnings.push(String(msg)); };
+    app.config.warnHandler = (msg, _trace) => { warnings.push(String(msg)); };
     app.config.errorHandler = (err) => { errors.push(String((err && err.message) || err)); };
     const el = document.createElement('div');
     el.id = 'app';
