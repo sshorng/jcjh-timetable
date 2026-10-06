@@ -881,6 +881,7 @@
       :is-mobile="isMobile"
       :class-schedules="classSchedules"
       :class-substitution-map="classSubstitutionMap"
+      :is-combined-class="isCombinedClass"
       :class-change-summary="classChangeSummary"
       :copy-class-readonly-link="copyClassReadonlyLink"
       :change-class-week="changeClassWeek"

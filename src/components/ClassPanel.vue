@@ -18,14 +18,16 @@
                   <button class="btn btn-secondary btn-week-round" @click="changeClassWeek(1)" title="下一週">▶</button>
                   <button class="btn btn-secondary btn-sm-78-ml" @click="goToClassThisWeek">本週</button>
                 </div>
-                <!-- 班級按鈕（唯讀深連結時鎖定該班） -->
+                <!-- 班級按鈕（唯讀深連結時鎖定該班；併班項目不設按鈕，其課程併入各單班顯示） -->
                 <div v-if="!classReadonlyMode" class="flex-wrap-gap-6" style="margin:12px 0;">
-                  <button v-for="cls in classList" :key="cls"
-                    class="btn class-pick-btn"
-                    :class="selectedClass === cls ? 'class-pick-btn-active' : 'btn-secondary'"
-                    style="padding:4px 12px;font-size:0.8rem;"
-                    @click="selectedClass === cls ? (selectedClass = '') : selectClassForView(cls)"
-                  >{{ cls }}</button>
+                  <template v-for="cls in classList" :key="cls">
+                    <button v-if="!isCombinedClass(cls)"
+                      class="btn class-pick-btn"
+                      :class="selectedClass === cls ? 'class-pick-btn-active' : 'btn-secondary'"
+                      style="padding:4px 12px;font-size:0.8rem;"
+                      @click="selectedClass === cls ? (selectedClass = '') : selectClassForView(cls)"
+                    >{{ cls }}</button>
+                  </template>
                 </div>
                 <div v-else style="margin:12px 0;font-size:0.85rem;color:var(--text-secondary);">
                   目前檢視：<strong>{{ selectedClass }}</strong>
@@ -121,6 +123,7 @@ defineProps({
   classViewerReadonly: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   isAdmin: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   classList: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  isCombinedClass: { type: Function, required: true },
   selectedClassWeekDates: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   classWeekNumber: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   timetablePeriods: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
