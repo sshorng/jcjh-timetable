@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import path from 'node:path';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-test('permission tests（後端合約，v1/v2 共用）', () => {
+test('permission tests（後端合約，v1/v2 共用）', async () => {
   const fs = require('fs');
   const path = require('path');
   const vm = require('vm');
@@ -93,7 +93,8 @@ test('permission tests（後端合約，v1/v2 共用）', () => {
   vm.runInThisContext(fs.readFileSync(path.join(here, '..', 'code.gs'), 'utf8'), { filename: 'code.gs' });
   const realRestoreMutualQuotaForRequests = restoreMutualQuotaForRequests_;
   global.window = global;
-  vm.runInThisContext(fs.readFileSync(path.join(here, '..', 'v1-backup', 'field-map.js'), 'utf8'), { filename: 'field-map.js' });
+  // v1-backup 不進版控（CI 無此檔）：改用 V2 ESM 版 FieldMap（行為一致，billing-data-shape 等已覆蓋）
+  window.FieldMap = (await import('../src/domain/field-map.js')).default;
   assert.strictEqual(
     window.FieldMap.mapTeacher({ '教師Email': TEACHING_GROUP_EMAIL, '職務': '教學組長', '系統角色': 'teacher' }).role,
     'admin',

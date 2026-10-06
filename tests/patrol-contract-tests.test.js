@@ -6,7 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-test('patrol contract tests（後端合約，v1/v2 共用）', () => {
+test('patrol contract tests（後端合約，v1/v2 共用）', async () => {
   const context = { console, Object, String, Array, Number, RegExp, Math, JSON };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(here, '..', 'code.gs'), 'utf8'), context, { filename: 'code.gs' });
@@ -93,9 +93,8 @@ test('patrol contract tests（後端合約，v1/v2 共用）', () => {
     });
   });
 
-  const fieldContext = { window: {} };
-  vm.createContext(fieldContext);
-  vm.runInContext(fs.readFileSync(path.join(here, '..', 'v1-backup', 'field-map.js'), 'utf8'), fieldContext, { filename: 'field-map.js' });
+  // v1-backup 不進版控（CI 無此檔）：改用 V2 ESM 版 FieldMap
+  const fieldContext = { window: { FieldMap: (await import('../src/domain/field-map.js')).default } };
   const mapped = fieldContext.window.FieldMap.mapSchedule({
     '班級': '', '科目': '', '課堂屬性': '巡堂', '教師姓名': '甲', '教師Email': 'a@school.example', '星期': 2, '節次': 3
   });
