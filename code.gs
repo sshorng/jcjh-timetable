@@ -5449,9 +5449,26 @@ function buildPublicClassPayload_(semesterId, className) {
       || scope === "全校" || scope === "全校適用" || scope === "全校班級";
     if (isSchoolWide) return true;
     var eventClasses = event["班級清單"] || event.classes || event.classList || "";
-    return classNames.some(function (className) {
-      return classFieldIncludes_(eventClasses, className);
-    });
+    // 僅該班相關：舊寫誤用全校班級名清單比對（classNames），等於把他班事件全放行
+    if (!cls) return true;
+    return classFieldIncludes_(eventClasses, cls);
+  }).map(function (event) {
+    // 公開僅需顯示欄：備註（管理員自由填寫）不外送；前端 mapClassAwayEvent 未讀它
+    return {
+      "事件ID": event["事件ID"] || event.id || "",
+      "學期代號": event["學期代號"] || event.semesterId || sid,
+      "事件名稱": event["事件名稱"] || event.name || "",
+      "起日": event["起日"] || event.startDate || "",
+      "迄日": event["迄日"] || event.endDate || "",
+      "適用範圍": event["適用範圍"] || event.scope || "",
+      "班級清單": event["班級清單"] || event.classes || event.classList || "",
+      "停課節次": event["停課節次"] || "",
+      "鐘點規則": event["鐘點規則"] || "",
+      "可進互代": event["可進互代"] || "",
+      "啟用": event["啟用"] || "",
+      "起始節次": event["起始節次"] || "",
+      "結束節次": event["結束節次"] || ""
+    };
   });
   var schoolSwaps = getActiveSchoolSwapRows_(sid).map(schoolSwapPublicRow_).filter(function (row) { return !!row; });
 

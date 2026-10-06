@@ -117,7 +117,7 @@ export const useDataStore = defineStore('data', () => {
     };
     const storedReportPeriod = readStoredReportPeriod();
     const todayForReport = DateUtils && typeof DateUtils.getTodayString === 'function'
-      ? DateUtils.getTodayString() : new Date().toISOString().slice(0, 10);
+      ? DateUtils.getTodayString() : DateUtils.toLocalDateStr(new Date());
     const reportMonth = ref(storedReportPeriod ? storedReportPeriod.month : todayForReport.slice(0, 7));
     const accountingPeriodMonth = ref(reportMonth.value);
     const monthEndDate = (month) => {

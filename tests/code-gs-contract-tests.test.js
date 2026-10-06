@@ -494,6 +494,17 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   // 2A：classSubstitutionMap 已移至 ui-schedule.js
   const scheduleSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-schedule.js'), 'utf8');
   assert.match(scheduleSource, /buildClassSubstitutionMap\(classSubstitutionRows\.value\)/, '班級課表也應使用實際代課優先的異動整理');
+  // 公開課表事件：僅該班相關（舊寫誤用全校班級名清單比對等於全放行）
+  const pubStart = source.indexOf('function buildPublicClassPayload_');
+  const pubEnd = source.indexOf('function assertPublicClassRateLimit_', pubStart);
+  assert.ok(pubStart >= 0 && pubEnd > pubStart, '公開課表 payload 建構函式必須存在');
+  const pubSource = source.slice(pubStart, pubEnd);
+  assert.match(pubSource, /if \(!cls\) return true;\s*\n\s*return classFieldIncludes_\(eventClasses, cls\)/, '公開事件應按請求班級篩選');
+  assert.doesNotMatch(pubSource, /classNames\.some\(function \(className\)/, '公開事件不可再用全校班級名清單比對');
+  const pubEventBase = pubSource.indexOf('getSemesterClassAwayCached_');
+  const pubEventMap = pubSource.slice(pubSource.indexOf('.map(function (event)', pubEventBase));
+  assert.ok(pubEventMap.includes('"事件名稱"'), '公開事件應保留顯示欄');
+  assert.ok(!/"備註":/.test(pubEventMap), '公開事件不可外送備註欄（管理員自由填寫）');
 
   console.log('code.gs exchange contract tests PASS');
 

@@ -99,7 +99,7 @@ const UiReport = (() => {
 const getBillingRequestWindow = () => {
   if (!isValidReportPeriod({ start: reportStartDate.value, end: reportEndDate.value })) return null;
   const today = DateUtils && typeof DateUtils.getTodayString === 'function'
-    ? DateUtils.getTodayString() : new Date().toISOString().slice(0, 10);
+    ? DateUtils.getTodayString() : DateUtils.toLocalDateStr(new Date());
   const startParts = reportStartDate.value.split('-').map(Number);
   const todayParts = today.split('-').map(Number);
   const startUtc = Date.UTC(startParts[0], startParts[1] - 1, startParts[2]);

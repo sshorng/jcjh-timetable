@@ -9,6 +9,7 @@
  * Eager 載入（setup 內委派，需先於 app.js）。create(deps) 注入 refs／回呼。
  */
 import { showToast } from '../ui/toast.js';
+import DateUtils from '../domain/date-utils.js';
 // 課表匯出已遷 ui-report 按需載入（export-lazy.js）；列印輔助維持靜態（預覽為同步路徑）
 import {
   generateFormHtml as buildFormHtml,
@@ -285,7 +286,7 @@ const getPrintPreviewPngBlob = async () => {
 };
 
 const getPrintPreviewFileName = () => {
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = DateUtils.toLocalDateStr(new Date());
   return '調代課單預覽-' + stamp + '.png';
 };
 

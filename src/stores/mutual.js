@@ -212,7 +212,7 @@ export const useMutualStore = defineStore('mutual', () => {
     const detailSubRecord = ref(null);
     const historyFilterMode = ref('all');
     const historyTypeFilter = ref('all');
-    const historyFilterDate = ref(new Date().toISOString().split('T')[0]);
+    const historyFilterDate = ref(DateUtils.toLocalDateStr(new Date()));
     const historySearchQuery = ref('');
     const historyPage = ref(1);
     const isHistoryExchangeType = (record) => {

@@ -297,7 +297,7 @@ const showTourDemoInvite = async () => {
     const cls = ((demo.classData.className || '') + (demo.classData.subject || '')).trim();
     leaveSlot = mmdd + (dayTxt ? '(' + dayTxt + ')' : '') + ' 第' + demo.period + '節' + (cls ? ' ' + cls : '');
   }
-  const today = typeof getTodayString === 'function' ? getTodayString() : new Date().toISOString().slice(0, 10);
+  const today = typeof getTodayString === 'function' ? getTodayString() : DateUtils.toLocalDateStr(new Date());
   tourDemoInvite.value = {
     serial: 'DEMO-導覽',
     createdAt: today,

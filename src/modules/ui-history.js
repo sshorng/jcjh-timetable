@@ -268,7 +268,8 @@ const UiHistory = (() => {
       const dow = d.getDay();
       const monday = new Date(d);
       monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-      return monday.toISOString().slice(0, 10);
+      // 取本地週一（toISOString 會在 UTC+ 時區把週一算成週日；同 domain-billing#getWeekKey 修法）
+      return DateUtils.toLocalDateStr(monday);
     };
     const getMonthStart = (dateStr) => dateStr.slice(0, 7);
 
