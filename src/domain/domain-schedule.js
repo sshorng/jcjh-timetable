@@ -10,6 +10,31 @@ import DateUtils from './date-utils.js';
  * 索引、圖論遞推調代鏈、lookup、pending 疊加
  */
 const DomainSchedule = (() => {
+  /** 列的節次（支援試算表中文欄名；billing／class-away 共用，原 billing 內建） */
+  function recordPeriod(record) {
+    if (!record) return NaN;
+    var value = record.period !== undefined && record.period !== null && record.period !== ''
+      ? record.period
+      : (record['節次'] !== undefined && record['節次'] !== null && record['節次'] !== ''
+        ? record['節次'] : record.requestPeriod);
+    return parseInt(value, 10);
+  }
+
+  /** 是否落在「週鐘點節次」（早自習0、1–7 或午休；原 billing 內建，class-away 改道至此斷循環） */
+  function isWeeklyHoursSlot(s) {
+    if (!s) return false;
+    var p = recordPeriod(s);
+    var isSpecial = p === 0 || p === 45;
+    var isLunch = p === 45 || (DateUtils && DateUtils.isLunchPeriod
+      && DateUtils.isLunchPeriod(s.period));
+    if (!(isSpecial || isLunch || (p >= 1 && p <= 7))) return false;
+    var a = String(s.attr || s['課堂屬性'] || '').trim();
+    if (!a || a === '一般' || a === '基本' || a === '超鐘點' || a === '抽離') return true;
+    // 舊匯入可能寫「實支」仍計（與有課同）
+    if (a === '實支') return true;
+    return false;
+  }
+
   /** 課堂屬性＝巡堂（顯示、不算鐘點、不可調出、可當空堂） */
   function isPatrolAttr(attr) {
     var a = String(attr || '').trim();
@@ -1135,6 +1160,8 @@ const DomainSchedule = (() => {
 
   return {
     buildSubstitutionsLookup: buildSubstitutionsLookup,
+    recordPeriod: recordPeriod,
+    isWeeklyHoursSlot: isWeeklyHoursSlot,
     isEmptySlotAssignmentRecord: isEmptySlotAssignmentRecord,
     selectActualDutyRecord: selectActualDutyRecord,
     buildClassSubstitutionMap: buildClassSubstitutionMap,

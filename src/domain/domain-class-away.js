@@ -3,7 +3,6 @@
  * IIFE 掛載改 ESM default export；body 與 v1 逐字一致。
  */
 import DateUtils from './date-utils.js';
-import DomainBilling from './domain-billing.js';
 import DomainSchedule from './domain-schedule.js';
 
 /**
@@ -505,15 +504,8 @@ const DomainClassAway = (() => {
     var n = 0;
     (allSchedules || []).forEach(function (s) {
       if (String(s.teacherEmail || '').toLowerCase() !== em) return;
-      // 與 DomainBilling.isWeeklyHoursSlot 對齊
-      if (DomainBilling && typeof DomainBilling.isWeeklyHoursSlot === 'function') {
-        if (!DomainBilling.isWeeklyHoursSlot(s)) return;
-      } else {
-        var p = parseInt(s.period, 10);
-        if (!(p === 0 || p === 45 || (p >= 1 && p <= 7))) return;
-        var attr = String(s.attr || '').trim();
-        if (attr && attr !== '基本' && attr !== '一般' && attr !== '超鐘點' && attr !== '抽離' && attr !== '實支' && attr !== '代課') return;
-      }
+      // 唯一真相在 DomainSchedule（與 billing 同源；斷 billing↔class-away 循環）
+      if (!DomainSchedule.isWeeklyHoursSlot(s)) return;
       // 併班：任一班在 reduce 名單即計
       var classes = [];
       if (DateUtils && typeof DateUtils.parseCombinedClasses === 'function') {

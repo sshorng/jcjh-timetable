@@ -516,14 +516,8 @@ const DomainBilling = (() => {
     return normalizeDateKey(record && (record.date || record['異動日期'] || record.requestDate));
   }
 
-  function recordPeriod(record) {
-    if (!record) return NaN;
-    var value = record.period !== undefined && record.period !== null && record.period !== ''
-      ? record.period
-      : (record['節次'] !== undefined && record['節次'] !== null && record['節次'] !== ''
-        ? record['節次'] : record.requestPeriod);
-    return parseInt(value, 10);
-  }
+  // 下沉 domain-schedule（class-away 改道至此，斷 billing↔class-away 循環）；此處轉發保相容
+  var recordPeriod = DomainSchedule.recordPeriod;
 
   function recordType(record) {
     return String(record && (record.type || record['異動類型']) || '').trim().toLowerCase();
@@ -1225,19 +1219,7 @@ const DomainBilling = (() => {
     * - 屬性：基本／一般／抽離（超鐘點由特殊標記判定；代課另列公付代課）
    * - 不含：巡堂、第8、課輔（第8）、單雙週課輔
    */
-  function isWeeklyHoursSlot(s) {
-    if (!s) return false;
-    var p = recordPeriod(s);
-    var isSpecial = p === 0 || p === 45;
-    var isLunch = p === 45 || (DateUtils && DateUtils.isLunchPeriod
-      && DateUtils.isLunchPeriod(s.period));
-    if (!(isSpecial || isLunch || (p >= 1 && p <= 7))) return false;
-    var a = String(s.attr || s['課堂屬性'] || '').trim();
-    if (!a || a === '一般' || a === '基本' || a === '超鐘點' || a === '抽離') return true;
-    // 舊匯入可能寫「實支」仍計（與有課同）
-    if (a === '實支') return true;
-    return false;
-  }
+  var isWeeklyHoursSlot = DomainSchedule.isWeeklyHoursSlot;
 
   /** 請假／代課是否落在「週鐘點節次」（早自習0、1–7 或午休） */
   function isWeeklyHoursPeriod(period) {

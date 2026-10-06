@@ -70,7 +70,8 @@ test('dep graph（import 循環盤點＋頂層跨模組讀取禁令）', () => {
     const rel = path.relative(srcDir, f);
     graph.set(rel, parseDeps(f));
   }
-  // 現況：domain／stores 存在歷史循環，但一律走「函式內＋typeof 守衛」呼叫，
+  // 現況：domain 層已無循環（recordPeriod／isWeeklyHoursSlot 下沉 schedule 後斷開）；
+  // stores 間仍有歷史循環，但一律走「函式內＋typeof 守衛」呼叫（idiomatic Pinia 跨 store 存取），
   // 故運行安全。此測試鎖定真正的危險：模組頂層（求值期）直接讀取他模組繫結
   // （循環下會 TDZ 炸裂）。循環清單僅印出供重構參考，不擋。
   const cycles = findCycles(graph);
