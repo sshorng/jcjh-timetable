@@ -2297,529 +2297,92 @@
            §UI-3 Modal：智慧媒合 / 對比 / 成功 / 後台表單
            ════════════════════════════════════ -->
       <!-- 3.1 智慧媒合建議：右側抽屜（不遮主課表） -->
-      <div v-if="showMatchModal" class="match-drawer-overlay" @click.self="closeMatchModal">
-        <div class="match-drawer" data-tour="match-drawer" @click.stop>
-          <div class="modal-header match-drawer-header">
-            <h3>🔍 智慧媒合與調代課建議</h3>
-            <button class="btn-close" @click="closeMatchModal">&times;</button>
-          </div>
-          <div class="modal-body match-drawer-body" style="padding-top: 8px;" data-tour="match-list">
-            <div class="match-mode-selector" data-tour="match-mode-tabs" style="margin-bottom: 12px; display: flex; gap: 8px;" v-if="!isBatchMatchFlow && matchMode !== 'triangle'">
-              <button class="match-mode-btn flex-1" :class="{ active: matchMode === 'substitution' }" @click="changeMatchMode('substitution')">
-                找人代課
-              </button>
-              <button
-                class="match-mode-btn flex-1"
-                data-tour="exchange-mode-btn"
-                :class="{ active: matchMode === 'exchange' }"
-                :disabled="activeCell.classData && (activeCell.classData.isPatrol || activeCell.classData.attr === '巡堂')"
-                :title="(activeCell.classData && (activeCell.classData.isPatrol || activeCell.classData.attr === '巡堂')) ? '巡堂不可調課' : ((activeCell.classData && activeCell.classData.restriction === 'restricted') ? '綁課可調課，點選後會提醒確認' : '')"
-                @click="changeMatchMode('exchange')"
-              >
-                找人調課
-              </button>
-            </div>
-            <div v-if="!isBatchMatchFlow && activeCell.classData && (activeCell.classData.isPatrol || activeCell.classData.attr === '巡堂')" style="font-size:0.75rem;color:#5b21b6;margin:-4px 0 10px;padding:6px 10px;background:#f5f3ff;border-radius:6px;border:1px solid #ddd6fe;">
-              本節為巡堂：不計鐘點、不需系統代課；若要請人代巡，請私下安排
-            </div>
-            <div v-if="!isBatchMatchFlow && activeCell.classData && (activeCell.classData.isPullOut || activeCell.classData.attr === '抽離')" style="font-size:0.75rem;color:#0f766e;margin:-4px 0 10px;padding:6px 10px;background:#f0fdfa;border-radius:6px;border:1px solid #99f6e4;">
-              本節為抽離：調課僅可與另一節「抽離」互調，不可與一般課調課；可找人代課
-            </div>
-             <div v-if="!isBatchMatchFlow && activeCell.classData && activeCell.classData.restriction === 'restricted'" style="font-size:0.75rem;color:#b45309;margin:-4px 0 10px;padding:6px 10px;background:#fffbeb;border-radius:6px;border:1px solid #fde68a;">
-               此堂為綁課：建議代課；特殊狀況仍可調課（切換時會提醒）
-             </div>
-             <div
-               v-if="!isBatchMatchFlow && isAdmin && activeCell.classData && (isCombinedClass(activeCell.classData.className) || hasScheduleSpecialTag(activeCell.classData, '併班'))"
-               style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:-4px 0 12px;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;"
-             >
-               <div style="font-size:0.78rem;color:#9a3412;line-height:1.45;">
-                  <strong>合班課堂</strong>：任課教師請假，由同節原本有課的其他併班任課教師代課。
-               </div>
-                <button type="button" class="btn btn-primary btn-sm" @click="startCombinedReturn">↩ 併班上課</button>
-             </div>
-              <!-- 批次調課固定逐組配對，每組可各自選對調教師。 -->
-              <div v-if="isBatchExchangeFlow" class="match-mode-selector" style="margin-bottom: 12px; display:flex; flex-direction:column; gap:8px;">
-                <div class="match-mode-btn active" style="width:100%;text-align:center;cursor:default;">
-                  ⇄ 批次調課（{{ batchSlots.length }} 組）
-                </div>
-                <div class="batch-slot-list" style="max-height:200px;">
-                 <div v-for="s in batchSlots" :key="'be'+s.key" class="batch-slot-item" :class="{ 'is-active-slot': batchActiveSlotKey === s.key, 'is-assigned-slot': !!(s.subTeacherEmail && s.targetDate) }" @click="selectBatchSlotForMatch(s.key)">
-                   <span>
-                     {{ s.teacherName }}　{{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
-                     <small v-if="s.subTeacherEmail && s.targetDate" style="display:block;color:var(--color-success);margin-top:2px;">
-                       ↔ {{ s.subTeacherName }}　{{ formatDateMMDD(s.targetDate) }}({{ getWeekDayText(s.targetDayOfWeek) }}) {{ formatPeriodText(s.targetPeriod) }} {{ s.targetClassName }}{{ s.targetSubject }}
-                     </small>
-                     <small v-else style="display:block;color:var(--text-muted);margin-top:2px;">尚未指定對調課堂</small>
-                     <small v-if="s.exchangeSubmissionUnknown" style="display:block;color:#b91c1c;margin-top:2px;">送出結果不明，請重整確認歷程</small>
-                     <small v-else-if="s.exchangeValidationError || s.exchangeSubmitError" style="display:block;color:#b91c1c;margin-top:2px;">{{ s.exchangeValidationError || s.exchangeSubmitError }}</small>
-                     <small v-if="s.exchangeSubmitted" style="display:block;color:var(--color-success);margin-top:2px;">已送出</small>
-                   </span>
-                   <button v-if="s.subTeacherEmail && s.targetDate && !s.exchangeSubmitted && !s.exchangeSubmissionUnknown" type="button" class="btn btn-secondary" style="padding:2px 6px;font-size:0.68rem;" @click.stop="clearBatchSlotSub(s.key)">清除</button>
-                 </div>
-               </div>
-               <div class="exchange-weekday-filter" role="group" aria-label="批次調課目標週次">
-                 <label class="history-filter-label" for="batch-exchange-week-offset">目標週次：</label>
-                 <select id="batch-exchange-week-offset" class="form-control" style="padding:4px 8px;font-size:0.8rem;max-width:150px;" v-model.number="exchangeWeekOffset">
-                   <option :value="0">本週</option><option :value="1">下週</option><option :value="-1">上週</option><option :value="2">下下週</option>
-                 </select>
-                 <span class="history-filter-label">篩選星期：</span>
-                 <div class="filter-chip-group">
-                   <button v-for="option in exchangeWeekdayOptions" :key="'batch-exchange-day-' + option.value" type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': exchangeWeekdayFilter === option.value }" @click="setExchangeWeekdayFilter(option.value)">{{ option.label }}</button>
-                 </div>
-               </div>
-                <div style="display:flex;justify-content:flex-end;margin-top:4px;">
-                 <button type="button" class="btn btn-success" :disabled="!batchAllSlotsAssigned || loading || isSubmitting" @click="prepBatchExchangeCompare">預覽批次調課（{{ batchAssignedCount }}/{{ batchSlots.length }}）</button>
-               </div>
-             </div>
-             <!-- 僅真正批次（≥2 節）才顯示；勿用 v-else 接在綁課提示後面，否則單節也會誤顯 -->
-             <div v-else-if="isBatchMatchFlow" class="match-mode-selector" style="margin-bottom: 12px; display:flex; flex-direction:column; gap:8px;">
-              <div class="match-mode-btn active" style="width:100%;text-align:center;cursor:default;">
-                📦 批次找人代課（{{ batchSlots.length }} 節）
-              </div>
-              <div class="flex-gap-6">
-                <button
-                  type="button"
-                  class="match-mode-btn flex-1-fs-82"
-                  :class="{ active: batchAssignMode === 'same' }"
-                  @click="setBatchAssignMode('same')"
-                >同一人全代</button>
-                <button
-                  type="button"
-                  class="match-mode-btn flex-1-fs-82"
-                  :class="{ active: batchAssignMode === 'perSlot' }"
-                  @click="setBatchAssignMode('perSlot')"
-                >每節不同人</button>
-              </div>
-            </div>
-
-            <div v-if="!isBatchExchangeFlow" class="match-filter-area" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px;">
-              <div v-if="!activeCell.dayOfWeek" style="color: var(--text-muted); text-align: center; padding: 10px 0;">
-                💡 請點擊課表任一堂有課的節次
-              </div>
-              <div v-else-if="isBatchMatchFlow && !isBatchExchangeFlow">
-                <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px; font-size: 0.95rem;">
-                  📦 批次代課：{{ batchSlots[0].teacherName }} 老師 · 共 {{ batchSlots.length }} 節
-                  <span v-if="isBatchPerSlotMode" style="font-weight:600;color:var(--color-primary);font-size:0.8rem;margin-left:6px;">
-                    （已指定 {{ batchAssignedCount }}/{{ batchSlots.length }}）
-                  </span>
-                </div>
-                <!-- 每節不同人：可點選節次列 -->
-                <div v-if="isBatchPerSlotMode" class="batch-slot-list" style="max-height:160px;">
-                  <div
-                    v-for="s in batchSlots"
-                    :key="'ps'+s.key"
-                    class="batch-slot-item cursor-pointer"
-                    :class="{ 'is-active-slot': batchActiveSlotKey === s.key, 'is-assigned-slot': !!s.subTeacherEmail }"
-                    @click="selectBatchSlotForMatch(s.key)"
-                  >
-                    <span>
-                      {{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
-                    </span>
-                    <span style="display:flex;align-items:center;gap:6px;">
-                      <strong v-if="s.subTeacherEmail" style="color:var(--color-success);">{{ s.subTeacherName }}</strong>
-                      <span v-else style="color:var(--text-muted);font-size:0.75rem;">尚未指定</span>
-                      <button
-                        v-if="s.subTeacherEmail"
-                        type="button"
-                        class="btn btn-secondary"
-                        style="padding:2px 6px;font-size:0.68rem;"
-                        @click.stop="clearBatchSlotSub(s.key)"
-                      >清除</button>
-                    </span>
-                  </div>
-                </div>
-                <div v-else class="batch-slot-chips">
-                  <span v-for="s in batchSlots" :key="'m'+s.key" class="batch-slot-chip">
-                    {{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
-                  </span>
-                </div>
-                <div class="text-xs-muted-75-mt">
-                  <template v-if="isBatchPerSlotMode">
-                    請點上方節次，再從下方名單為<strong>該節</strong>選代課老師。全部指定後按「確認申請」。
-                  </template>
-                  <template v-else>
-                    下列為<strong>全部選定節次皆空堂</strong>的教師（同課／同科／同班標籤為各節聯集）
-                  </template>
-                </div>
-                <div v-if="isBatchPerSlotMode" style="margin-top:10px;display:flex;justify-content:flex-end;">
-                  <button
-                    type="button"
-                    class="btn btn-success"
-                    style="padding:6px 14px;font-size:0.82rem;"
-                    :disabled="!batchAllSlotsAssigned"
-                    @click="prepBatchPerSlotCompare"
-                  >確認申請（{{ batchAssignedCount }}/{{ batchSlots.length }}）</button>
-                </div>
-              </div>
-              <div v-else>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;">
-                  <div style="font-weight: 700; color: var(--text-primary); font-size: 0.95rem;">
-                    已選定：{{ activeCell.teacherName }} 老師
-                  </div>
-                  <div v-if="matchMode === 'exchange'" style="display:flex;align-items:center;gap:6px;flex:0 0 auto;">
-                    <button
-                      v-if="isAdmin && !isBatchMatchFlow"
-                      type="button"
-                      class="btn btn-secondary"
-                      style="height:34px;padding:0 9px;border-radius:9px;font-size:0.76rem;line-height:1;"
-                      title="管理員直接建立同一天、同一節的雙向互換"
-                      @click="openSamePeriodSwapModal"
-                    >同節互換</button>
-                    <button
-                      type="button"
-                      class="btn btn-primary"
-                      style="min-width:64px;height:34px;padding:0 10px;border-radius:9px;font-size:0.82rem;line-height:1;"
-                      title="進階：三角調"
-                      aria-label="開啟三角調"
-                      @click="changeMatchMode('triangle')"
-                    >三角調</button>
-                  </div>
-                </div>
-                <div style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.4;">
-                  {{ inputRequestDate }}({{ getWeekDayText(activeCell.dayOfWeek) }}) {{ formatPeriodText(activeCell.period) }} {{ activeCell.classData ? activeCell.classData.className : '' }}{{ activeCell.classData ? activeCell.classData.subject : '' }}
-                </div>
-                <!-- 跨週調課週次選擇 -->
-                <div v-if="matchMode === 'exchange'" data-tour="exchange-controls">
-                  <div style="margin-top: 10px; display: flex; align-items: center; gap: 8px;">
-                    <label class="form-label" style="margin: 0; font-size: 0.8rem; white-space: nowrap;">對調至週次：</label>
-                    <select class="form-control" style="padding: 4px 8px; font-size: 0.8rem; max-width: 150px;" v-model.number="exchangeWeekOffset">
-                       <option :value="0">本週（同週對調）</option>
-                       <option :value="1">下週（往後一週）</option>
-                       <option :value="-1">上週（往前一週）</option>
-                       <option :value="2">下下週（往後兩週）</option>
-                    </select>
-                  </div>
-                  <div class="exchange-weekday-filter" role="group" aria-label="調課星期篩選">
-                    <span class="history-filter-label">篩選星期：</span>
-                    <div class="filter-chip-group">
-                      <button
-                        v-for="option in exchangeWeekdayOptions"
-                        :key="'exchange-day-' + option.value"
-                        type="button"
-                        class="btn btn-secondary filter-chip"
-                        :class="{ 'btn-primary': exchangeWeekdayFilter === option.value }"
-                        :aria-pressed="exchangeWeekdayFilter === option.value"
-                        @click="setExchangeWeekdayFilter(option.value)"
-                      >{{ option.label }}</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 媒合列表 -->
-             <div class="match-list-container" v-if="!(isBatchExchangeFlow && !batchActiveSlotKey && batchAllSlotsAssigned)">
-              <div v-if="recommendationLoading" style="text-align: center; padding: 40px;">
-                <div class="spinner"></div>
-                <p style="font-size: 0.85rem; color: var(--text-muted);">正在計算媒合名單...</p>
-              </div>
-              <div v-else>
-                <!-- 代課模式：搜尋 + 列表 -->
-                <template v-if="matchMode === 'substitution'">
-                  <!-- 無空堂警告 + 可能原因 -->
-                  <div v-if="matchShowNoTeacherWarning && recommendedTeachers.length === 0" class="match-empty-box">
-                    <div class="match-empty-icon">🚫</div>
-                    <div class="match-empty-title">
-                      {{ isBatchMatchFlow && !isBatchPerSlotMode ? '無教師能同時代全部選定節次' : '該時段無空堂教師' }}
-                    </div>
-                    <div class="match-empty-body">
-                      <template v-if="isBatchMatchFlow && !isBatchPerSlotMode">
-                        目前 {{ batchSlots.length }} 節找不到「全節皆空」的同一位代課老師。
-                      </template>
-                      <template v-else>
-                        全校 {{ teachersList.length }} 位中，{{ inputRequestDate }}({{ getWeekDayText(activeCell.dayOfWeek) }}) {{ formatPeriodText(activeCell.period) }}目前無可代人選。
-                      </template>
-                    </div>
-                    <ul v-if="matchEmptyReasons && matchEmptyReasons.length" class="match-empty-reasons">
-                      <li v-for="(r, i) in matchEmptyReasons" :key="i">{{ r }}</li>
-                    </ul>
-                    <button class="btn match-empty-btn" @click="closeMatchModal">我知道了，關閉視窗</button>
-                  </div>
-
-                  <!-- 搜尋列 -->
-                  <div class="mb-10">
-                    <input type="text" class="form-control" style="padding:8px 12px;font-size:0.85rem;" placeholder="🔍 搜尋教師姓名或科目..." v-model="matchSearchQuery">
-                  </div>
-                  <table class="match-table w-100-collapse">
-                    <thead>
-                      <tr class="tr-match-head">
-                        <th class="th-match th-match-teacher">教師</th>
-                        <th class="th-match">授課/空堂狀態</th>
-                        <th class="th-match-op">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="t in displayedRecommendedTeachers" :key="t.email" class="match-row tr-row-soft"
-                        data-match-mode="sub"
-                        :data-match-email="t.email"
-                        :data-match-name="t.name">
-                        <td class="td-match-main">
-                          <input type="radio" class="match-pick-radio" name="match-pick-sub" :id="'mps-' + t.email" :value="t.email" tabindex="-1">
-                          <label class="match-pick-hit" :for="'mps-' + t.email" :aria-label="'選取 ' + t.name" :title="getTeacherIdentityTooltip(t.email)"></label>
-                           <strong class="text-primary-strong" :title="getTeacherIdentityTooltip(t.email)">{{ t.name }}</strong>
-                           <span v-if="isHomeroomTeacher(t, activeCell.classData && activeCell.classData.className)" class="badge-match badge-homeroom">導師</span>
-                          <span v-if="t.isReleasedByAway" class="badge-match badge-released">外出班空堂</span>
-                          <span v-if="t.isSameCourse" class="badge-match badge-same-course">同課</span>
-                          <span v-if="t.isSameSubject" class="badge-match badge-same-subject">同科</span>
-                          <span v-if="t.isSameClass" class="badge-match badge-same-class">同班</span>
-                          <span v-if="activeCell.classData && activeCell.classData.restriction === 'restricted'" class="badge-match badge-restricted">原課綁課</span>
-                        </td>
-                        <td style="padding: 10px 4px; color: var(--text-muted); font-size: 0.8rem;">
-                          <template v-if="isBatchMatchFlow && !isBatchPerSlotMode">
-                             全節可代 <span class="text-secondary">（參考日已排：{{ t.todayPeriodCount }}節）</span>
-                            <span v-if="isMutualCover" class="text-mutual-sub">
-                              折抵額度：{{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}
-                              <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
-                              <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}"> → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
-                            </span>
-                          </template>
-                          <template v-else>
-                            <span v-if="t.isReleasedByAway" style="color:#6b21a8;font-weight:600;">外出班釋出</span>
-                            <span v-else>空堂</span>
-                             <span class="text-secondary">（當日已排：{{ t.todayPeriodCount }}節）</span>
-                            <span v-if="isMutualCover" class="text-mutual-sub">
-                              折抵額度：{{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}
-                              <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
-                              <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">
-                                → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}
-                              </span>
-                            </span>
-                          </template>
-                        </td>
-                        <td class="td-match-op">
-                          <div v-if="isMutualCover && !isBatchMatchFlow" class="match-op-pair">
-                            <button
-                              type="button"
-                              class="btn btn-secondary match-op-btn"
-                              title="對照雙方課表（不寫入暫定）"
-                              @click.stop="prepCompare('substitution', t.email)"
-                            >模擬</button>
-                            <button
-                              type="button"
-                              class="btn btn-primary match-op-btn match-op-btn-draft"
-                              title="加入暫定安排"
-                              @click.stop="assignMutualDraftFromMatch(t.email)"
-                            >暫定</button>
-                          </div>
-                          <div v-else-if="isBatchMatchFlow && isBatchPerSlotMode" class="match-op-pair match-op-pair-horizontal">
-                            <button type="button" class="btn btn-secondary match-op-btn" @click.stop.prevent="previewBatchCandidate('substitution', t.email)">模擬</button>
-                            <button type="button" class="btn btn-primary match-op-btn" @click.stop.prevent="assignBatchSlotSub(t.email)">指定此節</button>
-                          </div>
-                          <div v-else-if="isBatchMatchFlow" class="match-op-pair match-op-pair-horizontal">
-                            <button type="button" class="btn btn-secondary match-op-btn" @click.stop.prevent="previewBatchCandidate('substitution', t.email)">模擬</button>
-                            <button type="button" class="btn btn-primary match-op-btn" @click.stop.prevent="prepBatchCompare(t.email)">選用</button>
-                          </div>
-                          <button
-                            v-else
-                            class="btn btn-primary btn-sm-compact"
-                            @click.stop="prepCompare('substitution', t.email)"
-                          >模擬</button>
-                        </td>
-                      </tr>
-                      <tr v-if="filteredRecommendedTeachers.length === 0 && !matchShowNoTeacherWarning">
-                        <td colspan="3" class="empty-center-pad"><span class="empty-state-title">沒有符合的教師</span><span class="empty-state-hint">可改關鍵字或清空搜尋</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-if="filteredRecommendedTeachers.length > displayedRecommendedTeachers.length" class="center-pad-10">
-                    <button class="btn btn-secondary btn-sm-20" @click="loadMoreMatches">
-                      載入更多（{{ displayedRecommendedTeachers.length }} / {{ filteredRecommendedTeachers.length }}）
-                    </button>
-                  </div>
-                </template>
-
-                 <!-- 三角調模式：選兩堂原課，組成 A → B → C → A 閉環 -->
-                  <template v-else-if="matchMode === 'triangle'">
-                    <div class="triangle-builder" data-tour="triangle-builder">
-                     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-                       <strong style="font-size:0.9rem;color:#1d4ed8;">進階功能：三角調</strong>
-                       <button type="button" class="btn btn-secondary btn-sm-tight" @click="changeMatchMode('exchange')">← 返回一般調課</button>
-                     </div>
-                      <div style="padding:12px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;margin-bottom:12px;line-height:1.5;color:#1e3a8a;font-size:0.8rem;">
-                         <strong>三角調是整堂課循環交換</strong>：系統只列同班的有效原課，請先選 B，再選 C。三方都同意、教學組核准後才會整組生效。
-                     </div>
-
-                      <div style="display:grid;grid-template-columns:1fr;gap:10px;align-items:start;">
-                         <div class="card" style="margin:0;padding:12px;background:#fff;border:1px solid #bfdbfe;">
-                           <div style="font-weight:700;color:#1d4ed8;font-size:0.82rem;margin-bottom:6px;">A．目前原課</div>
-                          <div style="font-size:0.82rem;line-height:1.5;">
-                            <strong>{{ activeCell.teacherName }}</strong><br>
-                            {{ formatTriangleSlot({ date: inputRequestDate, day: activeCell.dayOfWeek, period: activeCell.period }, activeCell.classData, activeCell.teacherName) }}
-                          </div>
-                        </div>
-                         <div class="card" style="margin:0;padding:12px;background:#fff;border:1px solid #bfdbfe;">
-                          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
-                             <span style="font-weight:700;color:#1d4ed8;font-size:0.82rem;">依序選擇 B、C 的原課</span>
-                            <span style="font-size:0.72rem;color:var(--text-muted);">{{ triangleCandidateB ? triangleCandidateCReadyCount + ' / ' + triangleCandidateCOptions.length + ' 堂 C 可選' : triangleCandidateBReadyCount + ' / ' + triangleCandidateBOptions.length + ' 堂 B 可選' }}</span>
-                          </div>
-                          <input
-                            type="text"
-                            class="form-control"
-                            style="padding:7px 10px;font-size:0.8rem;margin-bottom:8px;"
-                            placeholder="搜尋教師、班級、科目或日期…"
-                            v-model="triangleCandidateSearch"
-                            aria-label="搜尋三角調原課"
-                          >
-                          <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:6px;">先選 B：A 的課會移到 B 的原課時段。</div>
-                          <div v-if="displayedTriangleBOptions.length" style="display:grid;gap:6px;max-height:190px;overflow:auto;padding-right:2px;">
-                            <button
-                              v-for="candidate in displayedTriangleBOptions"
-                              :key="'tri-b-' + candidate.key"
-                              type="button"
-                              :disabled="!candidate.triangleHasC"
-                               :style="{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: '1px solid ' + (trianglePickB === candidate.key ? '#2563eb' : (candidate.triangleHasC ? '#e2e8f0' : '#e5e7eb')), borderRadius: '8px', background: trianglePickB === candidate.key ? '#eff6ff' : (candidate.triangleHasC ? '#fff' : '#f3f4f6'), cursor: candidate.triangleHasC ? 'pointer' : 'not-allowed', color: candidate.triangleHasC ? 'var(--text-primary)' : '#9ca3af', opacity: candidate.triangleHasC ? '1' : '0.78' }"
-                              @click="selectTriangleCandidateB(candidate)"
-                            >
-                              <strong style="font-size:0.78rem;">B．{{ candidate.teacherName }}</strong>
-                              <span style="display:block;font-size:0.74rem;margin-top:2px;color:var(--text-secondary);">{{ formatTriangleSlot(candidate, candidate, candidate.teacherName) }}</span>
-                              <span v-if="candidate.triangleCanDirectExchange || candidate.isPullOut || candidate.attr === '抽離' || triangleCandidateIsRestricted(candidate)" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-                                <span v-if="candidate.triangleCanDirectExchange" class="badge-match" style="background:#dcfce7;color:#166534;">可直接對調</span>
-                                <span v-if="candidate.isPullOut || candidate.attr === '抽離'" class="badge-match badge-pullout">抽離</span>
-                                <span v-if="triangleCandidateIsRestricted(candidate)" class="badge-match badge-restricted">綁課</span>
-                              </span>
-                              <span style="display:block;font-size:0.68rem;margin-top:3px;color:var(--text-muted);">{{ candidate.triangleHasC ? '可接 C' : '沒有 C 可接' }}</span>
-                            </button>
-                          </div>
-                          <div v-else style="padding:12px 8px;text-align:center;color:var(--text-muted);font-size:0.8rem;">找不到可作為 B 的同班有效原課。</div>
-                           <div v-if="triangleCandidateB" style="font-size:0.75rem;color:var(--text-secondary);margin:10px 0 6px;border-top:1px solid #dbeafe;padding-top:9px;">再選 C：B 的課會移到 C 的原課時段，C 的課會回到 A 的原課時段。</div>
-                          <div v-if="triangleCandidateB && displayedTriangleCOptions.length" style="display:grid;gap:6px;max-height:190px;overflow:auto;padding-right:2px;">
-                            <button
-                              v-for="candidate in displayedTriangleCOptions"
-                              :key="'tri-c-' + candidate.key"
-                              type="button"
-                              :disabled="!candidate.triangleHasB"
-                               :style="{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: '1px solid ' + (trianglePickC === candidate.key ? '#2563eb' : (candidate.triangleHasB ? '#e2e8f0' : '#e5e7eb')), borderRadius: '8px', background: trianglePickC === candidate.key ? '#eff6ff' : (candidate.triangleHasB ? '#fff' : '#f3f4f6'), cursor: candidate.triangleHasB ? 'pointer' : 'not-allowed', color: candidate.triangleHasB ? 'var(--text-primary)' : '#9ca3af', opacity: candidate.triangleHasB ? '1' : '0.78' }"
-                              @click="selectTriangleCandidateC(candidate)"
-                            >
-                              <strong style="font-size:0.78rem;">C．{{ candidate.teacherName }}</strong>
-                               <span style="display:block;font-size:0.74rem;color:var(--text-secondary);margin-top:2px;">{{ formatTriangleSlot(candidate, candidate, candidate.teacherName) }}</span>
-                              <span v-if="candidate.isPullOut || candidate.attr === '抽離' || triangleCandidateIsRestricted(candidate)" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-                                <span v-if="candidate.isPullOut || candidate.attr === '抽離'" class="badge-match badge-pullout">抽離</span>
-                                <span v-if="triangleCandidateIsRestricted(candidate)" class="badge-match badge-restricted">綁課</span>
-                              </span>
-                              <span style="display:block;font-size:0.68rem;margin-top:3px;color:var(--text-muted);">{{ candidate.triangleHasB ? '可完成三角調' : '選定 B 後無法完成' }}</span>
-                            </button>
-                          </div>
-                          <div v-if="triangleCandidateB && !displayedTriangleCOptions.length" style="padding:12px 8px;text-align:center;color:var(--text-muted);font-size:0.8rem;">目前找不到能完成三角調的 C。</div>
-                          <div v-if="(triangleCandidateB ? triangleCandidateCOptions.length : triangleCandidateBOptions.length) > triangleCandidateDisplayCount" style="text-align:center;margin-top:8px;">
-                            <button type="button" class="btn btn-secondary btn-sm-tight" @click="loadMoreTriangleCandidates">載入更多原課</button>
-                          </div>
-                        </div>
-                      </div>
-
-                     <div v-if="trianglePreviewRows.length" style="margin-top:14px;padding:12px 14px;background:#fff;border:1px solid var(--border-color);border-radius:10px;">
-                       <div style="font-weight:700;color:var(--text-primary);font-size:0.86rem;margin-bottom:8px;">交換前後預覽</div>
-                       <div v-for="row in trianglePreviewRows" :key="'tri-preview-' + row.index" style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #f1f5f9;font-size:0.78rem;line-height:1.45;">
-                         <span><strong>{{ row.sourceTeacher }}</strong><br>{{ formatTriangleSlot(row.sourceSlot, row.sourceCourse, row.sourceTeacher) }}</span>
-                          <span style="font-size:1.05rem;color:#64748b;">→</span>
-                         <span><strong>{{ row.targetTeacher }} 時段</strong><br>{{ formatTriangleSlot(row.targetSlot, row.sourceCourse, row.sourceTeacher) }}</span>
-                       </div>
-                       <div style="margin-top:8px;font-size:0.75rem;color:var(--text-secondary);">三位教師完成交換後，每位教師只保留一個最終授課時段；中間步驟的暫時衝堂不單獨否決。</div>
-                     </div>
-
-                      <div v-if="triangleValidation && triangleValidation.errors && triangleValidation.errors.length" style="margin-top:12px;padding:10px 12px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;color:#9f1239;font-size:0.78rem;line-height:1.5;">
-                        <strong>尚不能送出：</strong>
-                        <span v-for="(error, index) in triangleValidation.errors" :key="'tri-error-' + index">{{ index ? '；' : ' ' }}{{ error }}</span>
-                      </div>
-
-                       <div v-if="triangleReady" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid #dbeafe;">
-                        <button type="button" class="btn btn-secondary btn-sm-tight" @click="openTriangleTimetablePreview">👥 預覽三人課表</button>
-                        <button type="button" class="btn btn-secondary btn-sm-tight" @click="openTrianglePaperPreview">👁️ 預覽調課單</button>
-                      </div>
-
-                      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:12px;padding:12px;background:#f8fafc;border:1px solid var(--border-color);border-radius:8px;">
-                       <label style="display:block;font-size:0.8rem;color:var(--text-secondary);">
-                         假別／課務類型
-                         <select class="form-select" v-model="triangleReason" style="margin-top:5px;">
-                           <option value="" disabled>請選擇假別／課務類型（未填寫時預設請假）</option>
-                           <option value="課務調整">課務調整（無請假）</option>
-                           <option v-for="r in leaveReasonOptions" :key="'tri-r-' + r" :value="r">{{ r }}</option>
-                         </select>
-                        </label>
-                        <label style="display:block;font-size:0.8rem;color:var(--text-secondary);">
-                         事由
-                         <textarea class="form-input" rows="3" v-model="triangleNote" placeholder="例如：三位教師已先行確認交換安排"></textarea>
-                        </label>
-                      </div>
-
-                      <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                       <button type="button" class="btn btn-secondary" @click="closeMatchModal">取消</button>
-                       <button type="button" class="btn btn-primary" :disabled="!triangleReady || triangleSubmitting" @click="submitTriangleRequest">
-                         {{ triangleSubmitting ? '送出中…' : '確認送出三角調' }}
-                       </button>
-                     </div>
-                   </div>
-                 </template>
-
-                  <!-- 調課模式列表 -->
-                  <template v-else>
-                   <div class="mb-10" style="display:flex;gap:8px;align-items:center;">
-                     <input type="text" class="form-control" style="padding:8px 12px;font-size:0.85rem;" placeholder="🔍 搜尋教師、班級、科目或節次…" v-model="matchSearchQuery">
-                     <button v-if="matchSearchQuery" type="button" class="btn btn-secondary btn-sm-tight" @click="matchSearchQuery = ''">清除</button>
-                   </div>
-                   <table class="match-table w-100-collapse">
-                    <thead>
-                      <tr class="tr-match-head">
-                        <th class="th-match th-match-teacher">教師</th>
-                        <th class="th-match">授課/空堂狀態</th>
-                        <th class="th-match-op">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="r in displayedExchangeList" :key="r.teacherEmail + r.periodKey" class="match-row tr-row-soft"
-                        data-match-mode="exc"
-                        :data-match-email="r.teacherEmail"
-                        :data-match-day="r.dayOfWeek"
-                        :data-match-period="r.period"
-                        :data-match-class="r.className || ''"
-                        :data-match-subject="r.subject || ''"
-                        :data-match-name="getRealTeacherName(r)">
-                        <td class="td-match-main">
-                          <input type="radio" class="match-pick-radio" name="match-pick-exc" :id="'mpe-' + r.teacherEmail + '-' + r.dayOfWeek + '-' + r.period" :value="r.teacherEmail + '|' + r.dayOfWeek + '|' + r.period" tabindex="-1">
-                          <label class="match-pick-hit" :for="'mpe-' + r.teacherEmail + '-' + r.dayOfWeek + '-' + r.period" :aria-label="'選取 ' + getRealTeacherName(r)" :title="getTeacherIdentityTooltip(r.teacherEmail || getRealTeacherName(r))"></label>
-                          <strong :title="getTeacherIdentityTooltip(r.teacherEmail || getRealTeacherName(r))">{{ getRealTeacherName(r) }}</strong>
-                          <div v-if="hasSubTeacherConflict" style="color: var(--color-danger); font-size: 0.7rem; font-weight: bold;">⚠️ 教師課務衝突</div>
-                          <div style="font-size: 0.7rem; color: var(--text-muted);">{{ r.className }} ({{ r.subject }})</div>
-                          <span v-if="r.freeByAway" class="badge-match badge-released">外出班釋出</span>
-                          <span v-if="r.isPullOut || r.attr === '抽離'" class="badge-match badge-pullout">抽離</span>
-                          <span v-if="activeCell.classData && (activeCell.classData.isPullOut || activeCell.classData.attr === '抽離')" class="badge-match badge-pullout">原課抽離</span>
-                          <span v-if="activeCell.classData && activeCell.classData.restriction === 'restricted'" class="badge-match badge-restricted">原課綁課</span>
-                          <span v-if="r.restriction === 'restricted'" class="badge-match badge-restricted">對調課綁課</span>
-                        </td>
-                        <td style="padding: 10px 4px; font-size: 0.8rem; color: var(--text-secondary);">
-                          可調：<span v-if="getMatchSlotDateMMDD(r.dayOfWeek)" style="font-weight: 600; color: var(--text-primary); margin-right: 2px;">{{ getMatchSlotDateMMDD(r.dayOfWeek) }}</span>({{ getWeekDayText(r.dayOfWeek) }}) {{ formatPeriodText(r.period) }}
-                        </td>
-                        <td class="td-match-op">
-                          <div v-if="isBatchExchangeFlow" class="match-op-pair match-op-pair-horizontal">
-                            <button type="button" class="btn btn-secondary match-op-btn" @click.stop.prevent="previewBatchCandidate('exchange', r.teacherEmail, r.periodKey, r.subject, r.className)">模擬</button>
-                            <button type="button" class="btn btn-primary match-op-btn" @click.stop.prevent="prepCompare('exchange', r.teacherEmail, r.periodKey, r.subject, r.className)">選為本組</button>
-                          </div>
-                          <button v-else type="button" class="btn btn-primary btn-sm-compact" @click.stop.prevent="prepCompare('exchange', r.teacherEmail, r.periodKey, r.subject, r.className)">模擬</button>
-                        </td>
-                      </tr>
-                      <tr v-if="filteredExchangeList.length === 0">
-                        <td colspan="3" class="empty-center-pad">
-                          <span class="empty-state-title">{{ recommendedExchangeList.length === 0 ? '目前沒有符合條件的對調課堂' : '這個星期沒有可對調課堂' }}</span>
-                          <span class="empty-state-hint">
-                            <template v-if="recommendedExchangeList.length === 0">請改選目標週次，並確認同班課程與雙方在交換時段皆可上課。</template>
-                            <template v-else>其他星期有候選課堂，可切回「全部」查看。</template>
-                          </span>
-                          <button v-if="exchangeWeekdayFilter" type="button" class="btn btn-secondary btn-sm-tight" style="margin-top:6px;" @click="setExchangeWeekdayFilter(0)">顯示全部星期</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-if="filteredExchangeList.length > displayedExchangeList.length" class="center-pad-10">
-                    <button class="btn btn-secondary btn-sm-20" @click="loadMoreMatches">
-                      載入更多（{{ displayedExchangeList.length }} / {{ filteredExchangeList.length }}）
-                    </button>
-                  </div>
-                </template>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 媒合抽屜（代／調課候選） → components/MatchDrawerModal.vue -->
+    <MatchDrawerModal
+      v-if="showMatchModal"
+      :is-batch-match-flow="isBatchMatchFlow"
+      :match-mode="matchMode"
+      :active-cell="activeCell"
+      :is-admin="isAdmin"
+      :is-batch-exchange-flow="isBatchExchangeFlow"
+      :batch-slots="batchSlots"
+      :batch-active-slot-key="batchActiveSlotKey"
+      :exchange-weekday-options="exchangeWeekdayOptions"
+      :exchange-weekday-filter="exchangeWeekdayFilter"
+      :batch-all-slots-assigned="batchAllSlotsAssigned"
+      :loading="loading"
+      :is-submitting="isSubmitting"
+      :batch-assigned-count="batchAssignedCount"
+      :batch-assign-mode="batchAssignMode"
+      :is-batch-per-slot-mode="isBatchPerSlotMode"
+      :input-request-date="inputRequestDate"
+      :recommendation-loading="recommendationLoading"
+      :match-show-no-teacher-warning="matchShowNoTeacherWarning"
+      :recommended-teachers="recommendedTeachers"
+      :teachers-list="teachersList"
+      :match-empty-reasons="matchEmptyReasons"
+      :displayed-recommended-teachers="displayedRecommendedTeachers"
+      :is-mutual-cover="isMutualCover"
+      :filtered-recommended-teachers="filteredRecommendedTeachers"
+      :triangle-candidate-b="triangleCandidateB"
+      :triangle-candidate-c-ready-count="triangleCandidateCReadyCount"
+      :triangle-candidate-c-options="triangleCandidateCOptions"
+      :triangle-candidate-b-ready-count="triangleCandidateBReadyCount"
+      :triangle-candidate-b-options="triangleCandidateBOptions"
+      :displayed-triangle-b-options="displayedTriangleBOptions"
+      :triangle-pick-b="trianglePickB"
+      :displayed-triangle-c-options="displayedTriangleCOptions"
+      :triangle-pick-c="trianglePickC"
+      :triangle-candidate-display-count="triangleCandidateDisplayCount"
+      :triangle-preview-rows="trianglePreviewRows"
+      :triangle-validation="triangleValidation"
+      :triangle-ready="triangleReady"
+      :leave-reason-options="leaveReasonOptions"
+      :triangle-submitting="triangleSubmitting"
+      :displayed-exchange-list="displayedExchangeList"
+      :has-sub-teacher-conflict="hasSubTeacherConflict"
+      :filtered-exchange-list="filteredExchangeList"
+      :recommended-exchange-list="recommendedExchangeList"
+      :change-match-mode="changeMatchMode"
+      :is-combined-class="isCombinedClass"
+      :has-schedule-special-tag="hasScheduleSpecialTag"
+      :select-batch-slot-for-match="selectBatchSlotForMatch"
+      :format-date-m-m-d-d="formatDateMMDD"
+      :get-week-day-text="getWeekDayText"
+      :format-period-text="formatPeriodText"
+      :clear-batch-slot-sub="clearBatchSlotSub"
+      :set-exchange-weekday-filter="setExchangeWeekdayFilter"
+      :set-batch-assign-mode="setBatchAssignMode"
+      :get-teacher-identity-tooltip="getTeacherIdentityTooltip"
+      :is-homeroom-teacher="isHomeroomTeacher"
+      :prep-compare="prepCompare"
+      :assign-mutual-draft-from-match="assignMutualDraftFromMatch"
+      :preview-batch-candidate="previewBatchCandidate"
+      :assign-batch-slot-sub="assignBatchSlotSub"
+      :prep-batch-compare="prepBatchCompare"
+      :format-triangle-slot="formatTriangleSlot"
+      :select-triangle-candidate-b="selectTriangleCandidateB"
+      :triangle-candidate-is-restricted="triangleCandidateIsRestricted"
+      :select-triangle-candidate-c="selectTriangleCandidateC"
+      :get-real-teacher-name="getRealTeacherName"
+      :get-match-slot-date-m-m-d-d="getMatchSlotDateMMDD"
+      :close-match-modal="closeMatchModal"
+      :start-combined-return="startCombinedReturn"
+      :prep-batch-exchange-compare="prepBatchExchangeCompare"
+      :prep-batch-per-slot-compare="prepBatchPerSlotCompare"
+      :open-same-period-swap-modal="openSamePeriodSwapModal"
+      :load-more-matches="loadMoreMatches"
+      :load-more-triangle-candidates="loadMoreTriangleCandidates"
+      :open-triangle-timetable-preview="openTriangleTimetablePreview"
+      :open-triangle-paper-preview="openTrianglePaperPreview"
+      :submit-triangle-request="submitTriangleRequest"
+      v-model:exchange-week-offset="exchangeWeekOffset"
+      v-model:match-search-query="matchSearchQuery"
+      v-model:triangle-candidate-search="triangleCandidateSearch"
+      v-model:triangle-reason="triangleReason"
+      v-model:triangle-note="triangleNote"
+      @close="closeMatchModal"
+    />
       <!-- 三角調：三位教師課表預覽 -->
     <!-- 同節互調 modal → components/SamePeriodSwapModal.vue -->
     <SamePeriodSwapModal
@@ -2849,494 +2412,79 @@
       @close="showTriangleTimetablePreview = false"
     />
       <!-- 3.2 雙人對比 Modal (compareModal) -->
-      <div v-if="showCompareModal" class="modal-overlay" data-tour="compare-modal" @click.self="closeCompareModal">
-        <div class="modal-card" data-tour="compare-card">
-          <div class="modal-header">
-            <h3>{{ pendingRequestData.isBatchCandidatePreview ? '👁️ 批次候選課表預覽' : '📉 調代課模擬對照與防呆核對' }}</h3>
-            <button class="btn-close" @click="closeCompareModal">&times;</button>
-          </div>
-
-          <div class="modal-body" data-tour="compare-body">
-            <div v-if="pendingRequestData.isBatchCandidatePreview" style="margin-bottom:12px;padding:10px 12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e40af;font-size:0.8rem;line-height:1.5;">
-              唯讀預覽：檢視目前選取課堂與候選教師的課表，不會指定、送出或更動批次內容。
-            </div>
-            <!-- 衝堂警告橫幅 -->
-            <div v-if="hasSubTeacherConflict" style="background:#fee2e2; border:1.5px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:12px; display:flex; align-items:center; gap:8px; font-size:0.85rem; color:#991b1b; font-weight:600;">
-              <template v-if="pendingRequestData.isPerSlot">
-                ⚠️ 衝堂警告：部分代課老師在指定節次已有課（紅色格），請切換右側受邀人檢視。
-              </template>
-              <template v-else>
-                ⚠️ 衝堂警告：{{ getTeacherNameByEmail(pendingRequestData.subTeacher) }} 老師在此節次已有課（紅色格），無法正常代課！
-              </template>
-                <span v-if="isAdmin || (isProxySubmitActive && pendingRequestData.leaveTeacher && user && String(pendingRequestData.leaveTeacher).toLowerCase() !== String(getTeacherNameByEmail(user.email) || '').toLowerCase())" style="font-weight:400; color:#b91c1c;">（可強制送出）</span>
-            </div>
-
-            <!-- 行政代申請提示／教學組直接核准 -->
-            <div
-              v-if="isProxySubmitActive && pendingRequestData.leaveTeacher && user && String(pendingRequestData.leaveTeacher).toLowerCase() !== String(getTeacherNameByEmail(user.email) || '').toLowerCase() && !pendingRequestData.isBatchCandidatePreview"
-              class="direct-approve-box"
-              style="border-color:#f59e0b;background:#fffbeb;"
-            >
-              <div class="direct-approve-title" style="color:#b45309;">📋 行政代申請</div>
-              <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:4px;">
-                請假老師：{{ getTeacherNameByEmail(pendingRequestData.leaveTeacher) || pendingRequestData.leaveTeacher }}；
-                送出後<strong>跳過受邀確認</strong>，直接進入「待教學組核准」。
-              </div>
-            </div>
-               <div v-if="isAdmin && !notificationsSuppressed && pendingRequestData.specialFlow !== 'combined_return' && !pendingRequestData.isBatchCandidatePreview && !(isProxySubmitActive && pendingRequestData.leaveTeacher && user && String(pendingRequestData.leaveTeacher).toLowerCase() !== String(getTeacherNameByEmail(user.email) || '').toLowerCase())" class="direct-approve-box">
-              <label class="direct-approve-row">
-                <input type="checkbox" class="direct-approve-check" v-model="directApproveMode">
-                <span class="direct-approve-text">
-                  <div class="direct-approve-title">⚡ 教學組直接核准</div>
-                  <div class="direct-approve-desc">勾選後送出即生效並更新課表；未勾選則需對方同意後再送行政審核。<span v-if="notificationsSuppressed">紙本模式下不寄送通知信。</span></div>
-                </span>
-              </label>
-              <label v-if="directApproveMode" class="direct-approve-sub">
-                <input type="checkbox" class="direct-approve-check-sm" v-model="directApproveSkipNotify">
-                <span>不寄通知信（稍後可用 LINE／批次通知）</span>
-              </label>
-            </div>
-
-            <div v-if="pendingRequestData.specialFlow === 'combined_return'" style="margin-bottom:12px;padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
-               <label class="form-label" style="margin-bottom:6px;color:#9a3412;">併班教師</label>
-              <select class="form-select" v-model="pendingRequestData.subTeacher">
-                <option value="" disabled>請選擇同節併班代課教師...</option>
-                <option v-for="candidate in (pendingRequestData.combinedReturnCandidates || [])" :key="'cr-candidate-' + candidate.email" :value="candidate.email">
-                  {{ candidate.name }}（{{ candidate.className || '併班課' }}{{ candidate.subject ? '／' + candidate.subject : '' }}）
-                </option>
-              </select>
-               <div style="margin-top:6px;font-size:0.75rem;color:#7c2d12;">請假教師：{{ getTeacherNameByEmail(pendingRequestData.leaveTeacher) }}；核准後由所選併班教師上課，不支領代課費。</div>
-            </div>
-
-            <!-- 課表模擬對比（手機可收合） -->
-             <details class="compare-grids-details" open>
-               <summary class="compare-grids-summary">📅 雙方課表對照（點可收合）</summary>
-               <div v-if="pendingRequestData.isBatch && pendingRequestData.mode !== 'exchange' && batchCompareWeekTotal > 1" class="batch-compare-week-nav" role="group" aria-label="批次模擬週次切換">
-                <button type="button" class="batch-compare-week-nav-btn" :disabled="batchCompareWeekIndex <= 0" @click="shiftBatchCompareWeek(-1)">‹ 上一週</button>
-                <div class="batch-compare-week-nav-main">
-                  <strong>批次模擬第 {{ batchCompareWeekIndex + 1 }}／{{ batchCompareWeekTotal }} 週</strong>
-                  <span>{{ formatDateMMDD(compareWeekDatesA[0]) }}～{{ formatDateMMDD(compareWeekDatesA[4]) }} · 本週 {{ batchCompareWeekSlotCount }} 節</span>
-                </div>
-                <button type="button" class="batch-compare-week-nav-btn" :disabled="batchCompareWeekIndex >= batchCompareWeekTotal - 1" @click="shiftBatchCompareWeek(1)">下一週 ›</button>
-              </div>
-              <div v-if="pendingRequestData.isExchangeBatch" class="batch-exchange-preview-switch">
-                <strong>選擇要預覽的配對組別</strong>
-                <div class="batch-exchange-preview-options" role="group" aria-label="批次調課組別課表預覽">
-                  <button
-                    v-for="(s, index) in pendingRequestData.batchSlots"
-                    :key="'batch-exchange-preview-pick-' + s.key"
-                    type="button"
-                    class="batch-exchange-preview-option"
-                    :class="{ 'is-active': batchExchangePreviewSlotKey === s.key || (!batchExchangePreviewSlotKey && index === 0) }"
-                    @click="setBatchExchangePreviewSlot(s.key)"
-                  >{{ index + 1 }}. {{ s.teacherName }} ↔ {{ s.subTeacherName || getTeacherNameByEmail(s.subTeacherEmail) }}</button>
-                </div>
-                <div class="batch-exchange-preview-hint">切換組別檢視調出教師與對調教師的週課表；跨週組別可分別切換來源週與目標週。</div>
-              </div>
-              <template v-if="isCrossWeekExchange">
-               <div class="exchange-cross-week-summary">
-                 <strong>跨週調課</strong>
-                 <span>{{ getExchangeEndpointText('source') }}</span>
-                 <span class="exchange-summary-arrow">↔</span>
-                 <span>{{ getExchangeEndpointText('target') }}</span>
-               </div>
-               <div class="mini-schedule-container exchange-two-table-panels" data-tour="compare-grids" style="margin-bottom: 16px; margin-top: 10px;">
-                 <div class="exchange-teacher-panel">
-                   <div class="mini-grid-title">👤 <strong>{{ getTeacherNameByEmail(pendingRequestData.leaveTeacher) }}</strong> 老師課表 <span class="exchange-panel-role">（申請人）</span></div>
-                   <div class="exchange-week-switch" role="group" aria-label="申請人課表週次">
-                     <button type="button" class="exchange-week-switch-btn" :class="{ 'is-active': compareWeekSelectionA === 'source' }" @click="setCompareWeekSelection('A', 'source')">調出週 {{ formatDateMMDD(compareWeekDatesA[0]) }}～{{ formatDateMMDD(compareWeekDatesA[4]) }}</button>
-                     <button type="button" class="exchange-week-switch-btn" :class="{ 'is-active': compareWeekSelectionA === 'target' }" @click="setCompareWeekSelection('A', 'target')">調入週 {{ formatDateMMDD(compareWeekDatesB[0]) }}～{{ formatDateMMDD(compareWeekDatesB[4]) }}</button>
-                   </div>
-                   <div class="exchange-week-status" :class="compareWeekSelectionA === 'source' ? 'is-out' : 'is-in'">
-                     {{ compareWeekSelectionA === 'source' ? '目前顯示：原課調出' : '目前顯示：換入課堂' }}
-                   </div>
-                   <div class="mini-grid exchange-week-grid">
-                     <div class="mini-grid-cell mini-grid-header">節</div>
-                     <div v-for="d in 5" :key="'exchange-a-head-'+d" class="mini-grid-cell mini-grid-header">{{ ['一','二','三','四','五'][d-1] }}<span class="mini-grid-date">{{ formatDateMMDD(compareDisplayDatesA[d-1]) }}</span></div>
-                     <template v-for="p in timetablePeriods" :key="'exchange-a-'+p">
-                       <div class="mini-grid-cell mini-grid-period">{{ getPeriodLabel(p) }}</div>
-                       <div v-for="d in 5" :key="'exchange-a-'+p+'-'+d" class="mini-grid-cell" :class="getCompareCellClass('A', d, p, compareWeekSelectionA)">
-                         {{ getCompareCellText('A', d, p, compareWeekSelectionA) }}
-                       </div>
-                     </template>
-                   </div>
-                   <div v-if="compareWeekSelectionA === 'target' && consecAlertsA && consecAlertsA.length" class="hint-amber-box">
-                     連堂警示：{{ consecAlertsA.join('、') }}
-                   </div>
-                 </div>
-                 <div class="exchange-teacher-panel">
-                   <div class="mini-grid-title">👤 <strong>{{ getTeacherNameByEmail(resolveCompareBEmail()) || '（尚未指定）' }}</strong> 老師課表 <span class="exchange-panel-role">（被申請人）</span></div>
-                   <div class="exchange-week-switch" role="group" aria-label="被申請人課表週次">
-                     <button type="button" class="exchange-week-switch-btn" :class="{ 'is-active': compareWeekSelectionB === 'source' }" @click="setCompareWeekSelection('B', 'source')">調入週 {{ formatDateMMDD(compareWeekDatesA[0]) }}～{{ formatDateMMDD(compareWeekDatesA[4]) }}</button>
-                     <button type="button" class="exchange-week-switch-btn" :class="{ 'is-active': compareWeekSelectionB === 'target' }" @click="setCompareWeekSelection('B', 'target')">調出週 {{ formatDateMMDD(compareWeekDatesB[0]) }}～{{ formatDateMMDD(compareWeekDatesB[4]) }}</button>
-                   </div>
-                   <div class="exchange-week-status" :class="compareWeekSelectionB === 'source' ? 'is-in' : 'is-out'">
-                     {{ compareWeekSelectionB === 'source' ? '目前顯示：換入課堂' : '目前顯示：原課調出' }}
-                   </div>
-                   <div class="mini-grid exchange-week-grid">
-                     <div class="mini-grid-cell mini-grid-header">節</div>
-                     <div v-for="d in 5" :key="'exchange-b-head-'+d" class="mini-grid-cell mini-grid-header">{{ ['一','二','三','四','五'][d-1] }}<span class="mini-grid-date">{{ formatDateMMDD(compareDisplayDatesB[d-1]) }}</span></div>
-                     <template v-for="p in timetablePeriods" :key="'exchange-b-'+p">
-                       <div class="mini-grid-cell mini-grid-period">{{ getPeriodLabel(p) }}</div>
-                       <div v-for="d in 5" :key="'exchange-b-'+p+'-'+d" class="mini-grid-cell" :class="getCompareCellClass('B', d, p, compareWeekSelectionB)">
-                         {{ getCompareCellText('B', d, p, compareWeekSelectionB) }}
-                       </div>
-                     </template>
-                   </div>
-                   <div v-if="compareWeekSelectionB === 'source' && consecAlertsB && consecAlertsB.length" class="hint-amber-box">
-                     連堂警示：{{ consecAlertsB.join('、') }}
-                   </div>
-                 </div>
-               </div>
-             </template>
-             <template v-else>
-             <div class="mini-schedule-container" data-tour="compare-grids" style="margin-bottom: 16px; margin-top: 10px;">
-              <!-- 左：申請教師當週課表 (A) -->
-              <div>
-                <div class="mini-grid-title">
-                    👤 <strong>{{ getTeacherNameByEmail(pendingRequestData.leaveTeacher) }}</strong> 老師課表（請假／申請人<span v-if="!pendingRequestData.isBatch">，{{ formatDateMMDD(compareWeekDatesA[0]) }}～{{ formatDateMMDD(compareWeekDatesA[4]) }}</span>）
-                </div>
-                <div class="mini-grid">
-                  <div class="mini-grid-cell mini-grid-header">節</div>
-                    <div class="mini-grid-cell mini-grid-header">一<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesA[0]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">二<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesA[1]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">三<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesA[2]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">四<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesA[3]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">五<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesA[4]) }}</span></div>
-                  
-                  <template v-for="p in timetablePeriods" :key="'A-'+p">
-                    <div class="mini-grid-cell mini-grid-period">{{ getPeriodLabel(p) }}</div>
-                    <div 
-                      v-for="d in 5" 
-                      :key="'A-'+p+'-'+d"
-                      class="mini-grid-cell"
-                      :class="getCompareCellClass('A', d, p)"
-                    >
-                      {{ getCompareCellText('A', d, p) }}
-                    </div>
-                  </template>
-                </div>
-                <!-- A師連堂警告 -->
-                <div v-if="consecAlertsA && consecAlertsA.length" class="hint-amber-box">
-                  ⚠️ 連堂警示：{{ consecAlertsA.join('、') }}
-                </div>
-              </div>
-
-              <!-- 右：代課/調課教師當週課表 (B) -->
-               <div>
-                 <div v-if="pendingRequestData.specialFlow === 'combined_return'" class="mini-grid-title">
-                    ↩ <strong>{{ getTeacherNameByEmail(resolveCompareBEmail()) || '尚未指定' }}</strong> 老師當週課表（合班代課）
-                 </div>
-                 <div v-else class="mini-grid-title">
-                     👤 <strong>{{ getTeacherNameByEmail(resolveCompareBEmail()) || '（尚未指定）' }}</strong> 老師課表（代課／受邀人<span v-if="!pendingRequestData.isBatch">，{{ formatDateMMDD(compareWeekDatesB[0]) }}～{{ formatDateMMDD(compareWeekDatesB[4]) }}</span>）
-                 </div>
-                <!-- 每節不同人：切換檢視各受邀人課表 -->
-                <div v-if="pendingRequestData.isBatch && pendingRequestData.isPerSlot && batchCompareSubGroups.length > 1" class="batch-slot-chips mb-8-block">
-                  <button
-                    v-for="g in batchCompareSubGroups"
-                    :key="'bcv-'+g.subEmail"
-                    type="button"
-                    class="batch-slot-chip"
-                    :class="{ 'is-view-active': String(batchCompareViewEmail).toLowerCase() === String(g.subEmail).toLowerCase() }"
-                    style="cursor:pointer;border:none;"
-                    @click="setBatchCompareViewEmail(g.subEmail)"
-                  >{{ g.subName }}（{{ g.slots.length }}節）</button>
-                </div>
-                  <div v-if="pendingRequestData.specialFlow === 'combined_return' && !resolveCompareBEmail()" style="padding:24px 12px;text-align:center;color:#9a3412;font-size:0.85rem;background:#fff7ed;border:1px dashed #fdba74;border-radius:8px;">
-                    請先指定同節原本有課的其他併班任課教師。
-                 </div>
-                 <div v-else-if="!resolveCompareBEmail()" style="padding:24px 12px;text-align:center;color:var(--text-muted);font-size:0.85rem;background:#f8fafc;border:1px dashed var(--border-color);border-radius:8px;">
-                   尚無受邀人可顯示課表
-                 </div>
-                 <div v-else class="mini-grid">
-                  <div class="mini-grid-cell mini-grid-header">節</div>
-                    <div class="mini-grid-cell mini-grid-header">一<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesB[0]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">二<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesB[1]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">三<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesB[2]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">四<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesB[3]) }}</span></div>
-                    <div class="mini-grid-cell mini-grid-header">五<span class="mini-grid-date">{{ formatDateMMDD(compareWeekDatesB[4]) }}</span></div>
-                  
-                  <template v-for="p in timetablePeriods" :key="'B-'+p">
-                    <div class="mini-grid-cell mini-grid-period">{{ getPeriodLabel(p) }}</div>
-                    <div 
-                      v-for="d in 5" 
-                      :key="'B-'+p+'-'+d"
-                      class="mini-grid-cell"
-                      :class="getCompareCellClass('B', d, p)"
-                    >
-                      {{ getCompareCellText('B', d, p) }}
-                    </div>
-                  </template>
-                </div>
-                <!-- B師連堂警告 -->
-                <div v-if="consecAlertsB && consecAlertsB.length" class="hint-amber-box">
-                  ⚠️ 連堂警示：{{ consecAlertsB.join('、') }}
-                </div>
-              </div>
-             </div>
-              </template>
-              </details>
-
-             <!-- 批次節次摘要 -->
-            <div v-if="pendingRequestData.isBatch" class="card" style="background:#eff6ff;border:1px solid #bfdbfe;padding:12px 14px;margin:0 0 12px;">
-              <div style="font-weight:700;font-size:0.88rem;color:#1e40af;margin-bottom:8px;">
-                📦 {{ pendingRequestData.mode === 'exchange' ? '批次調課' : '批次代課' }}申請（共 {{ pendingRequestData.batchCount || batchSlots.length }} {{ pendingRequestData.mode === 'exchange' ? '組' : '節' }}）
-              </div>
-              <div v-if="pendingRequestData.mode === 'exchange'" class="batch-slot-list" style="max-height:200px;background:#fff;">
-                <div v-for="(s, index) in batchSlots" :key="'cx'+s.key" class="batch-slot-item" style="align-items:flex-start;">
-                  <span style="min-width:0;flex:1;">
-                    <strong>{{ index + 1 }}. {{ s.teacherName }}</strong> {{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
-                    <span style="font-weight:700;color:#64748b;padding:0 5px;">↔</span>
-                    <strong>{{ s.subTeacherName || getTeacherNameByEmail(s.subTeacherEmail) }}</strong> {{ formatDateMMDD(s.targetDate) }}({{ getWeekDayText(s.targetDayOfWeek) }}) {{ formatPeriodText(s.targetPeriod) }} {{ s.targetClassName }}{{ s.targetSubject }}
-                    <small v-if="s.exchangeValidationError || s.exchangeSubmitError" style="display:block;color:#b91c1c;margin-top:3px;">{{ s.exchangeValidationError || s.exchangeSubmitError }}</small>
-                    <small v-else-if="s.exchangeSubmitted" style="display:block;color:#15803d;margin-top:3px;">已送出，獨立等待簽核</small>
-                    <small v-else style="display:block;color:#15803d;margin-top:3px;">此組可獨立送出</small>
-                  </span>
-                </div>
-              </div>
-              <div v-else-if="pendingRequestData.isPerSlot" class="batch-slot-list" style="max-height:180px;background:#fff;">
-                <div v-for="s in batchSlots" :key="'c'+s.key" class="batch-slot-item">
-                  <span>{{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}</span>
-                  <strong class="text-primary-strong">{{ s.subTeacherName || getTeacherNameByEmail(s.subTeacherEmail) }}</strong>
-                </div>
-              </div>
-              <div v-else class="batch-slot-chips">
-                <span v-for="s in batchSlots" :key="'c'+s.key" class="batch-slot-chip">
-                  {{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
-                </span>
-              </div>
-              <div class="text-xs-muted-75-mt">
-                <template v-if="pendingRequestData.mode === 'exchange'">
-                   共用批次編號；每組獨立簽核、列印及追蹤。{{ pendingRequestData.batchValidCount }} 組可送出，{{ pendingRequestData.batchInvalidCount }} 組需調整。
-                </template>
-                <template v-else-if="pendingRequestData.isPerSlot">
-                   共 {{ pendingRequestData.subTeacherCount || '多' }} 位代課老師　·　假別一次套用　·　每節獨立簽核
-                </template>
-                <template v-else>
-                   代課：{{ getTeacherNameByEmail(pendingRequestData.subTeacher) }}　·　假別一次套用全部節次　·　每節仍獨立簽核
-                </template>
-              </div>
-            </div>
-
-             <!-- 原因與審核選項 -->
-             <div v-if="!pendingRequestData.isBatchCandidatePreview" class="card" style="background: #f8fafc; padding: 16px; margin: 0; border: 1px solid var(--border-color);">
-                <div v-if="pendingRequestData.specialFlow === 'combined_return'" style="margin-bottom:14px;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
-                   <div style="font-size:0.82rem;font-weight:700;color:#9a3412;margin-bottom:6px;">併班上課經費規則</div>
-                   <div style="font-size:0.75rem;color:#7c2d12;line-height:1.45;">併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減，費用類別由系統自動帶入。</div>
-                   <div v-if="pendingRequestData.reason" style="margin-top:6px;font-size:0.75rem;color:#9a3412;">被代教師扣減類別：<strong>{{ pendingRequestData.subFee || '依假別自動帶入' }}</strong></div>
-                </div>
-                 <div data-tour="compare-form" class="compare-form-grid">
-                     <!-- 原因／假別與僅課務調整 -->
-                     <div class="form-group compare-form-leave-type" data-tour="compare-reason">
-                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                         <label class="form-label" style="margin:0;">假別</label>
-                          <label v-if="(pendingRequestData.mode === 'substitution' || pendingRequestData.mode === 'exchange') && pendingRequestData.specialFlow !== 'combined_return'" style="display:flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-secondary);cursor:pointer;">
-                          <input
-                            id="course-adjustment-only"
-                            type="checkbox"
-                            class="chk-box-16"
-                            v-model="pendingRequestData.courseAdjustmentOnly"
-                            @change="toggleCourseAdjustmentOnly"
-                          >
-                          <span>僅申請課務調整（無請假）</span>
-                        </label>
-                      </div>
-                        <select class="form-select" v-model="pendingRequestData.reason" :disabled="pendingRequestData.courseAdjustmentOnly" @change="onLeaveReasonChange">
-                          <option value="" disabled>請選擇假別...</option>
-                          <option v-if="(pendingRequestData.mode === 'substitution' || pendingRequestData.mode === 'exchange') && pendingRequestData.specialFlow !== 'combined_return'" value="課務調整">課務調整（無請假）</option>
-                         <option v-for="r in leaveReasonOptions" :key="r" :value="r">{{ r }}</option>
-                       </select>
-                    </div>
-
-                     <!-- 備註輸入：桌機版與假別同列，固定在右欄 -->
-                      <div class="form-group compare-form-note">
-                        <label class="form-label">事由</label>
-                        <input type="text" class="form-input" v-model="pendingRequestData.note">
-                      </div>
-
-                      <!-- 對調模式才顯示 B 欄日期。 -->
-                        <div class="form-group compare-form-exchange-date" v-if="pendingRequestData.mode === 'exchange' && !pendingRequestData.isBatch">
-                        <label class="form-label">對調目標日期 (B)</label>
-                        <input type="text" class="form-input" style="background: #f1f5f9; font-weight: 600;" readonly :value="pendingRequestData.dateB">
-                     </div>
-                    <div v-if="pendingRequestData.mode === 'substitution' && !pendingRequestData.courseAdjustmentOnly && pendingRequestData.specialFlow !== 'combined_return'" class="form-group compare-form-leave-time" :class="{ 'compare-form-leave-time-with-fee': isAdmin }">
-                      <label class="form-label">請假時間（代課清冊）</label>
-                     <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;">
-                       <button type="button" class="btn btn-secondary pad-6-10-78"  @click="setLeaveTimePreset('全天')">全天（{{ getLeaveTimePresetRange(pendingRequestData.leaveTeacher, '全天') }}）</button>
-                       <button type="button" class="btn btn-secondary pad-6-10-78"  @click="setLeaveTimePreset('上午')">上午（{{ getLeaveTimePresetRange(pendingRequestData.leaveTeacher, '上午') }}）</button>
-                       <button type="button" class="btn btn-secondary pad-6-10-78"  @click="setLeaveTimePreset('下午')">下午（{{ getLeaveTimePresetRange(pendingRequestData.leaveTeacher, '下午') }}）</button>
-                     </div>
-                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;">
-                       <input type="time" class="form-input" style="width:125px;" v-model="pendingRequestData.leaveTimeStart" @change="updatePendingLeaveTime">
-                       <span>至</span>
-                       <input type="time" class="form-input" style="width:125px;" v-model="pendingRequestData.leaveTimeEnd" @change="updatePendingLeaveTime">
-                       <span class="text-xs-sec-78" >目前：{{ pendingRequestData.leaveTimeType || '未填' }}（{{ pendingRequestData.leaveTime || '未填' }}）</span>
-                     </div>
-                      <small style="display:block;margin-top:5px;color:var(--text-muted);">行政人員預設全天 08:00~17:00；非行政預設全天 08:00~16:00，時間可自行修改。</small>
-                    </div>
-
-                    <!-- 經費選單僅管理員可見；位於請假時間右欄。 -->
-                    <div
-                      v-if="isAdmin && pendingRequestData.mode === 'substitution' && pendingRequestData.specialFlow !== 'combined_return'"
-                      class="form-group compare-form-fee"
-                      data-tour="compare-fee"
-                    >
-                      <label class="form-label text-success">代課鐘點費結算方式</label>
-                      <select
-                        class="form-select"
-                        v-model="pendingRequestData.subFee"
-                        :disabled="isPeriod8FeeLocked"
-                      >
-                        <option value="" disabled>請選擇...</option>
-                        <option v-if="isPeriod8FeeLocked" :value="PERIOD8_FEE">第8節代課（計畫經費）</option>
-                        <template v-if="!isPeriod8FeeLocked">
-                          <option v-if="!isMutualCover" value="自費代課">自費代課</option>
-                          <option v-if="!isMutualCover" value="公費代課">公費代課</option>
-                          <option v-if="!isMutualCover" :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）</option>
-                          <option v-if="!isMutualCover && pendingRequestData.subFee === '僅課表呈現'" value="僅課表呈現">僅課表呈現（舊）</option>
-                          <option value="扣額度">扣額度（不結鐘點＋扣折抵額度）</option>
-                          <option v-if="isMutualCover" value="活動公費">活動公費（可領代課費）</option>
-                          <option v-if="isAdmin || isMutualCover || pendingRequestData.subFee === '第8節代課'" value="第8節代課">第8節代課（計畫經費）</option>
-                        </template>
-                      </select>
-                       <span v-if="pendingRequestData.subFee === '扣額度'" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
-                         扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。
-                       </span>
-                       <span v-if="pendingRequestData.subFee === TIMETABLE_ONLY_FEE" style="font-size:0.72rem; color:#0369a1; display:block; margin-top:4px;">
-                         僅建立課表異動，不發代課費、不扣鐘點、不扣額度，也不列入經費匯出。
-                       </span>
-                      <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
-                        ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
-                      </span>
-                      <div
-                        v-if="quotaDeductPreview && quotaDeductPreview.length"
-                        style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:0.78rem;color:#5b21b6;line-height:1.55;"
-                      >
-                        <div style="font-weight:700;margin-bottom:4px;">折抵額度預覽（扣額度，僅管理員可見）</div>
-                        <div v-for="q in quotaDeductPreview" :key="q.email">
-                          {{ q.name }}：目前 <strong>{{ q.before }}</strong>
-                          → 扣 <strong>{{ q.deduct }}</strong>
-                          → 剩 <strong :style="{color: q.short ? '#b91c1c' : '#5b21b6'}">{{ q.short ? '不足' : q.after }}</strong>
-                          <span v-if="q.short" class="text-danger-deep">{{ isMutualCover ? '（將改活動公費）' : '（不可送出）' }}</span>
-                        </div>
-                        <div v-if="quotaPackLoading" style="margin-top:6px;color:#7c3aed;">查詢中…</div>
-                        <div v-else-if="quotaPackError" style="margin-top:6px;color:#b91c1c;">{{ quotaPackError }}</div>
-                        <div v-else-if="quotaPackOptions && quotaPackOptions.length" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;">
-                          <label class="form-label" style="margin-bottom:4px;">扣自事件包（預設最早有餘額者）</label>
-                          <select class="form-select" v-model="pendingRequestData.quotaPackageId" style="width:100%;font-size:0.78rem;">
-                            <option v-for="opt in quotaPackOptions" :key="opt.packageId" :value="opt.packageId">
-                              {{ opt.eventName || '未命名' }}｜餘{{ opt.remaining }}{{ opt.packageId === quotaFifoPackageId ? '（預設）' : '' }}
-                            </option>
-                          </select>
-                        </div>
-                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && !quotaDeductInsufficient" style="margin-top:6px;color:#6d28d9;">無分包明細，以總餘額扣。</div>
-                        <div v-else-if="!quotaPackLoading && !quotaPackError && pendingRequestData.subFee === '扣額度' && quotaDeductInsufficient" style="margin-top:6px;color:#b91c1c;">餘額不足，請先發放或改經費。</div>
-                        <div v-if="quotaDeductInsufficient" style="margin-top:8px;padding-top:8px;border-top:1px dashed #c4b5fd;color:#b91c1c;">
-                          <template v-if="isMutualCover">
-                            額度不足：送出時會<strong>自動改為活動公費</strong>。
-                            <button
-                              type="button"
-                              class="btn btn-secondary"
-                              style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
-                              @click="switchQuotaDeductToSelfPay"
-                            >改為活動公費</button>
-                          </template>
-                          <template v-else>
-                            額度不足，不可用「扣額度」。請改自費排代，或另選有額度的老師。
-                            <button
-                              type="button"
-                              class="btn btn-secondary"
-                              style="margin-left:8px;padding:2px 10px;font-size:0.72rem;"
-                              @click="switchQuotaDeductToSelfPay"
-                            >改為自費代課</button>
-                          </template>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-              <!-- 舊的管理員簽核模式已移至最上方顯眼處 -->
-            </div>
-
-            <!-- 送出前先問對方 LINE 範本 -->
-             <div v-if="!pendingRequestData.isBatchCandidatePreview && askFirstLineText && !pendingRequestData.isBatch && pendingRequestData.specialFlow !== 'combined_return'" data-tour="ask-first-line" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;margin-top:14px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-                <span style="font-weight:600;color:#15803d;font-size:0.85rem;">💬 送出前先問對方（LINE 範本）</span>
-                <div class="flex-gap-6-shrink">
-                  <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;line-height:1.2;" @click="copyLineMessage(askFirstLineDraft)">📋 複製</button>
-                  <button type="button" class="btn btn-success" style="padding:4px 10px;font-size:0.75rem;line-height:1.2;background:#06c755;border-color:#05b04b;" @click="sendLineMessage(askFirstLineDraft)">💬 LINE 傳送</button>
-                </div>
-              </div>
-              <textarea
-                class="form-input"
-                rows="7"
-                style="width:100%;font-family:monospace;font-size:0.78rem;background:#f8fafc;border:1px solid #d1fae5;border-radius:6px;padding:8px;resize:none;line-height:1.4;"
-                v-model="askFirstLineDraft"
-                @focus="$event.target.select()"
-              ></textarea>
-              <span style="font-size:0.72rem;color:#166534;display:block;margin-top:6px;line-height:1.4;">
-                * 送出前先傳 LINE 詢問對方意願，對方同意後再送出申請，核准成功率更高。
-              </span>
-            </div>
-
-          </div>
-          
-          <div class="modal-footer" data-tour="compare-submit">
-            <template v-if="pendingRequestData.isBatchCandidatePreview">
-              <button type="button" class="btn btn-primary" @click="closeCompareModal">← 返回批次候選</button>
-            </template>
-            <!-- 活動互代模擬：只對照課表，確認後寫入暫定（不直接送出申請） -->
-            <template v-else-if="paperMode && !isAdmin && isMutualCover">
-              <button
-                type="button"
-                class="btn btn-primary"
-                @click="openPaperPrintDraftFromCompare"
-               >👁️ 預覽調代課單</button>
-              <button type="button" class="btn btn-secondary" @click="showCompareModal = false">關閉</button>
-            </template>
-            <template v-else-if="isMutualCover && pendingRequestData.mutualPreview && !pendingRequestData.isBatch">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                :disabled="isSubmitting || loading"
-                @click="openPaperPrintDraftFromCompare"
-              >👁️ 預覽調代課單</button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                style="background:#7c3aed;border-color:#6d28d9;"
-                :disabled="isSubmitting || loading"
-                @click="assignMutualDraftFromMatch(pendingRequestData.subTeacher); showCompareModal = false"
-              >暫定</button>
-              <button type="button" class="btn btn-secondary" :disabled="isSubmitting || loading" @click="showCompareModal = false">關閉</button>
-             </template>
-             <template v-else>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                 :disabled="isSubmitting || loading"
-                 @click="openPaperPrintDraftFromCompare"
-                >👁️ 預覽調代課單</button>
-                <button
-                  class="btn btn-success"
-                 :data-tour="paperFlow ? 'compare-submit-paper' : 'compare-submit-online'"
-                  :disabled="(!isMutualCover && quotaDeductInsufficient) || isSubmitting || loading || (pendingRequestData.isExchangeBatch && !pendingRequestData.batchValidCount)"
-                :title="(!isMutualCover && quotaDeductInsufficient) ? '額度不足，請改自費排代' : (isMutualCover && quotaDeductInsufficient ? '額度不足將改活動公費後送出' : (isSubmitting || loading ? '送出中，請稍候' : ''))"
-                @click="pendingRequestData.isBatch ? executeBatchSubmit() : executeSubmitRequest()"
-              >
-                 {{ (isSubmitting || loading)
-                   ? '送出中…'
-                       : (pendingRequestData.isBatch
-                       ? (pendingRequestData.mode === 'exchange'
-                         ? ((paperFlow ? '送出申請並列印調課單（' : '確認批次調課送出（') + (pendingRequestData.batchValidCount || 0) + ' 組）')
-                         : ('確認批次送出（' + (pendingRequestData.batchCount || batchSlots.length) + ' 節）'))
-                       : (paperFlow ? '送出申請並列印調代課單' : '確認送出')) }}
-               </button>
-              <button class="btn btn-secondary" :disabled="isSubmitting || loading" @click="showCompareModal = false">取消</button>
-            </template>
-          </div>
-        </div>
-      </div>
+    <!-- 送出前對照確認 modal → components/CompareModal.vue -->
+    <CompareModal
+      v-if="showCompareModal"
+      :has-sub-teacher-conflict="hasSubTeacherConflict"
+      :is-admin="isAdmin"
+      :is-proxy-submit-active="isProxySubmitActive"
+      :user="user"
+      :notifications-suppressed="notificationsSuppressed"
+      :batch-compare-week-total="batchCompareWeekTotal"
+      :batch-compare-week-index="batchCompareWeekIndex"
+      :compare-week-dates-a="compareWeekDatesA"
+      :batch-compare-week-slot-count="batchCompareWeekSlotCount"
+      :batch-exchange-preview-slot-key="batchExchangePreviewSlotKey"
+      :is-cross-week-exchange="isCrossWeekExchange"
+      :compare-week-selection-a="compareWeekSelectionA"
+      :compare-week-dates-b="compareWeekDatesB"
+      :compare-display-dates-a="compareDisplayDatesA"
+      :timetable-periods="timetablePeriods"
+      :consec-alerts-a="consecAlertsA"
+      :compare-week-selection-b="compareWeekSelectionB"
+      :compare-display-dates-b="compareDisplayDatesB"
+      :consec-alerts-b="consecAlertsB"
+      :batch-compare-sub-groups="batchCompareSubGroups"
+      :batch-compare-view-email="batchCompareViewEmail"
+      :batch-slots="batchSlots"
+      :leave-reason-options="leaveReasonOptions"
+      :is-period8-fee-locked="isPeriod8FeeLocked"
+      :-p-e-r-i-o-d8_-f-e-e="PERIOD8_FEE"
+      :is-mutual-cover="isMutualCover"
+      :-t-i-m-e-t-a-b-l-e_-o-n-l-y_-f-e-e="TIMETABLE_ONLY_FEE"
+      :quota-deduct-preview="quotaDeductPreview"
+      :quota-pack-loading="quotaPackLoading"
+      :quota-pack-error="quotaPackError"
+      :quota-pack-options="quotaPackOptions"
+      :quota-fifo-package-id="quotaFifoPackageId"
+      :quota-deduct-insufficient="quotaDeductInsufficient"
+      :ask-first-line-text="askFirstLineText"
+      :paper-mode="paperMode"
+      :is-submitting="isSubmitting"
+      :loading="loading"
+      :paper-flow="paperFlow"
+      :get-teacher-name-by-email="getTeacherNameByEmail"
+      :shift-batch-compare-week="shiftBatchCompareWeek"
+      :format-date-m-m-d-d="formatDateMMDD"
+      :set-batch-exchange-preview-slot="setBatchExchangePreviewSlot"
+      :get-exchange-endpoint-text="getExchangeEndpointText"
+      :set-compare-week-selection="setCompareWeekSelection"
+      :get-period-label="getPeriodLabel"
+      :get-compare-cell-class="getCompareCellClass"
+      :get-compare-cell-text="getCompareCellText"
+      :resolve-compare-b-email="resolveCompareBEmail"
+      :set-batch-compare-view-email="setBatchCompareViewEmail"
+      :get-week-day-text="getWeekDayText"
+      :format-period-text="formatPeriodText"
+      :set-leave-time-preset="setLeaveTimePreset"
+      :get-leave-time-preset-range="getLeaveTimePresetRange"
+      :copy-line-message="copyLineMessage"
+      :send-line-message="sendLineMessage"
+      :assign-mutual-draft-from-match="assignMutualDraftFromMatch"
+      :execute-batch-submit="executeBatchSubmit"
+      :execute-submit-request="executeSubmitRequest"
+      :close-compare-modal="closeCompareModal"
+      :toggle-course-adjustment-only="toggleCourseAdjustmentOnly"
+      :on-leave-reason-change="onLeaveReasonChange"
+      :update-pending-leave-time="updatePendingLeaveTime"
+      :switch-quota-deduct-to-self-pay="switchQuotaDeductToSelfPay"
+      :open-paper-print-draft-from-compare="openPaperPrintDraftFromCompare"
+      v-model:direct-approve-mode="directApproveMode"
+      v-model:direct-approve-skip-notify="directApproveSkipNotify"
+      v-model:pending-request-data="pendingRequestData"
+      v-model:ask-first-line-draft="askFirstLineDraft"
+      @close="closeCompareModal"
+    />
 
       <!-- 單欄列印預覽：確認後才開啟正式左右雙聯列印視窗 -->
        <div v-if="showPrintPreviewModal" class="modal-overlay print-preview-overlay" data-tour="print-preview-modal" @click.self="closePrintPreview(true)">
@@ -3389,148 +2537,27 @@
     />
 
       <!-- 3.3 成功提示與 LINE 訊息複製對話框 (successModal) -->
-      <div v-if="showSuccessModal" class="modal-overlay" data-tour="success-modal" @click.self="showSuccessModal = false">
-        <div class="modal-card" style="max-width: 500px;" data-tour="success-card">
-          <div class="modal-header">
-            <h3 class="text-success">{{ successModalTitle }}</h3>
-            <button class="btn-close" @click="showSuccessModal = false">&times;</button>
-          </div>
-          
-          <div class="modal-body">
-            <p style="font-size: 0.9rem; color: var(--text-primary); margin-bottom: 12px; font-weight: 500; line-height: 1.5;">
-              {{ successModalMessage }}
-            </p>
-
-            <!-- 固定流程說明：依送出類型顯示不同後續 -->
-            <div class="success-flow" data-tour="success-flow">
-              <!-- 教學組直接核准 -->
-              <template v-if="successFlowMode === 'direct'">
-                <div class="success-flow-title">目前狀態</div>
-                <ol class="success-flow-steps">
-                  <li class="is-done"><span class="sf-n">1</span><span class="sf-t">已直接出單</span></li>
-                  <li class="is-done"><span class="sf-n">2</span><span class="sf-t">課表已正式變更</span></li>
-                </ol>
-                 <p class="success-flow-note">若需通知相關教師，可直接用下方按鈕預覽／列印、加入日曆，或到歷史紀錄查看。</p>
-              </template>
-              <!-- 行政代申請：跳過受邀確認，直接等教學組 -->
-              <template v-else-if="successFlowMode === 'proxy'">
-                <div class="success-flow-title">接下來怎麼辦</div>
-                <ol class="success-flow-steps">
-                  <li class="is-done"><span class="sf-n">1</span><span class="sf-t">已代送申請（跳過受邀確認）</span></li>
-                  <li class="is-current"><span class="sf-n">2</span><span class="sf-t">等教學組在「待辦」核准或退回</span></li>
-                  <li><span class="sf-n">3</span><span class="sf-t">教學組出單後，課表才正式變更</span></li>
-                </ol>
-                <p class="success-flow-note">不需等代課／調課對方同意。教學組退回 → 不生效。進度可在「待辦／歷史」查看。</p>
-              </template>
-              <!-- 一般教師送出 -->
-              <template v-else>
-                <div class="success-flow-title">接下來怎麼辦</div>
-                <ol class="success-flow-steps">
-                  <li class="is-done"><span class="sf-n">1</span><span class="sf-t">已送出申請（可用 LINE 再通知對方）</span></li>
-                  <li class="is-current"><span class="sf-n">2</span><span class="sf-t">等對方在「待辦」同意或拒絕</span></li>
-                  <li><span class="sf-n">3</span><span class="sf-t">等教學組出單後，課表才正式變更</span></li>
-                </ol>
-                <p class="success-flow-note">對方拒絕、行政退回或您撤回 → 不生效。進度可在「待辦／歷史」查看。</p>
-              </template>
-            </div>
-            
-            <!-- LINE 訊息範本：標題與複製／傳送同排 -->
-            <div v-if="hasLineTemplate" data-tour="line-template" style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-top: 12px;">
-              <!-- 多位代課老師：分卡顯示 -->
-              <div v-if="lineBatchParts && lineBatchParts.length > 1" style="display:flex;flex-direction:column;gap:12px;">
-                <div style="font-weight: 600; color: #15803d; font-size: 0.85rem;">
-                  💬 LINE 邀請訊息範本
-                </div>
-                <div
-                  v-for="(part, idx) in lineBatchParts"
-                  :key="'lp-'+idx"
-                  style="background:#fff;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;"
-                >
-                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-                    <span style="font-weight:700;color:#166534;font-size:0.85rem;">
-                      🏷️ 給 {{ part.name }} 老師（{{ part.count }} 節）
-                    </span>
-                    <div class="flex-gap-6-shrink">
-                      <button type="button" class="btn btn-secondary btn-sm-75" @click="copyLineBatchPart(idx)">📋 複製</button>
-                      <button type="button" class="btn btn-success" style="padding:4px 10px;font-size:0.75rem;background:#06c755;border-color:#05b04b;" @click="sendLineBatchPart(idx)">💬 LINE 傳送</button>
-                    </div>
-                  </div>
-                  <textarea
-                     class="form-input"
-                    rows="6"
-                    style="width:100%;font-family:monospace;font-size:0.78rem;background:#f8fafc;border:1px solid #d1fae5;border-radius:6px;padding:8px;resize:none;line-height:1.4;"
-                     v-model="part.text"
-                    @focus="$event.target.select()"
-                  ></textarea>
-                </div>
-                <span style="font-size:0.72rem;color:#166534;line-height:1.4;">
-                  * 每位老師一段，請分開複製／傳 LINE，避免內容混在一起。
-                </span>
-              </div>
-
-              <!-- 單一受邀人：標題＋複製＋LINE 同一排 -->
-              <div v-else>
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                  <span style="font-weight: 600; color: #15803d; font-size: 0.85rem; white-space:nowrap;">
-                    💬 LINE 邀請訊息範本
-                  </span>
-                  <div data-tour="line-actions" class="flex-gap-6-shrink">
-                    <button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:0.75rem;line-height:1.2;" @click="copyLineMessage()">
-                      📋 複製
-                    </button>
-                    <button type="button" class="btn btn-success" style="padding:4px 10px;font-size:0.75rem;line-height:1.2;background:#06c755;border-color:#05b04b;" @click="sendLineMessage()">
-                      💬 LINE 傳送
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                   class="form-input"
-                  rows="10"
-                  style="width: 100%; font-family: monospace; font-size: 0.8rem; background: #fff; border: 1px solid #d1fae5; border-radius: 6px; padding: 8px; resize: none; line-height: 1.4;"
-                   v-model="lineCopyText"
-                  @focus="$event.target.select()"
-                ></textarea>
-                <span style="font-size: 0.72rem; color: #166534; display: block; margin-top: 6px; line-height: 1.4;">
-                  * 可複製後用 LINE 傳給對方老師，加快簽核。
-                </span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="modal-footer success-modal-footer">
-            <div
-              v-if="successFlowMode === 'direct' && successActionRequests && successActionRequests.length"
-              class="success-followup-actions"
-              data-tour="success-followup-actions"
-            >
-              <button
-                type="button"
-                class="btn btn-primary"
-                title="先預覽單欄內容，再依原版格式列印"
-                @click="openSuccessPrintPreview"
-              >🖨️ 預覽／列印</button>
-              <button
-                v-if="successActionRequests.length === 1"
-                type="button"
-                class="btn btn-secondary"
-                title="依您的角色加入不用上課或代課行程"
-                @click="addSuccessToCalendar"
-              >📅 加入日曆</button>
-            </div>
-            <div class="success-actions">
-              <button v-if="successFlowMode === 'direct'" class="btn btn-secondary" @click="closeSuccessGoRecords">
-                📚 看歷史紀錄
-              </button>
-              <button v-else class="btn btn-primary" @click="closeSuccessGoPending">
-                📋 看我的申請
-              </button>
-              <button class="btn btn-secondary" @click="closeSuccessStayTimetable">
-                ➕ 再申請一筆
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 送出成功＋LINE 傳送 modal → components/SuccessModal.vue -->
+    <SuccessModal
+      v-if="showSuccessModal"
+      :success-modal-title="successModalTitle"
+      :success-modal-message="successModalMessage"
+      :success-flow-mode="successFlowMode"
+      :has-line-template="hasLineTemplate"
+      :success-action-requests="successActionRequests"
+      :copy-line-batch-part="copyLineBatchPart"
+      :send-line-batch-part="sendLineBatchPart"
+      :copy-line-message="copyLineMessage"
+      :send-line-message="sendLineMessage"
+      :open-success-print-preview="openSuccessPrintPreview"
+      :add-success-to-calendar="addSuccessToCalendar"
+      :close-success-go-records="closeSuccessGoRecords"
+      :close-success-go-pending="closeSuccessGoPending"
+      :close-success-stay-timetable="closeSuccessStayTimetable"
+      v-model:line-batch-parts="lineBatchParts"
+      v-model:line-copy-text="lineCopyText"
+      @close="showSuccessModal = false"
+    />
 
       <!-- 批次核准後列印提示 -->
     <!-- 批次已核准列印提示 modal → components/BatchPrintPromptModal.vue -->
@@ -3622,298 +2649,44 @@
     />
 
       <!-- 空堂事件 Modal -->
-      <div v-if="showClassAwayModal" class="modal-overlay" @click.self="showClassAwayModal = false">
-        <div class="modal-card" style="max-width:560px;">
-          <div class="modal-header">
-            <h3>{{ classAwayModalMode === 'add' ? '新增空堂事件' : '編輯空堂事件' }}</h3>
-            <button class="btn-close" @click="showClassAwayModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <label class="form-label">事件名稱</label>
-              <input type="text" class="form-input" placeholder="例：九年級畢旅、九年級畢業" v-model="classAwayForm.name">
-            </div>
-            <div class="form-group">
-              <label class="form-label">節次設定方式</label>
-              <div style="display:flex;flex-wrap:wrap;gap:12px;">
-                <label class="label-check-sm">
-                  <input type="radio" value="daily" v-model="classAwayForm.periodMode" @change="setClassAwayPeriodMode('daily')" class="chk-box-15">
-                  每日指定節次
-                </label>
-                <label class="label-check-sm">
-                  <input type="radio" value="range" v-model="classAwayForm.periodMode" @change="setClassAwayPeriodMode('range')" class="chk-box-15">
-                  連續起迄時段
-                </label>
-              </div>
-              <span style="font-size:0.73rem;color:var(--text-muted);display:block;margin-top:5px;">每日指定適用於日期範圍內的每一天；連續起迄會將首日、末日限制在所選節次，中間日期全日適用。</span>
-            </div>
-            <div v-if="classAwayForm.periodMode === 'range'" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;">
-              <div style="border:1px solid #bfdbfe;background:#eff6ff;border-radius:9px;padding:10px;">
-                <strong style="display:block;color:#1d4ed8;font-size:0.82rem;margin-bottom:8px;">起點</strong>
-                <div class="form-group" style="margin-bottom:8px;">
-                  <label class="form-label">日期</label>
-                  <input type="date" class="form-input" v-model="classAwayForm.startDate">
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label class="form-label">節次</label>
-                  <select class="form-select" v-model="classAwayForm.startPeriod" @change="setClassAwayPeriodBoundary('startPeriod', classAwayForm.startPeriod)">
-                    <option v-for="option in classAwayPeriodOptions" :key="'cae-start-'+option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
-                </div>
-              </div>
-              <div style="border:1px solid #c4b5fd;background:#f5f3ff;border-radius:9px;padding:10px;">
-                <strong style="display:block;color:#6d28d9;font-size:0.82rem;margin-bottom:8px;">終點</strong>
-                <div class="form-group" style="margin-bottom:8px;">
-                  <label class="form-label">日期（空白＝學期結束）</label>
-                  <input type="date" class="form-input" v-model="classAwayForm.endDate">
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label class="form-label">節次</label>
-                  <select class="form-select" v-model="classAwayForm.endPeriod" @change="setClassAwayPeriodBoundary('endPeriod', classAwayForm.endPeriod)">
-                    <option v-for="option in classAwayPeriodOptions" :key="'cae-end-'+option.value" :value="option.value">{{ option.label }}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div v-else>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-bottom:10px;">
-                <div class="form-group" style="margin:0;">
-                  <label class="form-label">起日</label>
-                  <input type="date" class="form-input" v-model="classAwayForm.startDate">
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label class="form-label">迄日（空白＝學期結束）</label>
-                  <input type="date" class="form-input" v-model="classAwayForm.endDate">
-                </div>
-              </div>
-              <div class="form-group">
-              <label class="form-label">每天停課節次（可複選）</label>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-                <label class="label-check-sm">
-                  <input type="checkbox" class="chk-box-15" :checked="isClassAwayPeriodSelected('all')" @change="toggleClassAwayPeriod('all')">
-                  全部節次
-                </label>
-                <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayPeriodRange">全選早自習至第8節</button>
-                <button type="button" class="btn btn-secondary btn-xs" @click="clearClassAwayPeriods">清空</button>
-                <span class="text-xs-muted-75">已選 {{ isClassAwayPeriodSelected('all') ? '全部節次' : ((classAwayForm.periods || []).length + ' 個節次') }}</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px;border:1px solid var(--border-color);border-radius:8px;padding:8px;">
-                <label v-for="option in classAwayPeriodOptions" :key="'cae-period-' + option.value" class="label-check-sm" style="margin:0;">
-                  <input type="checkbox" class="chk-box-15" :checked="isClassAwayPeriodSelected(option.value)" :disabled="isClassAwayPeriodSelected('all')" @change="toggleClassAwayPeriod(option.value)">
-                  {{ option.label }}
-                </label>
-              </div>
-              </div>
-            </div>
-             <div class="form-group">
-               <label class="form-label">適用範圍</label>
-               <div style="display:flex;flex-wrap:wrap;gap:16px;">
-                 <label class="label-check-sm">
-                   <input type="radio" value="all" v-model="classAwayForm.scope" class="chk-box-15">
-                   全校
-                 </label>
-                 <label class="label-check-sm">
-                   <input type="radio" value="classes" v-model="classAwayForm.scope" class="chk-box-15">
-                   指定班級
-                 </label>
-               </div>
-             </div>
-             <div class="form-group">
-              <label class="form-label">鐘點規則</label>
-              <select class="form-select" v-model="classAwayForm.billingRule">
-                  <option value="keep">不扣超鐘點（事件期間仍依原週節數計）</option>
-                  <option value="reduce">扣超鐘點（依事件期間未授課調降）</option>
-              </select>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;">
-              <label class="label-check-sm">
-                <input type="checkbox" v-model="classAwayForm.forMutual" class="chk-box-15">
-                  可進活動互代<span style="color:var(--text-muted);">（僅限事件起訖時段）</span>
-              </label>
-              <label class="label-check-sm">
-                <input type="checkbox" v-model="classAwayForm.enabled" class="chk-box-15">
-                啟用
-              </label>
-            </div>
-             <div v-if="classAwayForm.scope === 'classes'" class="form-group">
-               <label class="form-label">班級（核取多選）</label>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
-                <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayGrade('7')">全選七年級</button>
-                <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayGrade('8')">全選八年級</button>
-                <button type="button" class="btn btn-secondary btn-xs" @click="selectClassAwayGrade('9')">全選九年級</button>
-                <button type="button" class="btn btn-secondary btn-xs" @click="classAwayForm.classes = []">清空</button>
-                <span class="text-xs-muted-75" >已選 {{ (classAwayForm.classes || []).length }} 班</span>
-              </div>
-              <div style="max-height:160px;overflow:auto;border:1px solid var(--border-color);border-radius:8px;padding:8px;display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:4px;">
-                <label
-                  v-for="c in classList"
-                  :key="'cae-'+c"
-                  style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;"
-                >
-                  <input
-                    type="checkbox"
-                    class="chk-sm"
-                    :checked="isClassAwayFormClassSelected(c)"
-                    @change="toggleClassAwayFormClass(c)"
-                  >
-                  {{ c }}
-                </label>
-               </div>
-             </div>
-             <div v-else class="form-group" style="margin-bottom:12px;color:var(--text-secondary);font-size:0.82rem;">
-               此事件會套用到學期內所有班級，不必逐班勾選。
-             </div>
-            <div class="form-group">
-              <label class="form-label">備註</label>
-              <input type="text" class="form-input" v-model="classAwayForm.note" placeholder="選填">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="saveClassAwayEvent">儲存</button>
-            <button class="btn btn-secondary" @click="showClassAwayModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 空堂事件 modal → components/ClassAwayModal.vue -->
+    <ClassAwayModal
+      v-if="showClassAwayModal"
+      :class-away-modal-mode="classAwayModalMode"
+      :class-away-period-options="classAwayPeriodOptions"
+      :class-list="classList"
+      :set-class-away-period-mode="setClassAwayPeriodMode"
+      :set-class-away-period-boundary="setClassAwayPeriodBoundary"
+      :is-class-away-period-selected="isClassAwayPeriodSelected"
+      :toggle-class-away-period="toggleClassAwayPeriod"
+      :select-class-away-grade="selectClassAwayGrade"
+      :is-class-away-form-class-selected="isClassAwayFormClassSelected"
+      :toggle-class-away-form-class="toggleClassAwayFormClass"
+      :select-class-away-period-range="selectClassAwayPeriodRange"
+      :clear-class-away-periods="clearClassAwayPeriods"
+      :save-class-away-event="saveClassAwayEvent"
+      v-model:class-away-form="classAwayForm"
+      @close="showClassAwayModal = false"
+    />
 
       <!-- 4.1b. 管理員編輯歷史紀錄 Modal（可改全部代／調課欄位） -->
-      <div v-if="showHistoryEditModal" class="modal-overlay" @click.self="showHistoryEditModal = false">
-        <div class="modal-card" style="max-width: 560px;">
-          <div class="modal-header">
-            <h3>📝 編輯調代課紀錄</h3>
-            <button class="btn-close" @click="showHistoryEditModal = false">&times;</button>
-          </div>
-          <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto;">
-            <div class="text-xs-muted-78">
-               單號：<strong>{{ historyEditForm.serial || '未提供' }}</strong>
-                         · 類型：{{ historyEditForm.specialFlow === 'combined_return' ? '併班上課' : (historyEditForm.type === 'exchange' || historyEditForm.type === '對調' ? '調課' : '代課') }}
-             </div>
-            <div class="form-group">
-              <label class="form-label">類型</label>
-               <div v-if="historyEditForm.specialFlow === 'combined_return'" class="form-input" style="background:#f8fafc;color:#0f766e;">代課（併班上課）</div>
-              <select v-else class="form-select" v-model="historyEditForm.type" @change="onHistoryEditTypeChange">
-                <option value="substitution">代課</option>
-                <option value="exchange">調課</option>
-              </select>
-            </div>
-            <div class="grid-2-10">
-              <div class="form-group m-0">
-                <label class="form-label">請假教師</label>
-                <select class="form-select" v-model="historyEditForm.requesterEmail">
-                  <option value="" disabled>請選擇...</option>
-                   <option v-for="t in teachersList" :key="'he-leave-'+t.email" :value="t.email">{{ t.name }}（{{ t.subject || '無' }}）</option>
-                </select>
-              </div>
-              <div v-if="historyEditForm.specialFlow !== 'combined_return'" class="form-group m-0">
-                <label class="form-label">{{ historyEditForm.type === 'exchange' || historyEditForm.type === '對調' ? '對調教師' : '代課教師' }}</label>
-                <select class="form-select" v-model="historyEditForm.targetTeacherEmail">
-                  <option value="" disabled>請選擇...</option>
-                   <option v-for="t in teachersList" :key="'he-sub-'+t.email" :value="t.email">{{ t.name }}（{{ t.subject || '無' }}）</option>
-                </select>
-              </div>
-               <div v-else class="form-group m-0">
-                  <label class="form-label">併班教師</label>
-                 <select class="form-select" v-model="historyEditForm.targetTeacherEmail">
-                   <option value="" disabled>請選擇同節併班代課教師...</option>
-                   <option v-for="t in teachersList" :key="'he-combined-sub-'+t.email" :value="t.email">{{ t.name }}（{{ t.subject || '無' }}）</option>
-                 </select>
-               </div>
-            </div>
-            <div class="grid-2-10">
-              <div class="form-group m-0">
-                <label class="form-label">班級</label>
-                <input type="text" class="form-input" v-model="historyEditForm.className" list="he-class-list" placeholder="如 701">
-                <datalist id="he-class-list">
-                  <option v-for="c in classList" :key="'he-cls-'+c" :value="c"></option>
-                </datalist>
-              </div>
-              <div class="form-group m-0">
-                <label class="form-label">科目</label>
-                <input type="text" class="form-input" v-model="historyEditForm.subject" placeholder="如 國文">
-              </div>
-            </div>
-            <div class="text-sm-sec-mt">請假課堂</div>
-            <div class="grid-12-08-10">
-              <div class="form-group m-0">
-                <label class="form-label">日期</label>
-                <input type="date" class="form-input" v-model="historyEditForm.requestDate" @change="onHistoryEditDateChange('request')">
-              </div>
-              <div class="form-group m-0">
-                <label class="form-label">節次</label>
-                <select class="form-select" v-model.number="historyEditForm.requestPeriod" @change="onHistoryEditPeriodChange">
-                  <option v-for="p in timetablePeriods" :key="'he-rp-'+p" :value="p">{{ formatPeriodText(p) }}</option>
-                </select>
-              </div>
-            </div>
-            <template v-if="historyEditForm.type === 'exchange' || historyEditForm.type === '對調'">
-              <div class="text-sm-sec-mt">對調課堂</div>
-              <div class="grid-12-08-10">
-                <div class="form-group m-0">
-                  <label class="form-label">日期</label>
-                  <input type="date" class="form-input" v-model="historyEditForm.targetDate" @change="onHistoryEditDateChange('target')">
-                </div>
-                <div class="form-group m-0">
-                  <label class="form-label">節次</label>
-                  <select class="form-select" v-model.number="historyEditForm.targetPeriod">
-                    <option v-for="p in timetablePeriods" :key="'he-tp-'+p" :value="p">{{ formatPeriodText(p) }}</option>
-                  </select>
-                </div>
-              </div>
-            </template>
-            <div class="form-group m-0">
-              <label class="form-label">原因 / 假別</label>
-               <select class="form-select" v-model="historyEditForm.reason" @change="onHistoryEditReasonChange">
-                 <option value="" disabled>請選擇假別...</option>
-                 <option v-if="(historyEditForm.type === 'substitution' || historyEditForm.type === 'exchange' || historyEditForm.type === '對調') && historyEditForm.specialFlow !== 'combined_return'" value="課務調整">課務調整（無請假）</option>
-                  <option v-for="r in leaveReasonOptions" :key="'he-r-'+r" :value="r">{{ r }}</option>
-               </select>
-            </div>
-            <div class="form-group m-0" v-if="historyEditForm.type !== 'exchange' && historyEditForm.type !== '對調' && historyEditForm.specialFlow !== 'combined_return'">
-              <label class="form-label">請假時間（代課清冊）</label>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <select class="form-select" style="width:110px;" v-model="historyEditForm.leaveTimeType">
-                  <option value="">未填</option>
-                  <option value="全天">全天</option>
-                  <option value="上午">上午</option>
-                  <option value="下午">下午</option>
-                  <option value="自訂">自訂</option>
-                </select>
-                <input type="text" class="form-input" placeholder="如 08:00~16:00" v-model="historyEditForm.leaveTime">
-                <small v-if="historyEditForm.courseAdjustmentOnly" style="color:var(--text-muted);">課務調整不建立請假或代導鐘點費。</small>
-              </div>
-            </div>
-             <div class="form-group m-0" v-if="historyEditForm.type !== 'exchange' && historyEditForm.type !== '對調'">
-               <label class="form-label">{{ historyEditForm.specialFlow === 'combined_return' ? '被代教師扣減類別' : '經費類別' }}</label>
-               <div v-if="historyEditForm.specialFlow === 'combined_return'" class="form-input" style="background:#f8fafc;color:#0f766e;">
-                 {{ historyEditForm.subFee || '請先選擇假別' }}（依假別自動帶入）
-               </div>
-               <select v-else class="form-select" v-model="historyEditForm.subFee">
-                  <option value="自費代課">自費代課</option>
-                  <option value="公費代課">公費代課</option>
-                  <option :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）</option>
-                  <option v-if="historyEditForm.subFee === '僅課表呈現'" value="僅課表呈現">僅課表呈現（舊）</option>
-                  <option value="扣額度">扣額度</option>
-                 <option value="活動公費">活動公費</option>
-                 <option value="第8節代課">第8節代課</option>
-                 <option value="無">無</option>
-                 <option v-if="historyEditForm.subFee === '互代不結'" value="互代不結">互代不結（舊）</option>
-                 <option v-if="historyEditForm.subFee === '學校移撥'" value="學校移撥">學校移撥（舊）</option>
-               </select>
-             </div>
-            <div class="form-group m-0">
-              <label class="form-label">備註</label>
-              <input type="text" class="form-input" v-model="historyEditForm.note">
-            </div>
-            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin:0;">
-              <input type="checkbox" id="chk-printed" v-model="historyEditForm.printed" class="chk-box-16">
-              <label for="chk-printed" class="form-label m-0">標記為已列印</label>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" @click="saveHistoryEdit">💾 儲存</button>
-            <button class="btn btn-secondary" @click="showHistoryEditModal = false">取消</button>
-          </div>
-        </div>
-      </div>
+    <!-- 歷史異動編輯 modal → components/HistoryEditModal.vue -->
+    <HistoryEditModal
+      v-if="showHistoryEditModal"
+      :teachers-list="teachersList"
+      :class-list="classList"
+      :timetable-periods="timetablePeriods"
+      :leave-reason-options="leaveReasonOptions"
+      :-t-i-m-e-t-a-b-l-e_-o-n-l-y_-f-e-e="TIMETABLE_ONLY_FEE"
+      :on-history-edit-date-change="onHistoryEditDateChange"
+      :format-period-text="formatPeriodText"
+      :on-history-edit-type-change="onHistoryEditTypeChange"
+      :on-history-edit-period-change="onHistoryEditPeriodChange"
+      :on-history-edit-reason-change="onHistoryEditReasonChange"
+      :save-history-edit="saveHistoryEdit"
+      v-model:history-edit-form="historyEditForm"
+      @close="showHistoryEditModal = false"
+    />
 
       <!-- 4.1. 異動狀態與詳情 Modal -->
     <!-- §UI-3.1 異動詳情 modal → components/DetailModal.vue -->
@@ -4039,6 +2812,11 @@ import { onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
+import HistoryEditModal from './components/HistoryEditModal.vue';
+import ClassAwayModal from './components/ClassAwayModal.vue';
+import SuccessModal from './components/SuccessModal.vue';
+import CompareModal from './components/CompareModal.vue';
+import MatchDrawerModal from './components/MatchDrawerModal.vue';
 import TeacherModal from './components/TeacherModal.vue';
 import ImportTeachersModal from './components/ImportTeachersModal.vue';
 import SchoolSwapModal from './components/SchoolSwapModal.vue';

@@ -13,6 +13,7 @@ const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'ut
 // 詳情 modal 已抽為 components/DetailModal.vue（模板聚合見 composition.test.js）
 const detailModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'DetailModal.vue'), 'utf8');
 const overtimePlanModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'OvertimePlanModal.vue'), 'utf8');
+const compareModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'CompareModal.vue'), 'utf8');
 const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
 const exportSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-export.js'), 'utf8');
 
@@ -280,16 +281,16 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(teachersTableSource, /overflow-wrap:anywhere/, '欄位折行保證仍在（inline 形式）');
   assert.match(shellSource, /<title>建成國中線上課表系統/, '殼層標題應為建成國中線上課表系統');
   assert.match(shellSource, /application-name" content="JCJH Timetable"/, 'PWA application-name 應保留');
-  assert.equal((indexSource.match(/class="mini-grid-date"/g) || []).length, 12, '對照頁一般與左右兩張跨週課表都應顯示日期');
+  assert.equal((compareModalSource.match(/class="mini-grid-date"/g) || []).length, 12, '對照頁一般與左右兩張跨週課表都應顯示日期');
   assert.match(styleSource, /\.mini-grid-header \{[^}]*height: 38px[^}]*flex-direction: column/);
   assert.match(indexSource, /isCrossWeekExchange/);
-  assert.match(indexSource, /exchange-week-grid/);
-  assert.match(indexSource, /exchange-two-table-panels/);
+  assert.match(compareModalSource, /exchange-week-grid/);
+  assert.match(compareModalSource, /exchange-two-table-panels/);
   assert.match(indexSource, /compareWeekSelectionA/);
   assert.match(indexSource, /compareWeekSelectionB/);
-  assert.match(indexSource, /batch-compare-week-nav/);
-  assert.match(indexSource, /shiftBatchCompareWeek\(-1\)/);
-  assert.match(indexSource, /shiftBatchCompareWeek\(1\)/);
+  assert.match(compareModalSource, /batch-compare-week-nav/);
+  assert.match(compareModalSource, /shiftBatchCompareWeek\(-1\)/);
+  assert.match(compareModalSource, /shiftBatchCompareWeek\(1\)/);
   assert.match(submitHelperSource, /getBatchCompareWeeks/, '批次調課週次計算應存在');
   assert.match(dataStoreSource, /batchCompareWeekSlotCount/, '批次調課節數計算應存在（v2 在 data store）');
   const leaveHistorySlotStart = indexSource.search(/\{\{ formatHistoryLeaveSlot\((?:rec|row)\) \}\}/);
@@ -303,20 +304,21 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(indexSource.slice(exchangeHistorySlotStart, exchangeHistorySlotEnd), /isHistoryExchangeRechanged\((?:rec|row)\)/);
   assert.equal((indexSource.match(/isRequestLeaveRechanged\((?:req|row)\)/g) || []).length, 3, 'all request lists must mark the original endpoint independently');
   assert.equal((indexSource.match(/isRequestExchangeRechanged\((?:req|row)\)/g) || []).length, 3, 'all request lists must mark the target endpoint independently');
-  const triangleUiStart = indexSource.indexOf("matchMode === 'triangle'");
-  const triangleUiEnd = indexSource.indexOf('<!-- 調課模式列表 -->', triangleUiStart);
+  const matchDrawerSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'MatchDrawerModal.vue'), 'utf8');
+  const triangleUiStart = matchDrawerSource.indexOf("matchMode === 'triangle'");
+  const triangleUiEnd = matchDrawerSource.indexOf('<!-- 調課模式列表 -->', triangleUiStart);
   assert.ok(triangleUiStart >= 0 && triangleUiEnd > triangleUiStart, 'triangle UI block must remain discoverable');
-  const triangleUiSource = indexSource.slice(triangleUiStart, triangleUiEnd);
+  const triangleUiSource = matchDrawerSource.slice(triangleUiStart, triangleUiEnd);
   assert.match(triangleUiSource, /v-model="triangleReason"/);
   assert.match(triangleUiSource, /leaveReasonOptions/);
   assert.match(triangleUiSource, /未填寫時預設請假/);
   assert.match(triangleUiSource, /事由/);
   assert.match(detailModalSource, /紙本模式：請確認三位教師都已在調課單簽名/);
   assert.doesNotMatch(triangleUiSource, /#7c3aed|#6d28d9|#5b21b6|#faf5ff|#ddd6fe|#f5f3ff/);
-  assert.match(indexSource, /併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減/);
-  assert.match(indexSource, /v-model="pendingRequestData\.reason" :disabled="pendingRequestData\.courseAdjustmentOnly"/);
+  assert.match(compareModalSource, /併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減/);
+  assert.match(compareModalSource, /v-model="pendingRequestData\.reason" :disabled="pendingRequestData\.courseAdjustmentOnly"/);
   assert.doesNotMatch(indexSource, /<option v-if="pendingRequestData\.specialFlow === 'combined_return'" value="合班回原班">/);
-  assert.match(indexSource, /被代教師扣減類別/);
+  assert.match(compareModalSource, /被代教師扣減類別/);
   assert.match(indexSource, /getApproveRiskFlags\((?:req|row)\)\.filter\(f => \(f\.level === 'warn' \|\| f\.level === 'danger'\) && f\.key !== 'chain'\)/);
   assert.match(printModSource, /const returnTo = showDetailModal\.value \? 'detail' : '';/);
   assert.match(styleSource, /\.hist-actions \{[^}]*flex-wrap:\s*nowrap/);

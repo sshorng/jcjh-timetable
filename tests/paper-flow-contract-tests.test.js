@@ -950,33 +950,37 @@ function runCalendarFallbackContractTest() {
 }
 function runApplicationFormContractTest() {
   const html = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
-  assert.match(html, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
-  assert.match(html, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
-   assert.match(html, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
-   assert.match(html, /<option v-if="!isMutualCover" :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）<\/option>/, '管理員應可選僅課表呈現');
-   assert.match(html, /僅建立課表異動，不發代課費、不扣鐘點、不扣額度，也不列入經費匯出。/, '畫面應說明僅課表不進結算');
-  assert.match(html, /扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。/, '畫面應說明扣款對象與被代者零扣除');
-  assert.match(html, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
-  assert.match(html, /id="course-adjustment-only"/);
-  assert.match(html, /@change="toggleCourseAdjustmentOnly"/);
+  // 申請表單已抽為 components/CompareModal.vue；成功後續抽為 SuccessModal.vue
+  const compareHtml = fs.readFileSync(path.join(here, '../src/components', 'CompareModal.vue'), 'utf8');
+  const successHtml = fs.readFileSync(path.join(here, '../src/components', 'SuccessModal.vue'), 'utf8');
+  const matchHtml = fs.readFileSync(path.join(here, '../src/components', 'MatchDrawerModal.vue'), 'utf8');
+  assert.match(compareHtml, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
+  assert.match(compareHtml, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
+   assert.match(compareHtml, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
+   assert.match(compareHtml, /<option v-if="!isMutualCover" :value="TIMETABLE_ONLY_FEE">僅課表呈現（不結算）<\/option>/, '管理員應可選僅課表呈現');
+   assert.match(compareHtml, /僅建立課表異動，不發代課費、不扣鐘點、不扣額度，也不列入經費匯出。/, '畫面應說明僅課表不進結算');
+  assert.match(compareHtml, /扣額度規則：扣代課者 1 節額度；被代教師不扣鐘點、不扣額度。/, '畫面應說明扣款對象與被代者零扣除');
+  assert.match(compareHtml, /quotaDeductPreview/, '扣額度選取後應顯示額度預覽');
+  assert.match(compareHtml, /id="course-adjustment-only"/);
+  assert.match(compareHtml, /@change="toggleCourseAdjustmentOnly"/);
   assert.match(html, /<th class="billing-sticky-name">姓名<\/th>\s*<th class="billing-th-job">職務<\/th>\s*<th class="billing-th-subject">科目<\/th>/, '月報應在科目前顯示職務');
   assert.match(html, /課代節[\s\S]*?課代費/, '月報「我去代課」區應獨立顯示課表代課節數與費用');
   assert.match(html, /monthlyReportTotals\.substitutePaidCount[\s\S]*?monthlyReportTotals\.substitutePaidFee/, '月報合計列應統計課表代課節數與費用');
   assert.match(html, /<td class="billing-job" :title="row\.jobTitle \|\| '教師'">\{\{ row\.jobTitle \|\| '教師' \}\}<\/td>/, '月報未填職務應預設為教師');
   assert.match(html, /<td class="billing-subj" :title="row\.subject \|\| ''">\{\{ row\.subject \}\}<\/td>/, '月報科目應可移入查看完整文字');
-   assert.match(html, /\(pendingRequestData\.mode === 'substitution' \|\| pendingRequestData\.mode === 'exchange'\) && pendingRequestData\.specialFlow !== 'combined_return'/);
-  assert.ok((html.match(/預覽調代課單/g) || []).length >= 3, 'compare modal must expose preview in every footer branch');
-  assert.ok((html.match(/@click="openPaperPrintDraftFromCompare"/g) || []).length >= 3, 'preview buttons must use the shared preview flow');
+   assert.match(compareHtml, /\(pendingRequestData\.mode === 'substitution' \|\| pendingRequestData\.mode === 'exchange'\) && pendingRequestData\.specialFlow !== 'combined_return'/);
+  assert.ok((compareHtml.match(/預覽調代課單/g) || []).length >= 3, 'compare modal must expose preview in every footer branch');
+  assert.ok((compareHtml.match(/@click="openPaperPrintDraftFromCompare"/g) || []).length >= 3, 'preview buttons must use the shared preview flow');
   assert.doesNotMatch(html, /🖨️ 列印紙本通知/, 'compare modal must not expose the standalone paper notice button');
    assert.doesNotMatch(html, /送出並列印紙本通知|確認送出，通知相關人員/, 'submit button must not use the retired paper notice label');
-   assert.match(html, /paperFlow \? '送出申請並列印調代課單' : '確認送出'/, 'paper flow submit button must send then print');
+   assert.match(compareHtml, /paperFlow \? '送出申請並列印調代課單' : '確認送出'/, 'paper flow submit button must send then print');
    assert.doesNotMatch(html, /送出前不可列印/, 'preview button should not expose the lock note in its label');
    assert.match(html, /v-if="printPreview && printPreview\.canPrint !== false" class="print-preview-image-actions"/, 'pre-submit image actions should be hidden');
     assert.match(html, /v-if="printPreview && printPreview\.canPrint !== false" type="button" class="btn btn-primary"(?: data-tour="print-confirm")? @click="confirmPrintPreview"/, 'pre-submit print action should be hidden');
-  assert.match(html, /data-tour="success-followup-actions"/);
-  assert.match(html, /@click="openSuccessPrintPreview"/);
-  assert.match(html, /@click="addSuccessToCalendar"/);
-  assert.match(html, /@click="closeSuccessGoRecords"/);
+  assert.match(successHtml, /data-tour="success-followup-actions"/);
+  assert.match(successHtml, /@click="openSuccessPrintPreview"/);
+  assert.match(successHtml, /@click="addSuccessToCalendar"/);
+  assert.match(successHtml, /@click="closeSuccessGoRecords"/);
       const backofficeStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'backoffice.js'), 'utf8');
 const submitStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'submit.js'), 'utf8');
 const outputStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'output.js'), 'utf8');
@@ -1014,7 +1018,7 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
      assert.equal(isMutualRec({ subFee: '第8節代課' }), false, '第8節代課經費不可顯示為互代');
      assert.equal(isMutualRec({ subFee: '活動公費' }), true, '活動公費仍應顯示為互代');
      assert.match(submitStoreSource, /const paperFlow = computed\(\(\) =>\s*!storeToRefs\(useTourStore\(\)\)\.isMutualCover\.value\s*&&\s*notificationsSuppressed\.value\s*&&\s*!isProxySubmitActive\.value/, '關閉線上申請時應優先走紙本流程');
-     assert.match(html, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
+     assert.match(compareHtml, /v-if="isAdmin && !notificationsSuppressed && pendingRequestData\.specialFlow !== 'combined_return'/, '紙本模式不應顯示直接核准選項');
     // 2A：代申請驗證已移至 ui-proxy.js
     const proxySource = fs.readFileSync(path.join(here, '../src/modules/ui-proxy.js'), 'utf8');
     assert.match(proxySource, /if \(isAdmin\.value\) return true;/, '管理員應可協助他人再辦');
@@ -1037,14 +1041,14 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
     assert.match(appSubmitSource, /if \(p\.mode !== 'substitution' && p\.mode !== 'exchange'\) return;/, '課務調整切換應支援調課模式');
     assert.match(appSubmitSource, /const d = p\.mode === 'substitution'\s*\? getLeaveTimeDefaults\(p\.leaveTeacher\)\s*:\s*\{ type: '', start: '', end: '', range: '' \};/, '調課取消課務調整時不應套用請假時間');
      assert.match(backofficeSource, /reason \|\| ''\)\.trim\(\) === '課務調整'[\s\S]*toggleCourseAdjustmentOnly/, '直接選擇課務調整時應清空請假時間');
-    assert.match(html, /課務調整（無請假）/, '申請表應可直接選擇課務調整');
+    assert.match(compareHtml, /課務調整（無請假）/, '申請表應可直接選擇課務調整');
    assert.equal(typeof UiBatchPanel.create, 'function', 'batch panel module must remain discoverable');
   assert.match(activitySource, /var successActionRequests = deps\.successActionRequests/);
   assert.match(activitySource, /showSuccessModal, successActionRequests, showCompareModal/);
   assert.match(outputStoreSource, /successActionRequests/, 'output store 應暴露 successActionRequests');
    assert.match(printSource, /returnTo === 'compare'\) showCompareModal\.value = true/);
    assert.match(html, /getClassChangeTypeLabel\(item\.type\)/, 'class change badges should use compact labels');
-   assert.match(html, /isHomeroomTeacher\(t, activeCell\.classData && activeCell\.classData\.className\)/, 'substitution candidates should show class-specific homeroom status');
+   assert.match(matchHtml, /isHomeroomTeacher\(t, activeCell\.classData && activeCell\.classData\.className\)/, 'substitution candidates should show class-specific homeroom status');
     assert.match(mutualStoreSource, /const getClassChangeTypeLabel =/, '班級異動標籤函式應存在');
     // R16：代導判定已移至 ui-homeroom.js；改讀模組源碼
     const hmSource = fs.readFileSync(path.join(here, '../src/modules/ui-homeroom.js'), 'utf8');
@@ -1110,8 +1114,8 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
    assert.match(onboardingSource, /id: 'exchange-controls'/, 'tour should include exchange controls');
    assert.match(onboardingSource, /_storageKey = opts\.mode === 'paper' \? PAPER_STORAGE_KEY : STORAGE_KEY/);
    assert.match(html, /notificationsSuppressed \? '紙本流程操作教學' : '線上簽核操作教學'/, 'help button label should follow the global mode');
-   assert.match(html, /data-tour="exchange-mode-btn"/, 'exchange mode button should be a tour target');
-   assert.match(html, /data-tour="exchange-controls"/, 'exchange controls should be a tour target');
+  assert.match(matchHtml, /data-tour="exchange-mode-btn"/, 'exchange mode button should be a tour target');
+  assert.match(matchHtml, /data-tour="exchange-controls"/, 'exchange controls should be a tour target');
      assert.match(onboardingSource, /paper-print-preview/, 'paper tour should include the print preview step');
      assert.match(onboardingSource, /paper-print-button/, 'paper tour should include the confirm-print step');
      assert.match(onboardingSource, /compare-submit-paper/, 'paper tour should target the paper submit button');

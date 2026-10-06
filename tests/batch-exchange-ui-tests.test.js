@@ -74,7 +74,10 @@ test('batch exchange ui tests（v1 移植）', () => {
   assert.equal(batchAssignMode.value, 'same', '切回批次代課仍保留原本預設');
 
   // v1 讀 index.html／app.js；v2 樣板在 src/App.vue（殼層見 v2/index.html）
+  // 媒合抽屜／對照 modal 已抽為 components（模板聚合見 composition.test.js）
   const html = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+  const matchHtml = fs.readFileSync(path.join(here, '..', 'src', 'components', 'MatchDrawerModal.vue'), 'utf8');
+  const compareHtml = fs.readFileSync(path.join(here, '..', 'src', 'components', 'CompareModal.vue'), 'utf8');
   const submitSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-submit.js'), 'utf8');
   // 2A：申請欄位檢查已移至 ui-homeroom.js
   const homeroomSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-homeroom.js'), 'utf8');
@@ -89,16 +92,16 @@ test('batch exchange ui tests（v1 移植）', () => {
     html.indexOf('@click="isScheduleEditMode = !isScheduleEditMode"') > html.indexOf('data-tour="mutual-btn"'),
     '編輯基礎課表按鈕維持在工具列最右側'
   );
-  assert.match(html, /選為本組/, '批次調課候選按鈕應清楚標示配對動作');
-  assert.match(html, /match-op-pair-horizontal[\s\S]*?previewBatchCandidate\('substitution', t\.email\)[\s\S]*?模擬[\s\S]*?指定此節/, '批次代課模擬與指定按鈕水平排列');
-  assert.match(html, /match-op-pair-horizontal[\s\S]*?previewBatchCandidate\('exchange', r\.teacherEmail[\s\S]*?模擬[\s\S]*?選為本組/, '批次調課模擬與配對按鈕水平排列');
-  assert.match(html, /pendingRequestData\.isBatchCandidatePreview[\s\S]*?返回批次候選/, '預覽模式只提供返回候選，不顯示送出按鈕');
-  assert.match(html, /batch-exchange-preview-switch[\s\S]*?setBatchExchangePreviewSlot\(s\.key\)[\s\S]*?template v-if="isCrossWeekExchange"/, '批次調課預覽可切換配對組別並顯示課表');
-  assert.match(html, /batch-exchange-preview-switch[\s\S]*?<\/details>\s*<!-- 批次節次摘要 -->/, '課表預覽後仍保留批次申請摘要');
+  assert.match(matchHtml, /選為本組/, '批次調課候選按鈕應清楚標示配對動作');
+  assert.match(matchHtml, /match-op-pair-horizontal[\s\S]*?previewBatchCandidate\('substitution', t\.email\)[\s\S]*?模擬[\s\S]*?指定此節/, '批次代課模擬與指定按鈕水平排列');
+  assert.match(matchHtml, /match-op-pair-horizontal[\s\S]*?previewBatchCandidate\('exchange', r\.teacherEmail[\s\S]*?模擬[\s\S]*?選為本組/, '批次調課模擬與配對按鈕水平排列');
+  assert.match(compareHtml, /pendingRequestData\.isBatchCandidatePreview[\s\S]*?返回批次候選/, '預覽模式只提供返回候選，不顯示送出按鈕');
+  assert.match(compareHtml, /batch-exchange-preview-switch[\s\S]*?setBatchExchangePreviewSlot\(s\.key\)[\s\S]*?template v-if="isCrossWeekExchange"/, '批次調課預覽可切換配對組別並顯示課表');
+  assert.match(compareHtml, /batch-exchange-preview-switch[\s\S]*?<\/details>\s*<!-- 批次節次摘要 -->/, '課表預覽後仍保留批次申請摘要');
   assert.doesNotMatch(html, /逐組指定對調教師與對方課堂|逐組選定對調教師與對方課堂；已配對/, '批次調課抽屜不顯示重複的逐組配對說明');
-  assert.match(html, /type="button" class="btn btn-primary btn-sm-compact" @click\.stop\.prevent="prepCompare\('exchange'/, '選為本組按鈕不可觸發表單預設送出');
+  assert.match(matchHtml, /type="button" class="btn btn-primary btn-sm-compact" @click\.stop\.prevent="prepCompare\('exchange'/, '選為本組按鈕不可觸發表單預設送出');
   assert.doesNotMatch(html, /目前配對：/, '批次調課媒合區不再顯示佔空間的目前配對摘要');
-  assert.match(html, /class="match-filter-area"[\s\S]*?<div v-if="!activeCell\.dayOfWeek"/, '一般媒合篩選區分支應由有效的 v-if 開始');
+  assert.match(matchHtml, /class="match-filter-area"[\s\S]*?<div v-if="!activeCell\.dayOfWeek"/, '一般媒合篩選區分支應由有效的 v-if 開始');
   assert.match(submitSource, /const isPeriod8FeeLocked = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '第8節經費計算可處理空的申請資料');
   assert.match(submitSource, /const hasSubTeacherConflict = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!pending \|\| pending\.mode !== 'substitution'\)/, '代課衝堂計算可處理空的申請資料');
   assert.match(homeroomSource, /const isRequestValid = computed\(\(\) => \{\s*const pending = pendingRequestData\.value;\s*if \(!inputRequestDate\.value \|\| !pending\)/, '申請欄位檢查可處理空的申請資料');
