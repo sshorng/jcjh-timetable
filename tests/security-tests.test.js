@@ -116,7 +116,8 @@ test('security tests（v1 移植）', () => {
   assert.match(shellSource, /id="toast-container"[^>]*role="status"[^>]*aria-live="polite"/, 'toast 容器應在殼層');
   assert.match(shellSource, /id="confirm-overlay"[^>]*role="dialog"[^>]*aria-modal="true"/, '確認框應在殼層');
   assert.match(indexSource, /:aria-current="activeTab === 'timetable'/);
-  assert.match(indexSource, /class="class-timetable-layout"[^>]*role="region"/);
+  const classPanelSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'ClassPanel.vue'), 'utf8');
+  assert.match(classPanelSource, /class="class-timetable-layout"[^>]*role="region"/);
   assert.match(styleSource, /:where\(button, a, input, select, textarea\):focus-visible/);
   assert.match(styleSource, /班級課表多堂課[\s\S]*?\.class-timetable \.grid-cell-class[\s\S]*?height: auto;[\s\S]*?max-height: none;[\s\S]*?overflow: visible;/);
 

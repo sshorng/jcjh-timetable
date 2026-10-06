@@ -950,10 +950,12 @@ function runCalendarFallbackContractTest() {
 }
 function runApplicationFormContractTest() {
   const html = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
+  const printPreviewHtml = fs.readFileSync(path.join(here, '../src/components', 'PrintPreviewModal.vue'), 'utf8');
   // 申請表單已抽為 components/CompareModal.vue；成功後續抽為 SuccessModal.vue
   const compareHtml = fs.readFileSync(path.join(here, '../src/components', 'CompareModal.vue'), 'utf8');
   const successHtml = fs.readFileSync(path.join(here, '../src/components', 'SuccessModal.vue'), 'utf8');
   const matchHtml = fs.readFileSync(path.join(here, '../src/components', 'MatchDrawerModal.vue'), 'utf8');
+  const classPanelHtml = fs.readFileSync(path.join(here, '../src/components', 'ClassPanel.vue'), 'utf8');
   assert.match(compareHtml, /data-tour="compare-fee"/, '管理員申請表應保留經費選單');
   assert.match(compareHtml, /v-if="isAdmin && pendingRequestData\.mode === 'substitution' && pendingRequestData\.specialFlow !== 'combined_return'"/, '經費選單應僅管理員可見且課務調整仍可選');
    assert.match(compareHtml, /<option value="扣額度">扣額度（不結鐘點＋扣折抵額度）<\/option>/, '管理員應可選扣額度');
@@ -975,8 +977,8 @@ function runApplicationFormContractTest() {
    assert.doesNotMatch(html, /送出並列印紙本通知|確認送出，通知相關人員/, 'submit button must not use the retired paper notice label');
    assert.match(compareHtml, /paperFlow \? '送出申請並列印調代課單' : '確認送出'/, 'paper flow submit button must send then print');
    assert.doesNotMatch(html, /送出前不可列印/, 'preview button should not expose the lock note in its label');
-   assert.match(html, /v-if="printPreview && printPreview\.canPrint !== false" class="print-preview-image-actions"/, 'pre-submit image actions should be hidden');
-    assert.match(html, /v-if="printPreview && printPreview\.canPrint !== false" type="button" class="btn btn-primary"(?: data-tour="print-confirm")? @click="confirmPrintPreview"/, 'pre-submit print action should be hidden');
+   assert.match(printPreviewHtml, /v-if="printPreview && printPreview\.canPrint !== false" class="print-preview-image-actions"/, 'pre-submit image actions should be hidden');
+    assert.match(printPreviewHtml, /v-if="printPreview && printPreview\.canPrint !== false" type="button" class="btn btn-primary"(?: data-tour="print-confirm")? @click="confirmPrintPreview"/, 'pre-submit print action should be hidden');
   assert.match(successHtml, /data-tour="success-followup-actions"/);
   assert.match(successHtml, /@click="openSuccessPrintPreview"/);
   assert.match(successHtml, /@click="addSuccessToCalendar"/);
@@ -1047,7 +1049,7 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
   assert.match(activitySource, /showSuccessModal, successActionRequests, showCompareModal/);
   assert.match(outputStoreSource, /successActionRequests/, 'output store 應暴露 successActionRequests');
    assert.match(printSource, /returnTo === 'compare'\) showCompareModal\.value = true/);
-   assert.match(html, /getClassChangeTypeLabel\(item\.type\)/, 'class change badges should use compact labels');
+   assert.match(classPanelHtml, /getClassChangeTypeLabel\(item\.type\)/, 'class change badges should use compact labels');
    assert.match(matchHtml, /isHomeroomTeacher\(t, activeCell\.classData && activeCell\.classData\.className\)/, 'substitution candidates should show class-specific homeroom status');
     assert.match(mutualStoreSource, /const getClassChangeTypeLabel =/, '班級異動標籤函式應存在');
     // R16：代導判定已移至 ui-homeroom.js；改讀模組源碼
@@ -1120,8 +1122,8 @@ const mutualStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores',
      assert.match(onboardingSource, /paper-print-button/, 'paper tour should include the confirm-print step');
      assert.match(onboardingSource, /compare-submit-paper/, 'paper tour should target the paper submit button');
      assert.match(html, /paperMode \? '紙本申請進度' : '待辦簽核'/, 'pending navigation should follow the active mode');
-   assert.match(html, /data-tour="print-preview-modal"/, 'print preview should be a tour target');
-   assert.match(html, /data-tour="print-confirm"/, 'confirm print button should be a tour target');
+  assert.match(printPreviewHtml, /data-tour="print-preview-modal"/, 'print preview should be a tour target');
+  assert.match(printPreviewHtml, /data-tour="print-confirm"/, 'confirm print button should be a tour target');
 }
 
 function runHistoryEditTeacherValueTest() {

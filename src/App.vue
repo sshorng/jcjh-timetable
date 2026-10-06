@@ -868,119 +868,40 @@
         <!-- ════════════════════════════════════
              §UI-2.2 Tab：班級課表總覽
              ════════════════════════════════════ -->
-        <div v-if="activeTab === 'class'">
-          <div class="card">
-            <div class="card-title card-title-between">
-              <span>🏫 班級課表總覽<span v-if="classReadonlyMode || classViewerReadonly" class="text-xs-muted-78" style="font-weight:500;margin-left:8px;">（唯讀）</span></span>
-              <button v-if="selectedClass && isAdmin" type="button" class="btn btn-secondary btn-sm-78" @click="copyClassReadonlyLink(selectedClass)">複製唯讀連結</button>
-            </div>
-            <div style="padding: 0 0 12px 0;">
-              <div v-if="classList.length === 0" class="empty-state-muted">無班級資料，請先至後台上傳課表。</div>
-              <div v-else>
-                <!-- 週別與日期切換列 -->
-                <div class="week-picker-bar">
-                  <button class="btn btn-secondary btn-week-round" @click="changeClassWeek(-1)" title="上一週">◀</button>
-                  <div class="week-label">
-                    🗓️ {{ formatDateMMDD(selectedClassWeekDates[0]) }} ~ {{ formatDateMMDD(selectedClassWeekDates[4]) }}
-                    <span v-if="classWeekNumber" class="text-primary-bold">（{{ classWeekNumber }}）</span>
-                  </div>
-                  <button class="btn btn-secondary btn-week-round" @click="changeClassWeek(1)" title="下一週">▶</button>
-                  <button class="btn btn-secondary btn-sm-78-ml" @click="goToClassThisWeek">本週</button>
-                </div>
-                <!-- 班級按鈕（唯讀深連結時鎖定該班） -->
-                <div v-if="!classReadonlyMode" class="flex-wrap-gap-6" style="margin:12px 0;">
-                  <button v-for="cls in classList" :key="cls"
-                    class="btn class-pick-btn"
-                    :class="selectedClass === cls ? 'class-pick-btn-active' : 'btn-secondary'"
-                    style="padding:4px 12px;font-size:0.8rem;"
-                    @click="selectedClass === cls ? (selectedClass = '') : selectClassForView(cls)"
-                  >{{ cls }}</button>
-                </div>
-                <div v-else style="margin:12px 0;font-size:0.85rem;color:var(--text-secondary);">
-                  目前檢視：<strong>{{ selectedClass }}</strong>
-                </div>
-                <div v-if="!selectedClass" style="text-align:center;padding:20px;color:var(--text-muted);">👆 點選上方班級按鈕查看該班課表</div>
-                <div v-else class="class-timetable-layout" role="region" aria-label="班級課表內容">
-                  <div class="timetable-wrapper class-timetable-main" style="overflow-x:auto;">
-                    <div class="class-timetable" :class="{ 'is-readonly': classReadonlyMode || classViewerReadonly }">
-                      <div class="grid-header">節</div>
-                      <div v-for="(dateStr, idx) in selectedClassWeekDates" :key="'h'+idx" class="grid-header">
-                        {{ formatDateMMDD(dateStr) }}<br><span style="font-weight:400;">{{ ['一','二','三','四','五'][idx] }}</span>
-                      </div>
-                      <template v-for="period in timetablePeriods" :key="'ct-p-'+period">
-                        <div class="grid-cell-time" :class="getPeriodClass(period)">
-                          <span class="period">{{ getPeriodLabel(period) }}</span>
-                          <span class="time-span" v-if="!isMobile" style="font-size:0.62rem;">{{ getPeriodTimeSpan(period) }}</span>
-                        </div>
-                        <div v-for="(dateStr, dayIdx) in selectedClassWeekDates" :key="dayIdx"
-                          class="grid-cell-class"
-                           :class="[getPeriodClass(period), getClassCellClassForClass(selectedClass, dayIdx+1, period)]">
-                          <template v-if="classSchedules[selectedClass] && classSchedules[selectedClass][(dayIdx+1) + '-' + period]">
-                            <template v-if="classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period]">
-                              <div class="class-entry-block" :class="{ 'is-readonly': classReadonlyMode || classViewerReadonly }" @click="handleClassCellClick(selectedClass, dayIdx+1, period, 0)">
-                                 <div class="cell-subject">
-                                  <span class="subject-color-tag" :style="getSubjectStyle(classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].subject || classSchedules[selectedClass][(dayIdx+1) + '-' + period][0].subject)">
-                                    {{ classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].subject || classSchedules[selectedClass][(dayIdx+1) + '-' + period][0].subject }}
-                                  </span>
-                                </div>
-                                <div class="cell-class-name">
-                                   {{ classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].actualTeacherName || '未指定' }}
-                                </div>
-                                   <div class="cell-sub-badge">
-                                     {{ classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].specialFlow === 'combined_return' ? '併班上課' : (classSubstitutionMap[selectedClass + '|' + dateStr + '|' + period].type === 'exchange' ? '已調課' : '已代課') }}
-                                   <span v-if="classSchedules[selectedClass] && classSchedules[selectedClass][(dayIdx+1) + '-' + period] && classSchedules[selectedClass][(dayIdx+1) + '-' + period][0] && classSchedules[selectedClass][(dayIdx+1) + '-' + period][0]._schoolSwap" class="cell-badge tag-warning">全校對調</span>
-                                 </div>
-                              </div>
-                            </template>
-                            <template v-else>
-                              <template v-if="classSchedules[selectedClass][(dayIdx+1) + '-' + period].some(e => e.attr === '巡堂' || e.isPatrol)">
-                                <span class="cell-empty-label">巡堂</span>
-                              </template>
-                              <template v-else>
-                                <div v-for="(entry, ei) in classSchedules[selectedClass][(dayIdx+1) + '-' + period]" :key="entry.id || ei"
-                                  class="class-entry-block"
-                                  :class="{ 'is-match-source': isMatchSourceEntry(entry, dayIdx+1, period), 'is-match-hover': isMatchHoverEntry(entry, dayIdx+1, period), 'is-readonly': classReadonlyMode || classViewerReadonly }"
-                                  @click.stop="handleClassCellClick(selectedClass, dayIdx+1, period, entry)">
-                                  <div class="cell-subject">
-                                    <span class="subject-color-tag" :style="getSubjectStyle(entry.subject)">
-                                      {{ entry.subject }}
-                                    </span>
-                                    <span v-if="entry.attr === '單週' || entry.attr === '雙週'" style="font-size:0.65rem;color:var(--text-muted);margin-left:2px;">({{ entry.attr }})</span>
-                                     <span v-if="entry.restriction === 'restricted' || hasScheduleSpecialTag(entry, '綁課')" class="cell-badge tag-restricted">綁課</span>
-                                      <span v-if="hasScheduleSpecialTag(entry, '預排')" class="cell-badge tag-preplanned">預排</span>
-                                     <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
-                                       <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="away-class-badge">{{ getClassAwayEventName(selectedClass, dateStr, period) || '空堂事件' }}</span>
-                                  </div>
-                                  <div class="cell-class-name">
-                                    {{ getRealTeacherName(entry) }}
-                                    <span v-if="entry._combinedWith" style="font-size:0.65rem;color:var(--text-muted);">（與{{ entry._combinedWith }}）</span>
-                                  </div>
-                                </div>
-                              </template>
-                            </template>
-                          </template>
-                          <template v-else>
-                            <!-- 空堂：留白，不顯示 --- -->
-                          </template>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                  <aside class="class-change-summary">
-                    <div class="class-change-summary-title">{{ selectedClass }} 班級異動摘要</div>
-                    <div v-if="classChangeSummary.length === 0" class="class-change-empty"><span class="empty-state-title">本班目前無異動</span><span class="empty-state-hint">有核准的調代課或全校調課時會顯示在此</span></div>
-                    <div v-else class="class-change-list">
-                      <div v-for="item in classChangeSummary" :key="item.id" class="class-change-item" :class="{ 'is-week': item.inWeek }">
-                        <span class="class-change-type" :class="item.type === '調課' ? 'type-exchange' : (item.type === '全校對調' ? 'type-school-swap' : 'type-sub')">{{ getClassChangeTypeLabel(item.type) }}</span>
-                        <span class="class-change-line">{{ item.line }}</span>
-                      </div>
-                    </div>
-                  </aside>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <!-- 班級課表面板 → components/ClassPanel.vue -->
+    <ClassPanel
+      v-if="activeTab === 'class'"
+      :class-readonly-mode="classReadonlyMode"
+      :class-viewer-readonly="classViewerReadonly"
+      :is-admin="isAdmin"
+      :class-list="classList"
+      :selected-class-week-dates="selectedClassWeekDates"
+      :class-week-number="classWeekNumber"
+      :timetable-periods="timetablePeriods"
+      :is-mobile="isMobile"
+      :class-schedules="classSchedules"
+      :class-substitution-map="classSubstitutionMap"
+      :class-change-summary="classChangeSummary"
+      :copy-class-readonly-link="copyClassReadonlyLink"
+      :change-class-week="changeClassWeek"
+      :format-date-m-m-d-d="formatDateMMDD"
+      :select-class-for-view="selectClassForView"
+      :get-period-class="getPeriodClass"
+      :get-period-label="getPeriodLabel"
+      :get-period-time-span="getPeriodTimeSpan"
+      :get-class-cell-class-for-class="getClassCellClassForClass"
+      :handle-class-cell-click="handleClassCellClick"
+      :get-subject-style="getSubjectStyle"
+      :is-match-source-entry="isMatchSourceEntry"
+      :is-match-hover-entry="isMatchHoverEntry"
+      :has-schedule-special-tag="hasScheduleSpecialTag"
+      :is-class-away-on-date="isClassAwayOnDate"
+      :get-class-away-event-name="getClassAwayEventName"
+      :get-real-teacher-name="getRealTeacherName"
+      :get-class-change-type-label="getClassChangeTypeLabel"
+      :go-to-class-this-week="goToClassThisWeek"
+      v-model:selected-class="selectedClass"
+    />
 
         <!-- ════════════════════════════════════
              §UI-2.3 Tab：待辦與簽核
@@ -2487,43 +2408,17 @@
     />
 
       <!-- 單欄列印預覽：確認後才開啟正式左右雙聯列印視窗 -->
-       <div v-if="showPrintPreviewModal" class="modal-overlay print-preview-overlay" data-tour="print-preview-modal" @click.self="closePrintPreview(true)">
-         <div class="modal-card print-preview-modal-card">
-          <div class="modal-header">
-            <div>
-              <h3>👁️ 調代課單列印預覽</h3>
-              <div v-if="printPreview" class="print-preview-meta">
-                 共 {{ printPreview.recordCount }} 筆；教學組／教師合併為 {{ printPreview.staffFormCount }} 組，班級分送 {{ printPreview.classCopyCount }} 張；正式列印 {{ printPreview.pageCount }} 頁，共 {{ printPreview.copyCount }} 張分送單據。
-              </div>
-            </div>
-            <button class="btn-close" @click="closePrintPreview(true)">&times;</button>
-          </div>
-           <div class="modal-body print-preview-modal-body">
-             <iframe
-              v-if="printPreview"
-              class="print-preview-frame"
-              :srcdoc="printPreview.documentHtml"
-              title="調代課單單欄列印預覽"
-              sandbox="allow-scripts"
-            ></iframe>
-          </div>
-          <div class="modal-footer print-preview-modal-footer">
-             <div v-if="printPreview && printPreview.canPrint !== false" class="print-preview-image-actions">
-                 <button type="button" class="btn btn-secondary" title="複製單頁確認版，不影響正式列印份數" :disabled="printPreviewImageBusy" @click="copyPrintPreviewImage">
-                  {{ printPreviewImageBusy ? '處理中…' : '複製單頁' }}
-                </button>
-                 <button type="button" class="btn btn-secondary" title="下載單頁確認版，不影響正式列印份數" :disabled="printPreviewImageBusy" @click="downloadPrintPreviewImage">下載單頁</button>
-             </div>
-             <div class="print-preview-confirm-actions">
-               <button type="button" class="btn btn-secondary" @click="closePrintPreview(true)">返回</button>
-                <div v-if="printPreview && printPreview.canPrint === false" class="print-preview-lock-note">
-                  目前為送出前預覽，只能查看內容；送出申請成功後才能列印、下載或複製調代課單。
-                </div>
-                 <button v-if="printPreview && printPreview.canPrint !== false" type="button" class="btn btn-primary" data-tour="print-confirm" @click="confirmPrintPreview">🖨️ 確認列印</button>
-             </div>
-          </div>
-        </div>
-      </div>
+    <!-- 列印預覽 modal → components/PrintPreviewModal.vue -->
+    <PrintPreviewModal
+      v-if="showPrintPreviewModal"
+      :print-preview="printPreview"
+      :print-preview-image-busy="printPreviewImageBusy"
+      :close-print-preview="closePrintPreview"
+      :copy-print-preview-image="copyPrintPreviewImage"
+      :download-print-preview-image="downloadPrintPreviewImage"
+      :confirm-print-preview="confirmPrintPreview"
+      @close="closePrintPreview(true)"
+    />
 
       <!-- LINE 訊息編輯器：列表／詳情開啟後可先修改再複製或傳送 -->
     <!-- LINE 訊息編輯 modal → components/LineMessageModal.vue -->
@@ -2812,6 +2707,8 @@ import { onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
+import ClassPanel from './components/ClassPanel.vue';
+import PrintPreviewModal from './components/PrintPreviewModal.vue';
 import HistoryEditModal from './components/HistoryEditModal.vue';
 import ClassAwayModal from './components/ClassAwayModal.vue';
 import SuccessModal from './components/SuccessModal.vue';
