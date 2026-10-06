@@ -99,7 +99,8 @@ test('security tests（v1 移植）', () => {
   assert.match(uiDataSource, /const optimisticPatchRequestStatuses\s*=\s*\(updates\)/);
   // 2A：匯出 orchestration 已移至 ui-export.js，懶載不斷言 app.js，改斷言新檔
   const uiExportSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-export.js'), 'utf8');
-  assert.match(uiExportSource, /import ExportAccounting from '.\/export-accounting\.js'/, '會計匯出應靜態引入（v2 無 ensure* loader）');
+  assert.doesNotMatch(uiExportSource, /from '.\/export-accounting\.js'/, '會計匯出不得靜態引入（改 export-lazy 按需載入）');
+  assert.match(uiExportSource, /ensureAccounting\(\)/, '會計匯出應經 export-lazy 按需載入');
   // 2A：班級課表索引已移至 ui-schedule.js，改斷言新檔
   const uiScheduleSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-schedule.js'), 'utf8');
   assert.match(uiScheduleSource, /const classScheduleIndex = computed/);

@@ -29,18 +29,26 @@ test('export wiring（v2 接線迴歸）', () => {
     assert.equal(typeof fn, 'function', 'print-helper 應匯出可用函式');
   }
 
-  // 呼叫端必須走靜態 import，不可再依賴 v1 的 window＋ensure* script 懶載
-  //（v2/index.html 沒有這些 loader）。
+  // 重 payload 走 export-lazy.js 按需載入（首屏減肥），仍是 ESM import()，
+  // 不可退回 v1 的 window＋ensure* script 懶載（v2/index.html 沒有這些 loader）。
   const uiPrint = fs.readFileSync(path.join(modDir, 'ui-print.js'), 'utf8');
   const uiReport = fs.readFileSync(path.join(modDir, 'ui-report.js'), 'utf8');
   const uiExport = fs.readFileSync(path.join(modDir, 'ui-export.js'), 'utf8');
-  assert.match(uiPrint, /from '\.\/print-helper\.js'/, 'ui-print 應靜態引入 print-helper');
-  assert.match(uiPrint, /from '\.\/export-school-timetable\.js'/, 'ui-print 應靜態引入 export-school-timetable');
-  assert.match(uiReport, /from '\.\/export-school-timetable\.js'/, 'ui-report 應靜態引入 export-school-timetable');
-  assert.match(uiReport, /from '\.\/export-activity-cover\.js'/, 'ui-report 應靜態引入 export-activity-cover');
-  assert.match(uiReport, /from '\.\/export-invigilation-recovered\.js'/, 'ui-report 應靜態引入 export-invigilation');
-  assert.match(uiExport, /from '\.\/export-activity-cover\.js'/, 'ui-export 應靜態引入 export-activity-cover');
-  assert.match(uiExport, /from '\.\/export-invigilation-recovered\.js'/, 'ui-export 應靜態引入 export-invigilation');
+  const exportLazy = fs.readFileSync(path.join(modDir, 'export-lazy.js'), 'utf8');
+  assert.match(uiPrint, /from '\.\/print-helper\.js'/, 'ui-print 應靜態引入 print-helper（同步預覽路徑）');
+  assert.doesNotMatch(uiPrint, /export-school-timetable/, 'ui-print 不得再靜態引入課表匯出（已遷 ui-report 按需載入）');
+  assert.doesNotMatch(uiReport, /from '\.\/export-school-timetable\.js'/, 'ui-report 不得靜態引入課表匯出');
+  assert.doesNotMatch(uiReport, /from '\.\/export-activity-cover\.js'/, 'ui-report 不得靜態引入 activity-cover');
+  assert.doesNotMatch(uiReport, /from '\.\/export-invigilation-recovered\.js'/, 'ui-report 不得靜態引入 invigilation');
+  assert.doesNotMatch(uiExport, /from '\.\/export-accounting\.js'/, 'ui-export 不得靜態引入 accounting');
+  assert.doesNotMatch(uiExport, /from '\.\/export-activity-cover\.js'/, 'ui-export 不得靜態引入 activity-cover');
+  assert.doesNotMatch(uiExport, /from '\.\/export-invigilation-recovered\.js'/, 'ui-export 不得靜態引入 invigilation');
+  assert.doesNotMatch(uiExport, /from '\.\/export-period8-accounting\.js'/, 'ui-export 不得靜態引入 period8');
+  for (const chunk of ["import('./export-activity-cover.js')", "import('./export-invigilation-recovered.js')",
+      "import('./export-accounting.js')", "import('./export-period8-accounting.js')",
+      "import('./export-school-timetable.js')"]) {
+    assert.match(exportLazy, new RegExp(chunk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'export-lazy 應按需載入 ' + chunk);
+  }
   for (const [name, src] of [['ui-print', uiPrint], ['ui-report', uiReport], ['ui-export', uiExport]]) {
     assert.doesNotMatch(src, /window\.Export(ActivityCover|Invigilation|SchoolTimetable|Accounting|Period8Accounting)/, name + ' 不可再讀 window.Export*');
     assert.doesNotMatch(src, /window\.ensureExport/, name + ' 不可再依賴 window.ensureExport* loader');

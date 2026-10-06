@@ -1112,10 +1112,14 @@ const UiAdmin = (() => {
       var configured = refValue(accountingPeriod) || {};
       var end = normalizeExpensePlanDate(configured.end);
       var month = String(refValue(reportMonth) || '').trim();
-      if (!end && window.ExportAccounting
-          && typeof window.ExportAccounting.loadPeriodSettings === 'function' && month) {
-        var saved = window.ExportAccounting.loadPeriodSettings(month) || {};
-        end = normalizeExpensePlanDate(saved.end);
+      if (!end && month) {
+        // 匯出流程存過結算區間（export-accounting savePeriodSettings，localStorage 共用鍵）；
+        // v2 無 window.ExportAccounting，改直讀（原分支在 v2 恆為 false，等同失能）。
+        try {
+          var allSaved = JSON.parse(localStorage.getItem('school-substitution-accounting-periods-v1') || '{}');
+          var savedPeriod = ((allSaved[month] || {}).period) || allSaved[month] || {};
+          end = normalizeExpensePlanDate(savedPeriod.end);
+        } catch (eStore) { /* 忽略，續用月末 */ }
       }
       return end || monthEndForExpensePlan(month);
     }

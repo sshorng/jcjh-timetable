@@ -3,7 +3,6 @@ import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
 import FieldMap from '../domain/field-map.js';
-import ExportAccounting from '../modules/export-accounting.js';
 import { UiData } from '../modules/ui-data.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
 import { UiSubmitHelpers } from '../modules/ui-request.js';
@@ -637,9 +636,12 @@ const getSyncApi = () => {
             end: period.end
           }));
         } catch (e) { /* 瀏覽器封鎖儲存時不影響頁面操作 */ }
-        if (ExportAccounting && typeof ExportAccounting.savePeriodSettings === 'function') {
-          ExportAccounting.savePeriodSettings(reportMonth.value, period);
-        }
+        // 結算區間持久化非關鍵路徑：匯出模組按需載入，失敗靜默略過
+        import('../modules/export-lazy.js').then((m) => m.ensureAccounting()).then((ExportAccounting) => {
+          if (ExportAccounting && typeof ExportAccounting.savePeriodSettings === 'function') {
+            ExportAccounting.savePeriodSettings(reportMonth.value, period);
+          }
+        }).catch(() => {});
       }
     });
     }

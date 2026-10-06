@@ -7,12 +7,10 @@ import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { ensureExcelJS } from './vendor-libs.js';
-// R-v2接線：匯出模組改靜態 ESM（v1 走 window＋ensure* script 懶載；
-// ExcelJS／JSZip 仍走 CDN 全域，見 v2/index.html）
-import { ExportActivityCover } from './export-activity-cover.js';
-import { ExportInvigilation } from './export-invigilation-recovered.js';
-import ExportAccounting from './export-accounting.js';
-import ExportPeriod8Accounting from './export-period8-accounting.js';
+// 匯出 payload 改按需載入（export-lazy.js）：首屏主包不含，點匯出才抓。
+// activity-cover／invigilation／period8 經 deps 的 ensure*Ready gate（回傳已載模組）；
+// accounting 無 gate，直接用 loader。
+import { ensureAccounting, ensurePeriod8 } from './export-lazy.js';
 
 /**
  * ui-export.js — 匯出 orchestration（從 app.js 抽出，2A）
@@ -86,8 +84,9 @@ const UiExport = (() => {
         showToast('僅管理員可匯出輪值通知單', 'warning');
         return;
       }
+      let ExportActivityCover;
       try {
-        await ensureActivityCoverReady();
+        ExportActivityCover = await ensureActivityCoverReady();
       } catch (e) {
         showToast((e && e.message) || '匯出模組載入失敗', 'error');
         return;
@@ -424,8 +423,9 @@ const UiExport = (() => {
       const title = (titleResult.note || '').trim() || defaultTitle;
       invigilationExportTitle.value = title;
 
+      let ExportInvigilation;
       try {
-        await ensureInvigilationExportReady();
+        ExportInvigilation = await ensureInvigilationExportReady();
       } catch (e) {
         showToast('匯出模組載入失敗：' + (e && e.message ? e.message : e), 'error');
         return;
@@ -544,9 +544,9 @@ const UiExport = (() => {
       accountingExportLoading.value = true;
       try {
         const readyTasks = [ensureBillingReady()];
-        // R-v2接線：ExportAccounting 靜態 import 常駐；ExcelJS 走 CDN 全域
         readyTasks.push(ensureExcelJS());
         await Promise.all(readyTasks);
+        const ExportAccounting = await ensureAccounting().catch(() => null);
         if (!ExportAccounting || !ExportAccounting.buildExportData || !ExportAccounting.exportWorkbook) {
           throw new Error('會計匯出模組未載入');
         }
@@ -628,9 +628,15 @@ const UiExport = (() => {
       if (period8ExportLoading.value) return;
       period8ExportLoading.value = true;
       try {
+        let ExportPeriod8Accounting = null;
+        try {
+          ExportPeriod8Accounting = await ensurePeriod8();
+        } catch (eLoad) {
+          ExportPeriod8Accounting = null;
+        }
         const readyTasks = [ensurePeriod8Ready()];
-        // R-v2接線：ExportPeriod8Accounting 靜態 import 常駐；ExcelJS 走 CDN 全域
         readyTasks.push(ensureExcelJS());
+        await Promise.all(readyTasks);
         await Promise.all(readyTasks);
         if (!ExportPeriod8Accounting || !ExportPeriod8Accounting.buildExportData
             || !ExportPeriod8Accounting.exportWorkbook) {

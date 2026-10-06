@@ -9,8 +9,7 @@
  * Eager 載入（setup 內委派，需先於 app.js）。create(deps) 注入 refs／回呼。
  */
 import { showToast } from '../ui/toast.js';
-// R-v2接線：列印／課表匯出改靜態 ESM（v1 走 window＋ensure* script 懶載，v2/index.html 無此 loader）
-import { ExportSchoolTimetable } from './export-school-timetable.js';
+// 課表匯出已遷 ui-report 按需載入（export-lazy.js）；列印輔助維持靜態（預覽為同步路徑）
 import {
   generateFormHtml as buildFormHtml,
   printSelectedForms as runPrintSelectedForms,
@@ -103,10 +102,7 @@ const createPrintContext = (printWin = null, printOptions = {}) => ({
 });
 
 const ensureExportReady = async () => {
-  // R-v2接線：ExportSchoolTimetable 靜態 import，常駐可用
-  if (!ExportSchoolTimetable) {
-    throw new Error('課表匯出模組尚未載入');
-  }
+  // 課表匯出已遷 ui-report 按需載入；此 gate 保留相容（恆成功）
 };
 
 const printSelectedForms = async (formType, existingWin = null, printOptions = {}) => {

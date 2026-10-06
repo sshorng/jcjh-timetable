@@ -1,5 +1,6 @@
 import { ensureExcelJS, ensureJSZip } from './vendor-libs.js';
 import { downloadJsonSheets } from './excel-io.js';
+import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable } from './export-lazy.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -16,9 +17,7 @@ import FieldMap from '../domain/field-map.js';
 import { showToast } from '../ui/toast.js';
 // R-v2接線：課表／輪值／監考匯出改靜態 ESM（v1 走 window＋ensure* script 懶載；
 // ExcelJS／JSZip 仍走 CDN 全域，見 v2/index.html）
-import { ExportSchoolTimetable } from './export-school-timetable.js';
-import { ExportActivityCover } from './export-activity-cover.js';
-import { ExportInvigilation } from './export-invigilation-recovered.js';
+
 const UiReport = (() => {
   function create(deps) {
     deps = deps || {};
@@ -314,6 +313,7 @@ const setSchoolExportThisWeek = async () => {
     showToast('匯出模組載入失敗', 'error');
     return;
   }
+  const ExportSchoolTimetable = await ensureSchoolTimetable().catch(() => null);
   if (!ExportSchoolTimetable || !ExportSchoolTimetable.thisWeekRange) {
     showToast('匯出模組未載入', 'error');
     return;
@@ -335,6 +335,7 @@ const exportSchoolTimetableWord = async () => {
     showToast('匯出模組載入失敗，請重新整理頁面', 'error');
     return;
   }
+  const ExportSchoolTimetable = await ensureSchoolTimetable().catch(() => null);
   if (!ExportSchoolTimetable || !ExportSchoolTimetable.exportWord) {
     showToast('匯出模組未載入，請重新整理頁面', 'error');
     return;
@@ -370,14 +371,15 @@ const exportSchoolTimetableWord = async () => {
 };
 
 const ensureActivityCoverReady = async () => {
-  // R-v2接線：ExportActivityCover 靜態 import 常駐；JSZip 走 CDN 全域（見 v2/index.html）
   await ensureJSZip();
-  if (!ExportActivityCover || !ExportActivityCover.exportWord) {
+  const loaded = await ensureActivityCover().catch(() => null);
+  if (!loaded || !loaded.exportWord) {
     throw new Error('輪值通知單匯出模組尚未載入');
   }
   if (!(window.JSZip || (typeof JSZip !== 'undefined' && JSZip))) {
     throw new Error('JSZip 未載入');
   }
+  return loaded;
 };
 
 const buildDefaultInvigilationTitle = () => {
@@ -404,17 +406,18 @@ const buildDefaultInvigilationTitle = () => {
 };
 
 const ensureInvigilationExportReady = async () => {
-  // R-v2接線：ExportInvigilation 靜態 import 常駐；ExcelJS／JSZip 走 CDN 全域（見 v2/index.html）
   await ensureExcelJS();
   // 多份分發打 ZIP 用
   try { await ensureJSZip(); } catch (eZ) { /* 單份可不需 */ }
   await ensureDAC();
-  if (!ExportInvigilation || !ExportInvigilation.exportWorkbook) {
+  const loaded = await ensureInvigilation().catch(() => null);
+  if (!loaded || !loaded.exportWorkbook) {
     throw new Error('監考表匯出模組尚未載入');
   }
   if (!(window.ExcelJS || (typeof ExcelJS !== 'undefined' && ExcelJS))) {
     throw new Error('ExcelJS 未載入（套版需要）');
   }
+  return loaded;
 };
 
 const cancelScheduledMonthlyReport = () => {
