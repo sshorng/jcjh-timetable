@@ -711,10 +711,7 @@
   "clearScheduleCell",
   "updateTeacherBaseHours",
   "fillFixedOvertimeFromCurrentSchedule",
-  "fillFixedOvertimeForAllTeachers",
-  "showExceptionComposer",
-  "openExceptionComposer",
-  "submitAdminException"
+  "fillFixedOvertimeForAllTeachers"
  ],
  "output": [
   "accountingPeriodNavigation",

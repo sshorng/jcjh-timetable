@@ -8540,30 +8540,9 @@ function doPost(e) {
           isProxyOne = true;
         }
       }
-        if (!reqData.request["批次ID"]) reqData.request["批次ID"] = "";
-        // 特例建單（管理員＋事由）：強制標記＋事由入備註，跳過調課衝堂斷言
-        // （組合有效但單步看無效的案子由管理員背書；其餘格式／學期／經費規則照走）
-        var isAdminExceptionOne = isAdmin && (reqData.isAdminException === true
-          || (reqData.request && reqData.request.isAdminException === true));
-        if (!isAdmin && reqData.request) {
-          delete reqData.request.isAdminException;
-        }
-        if (isAdminExceptionOne) {
-          var exceptionReasonOne = String(
-            (reqData.exceptionReason != null ? reqData.exceptionReason
-              : (reqData.request && reqData.request.exceptionReason)) || '').trim();
-          if (!exceptionReasonOne) throw new Error('特例建單必須填寫事由！');
-          reqData.request["特殊流程"] = "admin_exception";
-          reqData.request.specialFlow = "admin_exception";
-          var prevNoteOne = String(reqData.request["備註"] || "").trim();
-          var exceptionTagOne = "[特例調代：" + exceptionReasonOne + "]";
-          reqData.request["備註"] = prevNoteOne
-            ? (prevNoteOne + " " + exceptionTagOne)
-            : exceptionTagOne;
-        }
-        if (!isAdminExceptionOne) {
-          assertNoExchangeIncomingConflict_(reqData.request, (getSemesterRequestsCached_(semesterId, true).rows || []));
-        }
+      if (!reqData.request["批次ID"]) reqData.request["批次ID"] = "";
+      
+        assertNoExchangeIncomingConflict_(reqData.request, (getSemesterRequestsCached_(semesterId, true).rows || []));
         persistRequestRowsWithQuota_([reqData.request], userEmail);
        if (String(reqData.request["狀態"] || "") === "approved") {
          syncHomeroomRecordForRequest_(reqData.request, userEmail);

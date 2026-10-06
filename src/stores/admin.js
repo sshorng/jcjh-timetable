@@ -36,7 +36,6 @@ export const useAdminStore = defineStore('admin', () => {
       email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
       fixedOvertimeHours: '', fixedOvertimeSlots: ''
     });
-    const showExceptionComposer = ref(false);
     const showOvertimePlanModal = ref(false);
     const overtimePlanTeacher = ref(null);
     const overtimePlanRows = ref([]);
@@ -143,10 +142,9 @@ const ensureUiAdminApi = async () => {
         teacherImportPreview,
         showScheduleEditModal,
         scheduleForm,
-         showTeacherModal,
-          teacherModalMode,
-          teacherForm,
-          showExceptionComposer,
+        showTeacherModal,
+         teacherModalMode,
+         teacherForm,
          showOvertimePlanModal,
          overtimePlanTeacher,
           overtimePlanRows,
@@ -199,8 +197,6 @@ const ensureUiAdminApi = async () => {
     const openAddTeacherModal = (...a) => needUiAdmin('openAddTeacherModal', ...a);
     const openEditTeacherModal = (...a) => needUiAdmin('openEditTeacherModal', ...a);
     const saveTeacher = (...a) => needUiAdmin('saveTeacher', ...a);
-    const openExceptionComposer = (...a) => needUiAdmin('openExceptionComposer', ...a);
-    const submitAdminException = (...a) => needUiAdmin('submitAdminException', ...a);
     const openOvertimePlanModal = (...a) => needUiAdmin('openOvertimePlanModal', ...a);
     const saveOvertimePlan = (...a) => needUiAdmin('saveOvertimePlan', ...a);
     const openTeacherExpenseAuditModal = (...a) => needUiAdmin('openTeacherExpenseAuditModal', ...a);
@@ -236,5 +232,5 @@ const ensureUiAdminApi = async () => {
     const updateTeacherBaseHours = (...a) => needUiAdmin('updateTeacherBaseHours', ...a);
     const fillFixedOvertimeFromCurrentSchedule = (...a) => needUiAdmin('fillFixedOvertimeFromCurrentSchedule', ...a);
     const fillFixedOvertimeForAllTeachers = (...a) => needUiAdmin('fillFixedOvertimeForAllTeachers', ...a);
-  return { leaveReasonOptions, showExceptionComposer, openExceptionComposer, submitAdminException, showImportTeachersModal, teacherExcelData, teacherExcelHeaders, teacherMappingFields, teacherImportPreview, showScheduleEditModal, scheduleForm, showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots, showTeacherExpenseAuditModal, teacherExpenseAuditRows, teacherExpenseAuditSummary, excelData, excelHeaders, mappingFields, importPreview, dashboardScope, emptySlotQuotaZero, getScheduleAttrLabel, getSchedule, getOvertimeExpenseSourceOptions, getMappingLabel, showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, _quotaLedgerCache, QUOTA_LEDGER_CACHE_MS, closeQuotaLedger, quotaTypeClass, showQuotaAdjustModal, quotaAdjustSaving, quotaAdjustForm, quotaAdjustPreview, closeManualQuotaAdjust, ensureUiAdminApi, needUiAdmin, runTeacherImportPreview, importSchedules, migrateNameKeySchema, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules, openScheduleEditModal, pickScheduleAttr, normalizeScheduleFormFlags, openAddTeacherModal, openEditTeacherModal, saveTeacher, openOvertimePlanModal, saveOvertimePlan, openTeacherExpenseAuditModal, normalizeTeacherExpenseData, deleteTeacher, handleTeacherExcelChange, importTeachersBatch, handleFileChange, openHistoryEditModal, saveHistoryEdit, onHistoryEditReasonChange, onHistoryEditTypeChange, onHistoryEditPeriodChange, onHistoryEditDateChange, openQuotaLedger, initImmediateAdmin1, initAdmin1, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, fillFixedOvertimeForAllTeachers };
+  return { leaveReasonOptions, showImportTeachersModal, teacherExcelData, teacherExcelHeaders, teacherMappingFields, teacherImportPreview, showScheduleEditModal, scheduleForm, showTeacherModal, teacherModalMode, teacherForm, showOvertimePlanModal, overtimePlanTeacher, overtimePlanRows, overtimePlanPeriodEnd, overtimePlanUsesFixedSlots, showTeacherExpenseAuditModal, teacherExpenseAuditRows, teacherExpenseAuditSummary, excelData, excelHeaders, mappingFields, importPreview, dashboardScope, emptySlotQuotaZero, getScheduleAttrLabel, getSchedule, getOvertimeExpenseSourceOptions, getMappingLabel, showQuotaLedgerModal, quotaLedgerLoading, quotaLedgerTeacher, quotaLedgerRows, _quotaLedgerCache, QUOTA_LEDGER_CACHE_MS, closeQuotaLedger, quotaTypeClass, showQuotaAdjustModal, quotaAdjustSaving, quotaAdjustForm, quotaAdjustPreview, closeManualQuotaAdjust, ensureUiAdminApi, needUiAdmin, runTeacherImportPreview, importSchedules, migrateNameKeySchema, runImportPreview, downloadScheduleTemplate, downloadCurrentSchedules, openScheduleEditModal, pickScheduleAttr, normalizeScheduleFormFlags, openAddTeacherModal, openEditTeacherModal, saveTeacher, openOvertimePlanModal, saveOvertimePlan, openTeacherExpenseAuditModal, normalizeTeacherExpenseData, deleteTeacher, handleTeacherExcelChange, importTeachersBatch, handleFileChange, openHistoryEditModal, saveHistoryEdit, onHistoryEditReasonChange, onHistoryEditTypeChange, onHistoryEditPeriodChange, onHistoryEditDateChange, openQuotaLedger, initImmediateAdmin1, initAdmin1, saveScheduleCell, clearScheduleCell, updateTeacherBaseHours, fillFixedOvertimeFromCurrentSchedule, fillFixedOvertimeForAllTeachers };
 });

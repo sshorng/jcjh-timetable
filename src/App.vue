@@ -1611,22 +1611,14 @@
             >
               ⚙️ 系統設定
             </button>
-             <button
-               class="btn btn-pill"
-               :class="adminSubTab === 'schoolExport' ? 'btn-primary' : 'btn-secondary'"
-               @click="adminSubTab = 'schoolExport'"
-             >
-               📄 課表匯出
-             </button>
-             <button
-               type="button"
-               class="btn btn-secondary"
-               title="組合有效但單步規則擋下的特例（調課＋接代課），由管理員背書建單"
-               @click="openExceptionComposer"
-             >
-               🛠️ 特例調代
-             </button>
-            </div>
+            <button 
+              class="btn btn-pill" 
+              :class="adminSubTab === 'schoolExport' ? 'btn-primary' : 'btn-secondary'"
+              @click="adminSubTab = 'schoolExport'"
+            >
+              📄 課表匯出
+            </button>
+           </div>
 
            <!-- 子分頁：第八節班級週表與核銷匯出 -->
            <div v-if="adminSubTab === 'period8'" class="period8-admin-page">
@@ -2474,17 +2466,6 @@
     />
 
       <!-- 批次匯入教師 Modal -->
-    <!-- 特例調代 composer → components/ExceptionComposerModal.vue -->
-    <ExceptionComposerModal
-      v-if="showExceptionComposer"
-      :teachers-list="teachersList"
-      :all-schedules="allSchedules"
-      :get-schedule-for-date="getScheduleForDate"
-      :get-teacher-name-by-email="getTeacherNameByEmail"
-      :submit-admin-exception="submitAdminException"
-      @close="showExceptionComposer = false"
-    />
-
     <!-- 批次匯入教師 modal → components/ImportTeachersModal.vue -->
     <ImportTeachersModal
       v-if="showImportTeachersModal"
@@ -2750,7 +2731,6 @@ import ExpenseAuditModal from './components/ExpenseAuditModal.vue';
 import BatchPrintPromptModal from './components/BatchPrintPromptModal.vue';
 import TrianglePreviewModal from './components/TrianglePreviewModal.vue';
 import DetailModal from './components/DetailModal.vue';
-import ExceptionComposerModal from './components/ExceptionComposerModal.vue';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from './stores/session.js';
 import { useDataStore } from './stores/data.js';
@@ -2815,9 +2795,9 @@ const { dashboardStats } = storeToRefs(historyStore);
 const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
 const { classAwayForm, classAwayModalMode, isSimulating, showClassAwayModal } = storeToRefs(backofficeStore);
-const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadScheduleTemplate, fillFixedOvertimeForAllTeachers, fillFixedOvertimeFromCurrentSchedule, handleFileChange, handleTeacherExcelChange, importSchedules, importTeachersBatch, migrateNameKeySchema, normalizeScheduleFormFlags, normalizeTeacherExpenseData, onHistoryEditDateChange, onHistoryEditPeriodChange, onHistoryEditReasonChange, onHistoryEditTypeChange, openAddTeacherModal, openEditTeacherModal, openExceptionComposer, openHistoryEditModal, openOvertimePlanModal, openQuotaLedger, openScheduleEditModal, openTeacherExpenseAuditModal, pickScheduleAttr, runImportPreview, runTeacherImportPreview, saveHistoryEdit, saveOvertimePlan, saveScheduleCell, saveTeacher, submitAdminException, updateTeacherBaseHours } = adminStore;
+const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadScheduleTemplate, fillFixedOvertimeForAllTeachers, fillFixedOvertimeFromCurrentSchedule, handleFileChange, handleTeacherExcelChange, importSchedules, importTeachersBatch, migrateNameKeySchema, normalizeScheduleFormFlags, normalizeTeacherExpenseData, onHistoryEditDateChange, onHistoryEditPeriodChange, onHistoryEditReasonChange, onHistoryEditTypeChange, openAddTeacherModal, openEditTeacherModal, openHistoryEditModal, openOvertimePlanModal, openQuotaLedger, openScheduleEditModal, openTeacherExpenseAuditModal, pickScheduleAttr, runImportPreview, runTeacherImportPreview, saveHistoryEdit, saveOvertimePlan, saveScheduleCell, saveTeacher, updateTeacherBaseHours } = adminStore;
 const { closeManualQuotaAdjust, closeQuotaLedger, getMappingLabel, getOvertimeExpenseSourceOptions, getScheduleAttrLabel, leaveReasonOptions, quotaTypeClass } = adminStore;
-const { dashboardScope, emptySlotQuotaZero, excelData, excelHeaders, importPreview, mappingFields, overtimePlanPeriodEnd, overtimePlanRows, overtimePlanTeacher, overtimePlanUsesFixedSlots, quotaAdjustForm, quotaAdjustPreview, quotaAdjustSaving, quotaLedgerLoading, quotaLedgerRows, quotaLedgerTeacher, scheduleForm, showExceptionComposer, showImportTeachersModal, showOvertimePlanModal, showQuotaAdjustModal, showQuotaLedgerModal, showScheduleEditModal, showTeacherExpenseAuditModal, showTeacherModal, teacherExcelData, teacherExcelHeaders, teacherExpenseAuditRows, teacherExpenseAuditSummary, teacherForm, teacherImportPreview, teacherMappingFields, teacherModalMode } = storeToRefs(adminStore);
+const { dashboardScope, emptySlotQuotaZero, excelData, excelHeaders, importPreview, mappingFields, overtimePlanPeriodEnd, overtimePlanRows, overtimePlanTeacher, overtimePlanUsesFixedSlots, quotaAdjustForm, quotaAdjustPreview, quotaAdjustSaving, quotaLedgerLoading, quotaLedgerRows, quotaLedgerTeacher, scheduleForm, showImportTeachersModal, showOvertimePlanModal, showQuotaAdjustModal, showQuotaLedgerModal, showScheduleEditModal, showTeacherExpenseAuditModal, showTeacherModal, teacherExcelData, teacherExcelHeaders, teacherExpenseAuditRows, teacherExpenseAuditSummary, teacherForm, teacherImportPreview, teacherMappingFields, teacherModalMode } = storeToRefs(adminStore);
 const { addSuccessToCalendar, calculateMonthlyReport, clearSchoolExportTeachers, closePrintPreview, confirmPrintPreview, copyPrintPreviewImage, downloadPrintPreviewImage, exportActivityCoverWord, exportInvigilationWorkbook, exportPeriod8Accounting, exportReportToExcel, exportSchoolTimetableWord, exportSubFeeToExcel, isSchoolExportTeacherSelected, openHistoryPrintPreview, openPaperDraftPreview, openPaperPrintForRequest, openPaperPrintMutualDrafts, openPrintPreview, openSuccessPrintPreview, openTrianglePaperPreview, printPaperDraft, printSelectedForms, printSingleRequest, selectAllSchoolExportTeachers, setSchoolExportThisWeek, shiftReportPeriod, toggleSchoolExportTeacher } = outputStore;
 const { openPaperPrintDraftFromCompare } = outputStore;
 const { displayedTriangleBOptions, displayedTriangleCOptions, triangleCandidateB, triangleCandidateBOptions, triangleCandidateBReadyCount, triangleCandidateC, triangleCandidateCList, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateDisplayCount, triangleCandidateOptions, triangleCandidateSearch, triangleCandidates, triangleLegs, triangleParticipants, trianglePreviewRows, trianglePreviewWeekDates, triangleReady, triangleTimetablePreview, triangleValidation, weekScheduleGrid } = storeToRefs(outputStore);
