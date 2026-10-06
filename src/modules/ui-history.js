@@ -278,6 +278,8 @@ const UiHistory = (() => {
 
       if (historyTypeFilter.value !== 'all') {
         records = records.filter(r => {
+          const flow = String(r.specialFlow || r['特殊流程'] || '');
+          if (historyTypeFilter.value === 'exception') return flow === 'admin_exception';
           const isExchange = isHistoryExchangeType(r);
           return historyTypeFilter.value === 'exchange' ? isExchange : !isExchange;
         });
@@ -742,7 +744,7 @@ const setHistoryFilterMode = (mode) => {
 };
 
 const setHistoryTypeFilter = (type) => {
-  const next = ['all', 'substitution', 'exchange'].includes(type) ? type : 'all';
+  const next = ['all', 'substitution', 'exchange', 'exception'].includes(type) ? type : 'all';
   historyTypeFilter.value = next;
   historyPage.value = 1;
 };

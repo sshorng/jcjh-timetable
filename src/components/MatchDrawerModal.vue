@@ -160,14 +160,6 @@
                   </div>
                   <div v-if="matchMode === 'exchange'" style="display:flex;align-items:center;gap:6px;flex:0 0 auto;">
                     <button
-                      v-if="isAdmin && !isBatchMatchFlow"
-                      type="button"
-                      class="btn btn-secondary"
-                      style="height:34px;padding:0 9px;border-radius:9px;font-size:0.76rem;line-height:1;"
-                      title="管理員直接建立同一天、同一節的雙向互換"
-                      @click="openSamePeriodSwapModal"
-                    >同節互換</button>
-                    <button
                       type="button"
                       class="btn btn-primary"
                       style="min-width:64px;height:34px;padding:0 10px;border-radius:9px;font-size:0.82rem;line-height:1;"
@@ -597,7 +589,6 @@ defineProps({
   startCombinedReturn: { type: Function, required: true },
   prepBatchExchangeCompare: { type: Function, required: true },
   prepBatchPerSlotCompare: { type: Function, required: true },
-  openSamePeriodSwapModal: { type: Function, required: true },
   loadMoreMatches: { type: Function, required: true },
   loadMoreTriangleCandidates: { type: Function, required: true },
   openTriangleTimetablePreview: { type: Function, required: true },

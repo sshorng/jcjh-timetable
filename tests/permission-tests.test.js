@@ -271,7 +271,6 @@ test('permission tests（後端合約，v1/v2 共用）', async () => {
     'saveSemester', 'deleteSemester', 'setDefaultSemester',
     'saveClassAwayEvent', 'deleteClassAwayEvent',
     'saveSchoolSwap', 'deleteSchoolSwap',
-    'adminCreateSamePeriodExchange',
     'saveTeacher', 'backupTeacherExpensePlans', 'deleteTeacher', 'importTeachersBatch', 'updateMutualQuotas',
     'earnMutualQuotaFromActivity', 'saveScheduleCell', 'clearScheduleCell',
     'importSchedulesBatch', 'adminApprove', 'adminReject', 'adminApproveBatch',
@@ -301,102 +300,8 @@ test('permission tests（後端合約，v1/v2 共用）', async () => {
   assert.strictEqual(mutationCalls, 1, 'admin action did not reach its write path');
   assert.ok(lockAcquires > 0, 'authorized admin action did not acquire the write lock');
 
-  const savedSamePeriodDeps = {
-    getTableData: getTableData,
-    getSemesterSchedulesCached_: getSemesterSchedulesCached_,
-    getActiveSchoolSwapRows_: getActiveSchoolSwapRows_,
-    getSemesterRequestsCached_: getSemesterRequestsCached_,
-    saveRows: saveRows,
-    invalidateSemesterCaches_: invalidateSemesterCaches_
-  };
-  const samePeriodSchedules = [
-    { '學期代號': semesterId, '教師Email': OWNER_EMAIL, '教師姓名': '申請人', '星期': 1, '節次': 2, '班級': '701', '科目': '國文', '課堂屬性': '' },
-    { '學期代號': semesterId, '教師Email': INVITEE_EMAIL, '教師姓名': '受邀人', '星期': 1, '節次': 2, '班級': '802', '科目': '數學', '課堂屬性': '' }
-  ];
-  let samePeriodExistingRows = [];
-  let samePeriodAwayEvents = [];
-  getTableData = function (sheetName) {
-    if (sheetName === '學期設定') return [{ '學期代號': semesterId, '開始日期': '2026-08-01', '結束日期': '2027-01-31' }];
-    if (sheetName === '空堂事件') return samePeriodAwayEvents;
-    if (sheetName === '教師課表') return samePeriodSchedules;
-    return [];
-  };
-  getSemesterSchedulesCached_ = function () { return samePeriodSchedules; };
-  getActiveSchoolSwapRows_ = function () { return []; };
-  getSemesterRequestsCached_ = function () { return { rows: samePeriodExistingRows }; };
-  saveRows = function (sheetName, rows) {
-    mutationCalls += 1;
-    persistedRows = rows.map(row => Object.assign({}, row));
-  };
-
-  resetMutationState();
-  const adminSamePeriodExchange = invoke({
-    email: ADMIN_EMAIL,
-    action: 'adminCreateSamePeriodExchange',
-    data: { date: '2026-10-12', period: 2, teacherAEmail: OWNER_EMAIL, teacherBEmail: INVITEE_EMAIL }
-  });
-  assert.strictEqual(adminSamePeriodExchange.success, true, '管理員應能直接建立已核准的同節互換');
-  assert.strictEqual(adminSamePeriodExchange.request['異動類型'], 'exchange');
-  assert.strictEqual(adminSamePeriodExchange.request['特殊流程'], 'admin_same_period_exchange');
-  assert.strictEqual(adminSamePeriodExchange.request['狀態'], 'approved');
-  assert.strictEqual(adminSamePeriodExchange.request['異動日期'], adminSamePeriodExchange.request['對調目標日期']);
-  assert.strictEqual(adminSamePeriodExchange.request['異動節次'], adminSamePeriodExchange.request['對調目標節次']);
-  assert.strictEqual(adminSamePeriodExchange.request['班級'], '701');
-  assert.strictEqual(adminSamePeriodExchange.request['對調目標班級'], '802');
-  assert.strictEqual(adminSamePeriodExchange.request['經費來源'], '無');
-  assert.match(adminSamePeriodExchange.request['備註'], /admin@school\.example/);
-  assert.strictEqual(mutationCalls, 1);
-  assert.deepStrictEqual(queuedMailLabels, [], '直接建立的同節互換不得排入申請通知');
-
-  samePeriodExistingRows = [adminSamePeriodExchange.request];
-  resetMutationState();
-  const duplicateSamePeriodExchange = invoke({
-    email: ADMIN_EMAIL,
-    action: 'adminCreateSamePeriodExchange',
-    data: { date: '2026-10-12', period: 2, teacherAEmail: OWNER_EMAIL, teacherBEmail: INVITEE_EMAIL }
-  });
-  assert.strictEqual(duplicateSamePeriodExchange.success, false, '已異動時段不可重複建立同節互換');
-  assert.match(duplicateSamePeriodExchange.error, /已有調代課異動/);
-  assert.strictEqual(mutationCalls, 0, '衝突互換不可寫入');
-
-  samePeriodExistingRows = [];
-  samePeriodAwayEvents = [{
-    '學期代號': semesterId,
-    '啟用': 'TRUE', '起日': '2026-10-12', '迄日': '2026-10-12',
-    '適用範圍': '全校', '停課節次': '第2節'
-  }];
-  resetMutationState();
-  const awaySamePeriodExchange = invoke({
-    email: ADMIN_EMAIL,
-    action: 'adminCreateSamePeriodExchange',
-    data: { date: '2026-10-12', period: 2, teacherAEmail: OWNER_EMAIL, teacherBEmail: INVITEE_EMAIL }
-  });
-  assert.strictEqual(awaySamePeriodExchange.success, false, '空堂事件時段不可建立同節互換');
-  assert.match(awaySamePeriodExchange.error, /空堂事件/);
-  assert.strictEqual(mutationCalls, 0);
-
-  samePeriodAwayEvents = [{
-    '學期代號': semesterId,
-    '啟用': 'TRUE', '起日': '2026-10-12', '迄日': '2026-10-12',
-    '適用範圍': '全校', '起始節次': '1', '結束節次': '3'
-  }];
-  resetMutationState();
-  const intervalAwaySamePeriodExchange = invoke({
-    email: ADMIN_EMAIL,
-    action: 'adminCreateSamePeriodExchange',
-    data: { date: '2026-10-12', period: 2, teacherAEmail: OWNER_EMAIL, teacherBEmail: INVITEE_EMAIL }
-  });
-  assert.strictEqual(intervalAwaySamePeriodExchange.success, false, '空堂事件節次區間內不可建立同節互換');
-  assert.match(intervalAwaySamePeriodExchange.error, /空堂事件/);
-  assert.strictEqual(mutationCalls, 0);
-
-  getTableData = savedSamePeriodDeps.getTableData;
-  getSemesterSchedulesCached_ = savedSamePeriodDeps.getSemesterSchedulesCached_;
-  getActiveSchoolSwapRows_ = savedSamePeriodDeps.getActiveSchoolSwapRows_;
+  // 後續送單路徑測試共用 fixture：既有申請為空（原先藏在同節互換區塊的還原段，抽離時保留）
   getSemesterRequestsCached_ = function () { return { rows: [] }; };
-  saveRows = savedSamePeriodDeps.saveRows;
-  invalidateSemesterCaches_ = savedSamePeriodDeps.invalidateSemesterCaches_;
-
   resetMutationState();
   const staffMarkPrinted = invoke({
     email: STAFF_EMAIL,

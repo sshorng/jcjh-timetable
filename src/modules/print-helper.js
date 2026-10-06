@@ -83,6 +83,8 @@ function stripPrintAdministrativeProxyNote(value) {
   return String(value == null ? '' : value)
     .replace(/\[行政代申請[^\]]*\]/g, '')
     .replace(/行政代申請[：:][^；;\r\n]*/g, '')
+    .replace(/\[特例調代[^\]]*\]/g, '')
+    .replace(/特例調代[：:][^；;\r\n]*/g, '')
     .replace(/^[；;\s]+|[；;\s]+$/g, '')
     .trim();
 }

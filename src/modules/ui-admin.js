@@ -6,6 +6,7 @@ import { readFirstSheetRows, downloadJsonSheets, excelSerialToDate } from './exc
 import DateUtils from '../domain/date-utils.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import FieldMap from '../domain/field-map.js';
+import { UiSubmitHelpers } from './ui-request.js';
 
 /**
  * ui-admin.js：後台匯入／教師 CRUD／課表格編輯／歷史編輯（方案甲殼瘦身 B）
@@ -50,6 +51,10 @@ const UiAdmin = (() => {
       return ref(init);
     }
     var showImportTeachersModal = useRef('showImportTeachersModal', false);
+    var showExceptionComposer = useRef('showExceptionComposer', false);
+    function openExceptionComposer() {
+      showExceptionComposer.value = true;
+    }
     var teacherExcelData = useRef('teacherExcelData', []);
     var teacherExcelHeaders = useRef('teacherExcelHeaders', []);
     var teacherMappingFields = useRef('teacherMappingFields', {
@@ -2533,7 +2538,142 @@ const UiAdmin = (() => {
       }
     };
 
+    /**
+     * 特例調代送單（管理員＋事由，1～5 腿）：沿用標準送單建構子，directApprove 直核、
+     * skipNotify 靜默、isAdminException 走後端特例分支（跳過衝堂斷言）。
+     * 逐腿送、逐腿回報；某腿失敗不回滾已成功的腿。
+     * payload: { legs: [{kind:'exchange',aSlot,bSlot}|{kind:'substitution',leave,sub}], reason }
+     */
+    function exceptionTimeKey(dateStr, period) {
+      var d = new Date(String(dateStr || '').replace(/-/g, '/'));
+      var dow = d.getDay();
+      var day = Number.isNaN(d.getTime()) ? '' : (dow === 0 ? 7 : dow);
+      return day + '-' + parseInt(period, 10);
+    }
+    function findExceptionCoverSlot(teacherEmail, dateStr, period) {
+      var em = String(teacherEmail || '').trim().toLowerCase();
+      var d = new Date(String(dateStr || '').replace(/-/g, '/'));
+      if (!em || Number.isNaN(d.getTime())) return null;
+      var dow = d.getDay() === 0 ? 7 : d.getDay();
+      var p = parseInt(period, 10);
+      return ((allSchedules && allSchedules.value) || []).find(function (s) {
+        return String((s && (s.teacherEmail || s.email)) || '').trim().toLowerCase() === em
+          && parseInt(s.dayOfWeek, 10) === dow
+          && parseInt(s.period, 10) === p;
+      }) || null;
+    }
+    function exceptionId(prefix) {
+      return 'req_exc_' + Date.now().toString(36) + '_' + prefix + Math.random().toString(36).slice(2, 6);
+    }
+    function exceptionSerial(prefix) {
+      return prefix + (1000 + Math.floor(Math.random() * 9000));
+    }
+    function buildExceptionLeg(pending, serialPrefix, reason, submitDepsBase) {
+      var built = UiSubmitHelpers.buildSubmitPayload(
+        Object.assign({ pendingRequestData: { value: pending } }, submitDepsBase),
+        exceptionId(serialPrefix), exceptionSerial(serialPrefix));
+      built.payload.directApprove = true;
+      built.payload.isAdminException = true;
+      built.payload.exceptionReason = reason;
+      built.payload.skipNotify = true;
+      built.newRequest.directApprove = true;
+      built.newRequest.isAdminException = true;
+      built.newRequest.exceptionReason = reason;
+      return built;
+    }
+    async function submitAdminException(payload) {
+      if (!isAdminRef || !isAdminRef.value) throw new Error('特例建單僅限教學組管理員');
+      payload = payload || {};
+      var reason = String(payload.reason || '').trim();
+      if (!reason) throw new Error('請填寫事由');
+      var legs = payload.legs || [];
+      if (!legs.length) throw new Error('至少需要一腿');
+      if (legs.length > 5) throw new Error('一次最多 5 腿');
+      var submitDepsBase = {
+        currentSemester: currentSemester,
+        getTeacherNameByEmail: getTeacherNameByEmail,
+        isAdmin: isAdminRef,
+        directApproveMode: { value: true },
+        paperFlow: { value: false },
+        isMutualCover: { value: false },
+        PERIOD8_FEE: '第8節代課',
+        ACTIVITY_PUBLIC_FEE: '活動公費',
+        TIMETABLE_ONLY_FEE: '僅課表呈現（不結算）',
+        activeCell: { value: null },
+        DAC: function () { return null; },
+        shouldProxySubmitForLeave: function () { return false; },
+        isProxySubmitActive: function () { return false; }
+      };
+      var results = [];
+      for (var i = 0; i < legs.length; i++) {
+        var leg = legs[i] || {};
+        try {
+          var built;
+          if (leg.kind === 'exchange') {
+            var a = leg.aSlot || {};
+            var b = leg.bSlot || {};
+            if (!a.teacherEmail || !b.teacherEmail) throw new Error('第' + (i + 1) + '腿：請選定雙方教師');
+            if (String(a.teacherEmail).trim().toLowerCase() === String(b.teacherEmail).trim().toLowerCase()) {
+              throw new Error('第' + (i + 1) + '腿：雙方須為不同教師');
+            }
+            if (!a.className || !b.className) throw new Error('第' + (i + 1) + '腿：雙方課堂須有基礎課程');
+            built = buildExceptionLeg({
+              mode: 'exchange',
+              leaveTeacher: a.teacherEmail,
+              subTeacher: b.teacherEmail,
+              cls: a.className,
+              subject: a.subject,
+              date: a.dateStr,
+              timeKey: exceptionTimeKey(a.dateStr, a.period),
+              dateB: b.dateStr,
+              timeB: exceptionTimeKey(b.dateStr, b.period),
+              subBClass: b.className,
+              subB: b.subject,
+              reason: reason,
+              subFee: '無',
+              note: ''
+            }, 'SWP', reason, submitDepsBase);
+          } else if (leg.kind === 'substitution') {
+            var leave = leg.leave || {};
+            var sub = leg.sub || {};
+            if (!leave.teacherEmail || !sub.teacherEmail) throw new Error('第' + (i + 1) + '腿：請選定請假與代課教師');
+            if (!sub.fee) throw new Error('第' + (i + 1) + '腿：請選擇經費');
+            var cover = findExceptionCoverSlot(leave.teacherEmail, leave.dateStr, leave.period);
+            if (!cover) throw new Error('第' + (i + 1) + '腿：被代格在請假人課表無基礎課程');
+            built = buildExceptionLeg({
+              mode: 'substitution',
+              leaveTeacher: leave.teacherEmail,
+              subTeacher: sub.teacherEmail,
+              cls: cover.className,
+              subject: cover.subject,
+              date: leave.dateStr,
+              timeKey: exceptionTimeKey(leave.dateStr, leave.period),
+              reason: reason,
+              subFee: sub.fee,
+              note: ''
+            }, 'SUB', reason, submitDepsBase);
+          } else {
+            throw new Error('第' + (i + 1) + '腿：未知的腿類型');
+          }
+          await callGasApi('submitRequest', built.payload);
+          results.push({ ok: true, serial: built.newRequest['單號'] });
+        } catch (errLeg) {
+          results.push({ ok: false, error: String((errLeg && errLeg.message) || errLeg || '建單失敗') });
+        }
+      }
+      var okAll = results.length > 0 && results.every(function (r) { return r.ok; });
+      if (okAll) {
+        showToast('特例單已直接核准建單（共 ' + results.length + ' 筆），經費照系統計算', 'success');
+        try {
+          if (typeof loadWeeklyData === 'function') await loadWeeklyData();
+        } catch (eRefresh) { /* ignore */ }
+      }
+      return { ok: okAll, results: results };
+    }
     return {
+      showExceptionComposer: showExceptionComposer,
+      openExceptionComposer: openExceptionComposer,
+      submitAdminException: submitAdminException,
       showImportTeachersModal: showImportTeachersModal,
       teacherExcelData: teacherExcelData,
       teacherExcelHeaders: teacherExcelHeaders,

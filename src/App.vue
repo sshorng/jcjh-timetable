@@ -1376,6 +1376,7 @@
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyTypeFilter === 'all' }" @click="setHistoryTypeFilter('all')">全部</button>
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyTypeFilter === 'substitution' }" @click="setHistoryTypeFilter('substitution')">代課</button>
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyTypeFilter === 'exchange' }" @click="setHistoryTypeFilter('exchange')">調課</button>
+                <button v-if="isAdmin" type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyTypeFilter === 'exception' }" @click="setHistoryTypeFilter('exception')">特例</button>
               </div>
               <span class="history-filter-label">日期</span>
               <div class="filter-chip-group">
@@ -1611,14 +1612,22 @@
             >
               ⚙️ 系統設定
             </button>
-            <button 
-              class="btn btn-pill" 
-              :class="adminSubTab === 'schoolExport' ? 'btn-primary' : 'btn-secondary'"
-              @click="adminSubTab = 'schoolExport'"
-            >
-              📄 課表匯出
-            </button>
-           </div>
+             <button
+               class="btn btn-pill"
+               :class="adminSubTab === 'schoolExport' ? 'btn-primary' : 'btn-secondary'"
+               @click="adminSubTab = 'schoolExport'"
+             >
+               📄 課表匯出
+             </button>
+             <button
+               type="button"
+               class="btn btn-secondary"
+               title="組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單"
+               @click="openExceptionComposer"
+             >
+               🛠️ 特例調代
+             </button>
+            </div>
 
            <!-- 子分頁：第八節班級週表與核銷匯出 -->
            <div v-if="adminSubTab === 'period8'" class="period8-admin-page">
@@ -2292,7 +2301,6 @@
       :start-combined-return="startCombinedReturn"
       :prep-batch-exchange-compare="prepBatchExchangeCompare"
       :prep-batch-per-slot-compare="prepBatchPerSlotCompare"
-      :open-same-period-swap-modal="openSamePeriodSwapModal"
       :load-more-matches="loadMoreMatches"
       :load-more-triangle-candidates="loadMoreTriangleCandidates"
       :open-triangle-timetable-preview="openTriangleTimetablePreview"
@@ -2306,22 +2314,6 @@
       @close="closeMatchModal"
     />
       <!-- 三角調：三位教師課表預覽 -->
-    <!-- 同節互調 modal → components/SamePeriodSwapModal.vue -->
-    <SamePeriodSwapModal
-      v-if="showSamePeriodSwapModal"
-      :same-period-swap-source="samePeriodSwapSource"
-      :same-period-swap-filtered-candidates="samePeriodSwapFilteredCandidates"
-      :same-period-swap-selected-candidate="samePeriodSwapSelectedCandidate"
-      :same-period-swap-saving="samePeriodSwapSaving"
-      :format-period-text="formatPeriodText"
-      v-model:same-period-swap-search-query="samePeriodSwapSearchQuery"
-      :same-period-swap-target-key="samePeriodSwapTargetKey"
-      :same-period-swap-candidates="samePeriodSwapCandidates"
-      :close-same-period-swap-modal="closeSamePeriodSwapModal"
-      :get-class-badge-style="getClassBadgeStyle"
-      :save-same-period-swap="saveSamePeriodSwap"
-      @close="closeSamePeriodSwapModal"
-    />
     <!-- 三角調三人課表預覽 modal → components/TrianglePreviewModal.vue -->
     <TrianglePreviewModal
       v-if="showTriangleTimetablePreview"
@@ -2466,6 +2458,17 @@
     />
 
       <!-- 批次匯入教師 Modal -->
+    <!-- 特例調代 composer → components/ExceptionComposerModal.vue -->
+    <ExceptionComposerModal
+      v-if="showExceptionComposer"
+      :teachers-list="teachersList"
+      :all-schedules="allSchedules"
+      :get-schedule-for-date="getScheduleForDate"
+      :get-teacher-name-by-email="getTeacherNameByEmail"
+      :submit-admin-exception="submitAdminException"
+      @close="showExceptionComposer = false"
+    />
+
     <!-- 批次匯入教師 modal → components/ImportTeachersModal.vue -->
     <ImportTeachersModal
       v-if="showImportTeachersModal"
@@ -2723,7 +2726,7 @@ import ManualHomeroomModal from './components/ManualHomeroomModal.vue';
 import SemesterModal from './components/SemesterModal.vue';
 import QuotaAdjustModal from './components/QuotaAdjustModal.vue';
 import EmptySlotModal from './components/EmptySlotModal.vue';
-import SamePeriodSwapModal from './components/SamePeriodSwapModal.vue';
+
 import OvertimePlanModal from './components/OvertimePlanModal.vue';
 import LineMessageModal from './components/LineMessageModal.vue';
 import QuotaLedgerModal from './components/QuotaLedgerModal.vue';
@@ -2731,6 +2734,7 @@ import ExpenseAuditModal from './components/ExpenseAuditModal.vue';
 import BatchPrintPromptModal from './components/BatchPrintPromptModal.vue';
 import TrianglePreviewModal from './components/TrianglePreviewModal.vue';
 import DetailModal from './components/DetailModal.vue';
+import ExceptionComposerModal from './components/ExceptionComposerModal.vue';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from './stores/session.js';
 import { useDataStore } from './stores/data.js';
@@ -2779,9 +2783,9 @@ const { activeAwayBanner, activeTab, adminSubTab, allSchedules, availableSemeste
 const { changeMatchMode, deleteSemester, getRealTeacherName, getTeacherTimetableHours, getTriangleGroupRequests, manualRefreshData, saveClientSettings, saveSemester, setDefaultSemester } = dataStore;
 const { changeWeek, clearAllProxySubmitEmails, clearProxyTarget, ensureHistoryMonthLoaded, formatClassName, formatDateMMDD, formatExchangeClassSlot, formatMoney, formatQuickTodoTitle, getClassBadgeStyle, getLeaveTimePresetRange, getPeriodClass, getPeriodLabel, getPeriodTimeSpan, getSubjectStyle, getTeacherIdentityTooltip, getTeacherNameByEmail, getTeacherSubjectByEmail, getWeekDayText, isExchangeClassRestricted, isLeaveClassRestricted, isLunchPeriod, isProxySubmitEmailGranted, openAddSemesterModal, openEditSemesterModal, period8CellsFor, period8StatusLabel, selectClassForView, setCompareWeekSelection, setProxySubmitEnabled, shiftBatchCompareWeek, updatePendingLeaveTime } = dataStore;
 const { accountingExportLoading, accountingPeriod, batchCompareWeekIndex, batchCompareWeekSlotCount, batchCompareWeekTotal, compareDisplayDatesA, compareDisplayDatesB, dataRefreshing, dataUpdatedLabel, devTeacherQuery, directApproveMode, emptySlotForm, filteredDevTeachers, filteredProxyTeachers, filteredTeachers, historyEditForm, historyFullLoaded, historyLoadedMonths, historyLoadingFull, historyMonthLoading, isCrossWeekExchange, isScheduleEditMode, monthlyReportData, monthlyReportLoading, monthlyReportTotals, period8ExportLoading, period8Loading, period8RosterRows, proxyGrantCandidateTeachers, proxyGrantedTeachers, proxyTargetName, reportEndDate, reportMonth, reportStartDate, reportWeeksCount, requestWindowInfo, showEmptySlotModal, showHistoryEditModal, softSyncing, subjectsList, userRoleText } = storeToRefs(dataStore);
-const { addEventToCalendar, addToGoogleCalendar, cellFromGrid, closeSamePeriodSwapModal, copyLineMessageForRequest, deleteSchoolSwap, downloadIcsCalendar, formatHistoryExchangeSlot, formatHistoryLeaveSlot, getClassAwayEventName, getClassCellClassForClass, getClassCellClassForDate, getScheduleForDate, isAwayClassCell, isHistoryExchangeRechanged, isHistoryExchangeRestricted, isHistoryLeaveRechanged, isHistoryLeaveRestricted, isRequestExchangeRechanged, isRequestLeaveRechanged, loadMoreTriangleCandidates, openAddSchoolSwapModal, openEditSchoolSwapModal, openSamePeriodSwapModal, openTriangleTimetablePreview, saveSamePeriodSwap, saveSchoolSwap, selectTriangleCandidateB, selectTriangleCandidateC, triangleCandidateIsRestricted } = timetableStore;
+const { addEventToCalendar, addToGoogleCalendar, cellFromGrid, copyLineMessageForRequest, deleteSchoolSwap, downloadIcsCalendar, formatHistoryExchangeSlot, formatHistoryLeaveSlot, getClassAwayEventName, getClassCellClassForClass, getClassCellClassForDate, getScheduleForDate, isAwayClassCell, isHistoryExchangeRechanged, isHistoryExchangeRestricted, isHistoryLeaveRechanged, isHistoryLeaveRestricted, isRequestExchangeRechanged, isRequestLeaveRechanged, loadMoreTriangleCandidates, openAddSchoolSwapModal, openEditSchoolSwapModal, openTriangleTimetablePreview, saveSchoolSwap, selectTriangleCandidateB, selectTriangleCandidateC, triangleCandidateIsRestricted } = timetableStore;
 const { changeTtPage, changeTeachersPage, formatPeriodText, getExpensePlanSummary, getHomeroomCoverCandidates, isBatchGroupExpanded, isCombinedClass, isExpensePlanSlotConfig, isSubFeeLockedToSelf, timetablePeriods, toggleBatchGroup } = timetableStore;
-const { accountingPlanOptions, adminTodoCount, allTeachersList, currentMonthHomeroomAssignedCount, currentMonthHomeroomFeeTotal, currentMonthHomeroomPendingCount, currentMonthHomeroomRecords, currentWeekDates, dateFilteredHistoryRecords, displayTimetableTeachers, exchangeTeachersList, filteredAdminPendingRequests, filteredHistoryRecords, hasQuickTodo, historyTotalPages, homeroomStatusFilter, homeroomTeachersList, isPeriod8FeeLocked, isRequestValid, manualHomeroomForm, myInviteCount, myTeacherProfile, paginatedAdminPending, paginatedHistoryRecords, paginatedMyPending, paginatedMySent, pendingAdminPage, pendingAdminTotal, pendingCount, pendingHomeroomRecords, pendingMyPendingPage, pendingMyPendingTotal, pendingMySentPage, pendingMySentTotal, pendingSearchQuery, quickTodoSentOpen, quotaDeductInsufficient, quotaDeductPreview, recommendedExchangeList, samePeriodSwapCandidates, samePeriodSwapFilteredCandidates, samePeriodSwapSaving, samePeriodSwapSearchQuery, samePeriodSwapSelectedCandidate, samePeriodSwapSource, samePeriodSwapTargetKey, showManualHomeroomModal, showSamePeriodSwapModal, teachersListDetails, TEACHERS_PAGE_SIZE_DEFAULT, teachersPageSize, teachersPage, teachersTotalPages, teachersNeedPager, pagedTeachersListDetails, ttNeedPager, ttPage, ttPageSize, ttTotalPages, visibleTimetableTeachers
+const { accountingPlanOptions, adminTodoCount, allTeachersList, currentMonthHomeroomAssignedCount, currentMonthHomeroomFeeTotal, currentMonthHomeroomPendingCount, currentMonthHomeroomRecords, currentWeekDates, dateFilteredHistoryRecords, displayTimetableTeachers, exchangeTeachersList, filteredAdminPendingRequests, filteredHistoryRecords, hasQuickTodo, historyTotalPages, homeroomStatusFilter, homeroomTeachersList, isPeriod8FeeLocked, isRequestValid, manualHomeroomForm, myInviteCount, myTeacherProfile, paginatedAdminPending, paginatedHistoryRecords, paginatedMyPending, paginatedMySent, pendingAdminPage, pendingAdminTotal, pendingCount, pendingHomeroomRecords, pendingMyPendingPage, pendingMyPendingTotal, pendingMySentPage, pendingMySentTotal, pendingSearchQuery, quickTodoSentOpen, quotaDeductInsufficient, quotaDeductPreview, recommendedExchangeList, showManualHomeroomModal, teachersListDetails, TEACHERS_PAGE_SIZE_DEFAULT, teachersPageSize, teachersPage, teachersTotalPages, teachersNeedPager, pagedTeachersListDetails, ttNeedPager, ttPage, ttPageSize, ttTotalPages, visibleTimetableTeachers
  } = storeToRefs(timetableStore);
 const { clearMatchPreview, closeMatchModal, fetchQuotaPackPreview, getMatchSlotDateMMDD, loadMoreMatches, resetQuotaPackOverride, selectMatchPreviewExchange, selectMatchPreviewSub, setBatchExchangePreviewSlot } = matchStore;
 const { batchCompareSubGroups, batchCompareViewEmail, batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, displayedExchangeList, displayedRecommendedTeachers, filteredExchangeList, filteredRecommendedTeachers, hasSubTeacherConflict, personalChanges, quotaFifoPackageId, quotaPackError, quotaPackLoading, quotaPackOptions, quotaPackPreview, quotaSelectedPack } = storeToRefs(matchStore);
@@ -2795,9 +2799,9 @@ const { dashboardStats } = storeToRefs(historyStore);
 const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
 const { classAwayForm, classAwayModalMode, isSimulating, showClassAwayModal } = storeToRefs(backofficeStore);
-const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadScheduleTemplate, fillFixedOvertimeForAllTeachers, fillFixedOvertimeFromCurrentSchedule, handleFileChange, handleTeacherExcelChange, importSchedules, importTeachersBatch, migrateNameKeySchema, normalizeScheduleFormFlags, normalizeTeacherExpenseData, onHistoryEditDateChange, onHistoryEditPeriodChange, onHistoryEditReasonChange, onHistoryEditTypeChange, openAddTeacherModal, openEditTeacherModal, openHistoryEditModal, openOvertimePlanModal, openQuotaLedger, openScheduleEditModal, openTeacherExpenseAuditModal, pickScheduleAttr, runImportPreview, runTeacherImportPreview, saveHistoryEdit, saveOvertimePlan, saveScheduleCell, saveTeacher, updateTeacherBaseHours } = adminStore;
+const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadScheduleTemplate, fillFixedOvertimeForAllTeachers, fillFixedOvertimeFromCurrentSchedule, handleFileChange, handleTeacherExcelChange, importSchedules, importTeachersBatch, migrateNameKeySchema, normalizeScheduleFormFlags, normalizeTeacherExpenseData, onHistoryEditDateChange, onHistoryEditPeriodChange, onHistoryEditReasonChange, onHistoryEditTypeChange, openAddTeacherModal, openEditTeacherModal, openExceptionComposer, openHistoryEditModal, openOvertimePlanModal, openQuotaLedger, openScheduleEditModal, openTeacherExpenseAuditModal, pickScheduleAttr, runImportPreview, runTeacherImportPreview, saveHistoryEdit, saveOvertimePlan, saveScheduleCell, saveTeacher, submitAdminException, updateTeacherBaseHours } = adminStore;
 const { closeManualQuotaAdjust, closeQuotaLedger, getMappingLabel, getOvertimeExpenseSourceOptions, getScheduleAttrLabel, leaveReasonOptions, quotaTypeClass } = adminStore;
-const { dashboardScope, emptySlotQuotaZero, excelData, excelHeaders, importPreview, mappingFields, overtimePlanPeriodEnd, overtimePlanRows, overtimePlanTeacher, overtimePlanUsesFixedSlots, quotaAdjustForm, quotaAdjustPreview, quotaAdjustSaving, quotaLedgerLoading, quotaLedgerRows, quotaLedgerTeacher, scheduleForm, showImportTeachersModal, showOvertimePlanModal, showQuotaAdjustModal, showQuotaLedgerModal, showScheduleEditModal, showTeacherExpenseAuditModal, showTeacherModal, teacherExcelData, teacherExcelHeaders, teacherExpenseAuditRows, teacherExpenseAuditSummary, teacherForm, teacherImportPreview, teacherMappingFields, teacherModalMode } = storeToRefs(adminStore);
+const { dashboardScope, emptySlotQuotaZero, excelData, excelHeaders, importPreview, mappingFields, overtimePlanPeriodEnd, overtimePlanRows, overtimePlanTeacher, overtimePlanUsesFixedSlots, quotaAdjustForm, quotaAdjustPreview, quotaAdjustSaving, quotaLedgerLoading, quotaLedgerRows, quotaLedgerTeacher, scheduleForm, showExceptionComposer, showImportTeachersModal, showOvertimePlanModal, showQuotaAdjustModal, showQuotaLedgerModal, showScheduleEditModal, showTeacherExpenseAuditModal, showTeacherModal, teacherExcelData, teacherExcelHeaders, teacherExpenseAuditRows, teacherExpenseAuditSummary, teacherForm, teacherImportPreview, teacherMappingFields, teacherModalMode } = storeToRefs(adminStore);
 const { addSuccessToCalendar, calculateMonthlyReport, clearSchoolExportTeachers, closePrintPreview, confirmPrintPreview, copyPrintPreviewImage, downloadPrintPreviewImage, exportActivityCoverWord, exportInvigilationWorkbook, exportPeriod8Accounting, exportReportToExcel, exportSchoolTimetableWord, exportSubFeeToExcel, isSchoolExportTeacherSelected, openHistoryPrintPreview, openPaperDraftPreview, openPaperPrintForRequest, openPaperPrintMutualDrafts, openPrintPreview, openSuccessPrintPreview, openTrianglePaperPreview, printPaperDraft, printSelectedForms, printSingleRequest, selectAllSchoolExportTeachers, setSchoolExportThisWeek, shiftReportPeriod, toggleSchoolExportTeacher } = outputStore;
 const { openPaperPrintDraftFromCompare } = outputStore;
 const { displayedTriangleBOptions, displayedTriangleCOptions, triangleCandidateB, triangleCandidateBOptions, triangleCandidateBReadyCount, triangleCandidateC, triangleCandidateCList, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateDisplayCount, triangleCandidateOptions, triangleCandidateSearch, triangleCandidates, triangleLegs, triangleParticipants, trianglePreviewRows, trianglePreviewWeekDates, triangleReady, triangleTimetablePreview, triangleValidation, weekScheduleGrid } = storeToRefs(outputStore);

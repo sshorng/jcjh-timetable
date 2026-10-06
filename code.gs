@@ -6216,138 +6216,6 @@ function samePeriodExchangeClassIsAway_(className, dateStr, period, semesterId) 
   });
 }
 
-function samePeriodExchangeScheduleForTeacher_(teacher, dateStr, period, semesterId, schedules, schoolSwaps) {
-  var email = String(teacher && (teacher["教師Email"] || teacher.email || teacher.loginEmail) || "").trim().toLowerCase();
-  var name = String(teacher && (teacher["教師姓名"] || teacher.name || teacher.teacherName) || "").trim().toLowerCase();
-  var day = schoolSwapWeekdayForDate_(dateStr);
-  var effective = resolveSchoolSwapSlotForTeacher_(schoolSwaps || [], dateStr, day, period, schedules || [], email);
-  var rows = (schedules || []).filter(function (row) {
-    if (!row) return false;
-    var rowEmail = String(row["教師Email"] || row.teacherEmail || "").trim().toLowerCase();
-    var rowName = String(row["教師姓名"] || row.teacherName || "").trim().toLowerCase();
-    var teacherMatches = rowEmail ? rowEmail === email : (!!name && rowName === name);
-    return teacherMatches
-      && parseInt(row["星期"] != null ? row["星期"] : row.dayOfWeek, 10) === parseInt(effective.dayOfWeek, 10)
-      && parseInt(row["節次"] != null ? row["節次"] : row.period, 10) === parseInt(effective.period, 10)
-      && samePeriodExchangeScheduleActive_(row, dateStr, semesterId);
-  });
-  if (rows.length !== 1) {
-    throw new Error((teacher && (teacher["教師姓名"] || teacher.name) || email)
-      + (rows.length ? "此時段有多筆課表，無法安全互換！" : "此時段沒有有效課程，無法互換！"));
-  }
-  var row = rows[0];
-  var cell = {
-    className: String(row["班級"] || row.className || "").trim(),
-    subject: String(row["科目"] || row.subject || "").trim(),
-    attr: String(row["課堂屬性"] || row.attr || "").trim(),
-    specialTags: String(row["特殊標記"] || row.specialTags || "").trim(),
-    restriction: String(row["調課限制"] || row.restriction || "").trim()
-  };
-  if (!cell.className || !cell.subject) throw new Error("所選教師的班級或科目資料不完整，無法互換！");
-  if (isPatrolScheduleRow_(row)) throw new Error("巡堂節次不可進行同節互換！");
-  if (samePeriodExchangeClassIsAway_(cell.className, dateStr, period, semesterId)) {
-    throw new Error("其中一方的班級該時段為空堂事件，無法互換！");
-  }
-  return cell;
-}
-
-function samePeriodExchangeRequestTouchesSlot_(row, teacherEmail, dateStr, period) {
-  var status = String(translateStatusToEn(row && (row["狀態"] || row.status) || "") || "").trim().toLowerCase();
-  if (status !== "approved" && status !== "pending_teacher" && status !== "pending_admin") return false;
-  var email = String(teacherEmail || "").trim().toLowerCase();
-  var sourceDate = String(row["異動日期"] || row.requestDate || "").trim().slice(0, 10).replace(/\//g, "-");
-  var sourcePeriod = parseInt(row["異動節次"] != null ? row["異動節次"] : row.requestPeriod, 10);
-  var requester = String(row["申請人Email"] || row.requesterEmail || "").trim().toLowerCase();
-  var target = String(row["受邀人Email"] || row.targetTeacherEmail || "").trim().toLowerCase();
-  if (sourceDate === dateStr && sourcePeriod === parseInt(period, 10)
-      && (requester === email || target === email)) return true;
-  if (String(translateTypeToEn(row["異動類型"] || row.type) || "").trim().toLowerCase() !== "exchange") return false;
-  var targetDate = String(row["對調目標日期"] || row.targetDate || "").trim().slice(0, 10).replace(/\//g, "-");
-  var targetPeriod = parseInt(row["對調目標節次"] != null ? row["對調目標節次"] : row.targetPeriod, 10);
-  return targetDate === dateStr && targetPeriod === parseInt(period, 10)
-    && (requester === email || target === email);
-}
-
-function createAdminSamePeriodExchangeRequest_(input, semesterId, operatorEmail, teachers) {
-  var source = input || {};
-  var sid = String(semesterId || "").trim();
-  if (!sid) throw new Error("缺少學期代號！");
-  var date = schoolSwapDate_(source.date, "互換日期");
-  var period = schoolSwapPeriod_(source.period, "互換節次");
-  var day = schoolSwapWeekdayForDate_(date);
-  var semester = schoolSwapSemester_(sid);
-  var semesterStart = String(semester["開始日期"] || semester.startDate || "").slice(0, 10);
-  var semesterEnd = String(semester["結束日期"] || semester.endDate || "").slice(0, 10);
-  if ((semesterStart && date < semesterStart) || (semesterEnd && date > semesterEnd)) {
-    throw new Error("互換日期不在目前學期範圍內！");
-  }
-
-  var emailA = normalizeEmail_(source.teacherAEmail, "教師 A Email");
-  var emailB = normalizeEmail_(source.teacherBEmail, "教師 B Email");
-  if (emailA === emailB) throw new Error("兩位互換教師不可相同！");
-  var teacherRows = teachers || getSemesterTeachersCached_(sid) || [];
-  var teacherA = findSemesterTeacher_(sid, emailA);
-  var teacherB = findSemesterTeacher_(sid, emailB);
-  if (!teacherA || !teacherB) throw new Error("互換教師不在目前學期教師名單中！");
-
-  var schedules = getSemesterSchedulesCached_(sid) || [];
-  var schoolSwaps = getActiveSchoolSwapRows_(sid) || [];
-  var courseA = samePeriodExchangeScheduleForTeacher_(teacherA, date, period, sid, schedules, schoolSwaps);
-  var courseB = samePeriodExchangeScheduleForTeacher_(teacherB, date, period, sid, schedules, schoolSwaps);
-  var pullOutA = courseA.attr.indexOf("抽離") >= 0 || courseA.specialTags.split(/[、,，;；/／|｜\s]+/).indexOf("抽離") >= 0;
-  var pullOutB = courseB.attr.indexOf("抽離") >= 0 || courseB.specialTags.split(/[、,，;；/／|｜\s]+/).indexOf("抽離") >= 0;
-  if (pullOutA !== pullOutB) throw new Error("抽離課僅可與另一節抽離課互換！");
-  if (courseA.className === courseB.className && courseA.subject === courseB.subject) {
-    throw new Error("雙方目前課程相同，無需建立互換！");
-  }
-
-  var requestRows = getSemesterRequestsCached_(sid, true).rows || [];
-  if (requestRows.some(function (row) {
-    return samePeriodExchangeRequestTouchesSlot_(row, emailA, date, period)
-      || samePeriodExchangeRequestTouchesSlot_(row, emailB, date, period);
-  })) {
-    throw new Error("其中一位教師該時段已有調代課異動或待審申請！");
-  }
-
-  var requestId = "same_period_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-  var compactDate = date.replace(/-/g, "");
-  var operator = String(operatorEmail || "").trim().toLowerCase();
-  var request = {
-    "學期代號": sid,
-    "申請單ID": requestId,
-    "單號": "互換-" + compactDate + "-" + requestId.slice(-6),
-    "狀態": "approved",
-    "直接核准": "是",
-    "紙本流程": "FALSE",
-    "異動類型": "exchange",
-    "特殊流程": "admin_same_period_exchange",
-    "申請人Email": emailA,
-    "受邀人Email": emailB,
-    "申請人姓名": String(teacherA["教師姓名"] || teacherA.name || "").trim(),
-    "受邀人姓名": String(teacherB["教師姓名"] || teacherB.name || "").trim(),
-    "異動日期": date,
-    "異動星期": day,
-    "異動節次": period,
-    "班級": courseA.className,
-    "科目": courseA.subject,
-    "請假事由": "課務調整",
-    "經費來源": "無",
-    "對調目標日期": date,
-    "對調目標星期": day,
-    "對調目標節次": period,
-    "對調目標班級": courseB.className,
-    "對調目標科目": courseB.subject,
-    "建立時間": toLocalTimeStr(new Date()),
-    "更新時間": toLocalTimeStr(new Date()),
-    "備註": "[管理員同節互換] 登錄者：" + operator
-  };
-  request = prepareNameKeyRequestRow_(request, sid, teacherRows);
-  validateRequestRow_(request, sid);
-  assertNewRequestId_(requestId, sid, emailA, emailB, "");
-  assertNoExchangeIncomingConflict_(request, requestRows);
-  return request;
-}
-
 /** 同一教師的同一日期／節次只能有一筆調課調入。核准與送出時都必須重新驗證。 */
 function assertNoExchangeIncomingConflict_(requestRow, existingRows) {
   var candidateId = String(requestRow && (requestRow["申請單ID"] || requestRow.id) || "").trim();
@@ -7175,7 +7043,7 @@ function doPost(e) {
       saveSemester: 1, deleteSemester: 1, setDefaultSemester: 1,
        saveClassAwayEvent: 1, deleteClassAwayEvent: 1,
        saveSchoolSwap: 1, deleteSchoolSwap: 1,
-       adminCreateSamePeriodExchange: 1,
+
        saveTeacher: 1, backupTeacherExpensePlans: 1, deleteTeacher: 1, importTeachersBatch: 1, updateMutualQuotas: 1,
       earnMutualQuotaFromActivity: 1,
       saveScheduleCell: 1, clearScheduleCell: 1, importSchedulesBatch: 1,
@@ -7279,17 +7147,6 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({
         success: true,
         schoolSwap: savedSchoolSwap
-      })).setMimeType(ContentService.MimeType.JSON);
-
-    } else if (action === "adminCreateSamePeriodExchange") {
-      if (!isAdmin) throw new Error("同節互換僅限管理員操作！");
-      assertNotTooFrequent_(userEmail, "adminCreateSamePeriodExchange");
-      var samePeriodExchange = createAdminSamePeriodExchangeRequest_(reqData || {}, semesterId, userEmail, teachers);
-      saveRows("申請單", [samePeriodExchange], "申請單ID");
-      invalidateSemesterCaches_(semesterId);
-      return ContentService.createTextOutput(JSON.stringify({
-        success: true,
-        request: samePeriodExchange
       })).setMimeType(ContentService.MimeType.JSON);
 
     } else if (action === "deleteSchoolSwap") {
@@ -8540,9 +8397,30 @@ function doPost(e) {
           isProxyOne = true;
         }
       }
-      if (!reqData.request["批次ID"]) reqData.request["批次ID"] = "";
-      
-        assertNoExchangeIncomingConflict_(reqData.request, (getSemesterRequestsCached_(semesterId, true).rows || []));
+        if (!reqData.request["批次ID"]) reqData.request["批次ID"] = "";
+        // 特例建單（管理員＋事由）：強制標記＋事由入備註，跳過調課衝堂斷言
+        // （組合有效但單步看無效的案子由管理員背書；其餘格式／學期／經費規則照走）
+        var isAdminExceptionOne = isAdmin && (reqData.isAdminException === true
+          || (reqData.request && reqData.request.isAdminException === true));
+        if (!isAdmin && reqData.request) {
+          delete reqData.request.isAdminException;
+        }
+        if (isAdminExceptionOne) {
+          var exceptionReasonOne = String(
+            (reqData.exceptionReason != null ? reqData.exceptionReason
+              : (reqData.request && reqData.request.exceptionReason)) || '').trim();
+          if (!exceptionReasonOne) throw new Error('特例建單必須填寫事由！');
+          reqData.request["特殊流程"] = "admin_exception";
+          reqData.request.specialFlow = "admin_exception";
+          var prevNoteOne = String(reqData.request["備註"] || "").trim();
+          var exceptionTagOne = "[特例調代：" + exceptionReasonOne + "]";
+          reqData.request["備註"] = prevNoteOne
+            ? (prevNoteOne + " " + exceptionTagOne)
+            : exceptionTagOne;
+        }
+        if (!isAdminExceptionOne) {
+          assertNoExchangeIncomingConflict_(reqData.request, (getSemesterRequestsCached_(semesterId, true).rows || []));
+        }
         persistRequestRowsWithQuota_([reqData.request], userEmail);
        if (String(reqData.request["狀態"] || "") === "approved") {
          syncHomeroomRecordForRequest_(reqData.request, userEmail);

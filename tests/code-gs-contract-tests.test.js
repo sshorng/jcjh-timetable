@@ -77,7 +77,7 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.equal(awayBoundaryContext.classAwayBoundaryPeriodIndex_('45') < awayBoundaryContext.classAwayBoundaryPeriodIndex_('5'), true,
     '午休順序應介於第4節與第5節之間');
   const awaySlotStart = source.indexOf('function samePeriodExchangePeriodInAwayEvent_');
-  const awaySlotEnd = source.indexOf('function samePeriodExchangeScheduleForTeacher_', awaySlotStart);
+  const awaySlotEnd = source.indexOf('function assertNoExchangeIncomingConflict_', awaySlotStart);
   assert.ok(awaySlotStart >= 0 && awaySlotEnd > awaySlotStart, '後端空堂時段判斷 helper 必須存在');
   const awaySlotContext = {
     String, parseInt,
@@ -471,16 +471,9 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.match(coverCalendar.title, /704\s+國文/);
   assert.equal(coverCalendar.startIso.slice(0, 8), '20260901');
 
-  assert.match(source, /adminCreateSamePeriodExchange:\s*1/, '同節互換 action 必須列入管理員專用權限');
-  const samePeriodStart = source.indexOf('} else if (action === "adminCreateSamePeriodExchange")');
-  const samePeriodEnd = source.indexOf('} else if (action === "deleteSchoolSwap")', samePeriodStart);
-  assert.ok(samePeriodStart >= 0 && samePeriodEnd > samePeriodStart, '同節互換需有獨立管理員寫入 action');
-  const samePeriodAction = source.slice(samePeriodStart, samePeriodEnd);
-  assert.match(samePeriodAction, /if \(!isAdmin\)/, '同節互換 action 必須在後端拒絕非管理員');
-  assert.match(samePeriodAction, /createAdminSamePeriodExchangeRequest_/, '同節互換 action 必須呼叫伺服器端驗證');
-  assert.match(samePeriodAction, /saveRows\("申請單", \[samePeriodExchange\]/, '同節互換需沿用既有調課記錄');
-  assert.doesNotMatch(samePeriodAction, /queueMail_|persistRequestRowsWithQuota_|syncHomeroomRecordForRequest_/, '管理員同節互換不可觸發通知、額度或代導流程');
-  assert.match(source, /特殊流程": "admin_same_period_exchange"/, '同節互換需有可辨識的課表異動標記');
+  // 同節互換建單路徑已整併至特例調代通道（admin_exception）：action 與建構函數已刪除；
+  // 歷史單據的 admin_same_period_exchange 顯示／索引分支保留
+  assert.match(source, /String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"/, '歷史同節互換標記仍須可辨識（索引分支）');
   assert.match(source, /if \(String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"\)[\s\S]*?markEdge\(reqDate, reqPer, reqEm, tgtEm, cls, subj\)[\s\S]*?markEdge\(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj\)/, '後端同節互換應讓雙方接手對方原班級');
   // 2A：班級視圖已移至 ui-classview.js
   const classViewSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-classview.js'), 'utf8');
@@ -505,6 +498,11 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   const pubEventMap = pubSource.slice(pubSource.indexOf('.map(function (event)', pubEventBase));
   assert.ok(pubEventMap.includes('"事件名稱"'), '公開事件應保留顯示欄');
   assert.ok(!/"備註":/.test(pubEventMap), '公開事件不可外送備註欄（管理員自由填寫）');
+  // 特例建單（管理員＋事由）：強制標記，跳過調課衝堂斷言，其餘規則照走
+  assert.match(source, /isAdminExceptionOne = isAdmin && \(reqData\.isAdminException === true/, '特例旗標僅管理員有效');
+  assert.match(source, /if \(!exceptionReasonOne\) throw new Error\('特例建單必須填寫事由！'\)/, '特例建單事由必填');
+  assert.match(source, /reqData\.request\["特殊流程"\] = "admin_exception"/, '特例單強制標記特殊流程');
+  assert.match(source, /if \(!isAdminExceptionOne\) \{\s*\n\s*assertNoExchangeIncomingConflict_/, '特例單跳過衝堂斷言（一般單仍擋）');
 
   console.log('code.gs exchange contract tests PASS');
 
