@@ -2908,60 +2908,17 @@
           </div>
         </div>
       </div>
-      <div v-if="showTriangleTimetablePreview" class="modal-overlay" @click.self="showTriangleTimetablePreview = false">
-        <div class="modal-card" style="width:min(1180px,96vw);max-width:1180px;max-height:92vh;overflow:auto;">
-          <div class="modal-header">
-            <div>
-              <h3>👥 三角調三人課表預覽</h3>
-              <div style="font-size:0.74rem;color:var(--text-muted);">調動後課表；綠色框為各教師調動後的新授課位置，原位置顯示為調出。</div>
-            </div>
-            <button class="btn-close" @click="showTriangleTimetablePreview = false">&times;</button>
-          </div>
-          <div class="modal-body" style="padding:12px;">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;">
-                         <section v-for="teacher in triangleTimetablePreview" :key="'tri-timetable-' + teacher.role" style="min-width:0;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff;padding:8px;">
-                 <div style="font-weight:700;color:#1d4ed8;font-size:0.82rem;margin-bottom:3px;">{{ teacher.role }}．{{ teacher.teacherName }}</div>
-                  <div style="font-size:0.68rem;color:#2563eb;margin-bottom:7px;">原課：{{ formatTriangleSlot(teacher.sourceSlot, teacher.sourceCourse, teacher.teacherName) }}</div>
-                <div style="overflow-x:auto;background:#fff;border-radius:6px;">
-                  <table style="width:100%;min-width:390px;border-collapse:collapse;table-layout:fixed;font-size:0.68rem;">
-                    <thead>
-                      <tr>
-                         <th style="width:54px;padding:5px 3px;text-align:center;background:#dbeafe;color:#1e3a8a;border-bottom:1px solid #bfdbfe;">節次</th>
-                         <th v-for="dayInfo in trianglePreviewWeekDates" :key="'tri-day-' + teacher.role + '-' + dayInfo.day" style="padding:5px 2px;text-align:center;background:#dbeafe;color:#1e3a8a;border-bottom:1px solid #bfdbfe;">{{ dayInfo.weekDay }}<br><span style="font-weight:500;color:var(--text-muted);">{{ dayInfo.shortDate }}</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="row in teacher.rows" :key="'tri-period-' + teacher.role + '-' + row.period">
-                        <th style="padding:4px 3px;text-align:center;color:var(--text-secondary);font-weight:600;border-bottom:1px solid #f1f5f9;">{{ getPeriodLabel(row.period) }}</th>
-                        <td v-for="cell in row.cells" :key="'tri-cell-' + teacher.role + '-' + cell.date + '-' + cell.period" :style="{ padding: '4px 3px', verticalAlign: 'top', borderLeft: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', background: cell.isMovedTo ? '#ecfdf5' : '#fff', boxShadow: cell.isMovedTo ? 'inset 0 0 0 2px #10b981' : 'none', opacity: cell.isSubstituted ? '0.65' : '1' }">
-                          <template v-if="cell.className || cell.subject">
-                            <strong style="display:block;white-space:normal;overflow-wrap:anywhere;">{{ cell.className || '未提供' }}</strong>
-                            <span style="display:block;color:var(--text-secondary);white-space:normal;overflow-wrap:anywhere;">{{ cell.subject || '未提供' }}</span>
-                            <span v-if="cell.isMovedTo" style="display:inline-block;margin-top:2px;padding:1px 3px;border-radius:3px;background:#d1fae5;color:#047857;font-size:0.6rem;">調入</span>
-                            <span v-if="cell.isPullOut" style="display:inline-block;margin-top:2px;padding:1px 3px;border-radius:3px;background:#ccfbf1;color:#0f766e;font-size:0.6rem;">抽離</span>
-                            <span v-if="cell.isRestricted" style="display:inline-block;margin-top:2px;padding:1px 3px;border-radius:3px;background:#fef3c7;color:#92400e;font-size:0.6rem;">綁課</span>
-                          </template>
-                          <span v-else :style="{ color: cell.isMovedFrom ? '#b45309' : '#cbd5e1' }">{{ cell.isMovedFrom ? '調出' : '空堂' }}</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-             <div style="margin-top:12px;padding:10px 12px;border:1px solid #bfdbfe;border-radius:8px;background:#fff;font-size:0.76rem;line-height:1.5;">
-               <strong style="color:#1d4ed8;">交換路線</strong>
-              <div v-for="row in trianglePreviewRows" :key="'tri-timetable-route-' + row.index" style="padding:5px 0;border-top:1px solid #f1f5f9;">
-                 {{ row.sourceTeacher }}：{{ formatTriangleSlot(row.sourceSlot, row.sourceCourse, row.sourceTeacher) }} → {{ row.targetTeacher }}時段（{{ formatTriangleSlot(row.targetSlot, row.sourceCourse, row.sourceTeacher) }}）
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" @click="showTriangleTimetablePreview = false">關閉</button>
-             <button type="button" class="btn btn-primary" @click="openTrianglePaperPreview">👁️ 預覽調課單</button>
-          </div>
-        </div>
-      </div>
+    <!-- 三角調三人課表預覽 modal → components/TrianglePreviewModal.vue -->
+    <TrianglePreviewModal
+      v-if="showTriangleTimetablePreview"
+      :triangle-timetable-preview="triangleTimetablePreview"
+      :triangle-preview-week-dates="trianglePreviewWeekDates"
+      :triangle-preview-rows="trianglePreviewRows"
+      :format-triangle-slot="formatTriangleSlot"
+      :get-period-label="getPeriodLabel"
+      :open-triangle-paper-preview="openTrianglePaperPreview"
+      @close="showTriangleTimetablePreview = false"
+    />
       <!-- 3.2 雙人對比 Modal (compareModal) -->
       <div v-if="showCompareModal" class="modal-overlay" data-tour="compare-modal" @click.self="closeCompareModal">
         <div class="modal-card" data-tour="compare-card">
@@ -3661,24 +3618,14 @@
       </div>
 
       <!-- 批次核准後列印提示 -->
-      <div v-if="showBatchPrintPrompt" class="modal-overlay" @click.self="dismissBatchPrintPrompt">
-        <div class="modal-card" style="max-width: 420px;">
-          <div class="modal-header">
-            <h3>🖨️ 批次已核准</h3>
-            <button class="btn-close" @click="dismissBatchPrintPrompt">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="font-size:0.9rem;line-height:1.5;margin:0 0 8px;">
-              已成功出單，共 <strong>{{ lastBatchPrintIds.length }}</strong> 筆異動紀錄可列印通知單。
-            </p>
-            <p style="font-size:0.8rem;color:var(--text-secondary);margin:0;">是否立即列印本批代（調、補）課單？</p>
-          </div>
-          <div class="modal-footer success-actions">
-            <button class="btn btn-primary" @click="printLastBatchNotices">🖨️ 一鍵列印本批</button>
-            <button class="btn btn-secondary" @click="dismissBatchPrintPrompt">稍後再印</button>
-          </div>
-        </div>
-      </div>
+    <!-- 批次已核准列印提示 modal → components/BatchPrintPromptModal.vue -->
+    <BatchPrintPromptModal
+      v-if="showBatchPrintPrompt"
+      :last-batch-print-ids="lastBatchPrintIds"
+      :dismiss-batch-print-prompt="dismissBatchPrintPrompt"
+      :print-last-batch-notices="printLastBatchNotices"
+      @close="dismissBatchPrintPrompt"
+    />
 
       <!-- 批次匯入教師 Modal -->
       <div v-if="showImportTeachersModal" class="modal-overlay" @click.self="showImportTeachersModal = false">
@@ -3931,62 +3878,15 @@
       </div>
 
       <!-- 4.1b. 教師經費來源檢查與整理 Modal -->
-      <div v-if="showTeacherExpenseAuditModal" class="modal-overlay" @click.self="showTeacherExpenseAuditModal = false">
-        <div class="modal-card" style="max-width:1100px;">
-          <div class="modal-header">
-            <h3>🔎 教師經費來源檢查</h3>
-            <button class="btn-close" @click="showTeacherExpenseAuditModal = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="margin:0 0 12px;color:var(--text-secondary);font-size:0.82rem;line-height:1.6;">
-              這是乾跑預覽，不會改寫課表或歷史月份。可整理資料會先備份原值，再只標準化來源 JSON 與固定超鐘點欄位；格式錯誤資料保留原值，空白經費計畫依規則視為預設經費，不需另行確認。
-            </p>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;font-size:0.82rem;">
-              <span class="status-badge status-approved">一致 {{ teacherExpenseAuditSummary.ok }}</span>
-              <span class="status-badge status-pending-admin">可整理 {{ teacherExpenseAuditSummary.normalizable }}</span>
-              <span class="status-badge status-pending-teacher">待確認 {{ teacherExpenseAuditSummary.review }}</span>
-              <span class="status-badge status-rejected">暫不整理 {{ teacherExpenseAuditSummary.blocked }}</span>
-            </div>
-            <div v-if="!teacherExpenseAuditRows.length" class="empty-state" style="padding:24px 12px;">
-              目前沒有教師資料可檢查。
-            </div>
-            <div v-else class="table-responsive">
-              <table class="custom-table" style="font-size:0.8rem;min-width:900px;">
-                <thead>
-                  <tr>
-                    <th>狀態</th>
-                    <th style="text-align:left;">教師</th>
-                    <th style="text-align:left;">來源目前值</th>
-                    <th style="text-align:left;">標準化後</th>
-                    <th style="text-align:left;">固定超鐘點目前值</th>
-                    <th style="text-align:left;">處理說明</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in teacherExpenseAuditRows" :key="'expense-audit-' + row.email">
-                    <td style="white-space:nowrap;">
-                      <span class="status-badge" :class="row.status === 'ok' ? 'status-approved' : (row.status === 'normalizable' ? 'status-pending-admin' : (row.status === 'blocked' ? 'status-rejected' : 'status-pending-teacher'))">
-                        {{ row.status === 'ok' ? '一致' : (row.status === 'normalizable' ? '可整理' : (row.status === 'blocked' ? '暫不整理' : '待確認')) }}
-                      </span>
-                    </td>
-                    <td style="text-align:left;vertical-align:top;">
-                      <strong>{{ row.name || '未命名' }}</strong><small style="display:block;color:var(--text-muted);word-break:break-all;">{{ row.email }}</small>
-                    </td>
-                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.planBefore }}</td>
-                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.planAfter }}</td>
-                    <td style="text-align:left;vertical-align:top;word-break:break-word;">{{ row.fixedBefore }}</td>
-                    <td style="text-align:left;vertical-align:top;color:var(--text-secondary);">{{ row.issues.concat(row.changes).join('；') || '無需處理' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-primary" :disabled="loading || !teacherExpenseAuditSummary.normalizable" @click="normalizeTeacherExpenseData">備份並整理可處理資料（{{ teacherExpenseAuditSummary.normalizable }} 位）</button>
-            <button class="btn btn-secondary" @click="showTeacherExpenseAuditModal = false">關閉</button>
-          </div>
-        </div>
-      </div>
+    <!-- 教師經費來源檢查 modal → components/ExpenseAuditModal.vue -->
+    <ExpenseAuditModal
+      v-if="showTeacherExpenseAuditModal"
+      :teacher-expense-audit-summary="teacherExpenseAuditSummary"
+      :teacher-expense-audit-rows="teacherExpenseAuditRows"
+      :loading="loading"
+      :normalize-teacher-expense-data="normalizeTeacherExpenseData"
+      @close="showTeacherExpenseAuditModal = false"
+    />
 
       <!-- 4.1a. 學期新增/編輯 Modal -->
       <div v-if="showSemesterModal" class="modal-overlay" @click.self="showSemesterModal = false">
@@ -4376,232 +4276,41 @@
       </div>
 
       <!-- 4.1. 異動狀態與詳情 Modal -->
-      <div v-if="showDetailModal" class="modal-overlay" @click.self="showDetailModal = false">
-        <div class="modal-card" style="max-width: 460px;">
-          <div class="modal-header">
-             <h3>🔍 {{ detailRequest && detailRequest.type === 'triangle' ? '三角調詳情簽核狀態' : '調代課異動詳情簽核狀態' }}</h3>
-            <button class="btn-close" @click="showDetailModal = false">&times;</button>
-          </div>
-          <div class="modal-body p-20">
-            <div v-if="detailRequest" style="display: flex; flex-direction: column; gap: 14px;">
-              
-              <!-- 狀態與單號 -->
-              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
-                <div>
-                  <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">異動單號</span>
-                  <strong style="font-size: 1rem; color: var(--text-primary);">{{ detailRequest.serial || '---' }}</strong>
-                </div>
-                <span class="status-badge" :class="'status-' + (detailRequest.status ? detailRequest.status.toLowerCase() : 'approved')">
-                  {{ getStatusText(detailRequest.status || 'approved') }}
-                </span>
-              </div>
-
-              <!-- 異動明細 -->
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.85rem; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-                 <div>
-                   <span class="text-muted-block">請假教師（申請）</span>
-                   <strong>{{ detailRequest.requesterName }}</strong>
-                 </div>
-                 <div>
-                   <span class="text-muted-block">{{ detailRequest.specialFlow === 'combined_return' ? '特殊流程' : '代課/受邀教師' }}</span>
-                    <strong>{{ detailRequest.specialFlow === 'combined_return' ? '併班上課' : detailRequest.targetTeacherName }}</strong>
-                </div>
-                <div style="grid-column: span 2;">
-                  <span class="text-muted-block">異動課堂</span>
-                  <strong>{{ formatDateMMDD(detailRequest.requestDate) }}({{ getWeekDayText(detailRequest.requestPeriodDay || new Date(detailRequest.requestDate.replace(/-/g, '/')).getDay()) }}) 第{{ detailRequest.requestPeriod }}節 {{ getOriginalRequestClass(detailRequest) }}{{ getOriginalRequestSubject(detailRequest) }}</strong>
-                </div>
-                 <div v-if="detailRequest.type === 'exchange' || detailRequest.type === '對調'" style="grid-column: span 2; border-top: 1px dashed var(--border-color); padding-top: 8px; margin-top: 4px;">
-                  <span class="text-muted-block">對調課堂</span>
-                  <strong class="text-primary-strong">{{ formatDateMMDD(detailRequest.targetDate) }}({{ getWeekDayText(detailRequest.targetDayOfWeek) }}) 第{{ detailRequest.targetPeriod }}節 {{ getOriginalTargetClass(detailRequest) }}{{ getOriginalTargetSubject(detailRequest) }}</strong>
-                </div>
-                <div v-if="detailRequest.type !== 'exchange' && detailRequest.type !== '對調' && detailRequest.type !== 'triangle'">
-                 <span class="text-muted-block">代課經費</span>
-                  <strong class="text-success">{{ detailRequest.specialFlow === 'combined_return' ? ('併班教師不支領；被代教師依假別扣減（' + (detailRequest.subFee || '待判定') + '）') : (detailRequest.subFee || '自費代課') }}</strong>
-               </div>
-
-                  <div v-if="detailRequest && detailRequest.type === 'triangle'" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:0.8rem;line-height:1.5;">
-                  <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px;">三角調整組 {{ detailRequest.triangleId || detailRequest.batchId || '未提供' }}</div>
-                  <div v-for="row in getTriangleGroupRequests(detailRequest)" :key="'detail-tri-' + row.id" style="padding:8px 0;border-top:1px solid #dbeafe;">
-                   <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                     <strong>第{{ row.triangleLegIndex || '未提供' }}腳：{{ row.requesterName }} → {{ row.targetTeacherName }}</strong>
-                      <span class="status-badge tag-gray">{{ row.triangleConsentStatus === 'paper_agreed' ? '紙本已確認' : (row.triangleConsentStatus === 'paper_pending' ? '待紙本簽名' : (row.triangleConsentStatus === 'agree' ? '已同意' : (row.triangleConsentStatus === 'decline' ? '已拒絕' : '待同意'))) }}</span>
-                   </div>
-                   <div style="color:var(--text-secondary);margin-top:3px;">{{ formatLeaveClassSlot(row) }} → {{ formatExchangeClassSlot(row) }}</div>
-                 </div>
-                   <div style="margin-top:8px;color:#1e3a8a;">{{ isPaperFlowRequest(detailRequest) ? '紙本模式：請確認三位教師都已在調課單簽名，再由教學組核審；系統不進行線上簽核。' : '線上模式：三方全部同意後才會送教學組核准；任一人拒絕或撤回，整組不生效。' }}</div>
-               </div>
-                <div>
-                  <span class="text-muted-block">假別事由</span>
-                  <strong>{{ detailRequest.reason || '請假' }}</strong>
-                </div>
-              </div>
-
-              <!-- 備註 -->
-              <div v-if="detailRequest.note" style="font-size: 0.8rem; border-left: 3px solid var(--color-danger); padding-left: 8px; color: var(--text-primary); margin-top: 4px;">
-                <strong>行政備註：</strong>{{ detailRequest.note }}
-              </div>
-
-              <!-- 簽核進度（調代課資訊下方） -->
-              <div class="req-progress-panel" :class="{ 'is-failed': getRequestProgressSteps(detailRequest).failed }">
-                <div class="req-progress-panel-title">簽核進度</div>
-                <div class="req-progress req-progress-lg">
-                  <div
-                    v-for="(st, si) in getRequestProgressSteps(detailRequest).steps"
-                    :key="'d'+st.key"
-                    class="req-progress-step"
-                    :class="{ done: st.done, current: st.current, fail: st.fail }"
-                  >
-                    <span class="req-progress-dot"></span>
-                    <span class="req-progress-label">{{ st.label }}</span>
-                    <span v-if="st.done && st.at" class="req-progress-time">{{ st.at }}</span>
-                    <span v-if="si < getRequestProgressSteps(detailRequest).steps.length - 1" class="req-progress-line"></span>
-                  </div>
-                </div>
-                <p class="req-progress-summary">{{ getRequestProgressSteps(detailRequest).summary }}</p>
-                <p v-if="getRequestProgressSteps(detailRequest).overdue" class="req-progress-overdue">⚠ {{ getRequestProgressSteps(detailRequest).overdueHint }}</p>
-              </div>
-
-            </div>
-          </div>
-          <div class="modal-footer" style="padding: 12px 20px; justify-content: flex-end; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-              <!-- 已核准案件的行事曆與列印按鈕（非審核中） -->
-              <template v-if="detailRequest && (detailRequest.status === 'approved' || !detailRequest.status)">
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  style="padding: 6px 10px; font-size: 0.8rem; margin: 0; display: inline-flex; align-items: center; gap: 4px; border-color: #cbd5e1; background: #fff;"
-                  title="依您的角色標記「不用上」或「代課／調入」"
-                  @click="addEventToCalendar(detailRequest)"
-                >
-                   📅 日曆
-                </button>
-                <button
-                  class="btn btn-primary"
-                  style="padding: 6px 10px; font-size: 0.8rem; margin: 0; display: inline-flex; align-items: center; gap: 4px;"
-                  title="依學校原版格式列印代（調、補）課單"
-                  @click="printSingleRequest(detailRequest, 'Notice')"
-                >
-                   🖨️ 列印
-                </button>
-              </template>
-                <!-- 進行中申請單 (Pending) 的快速簽核操作按鈕組 -->
-              <template v-if="detailRequest && (detailRequest.status === 'pending_teacher' || detailRequest.status === 'pending_admin')">
-                <button
-                  type="button"
-                  class="btn btn-primary btn-inline-flex"
-                  @click="openPaperPrintForRequest(detailRequest)"
-                >🖨️ 列印</button>
-                <button
-                  v-if="isAdmin || (user && detailRequest.requesterName && detailRequest.requesterName.toLowerCase() === getTeacherNameByEmail(user.email).toLowerCase())"
-                  type="button"
-                  class="btn btn-success btn-inline-flex"
-                  title="開啟可編輯的 LINE 訊息"
-                  @click="copyLineMessageForRequest(detailRequest)"
-                >💬 傳訊</button>
-                <!-- 受邀教師線上回簽同意/拒絕 -->
-                 <template v-if="detailRequest.status === 'pending_teacher' && user && detailRequest.targetTeacherName && detailRequest.targetTeacherName.toLowerCase() === getTeacherNameByEmail(user.email).toLowerCase()">
-                  <button
-                     v-if="detailRequest.batchId && detailRequest.type !== 'triangle'"
-                    class="btn btn-success"
-                    style="padding: 6px 12px; font-size: 0.8rem; margin: 0; display: inline-flex; align-items: center; background:#047857;"
-                    @click="respondToBatch(detailRequest.batchId, 'agree'); showDetailModal = false;"
-                  >
-                     ✔️ 全同
-                  </button>
-                  <button 
-                    class="btn btn-success btn-inline-flex"
-                    @click="respondToRequest(detailRequest.id, 'agree'); showDetailModal = false;"
-                  >
-                     ✔️ 同意
-                  </button>
-                  <button 
-                    class="btn btn-danger btn-danger-inline"
-                    @click="respondToRequest(detailRequest.id, 'decline'); showDetailModal = false;"
-                  >
-                     ❌ 拒絕
-                  </button>
-                  <button
-                     v-if="detailRequest.batchId && detailRequest.type !== 'triangle'"
-                    class="btn btn-secondary"
-                    style="padding: 6px 12px; font-size: 0.8rem; margin: 0; color: var(--color-danger);"
-                    @click="respondToBatch(detailRequest.batchId, 'decline'); showDetailModal = false;"
-                  >
-                     全拒
-                  </button>
-                </template>
-                
-                <!-- 申請人本人線上撤回 -->
-                 <template v-if="detailRequest.status === 'pending_teacher' && user && detailRequest.requesterName && detailRequest.requesterName.toLowerCase() === getTeacherNameByEmail(user.email).toLowerCase()">
-                  <button 
-                    class="btn btn-warning" 
-                    style="padding: 6px 12px; font-size: 0.8rem; margin: 0; background: #f59e0b; color: white; display: inline-flex; align-items: center;"
-                    @click="cancelRequest(detailRequest.id); showDetailModal = false;"
-                  >
-                     ↩️ 撤回
-                  </button>
-                </template>
-                
-                <!-- 行政管理員核准／駁回；紙本流程不寄通知信 -->
-                <template v-if="detailRequest.status === 'pending_admin' && isAdmin">
-                  <button 
-                    class="btn btn-success btn-inline-flex"
-                    @click="adminApprove(detailRequest.id); showDetailModal = false;"
-                  >
-                      ⚡ 核准
-                  </button>
-                  <button 
-                    class="btn btn-danger btn-danger-inline"
-                    @click="adminReject(detailRequest.id); showDetailModal = false;"
-                  >
-                    🚫 駁回
-                  </button>
-                </template>
-                
-                <!-- 行政管理員對 pending_teacher 單子直接撤銷 -->
-                <template v-if="detailRequest.status === 'pending_teacher' && isAdmin">
-                  <button 
-                    class="btn btn-danger btn-danger-inline"
-                    @click="cancelRequest(detailRequest.id); showDetailModal = false;"
-                  >
-                      🗑️ 撤銷
-                  </button>
-                </template>
-              </template>
-
-              <!-- 只有管理員可以進行快速撤銷 (已核准生效的異動) -->
-              <button 
-                v-if="isAdmin && detailSubRecord && detailRequest.id !== 'N/A'"
-                class="btn btn-danger" 
-                style="padding: 6px 12px; font-size: 0.8rem; margin: 0; background: var(--color-danger); color: white;"
-                @click="deleteSubstitutionRecord(detailSubRecord.id, detailRequest.id); showDetailModal = false;"
-              >
-                 🗑️ 撤銷
-              </button>
-              
-              <!-- 二次轉移/再次調代課 -->
-               <button v-if="detailSubRecord && detailRequest.specialFlow !== 'combined_return' && canStartSecondSubFromDetail"
-                class="btn btn-success" 
-                style="padding: 6px 12px; font-size: 0.8rem; margin: 0;"
-                @click="startSecondSub"
-              >
-                 🔄 再辦
-              </button>
-
-              <!-- 調開／被代後：原課老師該節已空，可另排空堂任務 -->
-              <button
-                 v-if="isAdmin && detailSubRecord && detailRequest.specialFlow !== 'combined_return' && detailSubRecord.originalTeacherName"
-                class="btn btn-primary"
-                style="padding: 6px 12px; font-size: 0.8rem; margin: 0;"
-                type="button"
-                @click="openEmptySlotFromDetail"
-              >
-                 📌 排班
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- §UI-3.1 異動詳情 modal → components/DetailModal.vue -->
+    <DetailModal
+      v-if="showDetailModal"
+      :detail-request="detailRequest"
+      :detail-sub-record="detailSubRecord"
+      :user="user"
+      :is-admin="isAdmin"
+      :can-start-second-sub-from-detail="canStartSecondSubFromDetail"
+      :get-status-text="getStatusText"
+      :format-date-m-m-d-d="formatDateMMDD"
+      :get-week-day-text="getWeekDayText"
+      :get-original-request-class="getOriginalRequestClass"
+      :get-original-request-subject="getOriginalRequestSubject"
+      :get-original-target-class="getOriginalTargetClass"
+      :get-original-target-subject="getOriginalTargetSubject"
+      :get-triangle-group-requests="getTriangleGroupRequests"
+      :format-leave-class-slot="formatLeaveClassSlot"
+      :format-exchange-class-slot="formatExchangeClassSlot"
+      :is-paper-flow-request="isPaperFlowRequest"
+      :get-request-progress-steps="getRequestProgressSteps"
+      :get-teacher-name-by-email="getTeacherNameByEmail"
+      :add-event-to-calendar="addEventToCalendar"
+      :print-single-request="printSingleRequest"
+      :open-paper-print-for-request="openPaperPrintForRequest"
+      :copy-line-message-for-request="copyLineMessageForRequest"
+      :respond-to-batch="respondToBatch"
+      :respond-to-request="respondToRequest"
+      :cancel-request="cancelRequest"
+      :admin-approve="adminApprove"
+      :admin-reject="adminReject"
+      :delete-substitution-record="deleteSubstitutionRecord"
+      :start-second-sub="startSecondSub"
+      :open-empty-slot-from-detail="openEmptySlotFromDetail"
+      @close="showDetailModal = false"
+    />
 
 
       <!-- 新手導覽：懶載入 onboarding-tour.js（不佔殼 DOM） -->
@@ -4819,64 +4528,17 @@
       </div>
 
       <!-- 折抵額度歷程 Modal（後台教師管理） -->
-      <div v-if="showQuotaLedgerModal" class="modal-overlay" @click.self="closeQuotaLedger">
-        <div class="modal-card quota-ledger-modal" role="dialog" aria-modal="true" aria-label="額度歷程">
-          <div class="modal-header">
-            <h3>📒 額度歷程
-              <span v-if="quotaLedgerTeacher" class="quota-ledger-who">
-                 ：{{ quotaLedgerTeacher.name }}
-                <span class="quota-ledger-bal">餘額 {{ quotaLedgerTeacher.sheetQuota != null ? quotaLedgerTeacher.sheetQuota : quotaLedgerTeacher.balance }}</span>
-              </span>
-            </h3>
-            <button type="button" class="btn-close" @click="closeQuotaLedger" aria-label="關閉">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。僅管理員可見。事件＝顯示名稱；包ID＝實際扣自哪個額度包（同名事件可能分屬不同包）；事件ID＝系統分類（evt_sub 代課／evt_exam 段考／evt_empty_slot 空堂）。</p>
-            <div v-if="quotaLedgerLoading" class="quota-ledger-loading">載入中…</div>
-            <div v-if="!quotaLedgerLoading && !quotaLedgerRows.length" class="quota-ledger-empty">尚無歷程列</div>
-            <div v-if="quotaLedgerRows.length" class="table-responsive quota-ledger-table-wrap" :class="{ 'is-refreshing': quotaLedgerLoading }">
-              <table class="custom-table quota-ledger-table">
-                <thead>
-                  <tr>
-                    <th>時間</th>
-                    <th>類型</th>
-                    <th>異動</th>
-                    <th>餘額後</th>
-                    <th>事件</th>
-                    <th title="實際扣自哪個額度包">包ID</th>
-                    <th title="系統事件分類">事件ID</th>
-                    <th>備註</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in quotaLedgerRows" :key="row.id || (row.time + row.delta + row.type)">
-                    <td class="quota-ledger-time">{{ row.time }}</td>
-                     <td><span class="quota-type-tag" :class="quotaTypeClass(row.type)">{{ row.typeLabel || row.type || '無' }}</span></td>
-                    <td>
-                      <strong :class="row.delta > 0 ? 'text-ok-green' : (row.delta < 0 ? 'text-danger-deep' : '')">
-                        {{ row.delta > 0 ? ('+' + row.delta) : row.delta }}
-                      </strong>
-                    </td>
-                    <td>{{ row.balanceAfter }}</td>
-                    <td>
-                      <span v-if="row.eventName">{{ row.eventName }}</span>
-                       <span v-else class="text-muted">無</span>
-                      <span v-if="row.startDate" class="quota-ledger-range"> {{ row.startDate }}{{ row.endDate && row.endDate !== row.startDate ? ('～' + row.endDate) : '' }}</span>
-                    </td>
-                    <td style="font-size:0.7rem;word-break:break-all;max-width:160px;">{{ row.packageId || '—' }}</td>
-                    <td style="font-size:0.7rem;">{{ row.eventId || '—' }}</td>
-                     <td class="quota-ledger-note">{{ row.note || (row.operator ? ('操作：' + row.operator) : '未填') }}<div v-if="row.requestId" style="font-size:0.68rem;color:var(--text-muted);">單 {{ row.requestId }}</div></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer" style="display:flex;justify-content:space-between;gap:8px;">
-            <button type="button" class="btn btn-secondary" @click="openManualQuotaAdjust(quotaLedgerTeacher)" :disabled="!quotaLedgerTeacher">± 手動調整</button>
-            <button type="button" class="btn btn-secondary" @click="closeQuotaLedger">關閉</button>
-          </div>
-        </div>
-      </div>
+    <!-- 額度歷程 modal → components/QuotaLedgerModal.vue -->
+    <QuotaLedgerModal
+      v-if="showQuotaLedgerModal"
+      :quota-ledger-teacher="quotaLedgerTeacher"
+      :quota-ledger-loading="quotaLedgerLoading"
+      :quota-ledger-rows="quotaLedgerRows"
+      :quota-type-class="quotaTypeClass"
+      :close-quota-ledger="closeQuotaLedger"
+      :open-manual-quota-adjust="openManualQuotaAdjust"
+      @close="closeQuotaLedger"
+    />
 
       <!-- 管理員手動增減額度 -->
       <div v-if="showQuotaAdjustModal" class="modal-overlay" @click.self="closeManualQuotaAdjust">
@@ -4930,6 +4592,11 @@ import { onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
+import QuotaLedgerModal from './components/QuotaLedgerModal.vue';
+import ExpenseAuditModal from './components/ExpenseAuditModal.vue';
+import BatchPrintPromptModal from './components/BatchPrintPromptModal.vue';
+import TrianglePreviewModal from './components/TrianglePreviewModal.vue';
+import DetailModal from './components/DetailModal.vue';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from './stores/session.js';
 import { useDataStore } from './stores/data.js';

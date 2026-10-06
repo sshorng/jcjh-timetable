@@ -872,7 +872,8 @@ function runRequestListSortTest() {
 }
 
 function runCalendarFallbackContractTest() {
-  const html = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+  // 詳情按鈕已隨 modal 抽至 components/DetailModal.vue
+  const html = fs.readFileSync(path.join(here, '..', 'src', 'components', 'DetailModal.vue'), 'utf8');
   const clickMarker = '@click="addEventToCalendar(detailRequest)"';
   const clickIndex = html.indexOf(clickMarker);
   assert.ok(clickIndex >= 0, 'detail calendar button must remain wired');

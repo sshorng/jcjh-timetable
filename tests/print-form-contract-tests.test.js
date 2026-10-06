@@ -6,11 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { UiExport } from '../src/modules/ui-export.js';
 import { generateFormHtml, packPrintForms, buildPrintPreview, buildPrintForms, getPrintPreviewCss, getPrintAudienceLabels, buildPrintGroups, buildHistoryPrintRecords, splitPrintGroupByWeek, printSelectedForms, buildPrintPreviewImageSvg } from '../src/modules/print-helper.js';
 import { UiTimetable } from '../src/modules/ui-timetable.js';
-import DomainSchedule from '../src/domain/domain-schedule.js';
 
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+// 詳情 modal 已抽為 components/DetailModal.vue（模板聚合見 composition.test.js）
+const detailModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'DetailModal.vue'), 'utf8');
 const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
 const exportSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-export.js'), 'utf8');
 
@@ -309,7 +310,7 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(triangleUiSource, /leaveReasonOptions/);
   assert.match(triangleUiSource, /未填寫時預設請假/);
   assert.match(triangleUiSource, /事由/);
-  assert.match(indexSource, /紙本模式：請確認三位教師都已在調課單簽名/);
+  assert.match(detailModalSource, /紙本模式：請確認三位教師都已在調課單簽名/);
   assert.doesNotMatch(triangleUiSource, /#7c3aed|#6d28d9|#5b21b6|#faf5ff|#ddd6fe|#f5f3ff/);
   assert.match(indexSource, /併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減/);
   assert.match(indexSource, /v-model="pendingRequestData\.reason" :disabled="pendingRequestData\.courseAdjustmentOnly"/);
