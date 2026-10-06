@@ -7095,6 +7095,33 @@ function persistRequestRowsWithQuota_(rows, operatorEmail) {
   return quotaResult;
 }
 
+/** 前端錯誤回報：寫入「前端錯誤」表（時間／Email／訊息／堆疊／網址／UA），欄位皆截斷 */
+function logClientError_(data) {
+  data = data || {};
+  function cap(v, n) {
+    v = String(v == null ? "" : v);
+    return v.length > n ? v.slice(0, n) : v;
+  }
+  var now = new Date();
+  var row = [
+    Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
+    cap(data.email, 120),
+    cap(data.message, 500),
+    cap(data.stack, 2000),
+    cap(data.url, 500),
+    cap(data.userAgent, 300)
+  ];
+  var ss = getSpreadsheet();
+  var sheet = ss.getSheetByName("前端錯誤");
+  if (!sheet) {
+    sheet = ss.insertSheet("前端錯誤");
+    sheet.appendRow(["時間", "Email", "訊息", "堆疊", "網址", "UserAgent"]);
+    sheet.setFrozenRows(1);
+  }
+  sheet.appendRow(row);
+  return 1;
+}
+
 // ----------------- 主入口：doPost（讀寫） -----------------
 function doPost(e) {
   var requestContext = {
@@ -7111,6 +7138,14 @@ function doPost(e) {
     const action = postData.action;
     requestContext.action = String(action || "unknown");
     requestContext.semesterId = String(postData.semesterId || "").trim();
+
+    // 前端錯誤回報：免 Token（未登入／啟動期也要能報）；僅 append「前端錯誤」表，無其他副作用
+    if (action === "logClientError") {
+      var loggedErrors = 0;
+      try { loggedErrors = logClientError_(postData.data || {}); } catch (eLog) { loggedErrors = 0; }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, logged: loggedErrors }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
     // 讀取類：不佔寫入鎖；getPublicClassData 免 Token
     if (action === "getInitialData" || action === "getMetaData" || action === "getPublicClassData"

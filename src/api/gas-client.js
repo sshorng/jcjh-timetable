@@ -433,7 +433,7 @@ const GasApi = (() => {
           handleAuthExpired();
           throw new Error(formatError(new Error('登入憑證已過期，請重新登入！'), action));
         }
-      } else if (action !== 'getPublicClassData') {
+      } else if (action !== 'getPublicClassData' && action !== 'logClientError') {
         throw new Error('未授權的免登入 API 操作');
       }
       const payload = {

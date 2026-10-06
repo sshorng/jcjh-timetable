@@ -2746,8 +2746,10 @@ import { useInteractionStore } from './stores/interaction.js';
 import { useHomeroomStore } from './stores/homeroom.js';
 import { useMutualStore } from './stores/mutual.js';
 import { useTourStore } from './stores/tour.js';
+import { useGasStore } from './stores/gas.js';
 import { UiLineTemplate } from './modules/ui-line-template.js';
 import { UiListHelpers } from './modules/ui-list-helpers.js';
+import { installErrorReporting } from './modules/error-report.js';
 const sessionStore = useSessionStore();
 const dataStore = useDataStore();
 const timetableStore = useTimetableStore();
@@ -2762,6 +2764,15 @@ const interactionStore = useInteractionStore();
 const homeroomStore = useHomeroomStore();
 const mutualStore = useMutualStore();
 const tourStore = useTourStore();
+const gasStore = useGasStore();
+// 全域前端錯誤回報（fire-and-forget；免登入亦可報；見 modules/error-report.js）
+installErrorReporting({
+  getEmail: () => {
+    const u = sessionStore.user;
+    return u && u.email ? String(u.email) : '';
+  },
+  send: (entry) => gasStore.callGasApi('logClientError', entry, { skipAuth: true }).catch(() => false)
+});
 const { canOperateOnTeacherEmail, ensureProxyTargetForTeacher, initMobileDay, loginWithGoogle, persistProxySubmitEmails, reloadGsiLoginButton, setActiveTab, setOnlineSubstitutionEnabled, setProxyTarget, toggleProxySubmitEmail } = sessionStore;
 const { checkMobile, handleAvatarError, isClassAwayOnDate, isSingleWeek, schoolSwapWeekdayText, toLocalDateStr } = sessionStore;
 const { activeAwayBanner, activeTab, adminSubTab, allSchedules, availableSemesters, avatarSrc, canViewAllTimetables, classAwayEvents, currentSemester, currentSemesterName, currentWeekNumber, gasApiUrl, googleClientId, gsiButtonError, gsiButtonReady, gsiLoggingIn, homeroomAssignSelections, homeroomRecords, homeroomRecordsLoading, isAdmin, isMobile, isStaff, loading, loadingMessage, onlineSubstitutionEnabled, originalUser, proxyGrantQuery, proxySubmitEmails, proxySubmitEnabled, proxySubmitEnabledAt, proxySubmitEnabledBy, proxyTargetEmail, proxyTargetQuery, requestsList, schoolSwapForm, schoolSwapModalMode, schoolSwapRows, schoolSwapSaving, schoolSwaps, searchQuery, selectedMobileDay, selectedSubject, selectedWeekDate, semesterEndDate, semesterForm, semesterModalMode, semesterStartDate, semestersList, showMatchModal, showProxyTargetDropdown, showSchoolSwapModal, showSemesterModal, substitutionRecords, teachersList, timetableDisplayMode, user, userRole } = storeToRefs(sessionStore);
