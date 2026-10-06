@@ -120,7 +120,9 @@ const DomainBilling = (() => {
     var dow = d.getDay();
     var monday = new Date(d);
     monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
-    return monday.toISOString().slice(0, 10);
+    // 取本地週一（舊寫 toISOString 會在 UTC+ 時區把週一算成週日）
+    return monday.getFullYear() + '-' + String(monday.getMonth() + 1).padStart(2, '0')
+      + '-' + String(monday.getDate()).padStart(2, '0');
   }
 
   // 2C 消重：唯一實作在 date-utils.js；此處保留委派（獨立載入時仍可用內建版）

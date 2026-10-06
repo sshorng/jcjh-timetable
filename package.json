@@ -11,6 +11,7 @@
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests scripts",
     "lint:sync-gas": "node scripts/sync-gas-globals.cjs",
     "e2e:boot": "npm run build && node scripts/e2e-boot-check.cjs"
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^10.12.0",
     "happy-dom": "^15.7.4",
     "vite": "^5.4.11",
