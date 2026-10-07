@@ -2539,9 +2539,9 @@ const UiAdmin = (() => {
     };
 
     /**
-     * 特例調代送單（管理員＋事由，1～5 腿）：沿用標準送單建構子，directApprove 直核、
+     * 特例調代送單（管理員＋事由，1～5 組）：沿用標準送單建構子，directApprove 直核、
      * skipNotify 靜默、isAdminException 走後端特例分支（跳過衝堂斷言）。
-     * 逐腿送、逐腿回報；某腿失敗不回滾已成功的腿。
+     * 逐組送、逐組回報；某組失敗不回滾已成功的組。
      * payload: { legs: [{kind:'exchange',aSlot,bSlot}|{kind:'substitution',leave,sub}], reason }
      */
     function exceptionTimeKey(dateStr, period) {
@@ -2575,8 +2575,8 @@ const UiAdmin = (() => {
       var reason = String(payload.reason || '').trim();
       if (!reason) throw new Error('請填寫事由');
       var legs = payload.legs || [];
-      if (!legs.length) throw new Error('至少需要一腿');
-      if (legs.length > 5) throw new Error('一次最多 5 腿');
+      if (!legs.length) throw new Error('至少需要一組');
+      if (legs.length > 5) throw new Error('一次最多 5 組');
       var submitDepsBase = {
         currentSemester: currentSemester,
         getTeacherNameByEmail: getTeacherNameByEmail,
@@ -2600,11 +2600,11 @@ const UiAdmin = (() => {
           if (leg.kind === 'exchange') {
             var a = leg.aSlot || {};
             var b = leg.bSlot || {};
-            if (!a.teacherEmail || !b.teacherEmail) throw new Error('第' + (i + 1) + '腿：請選定雙方教師');
+            if (!a.teacherEmail || !b.teacherEmail) throw new Error('第' + (i + 1) + '組：請選定雙方教師');
             if (String(a.teacherEmail).trim().toLowerCase() === String(b.teacherEmail).trim().toLowerCase()) {
-              throw new Error('第' + (i + 1) + '腿：雙方須為不同教師');
+              throw new Error('第' + (i + 1) + '組：雙方須為不同教師');
             }
-            if (!a.className || !b.className) throw new Error('第' + (i + 1) + '腿：雙方課堂須有基礎課程');
+            if (!a.className || !b.className) throw new Error('第' + (i + 1) + '組：雙方課堂須有基礎課程');
             built = buildExceptionLeg({
               mode: 'exchange',
               leaveTeacher: a.teacherEmail,
@@ -2624,10 +2624,10 @@ const UiAdmin = (() => {
           } else if (leg.kind === 'substitution') {
             var leave = leg.leave || {};
             var sub = leg.sub || {};
-            if (!leave.teacherEmail || !sub.teacherEmail) throw new Error('第' + (i + 1) + '腿：請選定請假與代課教師');
-            if (!sub.fee) throw new Error('第' + (i + 1) + '腿：請選擇經費');
+            if (!leave.teacherEmail || !sub.teacherEmail) throw new Error('第' + (i + 1) + '組：請選定請假與代課教師');
+            if (!sub.fee) throw new Error('第' + (i + 1) + '組：請選擇經費');
             // 被代課堂以元件解析的「當前該格課程」為準（含已生效／待生效疊加），此處只驗存在
-            if (!leave.className) throw new Error('第' + (i + 1) + '腿：被代格無課程');
+            if (!leave.className) throw new Error('第' + (i + 1) + '組：被代格無課程');
             built = buildExceptionLeg({
               mode: 'substitution',
               leaveTeacher: leave.teacherEmail,
@@ -2641,7 +2641,7 @@ const UiAdmin = (() => {
               note: ''
             }, 'SUB', reason, submitDepsBase);
           } else {
-            throw new Error('第' + (i + 1) + '腿：未知的腿類型');
+            throw new Error('第' + (i + 1) + '組：未知的組類型');
           }
           await callGasApi('submitRequest', built.payload);
           results.push({ ok: true, serial: built.newRequest['單號'] });

@@ -7,8 +7,8 @@
  *
  * leg: { kind: 'exchange'|'substitution',
  *        aSlot: {teacherEmail,teacherName,className,subject,attr,specialTags,dateStr,dayOfWeek,period},
- *        bSlot: {...}（調課對象端；代課腿不用）,
- *        sub: {teacherEmail,dateStr,period,fee}（代課腿用） }
+ *        bSlot: {...}（調課對象端；代課組不用）,
+ *        sub: {teacherEmail,dateStr,period,fee}（代課組用） }
  * checks: { getScheduleForDate }（可選；有才做佔位／衝堂檢查）
  */
 function periodBucket(period) {
@@ -118,7 +118,7 @@ function buildExceptionLegWarnings(leg, checks) {
   return warnings;
 }
 
-/** 跨腿檢查：同教師同格出現兩次（疊堂）、同組教師出現多次（順序提醒） */
+/** 跨組檢查：同教師同格出現兩次（疊堂）、同組教師出現多次（順序提醒） */
 function buildExceptionCrossWarnings(legs) {
   var warnings = [];
   legs = legs || [];
@@ -129,14 +129,14 @@ function buildExceptionCrossWarnings(legs) {
     if (leg.kind === 'exchange') {
       var a = leg.aSlot || {};
       var b = leg.bSlot || {};
-      endpoints.push({ email: a.teacherEmail, dateStr: a.dateStr, period: a.period, label: '第' + (i + 1) + '腿A端' });
-      endpoints.push({ email: b.teacherEmail, dateStr: b.dateStr, period: b.period, label: '第' + (i + 1) + '腿B端' });
+      endpoints.push({ email: a.teacherEmail, dateStr: a.dateStr, period: a.period, label: '第' + (i + 1) + '組A端' });
+      endpoints.push({ email: b.teacherEmail, dateStr: b.dateStr, period: b.period, label: '第' + (i + 1) + '組B端' });
       var pair = [String(a.teacherEmail || '').trim().toLowerCase(), String(b.teacherEmail || '').trim().toLowerCase()].sort().join('&');
       pairCount[pair] = (pairCount[pair] || []);
       pairCount[pair].push(i + 1);
     } else {
       var s = leg.sub || {};
-      endpoints.push({ email: s.teacherEmail, dateStr: s.dateStr, period: s.period, label: '第' + (i + 1) + '腿代課' });
+      endpoints.push({ email: s.teacherEmail, dateStr: s.dateStr, period: s.period, label: '第' + (i + 1) + '組代課' });
     }
     endpoints.forEach(function (ep) {
       if (!ep.email || !ep.dateStr || ep.period == null) return;
@@ -153,7 +153,7 @@ function buildExceptionCrossWarnings(legs) {
   });
   Object.keys(pairCount).forEach(function (pair) {
     if (pairCount[pair].length > 1) {
-      warnings.push('同組教師出現於多腿（第' + pairCount[pair].join('、第') + '腿）：請確認順序與生效狀態');
+      warnings.push('同組教師出現於多組（第' + pairCount[pair].join('、第') + '組）：請確認順序與生效狀態');
     }
   });
   return warnings;

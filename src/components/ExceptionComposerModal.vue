@@ -7,13 +7,13 @@
           </div>
           <div class="modal-body p-20" style="display: flex; flex-direction: column; gap: 14px;">
             <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
-              組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單（最多 {{ maxLegs }} 腿）。
+              組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單（最多 {{ maxLegs }} 組）。
               檢查只顯示警告不阻擋；建單後經費照系統計算，不寄線上通知。
               先選日期節次，該節有課者會置頂顯示。
             </div>
             <div v-for="(leg, i) in legs" :key="'exleg-' + i" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                <strong>第{{ i + 1 }}腿</strong>
+                <strong>第{{ i + 1 }}組</strong>
                 <select class="form-select" style="width: auto;" v-model="leg.kind">
                   <option value="exchange">調課（兩人互調，含同節）</option>
                   <option value="substitution">代課（B 代一節）</option>
@@ -95,7 +95,7 @@
               </div>
               <div v-if="legHasInput(i)" style="font-size: 0.78rem; margin-top: 6px; color: var(--text-secondary);">{{ legText(i) }}</div>
             </div>
-            <button v-if="legs.length < maxLegs" type="button" class="btn btn-secondary" style="align-self: flex-start;" @click="addLeg">＋ 加一腿（調課／代課）</button>
+            <button v-if="legs.length < maxLegs" type="button" class="btn btn-secondary" style="align-self: flex-start;" @click="addLeg">＋ 加一組（調課／代課）</button>
             <label class="form-label">事由（必填，記入備註備查）
               <input type="text" class="form-input" maxlength="200" placeholder="例：A、B 已線下談妥，B 週二有空" v-model="reason">
             </label>
@@ -106,7 +106,7 @@
             <div v-if="formError" style="font-size: 0.8rem; color: var(--color-danger);">{{ formError }}</div>
             <div v-if="results.length" style="font-size: 0.8rem; line-height: 1.6;">
               <div v-for="(r, i) in results" :key="'exr-' + i" :style="{ color: r.ok ? 'var(--color-success)' : 'var(--color-danger)' }">
-                第{{ i + 1 }}腿：{{ r.ok ? ('已建單（' + r.serial + '）') : ('失敗：' + r.error) }}
+                第{{ i + 1 }}組：{{ r.ok ? ('已建單（' + r.serial + '）') : ('失敗：' + r.error) }}
               </div>
             </div>
           </div>
@@ -120,7 +120,7 @@
       </div>
 </template>
 
-<!-- 特例調代 composer（後台掛載；leg 卡片制 1～5 腿，送單委派 submitAdminException） -->
+<!-- 特例調代 composer（後台掛載；leg 卡片制 1～5 組，送單委派 submitAdminException） -->
 <script setup>
 import { computed, ref } from 'vue';
 import { buildExceptionWarnings } from '../modules/exception-warnings.js';
@@ -381,7 +381,7 @@ async function onSubmit() {
   formError.value = '';
   results.value = [];
   if (!canSubmit.value) {
-    formError.value = '請填完各腿課堂與事由';
+    formError.value = '請填完各組課堂與事由';
     return;
   }
   sending.value = true;
@@ -394,7 +394,7 @@ async function onSubmit() {
     if (out.ok) {
       emit('close');
     } else {
-      formError.value = '部分腿建單失敗，詳見上方結果（成功的單有效，不回滾）';
+      formError.value = '部分組建單失敗，詳見上方結果（成功的單有效，不回滾）';
     }
   } catch (err) {
     formError.value = String((err && err.message) || err || '送出失敗');

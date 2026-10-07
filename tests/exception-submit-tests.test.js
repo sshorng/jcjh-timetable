@@ -54,7 +54,7 @@ function legsAB() {
   }];
 }
 
-test('exception submit：調課＋代課兩腿，標記與靜默齊全', async () => {
+test('exception submit：調課＋代課兩組，標記與靜默齊全', async () => {
   const { api, calls } = adminDeps({});
   const res = await api.submitAdminException({ legs: legsAB(), reason: 'A、B 已線下談妥' });
   assert.equal(res.ok, true);
@@ -80,7 +80,7 @@ test('exception submit：調課＋代課兩腿，標記與靜默齊全', async (
   console.log('exception submit tests PASS');
 });
 
-test('exception submit：單腿同節互換亦可建', async () => {
+test('exception submit：單組同節互換亦可建', async () => {
   const { api, calls } = adminDeps({});
   const res = await api.submitAdminException({
     legs: [{
@@ -101,7 +101,7 @@ test('exception submit：單腿同節互換亦可建', async () => {
   assert.equal(calls[0].payload.request['對調目標日期'], '2026-09-01');
 });
 
-test('exception submit：無事由／超腿／非管理員／同教師拒收', async () => {
+test('exception submit：無事由／超組／非管理員／同教師拒收', async () => {
   const { api, calls } = adminDeps({});
   await assert.rejects(api.submitAdminException({ legs: legsAB(), reason: '  ' }), /事由/);
   await assert.rejects(

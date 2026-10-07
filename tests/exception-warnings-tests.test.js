@@ -86,7 +86,7 @@ test('exception warnings：抽離不對等與同課免換', () => {
   assert.ok(w2.some((w) => w.includes('無需互換')), JSON.stringify(w2));
 });
 
-test('exception warnings：跨腿疊堂與同組多腿提醒', () => {
+test('exception warnings：跨組疊堂與同組多組提醒', () => {
   const leg1 = {
     kind: 'exchange',
     aSlot: { teacherEmail: 'a@school.example', dateStr: '2026-09-01', period: 8 },
