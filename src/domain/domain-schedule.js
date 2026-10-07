@@ -114,7 +114,11 @@ const DomainSchedule = (() => {
   function buildSubstitutionsLookup(records) {
     const map = {};
     (records || []).forEach(function (r) {
-      const key = r.date + '_' + r.period;
+      // 試算表手建常見 2026/10/13、2026-1-5 等寫法，正規化後才組同格鍵
+      var normDate = (r && r.date != null && typeof normalizeScheduleDate === 'function')
+        ? (normalizeScheduleDate(r.date) || r.date)
+        : (r && r.date);
+      const key = normDate + '_' + r.period;
       if (!map[key]) map[key] = [];
       map[key].push(r);
     });
@@ -148,7 +152,10 @@ const DomainSchedule = (() => {
     (records || []).forEach(function (record) {
       if (!record) return;
       var className = String(record.className || record['班級'] || '').trim();
-      var date = String(record.date || record.requestDate || record['異動日期'] || '').slice(0, 10);
+      var rawDate = String(record.date || record.requestDate || record['異動日期'] || '').slice(0, 10);
+      var date = (typeof normalizeScheduleDate === 'function' && rawDate)
+        ? (normalizeScheduleDate(rawDate) || rawDate)
+        : rawDate;
       var period = parseInt(record.period != null ? record.period : record['異動節次'], 10);
       var key = className + '|' + date + '|' + period;
       var previous = map[key];
@@ -413,7 +420,7 @@ const DomainSchedule = (() => {
     if (periodSubs.length > 0) {
       var combinedOwn = periodSubs.find(function (r) {
         return isCombinedReturnRequest(r)
-          && String(r.date || '') === String(dateStr || '')
+          && (normalizeScheduleDate(r.date) || String(r.date || '')) === (normalizeScheduleDate(dateStr) || String(dateStr || ''))
           && parseInt(r.period, 10) === parseInt(period, 10)
           && String(r.originalTeacherEmail || '').toLowerCase() === String(teacherEmail || '').toLowerCase()
           && String(r.actualTeacherEmail || '').toLowerCase() === String(teacherEmail || '').toLowerCase();
@@ -807,9 +814,9 @@ const DomainSchedule = (() => {
         if (!priorDuty && allSubs && allSubs.length) {
           for (var aj = allSubs.length - 1; aj >= 0; aj--) {
             var ar = allSubs[aj];
-            if (ar && ar.actualTeacherEmail
+              if (ar && ar.actualTeacherEmail
                 && String(ar.actualTeacherEmail).toLowerCase() === emailLower
-                && String(ar.date) === String(dateStr)
+                && (normalizeScheduleDate(ar.date) || String(ar.date || '')) === (normalizeScheduleDate(dateStr) || String(dateStr || ''))
                 && parseInt(ar.period, 10) === parseInt(period, 10)
                 && ar !== firstEdge
                 && (ar.className || ar.subject)) {

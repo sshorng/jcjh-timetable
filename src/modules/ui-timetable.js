@@ -199,8 +199,18 @@ const UiTimetable = (() => {
       const em = String(email).toLowerCase();
       const p = parseInt(period, 10);
       const dateKey = String(dateStr || '');
+      const normKey = (DomainSchedule && DomainSchedule.normalizeScheduleDate)
+        ? (DomainSchedule.normalizeScheduleDate(dateKey) || dateKey)
+        : dateKey;
+      const normRecDate = (d) => {
+        var raw = String(d || '');
+        if (DomainSchedule && DomainSchedule.normalizeScheduleDate) {
+          return DomainSchedule.normalizeScheduleDate(raw) || raw;
+        }
+        return raw;
+      };
       const slotSubs = slotSubsOpt || (subsSoFar || []).filter(s =>
-        s && String(s.date) === dateKey && parseInt(s.period, 10) === p
+        s && normRecDate(s.date) === normKey && parseInt(s.period, 10) === p
       );
 
       const courseMetadataFromRecord = (record) => {
@@ -1190,7 +1200,14 @@ const UiTimetable = (() => {
       const subs = [];
       // date|period → edges（邊組邊查，避免 resolve 每次 O(n) filter）
       const slotIndex = Object.create(null);
-      const slotKey = (dateStr, period) => String(dateStr || '') + '|' + (parseInt(period, 10) || 0);
+      // 手建列日期格式不一（2026/10/13、2026-1-5）時仍併同格
+      const slotKey = (dateStr, period) => {
+        var raw = String(dateStr || '').slice(0, 10);
+        var norm = (DomainSchedule && DomainSchedule.normalizeScheduleDate)
+          ? (DomainSchedule.normalizeScheduleDate(raw) || raw)
+          : raw;
+        return norm + '|' + (parseInt(period, 10) || 0);
+      };
       const pushSub = (rec) => {
         if (!rec) return;
         // Keep non-enumerable legacy aliases for calculation modules; the persisted/API key is the name.

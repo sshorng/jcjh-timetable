@@ -228,6 +228,36 @@ test('teacher_swap：同節互換兩邊皆顯示調入＋調出', () => {
   assert.equal(feng.outgoingDuty.className, '902', '馮原課 902 應列調出');
 });
 
+test('日期格式混雜（斜線／短月日）仍併同格顯示', () => {
+  const schedules = [
+    { teacherEmail: '賴美玲', teacherName: '賴美玲', dayOfWeek: 2, period: 1, className: '908', subject: '英語' },
+    { teacherEmail: '馮品正', teacherName: '馮品正', dayOfWeek: 2, period: 1, className: '902', subject: '數學' }
+  ];
+  // 手建列常見混寫：請假日破折、目標日斜線，實為同格
+  const e1 = { id: 'm_1', requestId: 'm', date: '2026-10-13', period: 1, originalTeacherEmail: '賴美玲', actualTeacherEmail: '馮品正', className: '908', subject: '英語', type: 'exchange', subFee: '無' };
+  const e2 = { id: 'm_2', requestId: 'm', date: '2026/10/13', period: 1, originalTeacherEmail: '馮品正', actualTeacherEmail: '賴美玲', className: '902', subject: '數學', type: 'exchange', subFee: '無' };
+  const lookup = DomainSchedule.buildSubstitutionsLookup([e1, e2]);
+  assert.equal((lookup['2026-10-13_1'] || []).length, 2, '混寫日期應併入同格鍵');
+  const index = DomainSchedule.buildScheduleIndex(schedules);
+  const periodSubs = lookup['2026-10-13_1'];
+  for (const email of ['賴美玲', '馮品正']) {
+    const cell = DomainSchedule.resolveApprovedSchedule({
+      teacherEmail: email,
+      dateStr: '2026-10-13',
+      period: 1,
+      dayOfWeek: 2,
+      allSchedules: schedules,
+      scheduleIndex: index,
+      periodSubs,
+      allSubs: periodSubs,
+      helpers: helpers()
+    });
+    assert.equal(cell && cell.hasConcurrentDuty, true, email + '混寫日期仍應同時顯示調入與調出');
+  }
+  const classMap = DomainSchedule.buildClassSubstitutionMap([e1, e2]);
+  assert.ok(classMap['902|2026-10-13|1'], '班級鍵日期亦應正規化');
+});
+
 test('teacher_swap：後端媒合佔位沿用班留原班', () => {
   const source = fs.readFileSync(path.join(here, '..', 'code.gs'), 'utf8');
   assert.match(source, /stayFlow === "teacher_swap"|"teacher_swap" === stayFlow|teacher_swap/, '後端應辨識 teacher_swap 班留流程');
