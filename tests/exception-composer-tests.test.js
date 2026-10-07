@@ -69,6 +69,11 @@ test('composer：輸入篩選解析教師＋顯示當前（非基礎）課程', 
   // A 格顯示當前課（704英文），而非基礎課（701國文）
   expect(html).toContain('704');
   expect(html).toContain('英文');
+  // 該格有課者置頂：A 欄 datalist 首位應為 A師（701國文）
+  const firstDatalist = el.querySelector('datalist');
+  const firstOptions = [...firstDatalist.querySelectorAll('option')].map((o) => o.value);
+  expect(firstOptions[0].includes('A師'), '有課者應置頂：' + firstOptions[0]).toBe(true);
+  expect(firstOptions[0].includes('704'), '置頂附帶當前（非基礎）班級：' + firstOptions[0]).toBe(true);
   // 送出鈕應啟用（結構完整＋事由已填）
   const submitBtn = [...el.querySelectorAll('button')].find((b) => b.textContent.includes('直接核准建單'));
   expect(submitBtn, '應有送出鈕').toBeTruthy();

@@ -20,12 +20,12 @@
                 <button v-if="legs.length > 1" type="button" class="btn btn-secondary" style="margin-left: auto; padding: 2px 8px; font-size: 0.75rem;" @click="removeLeg(i)">移除</button>
               </div>
               <div v-if="leg.kind === 'exchange'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <label class="form-label">A 端教師
+                <label class="form-label">A 端教師（先選日期節次會列出該節有課者置頂）
                   <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value)"
+                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
                     :list="'dl-exc-' + i + '-a'">
                   <datalist :id="'dl-exc-' + i + '-a'">
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'a-' + t.value" :value="t.display"></option>
+                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'a-' + t.value" :value="t.display"></option>
                   </datalist>
                 </label>
                 <label class="form-label">A 日期／節次
@@ -36,12 +36,12 @@
                     </select>
                   </span>
                 </label>
-                <label class="form-label">B 端教師
+                <label class="form-label">B 端教師（先選日期節次會列出該節有課者置頂）
                   <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value)"
+                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.bDate, leg.bPeriod)"
                     :list="'dl-exc-' + i + '-b'">
                   <datalist :id="'dl-exc-' + i + '-b'">
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'b-' + t.value" :value="t.display"></option>
+                    <option v-for="t in slotTeachers(leg.bDate, leg.bPeriod)" :key="'ex' + i + 'b-' + t.value" :value="t.display"></option>
                   </datalist>
                 </label>
                 <label class="form-label">B 日期／節次
@@ -56,10 +56,10 @@
               <div v-else style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <label class="form-label">請假教師（被代）
                   <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value)"
+                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
                     :list="'dl-exc-' + i + '-l'">
                   <datalist :id="'dl-exc-' + i + '-l'">
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'l-' + t.value" :value="t.display"></option>
+                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'l-' + t.value" :value="t.display"></option>
                   </datalist>
                 </label>
                 <label class="form-label">日期／節次
@@ -72,10 +72,10 @@
                 </label>
                 <label class="form-label">代課教師
                   <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value)"
+                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.aDate, leg.aPeriod)"
                     :list="'dl-exc-' + i + '-s'">
                   <datalist :id="'dl-exc-' + i + '-s'">
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 's-' + t.value" :value="t.display"></option>
+                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 's-' + t.value" :value="t.display"></option>
                   </datalist>
                 </label>
                 <label class="form-label">經費（同一般流程選項）
@@ -158,19 +158,79 @@ const teacherOptions = computed(function () {
     return { value: value, label: label, display: subject ? (label + '（' + subject + '）') : label };
   }).filter(function (t) { return !!t.value; });
 });
-function resolveTeacherEmail(text) {
+// 該格有課者優先排前（附班級），其餘不斷後——只排序不過濾，任何人都不會選不到
+// （快取以 modal 生命週期為準：僅影響排序，不影響可選性，課表重載也不會錯）
+var slotTeacherCache = {};
+function slotKeyOf(dateStr, period) {
+  return String(dateStr || '').slice(0, 10) + '|' + String(period);
+}
+function slotTeachers(dateStr, period) {
+  var key = slotKeyOf(dateStr, period);
+  if (slotTeacherCache[key]) return slotTeacherCache[key];
+  var base = teacherOptions.value || [];
+  if (!dateStr || period === '' || period == null) {
+    slotTeacherCache[key] = base;
+    return base;
+  }
+  var dow = dayOfWeekOf(dateStr);
+  var p = parseInt(period, 10);
+  var withClass = [];
+  var rest = [];
+  base.forEach(function (t) {
+    var info = slotClassOf(t.value, dateStr, dow, p);
+    if (info) {
+      withClass.push({ value: t.value, label: t.label, display: t.label + '（' + info + '）' });
+    } else {
+      rest.push(t);
+    }
+  });
+  var out = withClass.concat(rest);
+  slotTeacherCache[key] = out;
+  return out;
+}
+function slotClassOf(email, dateStr, dow, period) {
+  var em = String(email || '').trim().toLowerCase();
+  if (!em || !dow || Number.isNaN(parseInt(period, 10))) return '';
+  var p = parseInt(period, 10);
+  // 與 slotView 同序：當前有效課程優先，基礎課程備援（兩處顯示一致）
+  try {
+    if (typeof props.getScheduleForDate === 'function') {
+      var cell = props.getScheduleForDate(email, dateStr, period, dow) || null;
+      if (cell && (cell.className || cell.subject)) {
+        return String(cell.className || '').trim() + String(cell.subject || '').trim();
+      }
+    }
+  } catch (eCell) { /* 續查基礎課程 */ }
+  var list = props.allSchedules || [];
+  for (var i = 0; i < list.length; i++) {
+    var s = list[i];
+    if (String((s && (s.teacherEmail || s.email)) || '').trim().toLowerCase() === em
+        && parseInt(s.dayOfWeek, 10) === dow
+        && parseInt(s.period, 10) === p
+        && String(s.className || '').trim()) {
+      return String(s.className).trim() + String(s.subject || '').trim();
+    }
+  }
+  return '';
+}
+function resolveTeacherEmail(text, dateStr, period) {
   var key = String(text || '').trim().toLowerCase();
   if (!key) return '';
-  var list = teacherOptions.value || [];
-  var hit = list.find(function (t) {
+  var cands = slotTeachers(dateStr, period);
+  var hit = cands.find(function (t) {
     return t.value === key || t.label.toLowerCase() === key || t.display.toLowerCase() === key;
   });
-  return hit ? hit.value : '';
+  if (hit) return hit.value;
+  var all = teacherOptions.value || [];
+  var hit2 = all.find(function (t) {
+    return t.value === key || t.label.toLowerCase() === key;
+  });
+  return hit2 ? hit2.value : '';
 }
-function onTeacherInput(leg, side, text) {
+function onTeacherInput(leg, side, text, dateStr, period) {
   if (!leg) return;
   leg[side + 'Text'] = text;
-  leg[side + 'Email'] = resolveTeacherEmail(text);
+  leg[side + 'Email'] = resolveTeacherEmail(text, dateStr, period);
 }
 function dayOfWeekOf(dateStr) {
   var d = new Date(String(dateStr || '').replace(/-/g, '/'));
