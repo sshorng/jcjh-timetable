@@ -12,6 +12,8 @@ import DomainClassAway from './domain-class-away.js';
 const FieldMap = (() => {
   const SPECIAL_FLOW_COMBINED_RETURN = 'combined_return';
   const SPECIAL_FLOW_COMBINED_RETURN_LABEL = '合班回原班';
+  const SPECIAL_FLOW_TEACHER_SWAP = 'teacher_swap';
+  const SPECIAL_FLOW_TEACHER_SWAP_LABEL = '特殊對調（人走班留）';
 
   function normalizeSpecialFlow(raw) {
     const value = String(raw == null ? '' : raw).trim();
@@ -19,6 +21,10 @@ const FieldMap = (() => {
     if (value.toLowerCase() === SPECIAL_FLOW_COMBINED_RETURN
         || value === SPECIAL_FLOW_COMBINED_RETURN_LABEL) {
       return SPECIAL_FLOW_COMBINED_RETURN;
+    }
+    if (value.toLowerCase() === SPECIAL_FLOW_TEACHER_SWAP
+        || value === SPECIAL_FLOW_TEACHER_SWAP_LABEL) {
+      return SPECIAL_FLOW_TEACHER_SWAP;
     }
     return value;
   }
@@ -1164,6 +1170,8 @@ const FieldMap = (() => {
   return {
     SPECIAL_FLOW_COMBINED_RETURN,
     SPECIAL_FLOW_COMBINED_RETURN_LABEL,
+    SPECIAL_FLOW_TEACHER_SWAP,
+    SPECIAL_FLOW_TEACHER_SWAP_LABEL,
     pick,
     asBool,
     isCourseAdjustmentOnly,

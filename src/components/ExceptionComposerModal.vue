@@ -7,7 +7,7 @@
           </div>
           <div class="modal-body p-20" style="display: flex; flex-direction: column; gap: 14px;">
             <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
-              組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單（最多 {{ maxLegs }} 組）。
+              組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單（最多 {{ maxLegs }} 組）。調課一律人走班留（班級留在原時段，只換老師）。
               檢查只顯示警告不阻擋；建單後經費照系統計算，不寄線上通知。
               先選日期節次，該節有課者會置頂顯示。
             </div>
@@ -15,7 +15,7 @@
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                 <strong>第{{ i + 1 }}組</strong>
                 <select class="form-select" style="width: auto;" v-model="leg.kind">
-                  <option value="exchange">調課（兩人互調，含同節）</option>
+                  <option value="exchange">調課（人走班留，含同節）</option>
                   <option value="substitution">代課（B 代一節）</option>
                 </select>
                 <button v-if="legs.length > 1" type="button" class="btn btn-secondary" style="margin-left: auto; padding: 2px 8px; font-size: 0.75rem;" @click="removeLeg(i)">移除</button>

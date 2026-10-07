@@ -203,7 +203,9 @@ const UiClassView = (() => {
           return;
         }
         if (type === 'exchange' || type === '對調') {
-          if (String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange') {
+          var classStayFlow = String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange'
+            || String(req.specialFlow || req['特殊流程'] || '') === 'teacher_swap';
+          if (classStayFlow) {
             out.push(Object.assign({}, base, {
               id: String(base.requestId) + '_class_1',
               requestId: base.requestId,

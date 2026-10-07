@@ -1385,8 +1385,10 @@ const UiTimetable = (() => {
           const leaveMetadataCell = leaveCellIsTask ? leaveBaseCell : leaveEff;
           const targetMetadataCell = targetCellIsTask ? targetBaseCell : targetEff;
 
-          if (String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange') {
-            // 同節互換是交換教師負責的班級，兩邊原班級留在原時段。
+          var classStayFlow = String(req.specialFlow || req['特殊流程'] || '') === 'admin_same_period_exchange'
+            || String(req.specialFlow || req['特殊流程'] || '') === 'teacher_swap';
+          if (classStayFlow) {
+            // 班留原時段（同節互換／特殊對調人走班留）：兩邊原班級留在原日期節次，只換老師。
             pushSub(withCourseMetadata({
               id: req.id + '_1',
               date: req.requestDate,

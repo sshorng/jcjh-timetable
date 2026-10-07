@@ -4959,8 +4959,9 @@ function buildMatchCandidates_(semesterId, opts) {
       var targetCourse = courseAt(tgtEm, targetDate, targetPeriod, targetDay);
       var targetCls = r["對調目標班級"] || r.targetClassName || targetCourse.className;
       var targetSubj = r["對調目標科目"] || r.targetSubject || targetCourse.subject;
-      if (String(r["特殊流程"] || r.specialFlow || "") === "admin_same_period_exchange") {
-        // 同節互換只交換教師負責的班級，班級與科目留在原日期節次。
+      var stayFlow = String(r["特殊流程"] || r.specialFlow || "");
+      if (stayFlow === "admin_same_period_exchange" || stayFlow === "teacher_swap") {
+        // 班留原時段（同節互換／特殊對調人走班留）：只交換教師，班級與科目留在原日期節次。
         markEdge(reqDate, reqPer, reqEm, tgtEm, cls, subj);
         markEdge(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj);
         return;

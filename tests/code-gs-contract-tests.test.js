@@ -473,11 +473,13 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
 
   // 同節互換建單路徑已整併至特例調代通道（admin_exception）：action 與建構函數已刪除；
   // 歷史單據的 admin_same_period_exchange 顯示／索引分支保留
-  assert.match(source, /String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"/, '歷史同節互換標記仍須可辨識（索引分支）');
-  assert.match(source, /if \(String\(r\["特殊流程"\] \|\| r\.specialFlow \|\| ""\) === "admin_same_period_exchange"\)[\s\S]*?markEdge\(reqDate, reqPer, reqEm, tgtEm, cls, subj\)[\s\S]*?markEdge\(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj\)/, '後端同節互換應讓雙方接手對方原班級');
+  assert.match(source, /admin_same_period_exchange/, '歷史同節互換標記仍須可辨識（索引分支）');
+  assert.match(source, /teacher_swap/, '後端應辨識特殊對調人走班留（teacher_swap）');
+  assert.match(source, /markEdge\(reqDate, reqPer, reqEm, tgtEm, cls, subj\)[\s\S]*?markEdge\(targetDate, targetPeriod, tgtEm, reqEm, targetCls, targetSubj\)/, '後端班留流程應讓雙方接手對方原班級');
   // 2A：班級視圖已移至 ui-classview.js
   const classViewSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-classview.js'), 'utf8');
-  assert.match(classViewSource, /if \(String\(req\.specialFlow \|\| req\['特殊流程'\] \|\| ''\) === 'admin_same_period_exchange'\)/, '前端個人課表需辨識管理員同節互換');
+  assert.match(classViewSource, /admin_same_period_exchange/, '前端個人課表需辨識管理員同節互換');
+  assert.match(classViewSource, /teacher_swap/, '前端班級視圖需辨識特殊對調人走班留');
   assert.match(classViewSource, /originalTeacherName: requesterName,[\s\S]*?actualTeacherName: targetName,[\s\S]*?className: classValue/, '前端應將 A 原班級改由 B 授課');
   assert.match(classViewSource, /originalTeacherName: targetName,[\s\S]*?actualTeacherName: requesterName,[\s\S]*?className: targetClassValue/, '前端應將 B 原班級改由 A 授課');
   assert.match(timetableStoreSource, /resolveCellFromBaseAndSubs\(\.\.\.args\)/, '細胞解析已移至 ui-timetable（經 getTimetableApi 委派）');

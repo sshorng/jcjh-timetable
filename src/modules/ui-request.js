@@ -354,7 +354,7 @@ const UiSubmitHelpers = (() => {
       "狀態": initialStatus,
        "直接核准": doDirectApprove ? '是' : '',
        "紙本流程": paperFlowActive ? 'TRUE' : 'FALSE',
-       "特殊流程": combinedReturn ? 'combined_return' : '',
+       "特殊流程": combinedReturn ? 'combined_return' : (pending.specialFlow || ''),
       directApprove: doDirectApprove,
       isProxySubmit: !!proxyActive,
        paperFlow: paperFlowActive,

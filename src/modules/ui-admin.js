@@ -2619,7 +2619,9 @@ const UiAdmin = (() => {
               subB: b.subject,
               reason: reason,
               subFee: '無',
-              note: ''
+              note: '',
+              // 特例調代的調課一律人走班留（班級留在原時段，只換老師）；一般調課流程不受影響
+              specialFlow: 'teacher_swap'
             }, 'SWP', reason, submitDepsBase);
           } else if (leg.kind === 'substitution') {
             var leave = leg.leave || {};
