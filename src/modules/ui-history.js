@@ -279,7 +279,7 @@ const UiHistory = (() => {
       if (historyTypeFilter.value !== 'all') {
         records = records.filter(r => {
           const flow = String(r.specialFlow || r['特殊流程'] || '');
-          if (historyTypeFilter.value === 'exception') return flow === 'admin_exception';
+          if (historyTypeFilter.value === 'exception') return flow === 'admin_exception' || flow === 'teacher_swap';
           const isExchange = isHistoryExchangeType(r);
           return historyTypeFilter.value === 'exchange' ? isExchange : !isExchange;
         });

@@ -8411,8 +8411,13 @@ function doPost(e) {
             (reqData.exceptionReason != null ? reqData.exceptionReason
               : (reqData.request && reqData.request.exceptionReason)) || '').trim();
           if (!exceptionReasonOne) throw new Error('特例建單必須填寫事由！');
-          reqData.request["特殊流程"] = "admin_exception";
-          reqData.request.specialFlow = "admin_exception";
+          // 班留流程（特殊對調人走班留／同節互換）優先保留，顯示層才分得出人走班留；
+          // 其餘特例才強制標記 admin_exception。
+          var keepFlowOne = String(reqData.request["特殊流程"] || reqData.request.specialFlow || "");
+          if (keepFlowOne !== "teacher_swap" && keepFlowOne !== "admin_same_period_exchange") {
+            reqData.request["特殊流程"] = "admin_exception";
+            reqData.request.specialFlow = "admin_exception";
+          }
           var prevNoteOne = String(reqData.request["備註"] || "").trim();
           var exceptionTagOne = "[特例調代：" + exceptionReasonOne + "]";
           reqData.request["備註"] = prevNoteOne

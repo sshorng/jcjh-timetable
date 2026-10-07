@@ -504,6 +504,7 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.match(source, /isAdminExceptionOne = isAdmin && \(reqData\.isAdminException === true/, '特例旗標僅管理員有效');
   assert.match(source, /if \(!exceptionReasonOne\) throw new Error\('特例建單必須填寫事由！'\)/, '特例建單事由必填');
   assert.match(source, /reqData\.request\["特殊流程"\] = "admin_exception"/, '特例單強制標記特殊流程');
+  assert.match(source, /keepFlowOne !== "teacher_swap"/, '特例單應保留特殊對調人走班留標記');
   assert.match(source, /if \(!isAdminExceptionOne\) \{\s*\n\s*assertNoExchangeIncomingConflict_/, '特例單跳過衝堂斷言（一般單仍擋）');
 
   console.log('code.gs exchange contract tests PASS');

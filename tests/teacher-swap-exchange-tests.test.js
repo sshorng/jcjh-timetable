@@ -137,6 +137,16 @@ test('teacher_swap：轉換後班級留在原時段（人走班留）', () => {
   assert.equal(String(atLeave.actualTeacherEmail), '蘇育男', '請假日由蘇上課');
 });
 
+test('admin_exception：特例舊單維持人帶班走（不被當班留）', () => {
+  const convert = makeConverter();
+  const req = swapRequest('');
+  req.specialFlow = 'admin_exception';
+  req['特殊流程'] = 'admin_exception';
+  const subs = convert([req]);
+  const atTarget = subs.find((s) => s.date === '2026-10-12' && Number(s.period) === 2);
+  assert.equal(atTarget.className, '906', 'admin_exception 仍走一般對調（人帶班走）');
+});
+
 test('一般對調：轉換維持人帶班走（不受 teacher_swap 影響）', () => {
   const convert = makeConverter();
   const subs = convert([swapRequest('')]);
