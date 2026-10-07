@@ -220,9 +220,21 @@ const UiTimetable = (() => {
       const asActual = slotSubs.filter(s =>
         s.actualTeacherEmail && String(s.actualTeacherEmail).toLowerCase() === em
       );
-      const hit = DomainSchedule && typeof DomainSchedule.selectActualDutyRecord === 'function'
+      let hit = DomainSchedule && typeof DomainSchedule.selectActualDutyRecord === 'function'
         ? DomainSchedule.selectActualDutyRecord(slotSubs, em)
         : (asActual.length ? asActual[asActual.length - 1] : null);
+      // 轉代消耗：調入後又同班科調出，視為已轉走，不再是有效義務（防重複再調）
+      if (hit) {
+        var hitKey = String(hit.className || '').trim() + '|' + String(hit.subject || '').trim();
+        var hitIdx = slotSubs.indexOf(hit);
+        var forwarded = (slotSubs || []).some(function (s, si) {
+          if (si <= hitIdx) return false;
+          if (!s || !s.originalTeacherEmail) return false;
+          if (String(s.originalTeacherEmail).toLowerCase() !== em) return false;
+          return String(s.className || '').trim() + '|' + String(s.subject || '').trim() === hitKey;
+        });
+        if (forwarded) hit = null;
+      }
       if (hit) {
         let cls = hit.className || '';
         let subj = hit.subject || '';
@@ -1929,6 +1941,8 @@ const UiTimetable = (() => {
          if (cell.pendingType === 'triangle_in') return 'is-pending-exc-in' + batchCls;
        }
        if (cell.hasConcurrentDuty) return 'is-concurrent-duty' + batchCls;
+       if (cell.isReturnDuty) return 'has-class is-return-duty' + batchCls;
+       if (cell.hasMultipleOutgoing) return ((cell.subType === 'exchange' || cell.subType === 'triangle') ? 'is-exchange-out' : 'is-substituted-out') + batchCls;
        if (cell.isSubstituted) {
          return ((cell.subType === 'exchange' || cell.subType === 'triangle') ? 'is-exchange-out' : 'is-substituted-out') + batchCls;
        }

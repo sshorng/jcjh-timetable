@@ -370,6 +370,17 @@ const UiLineTemplate = (() => {
       }
       return `${head}\n${cell.pendingText || '申請處理中'}`;
     }
+    if (cell.isReturnDuty) {
+      return `${head}\n↩ 代回本人原課\n${cell.subText || ''}`;
+    }
+    if (cell.hasMultipleOutgoing && cell.outgoingDuties && cell.outgoingDuties.length) {
+      const lines = [head, '➔ 本節已全數調出'];
+      cell.outgoingDuties.forEach(function (d) {
+        lines.push(`${d.className || ''} ${d.subject || ''}`.trim());
+        if (d.subText) lines.push(d.subText);
+      });
+      return lines.filter(Boolean).join('\n');
+    }
     if (cell.hasConcurrentDuty && cell.outgoingDuty) {
       const outgoing = cell.outgoingDuty;
       const incomingLabel = cell.subType === 'exchange' || cell.subType === 'triangle'

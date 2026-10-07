@@ -702,20 +702,30 @@
                                   </div>
                                   <div v-if="!isMobile && slot.cell.subText && String(slot.cell.subText).replace(/[📌\s]/g, '') !== String(slot.cell.subject || '').replace(/[📌\s]/g, '')" class="cell-sub-text cell-sub-muted">{{ slot.cell.subText }}</div>
                                    <div v-if="!isMobile && slot.cell.pendingText" class="cell-sub-text cell-sub-pending">{{ slot.cell.pendingText }}</div>
-                                   <div v-if="slot.cell.hasConcurrentDuty && slot.cell.outgoingDuty" class="cell-overlap-outgoing">
-                                     <div class="cell-overlap-label">原課調出</div>
-                                     <div v-if="slot.cell.outgoingDuty.className && String(slot.cell.outgoingDuty.className).trim()" class="cell-overlap-class">
-                                       <span class="class-color-badge" :style="getClassBadgeStyle(slot.cell.outgoingDuty.className)">
-                                         {{ formatClassName(slot.cell.outgoingDuty.className) || slot.cell.outgoingDuty.className }}
-                                       </span>
-                                     </div>
-                                     <div v-if="slot.cell.outgoingDuty.subject" class="cell-overlap-subject">{{ slot.cell.outgoingDuty.subject }}</div>
-                                   <div v-if="!isMobile && slot.cell.outgoingDuty.subText" class="cell-overlap-subtext">{{ slot.cell.outgoingDuty.subText }}</div>
-            </div>
+                                    <div v-if="slot.cell.hasConcurrentDuty && slot.cell.outgoingDuty" class="cell-overlap-outgoing">
+                                      <div class="cell-overlap-label">原課調出</div>
+                                      <div v-if="slot.cell.outgoingDuty.className && String(slot.cell.outgoingDuty.className).trim()" class="cell-overlap-class">
+                                        <span class="class-color-badge" :style="getClassBadgeStyle(slot.cell.outgoingDuty.className)">
+                                          {{ formatClassName(slot.cell.outgoingDuty.className) || slot.cell.outgoingDuty.className }}
+                                        </span>
+                                      </div>
+                                      <div v-if="slot.cell.outgoingDuty.subject" class="cell-overlap-subject">{{ slot.cell.outgoingDuty.subject }}</div>
+                                    <div v-if="!isMobile && slot.cell.outgoingDuty.subText" class="cell-overlap-subtext">{{ slot.cell.outgoingDuty.subText }}</div>
+             </div>
+                                    <div v-if="slot.cell.hasMultipleOutgoing && slot.cell.outgoingDuties && slot.cell.outgoingDuties.length > 1" class="cell-overlap-outgoing">
+                                      <div class="cell-overlap-label">多重調出（{{ slot.cell.outgoingDuties.length }}筆）</div>
+                                      <div v-for="(d, di) in slot.cell.outgoingDuties" :key="'mo'+di" class="cell-overlap-multi">
+                                        <span v-if="d.className" class="class-color-badge" :style="getClassBadgeStyle(d.className)">{{ formatClassName(d.className) || d.className }}</span>
+                                        <span v-if="d.subject" class="cell-overlap-subject">{{ d.subject }}</span>
+                                        <div v-if="!isMobile && d.subText" class="cell-overlap-subtext">{{ d.subText }}</div>
+                                      </div>
+             </div>
           </div>
-                                  <div class="cell-badges">
-                                     <span v-if="slot.cell.hasConcurrentDuty" class="cell-badge tag-gray" title="原課已調出，本節改上掉入課">原課調出</span>
-                                     <span v-if="slot.cell.isCombinedReturn" class="cell-badge tag-combined">併班上課</span>
+                                   <div class="cell-badges">
+                                      <span v-if="slot.cell.hasConcurrentDuty" class="cell-badge tag-gray" title="原課已調出，本節改上掉入課">原課調出</span>
+                                      <span v-if="slot.cell.isReturnDuty" class="cell-badge tag-green" title="代回本人原課">代回</span>
+                                      <span v-if="slot.cell.hasMultipleOutgoing" class="cell-badge tag-warning" :title="'本節共調出' + (slot.cell.outgoingDuties ? slot.cell.outgoingDuties.length : 2) + '筆'">多重調出</span>
+                                      <span v-if="slot.cell.isCombinedReturn" class="cell-badge tag-combined">併班上課</span>
                                     <span v-if="slot.cell.isSubstituted"
                                     class="cell-badge"
                                     :class="slot.cell.subType === 'exchange' ? 'tag-warning' : (slot.cell.isMutualCover ? 'tag-purple' : 'tag-red')"

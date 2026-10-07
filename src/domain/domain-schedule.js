@@ -629,6 +629,151 @@ const DomainSchedule = (() => {
         };
       }
 
+      // 連環轉代鏈：代回優先＋轉代消耗＋多重調出（徹底修）
+      // outgoings／incomings 以 periodSubs 陣列順序為時間序（convert 已按 createdAt 排序）。
+      var chainOutgoings = (periodSubs || []).filter(function (r) {
+        if (!r || !r.originalTeacherEmail) return false;
+        if (String(r.originalTeacherEmail).toLowerCase() !== emailLower) return false;
+        if (r.actualTeacherEmail && String(r.actualTeacherEmail).toLowerCase() === emailLower
+          && String(r.originalTeacherEmail).toLowerCase() === emailLower) return false;
+        if (r.actualTeacherEmail && String(r.actualTeacherEmail).toLowerCase() === emailLower
+          && String(r.originalTeacherEmail).toLowerCase() === emailLower) return false;
+        // 排除原＝實＝本人的空堂任務（上已處理），其餘原＝本人皆視為調出
+        if (String(r.originalTeacherEmail).toLowerCase() === emailLower
+          && r.actualTeacherEmail && String(r.actualTeacherEmail).toLowerCase() === emailLower) return false;
+        return true;
+      });
+      var chainIncomings = (periodSubs || []).filter(function (r) {
+        if (!r || !r.actualTeacherEmail) return false;
+        if (String(r.actualTeacherEmail).toLowerCase() !== emailLower) return false;
+        if (r.originalTeacherEmail && String(r.originalTeacherEmail).toLowerCase() === emailLower
+          && String(r.actualTeacherEmail).toLowerCase() === emailLower) return false;
+        return true;
+      });
+      function chainCourseKey(className, subject) {
+        return String(className || '').trim() + '|' + String(subject || '').trim();
+      }
+      function chainRecordKey(r) {
+        return chainCourseKey(r && (r.className || r['班級']), r && (r.subject || r['科目']));
+      }
+      function chainIndexOf(rec) {
+        for (var ci = 0; ci < (periodSubs || []).length; ci++) {
+          if ((periodSubs || [])[ci] === rec) return ci;
+        }
+        return -1;
+      }
+      if (chainOutgoings.length > 0 && chainIncomings.length > 0) {
+        // 被轉走的調入：同班科且有更晚的同班科調出在後，即視為已轉出消耗
+        var chainRemaining = chainIncomings.filter(function (inc) {
+          var ii = chainIndexOf(inc);
+          var ik = chainRecordKey(inc);
+          for (var oi = 0; oi < chainOutgoings.length; oi++) {
+            var out = chainOutgoings[oi];
+            if (chainRecordKey(out) === ik && chainIndexOf(out) > ii) return false;
+          }
+          return true;
+        });
+        if (chainRemaining.length > 0) {
+          var chainTeaching = chainRemaining[chainRemaining.length - 1];
+          var chainTeachingKey = chainRecordKey(chainTeaching);
+          var chainConcurrent = chainOutgoings.filter(function (o) {
+            return chainRecordKey(o) !== chainTeachingKey;
+          });
+          if (chainConcurrent.length === 0) {
+            // 同班同科有出又有入、且最終持有為本人：代回本人原課，不再顯示調出
+            var chainOrigLower = chainTeaching.originalTeacherEmail
+              ? String(chainTeaching.originalTeacherEmail).toLowerCase() : null;
+            var chainCell = buildIncomingCell({ edge: chainTeaching, originalOwner: chainOrigLower });
+            if (chainCell) {
+              var chainBaseCands = getCandidates(index, teacherEmail, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);
+              var chainBase = chainBaseCands.filter(function (s) {
+                return String(s.teacherEmail || '').toLowerCase() === emailLower;
+              })[0] || chainBaseCands[0] || null;
+              var chainIsReturn = !!(chainBase
+                && chainCourseKey(chainBase.className, chainBase.subject) === chainCourseKey(chainCell.className, chainCell.subject));
+              if (chainIsReturn) {
+                var chainFee = String(chainTeaching.subFee || chainTeaching['經費來源'] || '').trim();
+                var chainFeePart = (chainFee && chainFee !== '無') ? '（' + chainFee + '）' : '';
+                return Object.assign({}, chainCell, {
+                  isSubstituted: false,
+                  isSubstitutionDuty: false,
+                  isReturnDuty: true,
+                  isMutualCover: false,
+                  subText: '↩ 代回' + chainFeePart + '：' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(chainTeaching.originalTeacherEmail) : ''),
+                  subRecord: chainTeaching,
+                  returnRecord: chainTeaching
+                });
+              }
+              return chainCell;
+            }
+          }
+        } else if (chainOutgoings.length > 1) {
+          // 調入已全數轉出：本人本節無課，顯示多重調出（修 906 再調出的課名／紀錄錯位）
+          var multiBaseCands = getCandidates(index, teacherEmail, scheduleDayOfWeek, schedulePeriod, allSchedules, dateStr);
+          var multiBase = multiBaseCands.filter(function (s) {
+            return String(s.teacherEmail || '').toLowerCase() === emailLower;
+          })[0] || multiBaseCands[0] || null;
+          var multiPrimary = null;
+          for (var mi = 0; mi < chainOutgoings.length; mi++) {
+            if (multiBase && chainRecordKey(chainOutgoings[mi]) === chainCourseKey(multiBase.className, multiBase.subject)) {
+              multiPrimary = chainOutgoings[mi];
+              break;
+            }
+          }
+          if (!multiPrimary) multiPrimary = chainOutgoings[chainOutgoings.length - 1];
+          var multiDuties = chainOutgoings.map(function (o) {
+            var oFee = o.subFee || o['經費來源'] || '';
+            var oText = '';
+            if (o.type === 'exchange' || o.type === 'triangle') {
+              var oOther = (allSubs || []).filter(function (x) {
+                return x && x.requestId && x.requestId === o.requestId
+                  && (x.date !== o.date || String(x.period) !== String(o.period) || x.id !== o.id);
+              })[0] || null;
+              var oDest = oOther ? formatShortDateAndPeriod(oOther.date, oOther.period, h.getWeekDayText) : '本節';
+              oText = '⇄ 調至 ' + oDest + ' ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
+            } else if (isTimetableOnlyFee(oFee)) {
+              oText = '📋 僅課表：' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
+            } else if (oFee === '扣額度' || oFee === '互代不結') {
+              oText = '🔁 互代: ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
+            } else {
+              oText = '👤 代課: ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
+            }
+            return {
+              className: String(o.className || '').trim(),
+              subject: String(o.subject || '').trim(),
+              subType: o.type,
+              isMutualCover: oFee === '扣額度' || oFee === '互代不結',
+              subText: oText,
+              subRecord: o,
+              isClassAway: false
+            };
+          });
+          var multiPrimaryDuty = null;
+          for (var pi = 0; pi < multiDuties.length; pi++) {
+            if (multiDuties[pi].subRecord === multiPrimary) { multiPrimaryDuty = multiDuties[pi]; break; }
+          }
+          if (!multiPrimaryDuty) multiPrimaryDuty = multiDuties[multiDuties.length - 1];
+          var multiOutBase = multiBase || { className: multiPrimaryDuty.className, subject: multiPrimaryDuty.subject };
+          return Object.assign({}, multiOutBase, {
+            className: multiPrimaryDuty.className || multiOutBase.className || '',
+            subject: multiPrimaryDuty.subject || multiOutBase.subject || '',
+            teacherEmail: teacherEmail,
+            dayOfWeek: dayOfWeek,
+            period: period,
+            isSubstituted: true,
+            isSubstitutionDuty: false,
+            hasMultipleOutgoing: true,
+            outgoingDuty: multiPrimaryDuty,
+            outgoingDuties: multiDuties,
+            subType: multiPrimaryDuty.subType,
+            isMutualCover: !!multiPrimaryDuty.isMutualCover,
+            subText: multiPrimaryDuty.subText,
+            subRecord: multiPrimary,
+            isClassAway: !!(h.isClassAway && h.isClassAway(multiPrimaryDuty.className, dateStr, period))
+          });
+        }
+      }
+
       if (forwardMap[emailLower]) {
         var path = [];
         var current = emailLower;

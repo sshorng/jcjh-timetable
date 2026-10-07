@@ -766,6 +766,21 @@ body {
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.06);
 }
 
+/* 代回本人原課：一般底色＋綠色左線，與正常上課一致，僅多代回徽章。 */
+.grid-cell-class.is-return-duty {
+  border-left: 3.5px solid #16a34a !important;
+}
+.cell-overlap-multi {
+  margin-top: 4px;
+  padding-top: 3px;
+  border-top: 1px dotted #cbd5e1;
+}
+.cell-overlap-multi:first-of-type {
+  border-top: none;
+  margin-top: 2px;
+  padding-top: 0;
+}
+
 /* 同一節同時有原課調出與新課掉入：以實際上課課程為主，原課另列於下方。 */
 .grid-cell-class.is-concurrent-duty {
   background: linear-gradient(180deg, #eff6ff 0%, #eff6ff 55%, #f8fafc 55%, #f8fafc 100%) !important;
