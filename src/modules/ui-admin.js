@@ -2550,18 +2550,6 @@ const UiAdmin = (() => {
       var day = Number.isNaN(d.getTime()) ? '' : (dow === 0 ? 7 : dow);
       return day + '-' + parseInt(period, 10);
     }
-    function findExceptionCoverSlot(teacherEmail, dateStr, period) {
-      var em = String(teacherEmail || '').trim().toLowerCase();
-      var d = new Date(String(dateStr || '').replace(/-/g, '/'));
-      if (!em || Number.isNaN(d.getTime())) return null;
-      var dow = d.getDay() === 0 ? 7 : d.getDay();
-      var p = parseInt(period, 10);
-      return ((allSchedules && allSchedules.value) || []).find(function (s) {
-        return String((s && (s.teacherEmail || s.email)) || '').trim().toLowerCase() === em
-          && parseInt(s.dayOfWeek, 10) === dow
-          && parseInt(s.period, 10) === p;
-      }) || null;
-    }
     function exceptionId(prefix) {
       return 'req_exc_' + Date.now().toString(36) + '_' + prefix + Math.random().toString(36).slice(2, 6);
     }
@@ -2638,14 +2626,14 @@ const UiAdmin = (() => {
             var sub = leg.sub || {};
             if (!leave.teacherEmail || !sub.teacherEmail) throw new Error('第' + (i + 1) + '腿：請選定請假與代課教師');
             if (!sub.fee) throw new Error('第' + (i + 1) + '腿：請選擇經費');
-            var cover = findExceptionCoverSlot(leave.teacherEmail, leave.dateStr, leave.period);
-            if (!cover) throw new Error('第' + (i + 1) + '腿：被代格在請假人課表無基礎課程');
+            // 被代課堂以元件解析的「當前該格課程」為準（含已生效／待生效疊加），此處只驗存在
+            if (!leave.className) throw new Error('第' + (i + 1) + '腿：被代格無課程');
             built = buildExceptionLeg({
               mode: 'substitution',
               leaveTeacher: leave.teacherEmail,
               subTeacher: sub.teacherEmail,
-              cls: cover.className,
-              subject: cover.subject,
+              cls: leave.className,
+              subject: leave.subject,
               date: leave.dateStr,
               timeKey: exceptionTimeKey(leave.dateStr, leave.period),
               reason: reason,

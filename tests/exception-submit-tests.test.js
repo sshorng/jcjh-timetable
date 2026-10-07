@@ -46,7 +46,10 @@ function legsAB() {
     }
   }, {
     kind: 'substitution',
-    leave: { teacherEmail: 'a@school.example', dateStr: '2026-09-01', period: 8, dayOfWeek: 2 },
+    leave: {
+      teacherEmail: 'a@school.example', className: '701', subject: '國文',
+      dateStr: '2026-09-01', period: 8, dayOfWeek: 2
+    },
     sub: { teacherEmail: 'b@school.example', dateStr: '2026-09-01', period: 8, dayOfWeek: 2, fee: '第8節代課' }
   }];
 }

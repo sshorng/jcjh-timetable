@@ -21,10 +21,12 @@
               </div>
               <div v-if="leg.kind === 'exchange'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <label class="form-label">A 端教師
-                  <select class="form-select" v-model="leg.aEmail">
-                    <option value="">請選擇</option>
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'a-' + t.value" :value="t.value">{{ t.label }}</option>
-                  </select>
+                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value)"
+                    :list="'dl-exc-' + i + '-a'">
+                  <datalist :id="'dl-exc-' + i + '-a'">
+                    <option v-for="t in teacherOptions" :key="'ex' + i + 'a-' + t.value" :value="t.display"></option>
+                  </datalist>
                 </label>
                 <label class="form-label">A 日期／節次
                   <span style="display: flex; gap: 4px;">
@@ -35,10 +37,12 @@
                   </span>
                 </label>
                 <label class="form-label">B 端教師
-                  <select class="form-select" v-model="leg.bEmail">
-                    <option value="">請選擇</option>
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'b-' + t.value" :value="t.value">{{ t.label }}</option>
-                  </select>
+                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value)"
+                    :list="'dl-exc-' + i + '-b'">
+                  <datalist :id="'dl-exc-' + i + '-b'">
+                    <option v-for="t in teacherOptions" :key="'ex' + i + 'b-' + t.value" :value="t.display"></option>
+                  </datalist>
                 </label>
                 <label class="form-label">B 日期／節次
                   <span style="display: flex; gap: 4px;">
@@ -51,10 +55,12 @@
               </div>
               <div v-else style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                 <label class="form-label">請假教師（被代）
-                  <select class="form-select" v-model="leg.aEmail">
-                    <option value="">請選擇</option>
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 'l-' + t.value" :value="t.value">{{ t.label }}</option>
-                  </select>
+                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value)"
+                    :list="'dl-exc-' + i + '-l'">
+                  <datalist :id="'dl-exc-' + i + '-l'">
+                    <option v-for="t in teacherOptions" :key="'ex' + i + 'l-' + t.value" :value="t.display"></option>
+                  </datalist>
                 </label>
                 <label class="form-label">日期／節次
                   <span style="display: flex; gap: 4px;">
@@ -65,10 +71,12 @@
                   </span>
                 </label>
                 <label class="form-label">代課教師
-                  <select class="form-select" v-model="leg.bEmail">
-                    <option value="">請選擇</option>
-                    <option v-for="t in teacherOptions" :key="'ex' + i + 's-' + t.value" :value="t.value">{{ t.label }}</option>
-                  </select>
+                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value)"
+                    :list="'dl-exc-' + i + '-s'">
+                  <datalist :id="'dl-exc-' + i + '-s'">
+                    <option v-for="t in teacherOptions" :key="'ex' + i + 's-' + t.value" :value="t.display"></option>
+                  </datalist>
                 </label>
                 <label class="form-label">經費（同一般流程選項）
                   <select class="form-select" v-model="leg.subFee">
@@ -123,8 +131,8 @@ const results = ref([]);
 function blankLeg() {
   return {
     kind: 'exchange',
-    aEmail: '', aDate: '', aPeriod: '',
-    bEmail: '', bDate: '', bPeriod: '',
+    aEmail: '', aText: '', aDate: '', aPeriod: '',
+    bEmail: '', bText: '', bDate: '', bPeriod: '',
     subFee: '自費代課'
   };
 }
@@ -146,9 +154,24 @@ const teacherOptions = computed(function () {
   return (props.teachersList || []).map(function (t) {
     var value = String((t && (t.email || t.loginEmail || t['教師Email'])) || '').trim().toLowerCase();
     var label = String((t && (t.name || t.teacherName || t['教師姓名'])) || '').trim() || value;
-    return { value: value, label: label };
+    var subject = String((t && (t.subject || t['授課科目'] || t['任課科目'])) || '').trim();
+    return { value: value, label: label, display: subject ? (label + '（' + subject + '）') : label };
   }).filter(function (t) { return !!t.value; });
 });
+function resolveTeacherEmail(text) {
+  var key = String(text || '').trim().toLowerCase();
+  if (!key) return '';
+  var list = teacherOptions.value || [];
+  var hit = list.find(function (t) {
+    return t.value === key || t.label.toLowerCase() === key || t.display.toLowerCase() === key;
+  });
+  return hit ? hit.value : '';
+}
+function onTeacherInput(leg, side, text) {
+  if (!leg) return;
+  leg[side + 'Text'] = text;
+  leg[side + 'Email'] = resolveTeacherEmail(text);
+}
 function dayOfWeekOf(dateStr) {
   var d = new Date(String(dateStr || '').replace(/-/g, '/'));
   if (Number.isNaN(d.getTime())) return '';
@@ -169,22 +192,37 @@ function findSlot(email, dateStr, period) {
 }
 function slotView(email, dateStr, period) {
   var s = findSlot(email, dateStr, period);
+  // 當前該格課程優先（含已生效／待生效異動疊加），才抓得到鏈式第二筆的真實課堂
+  var eff = null;
+  try {
+    if (typeof props.getScheduleForDate === 'function' && email && dateStr && period !== '') {
+      eff = props.getScheduleForDate(email, dateStr, period, dayOfWeekOf(dateStr)) || null;
+    }
+  } catch (eEff) { /* 以基礎課程為準 */ }
   var teacherName = '';
   try {
     teacherName = props.getTeacherNameByEmail(email) || (s && (s.teacherName || s.name)) || '';
   } catch (eName) { /* ignore */ }
+  var className = String(((eff && eff.className) || (s && s.className)) || '');
+  var subject = String(((eff && eff.subject) || (s && s.subject)) || '');
   return {
     teacherEmail: email,
     teacherName: teacherName,
-    className: String((s && s.className) || ''),
-    subject: String((s && s.subject) || ''),
+    className: className,
+    subject: subject,
     attr: String((s && (s.attr || s.attribute)) || ''),
     specialTags: String((s && (s.specialTags || s['特殊標記'])) || ''),
     isPullOut: !!(s && (s.isPullOut || s.isSubstitute)),
+    pendingText: String((eff && (eff.pendingText || '')) || ''),
     dateStr: dateStr,
     dayOfWeek: dayOfWeekOf(dateStr),
     period: period === '' ? '' : parseInt(period, 10)
   };
+}
+function slotTextWithPending(slot) {
+  var base = slotText(slot);
+  if (slot.pendingText) return base + '（' + slot.pendingText + '）';
+  return base;
 }
 function slotText(slot) {
   if (!slot.teacherEmail || !slot.dateStr || slot.period === '') return '—';
@@ -197,10 +235,10 @@ function legText(i) {
   if (leg.kind === 'exchange') {
     var a = slotView(leg.aEmail, leg.aDate, leg.aPeriod);
     var b = slotView(leg.bEmail, leg.bDate, leg.bPeriod);
-    return slotText(a) + ' ⇄ ' + slotText(b);
+    return slotTextWithPending(a) + ' ⇄ ' + slotTextWithPending(b);
   }
   var s = slotView(leg.aEmail, leg.aDate, leg.aPeriod);
-  return slotText(s) + ' → ' + String(leg.bEmail || '未定') + '（' + leg.subFee + '）';
+  return slotTextWithPending(s) + ' → ' + String(leg.bEmail || '未定') + '（' + leg.subFee + '）';
 }
 function legModel(i) {
   var leg = legs.value[i];
@@ -211,10 +249,13 @@ function legModel(i) {
       bSlot: slotView(leg.bEmail, leg.bDate, leg.bPeriod)
     };
   }
+  var leaveView = slotView(leg.aEmail, leg.aDate, leg.aPeriod);
   return {
     kind: 'substitution',
     leave: {
       teacherEmail: leg.aEmail,
+      className: leaveView.className,
+      subject: leaveView.subject,
       dateStr: leg.aDate,
       period: leg.aPeriod,
       dayOfWeek: dayOfWeekOf(leg.aDate)
