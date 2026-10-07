@@ -5,10 +5,11 @@
  * 合計約 6k 行，只在匯出按鈕觸發時用到；改 import() 後主包減肥。呼叫端一律經由
  * 各模块既有的 ensure*Ready gate（ui-report 內實作，兼做 JSZip／ExcelJS／DAC 檢查）。
  */
+import { notifyChunkLoadFailed } from './vendor-libs.js';
 const _cache = {};
 function _cached(key, load) {
   if (!_cache[key]) {
-    _cache[key] = load().catch((e) => { _cache[key] = null; throw e; });
+    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(); throw e; });
   }
   return _cache[key];
 }

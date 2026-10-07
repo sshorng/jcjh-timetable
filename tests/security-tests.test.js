@@ -90,6 +90,15 @@ test('security tests（v1 移植）', () => {
   assert.strictEqual(executablePrintMarkup.test(routeOutput), false);
   const vercelCsp = vercelConfig.headers[0].headers.find(h => h.key === 'Content-Security-Policy');
   assert.ok(vercelCsp && vercelCsp.value.includes('googleusercontent.com'));
+  // 懶載分包 404 主因：殼層被快取到舊版。index.html 不可緩，分包 hash 檔名可長緩。
+  const vercelCache = (source) => {
+    const block = vercelConfig.headers.find((b) => b.source === source);
+    const hit = block && block.headers.find((h) => h.key === 'Cache-Control');
+    return hit ? hit.value : '';
+  };
+  assert.ok(vercelCache('/index.html').includes('no-cache'), 'index.html 必須 no-cache');
+  assert.ok(vercelCache('/').includes('no-cache'), '根路徑必須 no-cache');
+  assert.ok(vercelCache('/assets/(.*)').includes('immutable'), 'hash 分包必須 immutable 長緩');
   assert.match(gasApiSource, /AbortController/);
   assert.match(gasApiSource, /ACTION_TIMEOUT_MS/);
   assert.match(gasApiSource, /cancelAllInflight/);
