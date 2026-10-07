@@ -1486,3 +1486,43 @@ test('export accounting tests（v1 移植）', () => {
   console.log('export accounting tests PASS');
 
 });
+
+test('export accounting 自費隱私：自付明細不印原始備註', () => {
+  const period = { start: '2026-10-01', end: '2026-10-31' };
+  const privacyExport = ExportAccounting.buildExportData({
+    reportMonth: '2026-10',
+    reportStartDate: period.start,
+    reportEndDate: period.end,
+    reportWeeksCount: 5,
+    periods: {
+      overtime: period,
+      adjunct: period,
+      publicSub: period,
+      selfSub: period,
+      mentor: period
+    },
+    teachers: [
+      { email: 'owner-privacy@x', name: '曾瀅芮', baseHours: 16 },
+      { email: 'cover-privacy@x', name: '唐子超', baseHours: 16 }
+    ],
+    allSchedules: [
+      { teacherEmail: 'owner-privacy@x', teacherName: '曾瀅芮', dayOfWeek: 3, period: 7,
+        className: '8英資A', subject: '資優英語', attr: '一般' }
+    ],
+    substitutionRecords: [
+      { date: '2026-10-14', period: 7, className: '8英資A', subject: '資優英語', type: 'substitution',
+        originalTeacherEmail: 'owner-privacy@x', originalTeacherName: '曾瀅芮',
+        actualTeacherEmail: 'cover-privacy@x', actualTeacherName: '唐子超',
+        subFee: '自費代課', reason: '病假', note: '檢查回診', status: 'approved' },
+      { date: '2026-10-15', period: 7, className: '8英資A', subject: '資優英語', type: 'substitution',
+        originalTeacherEmail: 'owner-privacy@x', originalTeacherName: '曾瀅芮',
+        actualTeacherEmail: 'cover-privacy@x', actualTeacherName: '唐子超',
+        subFee: '公費代課', reason: '公假', note: '研習證明', status: 'approved' }
+    ]
+  });
+  const selfRow = (privacyExport.sheets.selfSub || []).find(row => row.actualName === '唐子超');
+  assert.ok(selfRow, '自費代課應列入自付明細');
+  assert.equal(selfRow.note, '', '自費列原始備註不得印出（送單隱私對齊）');
+  assert.match(selfRow.substitutionNote, /代曾瀅芮/, '自費列合成註記應保留原教師');
+  assert.doesNotMatch(selfRow.substitutionNote, /檢查回診/, '合成註記不應混入原始備註');
+});

@@ -2178,7 +2178,9 @@ const __root = {
         originalName: originalName,
         reason: reason(r) || subFee(r),
         substitutionNote: substitutionNoteText(r, opts, originalName),
-        note: r.note || ''
+        // 自費隱私：送單時已不把請假人備註寫入（ui-request 僅留行政標籤），
+        // 舊單殘留的備註也不得再印出，只留合成註記。
+        note: isSelfPaidRecord(r) ? '' : (r.note || '')
       };
     });
   }
