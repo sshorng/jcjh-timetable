@@ -9,6 +9,7 @@
             <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
               組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單（最多 {{ maxLegs }} 腿）。
               檢查只顯示警告不阻擋；建單後經費照系統計算，不寄線上通知。
+              先選日期節次，該節有課者會置頂顯示。
             </div>
             <div v-for="(leg, i) in legs" :key="'exleg-' + i" style="border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -19,72 +20,80 @@
                 </select>
                 <button v-if="legs.length > 1" type="button" class="btn btn-secondary" style="margin-left: auto; padding: 2px 8px; font-size: 0.75rem;" @click="removeLeg(i)">移除</button>
               </div>
-              <div v-if="leg.kind === 'exchange'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <label class="form-label">A 端教師（先選日期節次會列出該節有課者置頂）
-                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
-                    :list="'dl-exc-' + i + '-a'">
-                  <datalist :id="'dl-exc-' + i + '-a'">
-                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'a-' + t.value" :value="t.display"></option>
-                  </datalist>
-                </label>
-                <label class="form-label">A 日期／節次
-                  <span style="display: flex; gap: 4px;">
+              <div v-if="leg.kind === 'exchange'" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 8px;">
+                  <label class="form-label">A 端教師
+                    <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                      :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
+                      :list="'dl-exc-' + i + '-a'">
+                    <datalist :id="'dl-exc-' + i + '-a'">
+                      <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'a-' + t.value" :value="t.display"></option>
+                    </datalist>
+                  </label>
+                  <label class="form-label">A 日期
                     <input type="date" class="form-input" v-model="leg.aDate">
+                  </label>
+                  <label class="form-label">A 節次
                     <select class="form-select" v-model="leg.aPeriod">
                       <option v-for="p in periodOptions" :key="'ex' + i + 'ap-' + p.value" :value="p.value">{{ p.label }}</option>
                     </select>
-                  </span>
-                </label>
-                <label class="form-label">B 端教師（先選日期節次會列出該節有課者置頂）
-                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.bDate, leg.bPeriod)"
-                    :list="'dl-exc-' + i + '-b'">
-                  <datalist :id="'dl-exc-' + i + '-b'">
-                    <option v-for="t in slotTeachers(leg.bDate, leg.bPeriod)" :key="'ex' + i + 'b-' + t.value" :value="t.display"></option>
-                  </datalist>
-                </label>
-                <label class="form-label">B 日期／節次
-                  <span style="display: flex; gap: 4px;">
+                  </label>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 8px;">
+                  <label class="form-label">B 端教師
+                    <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                      :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.bDate, leg.bPeriod)"
+                      :list="'dl-exc-' + i + '-b'">
+                    <datalist :id="'dl-exc-' + i + '-b'">
+                      <option v-for="t in slotTeachers(leg.bDate, leg.bPeriod)" :key="'ex' + i + 'b-' + t.value" :value="t.display"></option>
+                    </datalist>
+                  </label>
+                  <label class="form-label">B 日期
                     <input type="date" class="form-input" v-model="leg.bDate">
+                  </label>
+                  <label class="form-label">B 節次
                     <select class="form-select" v-model="leg.bPeriod">
                       <option v-for="p in periodOptions" :key="'ex' + i + 'bp-' + p.value" :value="p.value">{{ p.label }}</option>
                     </select>
-                  </span>
-                </label>
+                  </label>
+                </div>
               </div>
-              <div v-else style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <label class="form-label">請假教師（被代）
-                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
-                    :list="'dl-exc-' + i + '-l'">
-                  <datalist :id="'dl-exc-' + i + '-l'">
-                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'l-' + t.value" :value="t.display"></option>
-                  </datalist>
-                </label>
-                <label class="form-label">日期／節次
-                  <span style="display: flex; gap: 4px;">
+              <div v-else style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 8px;">
+                  <label class="form-label">請假教師（被代）
+                    <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                      :value="leg.aText" @input="onTeacherInput(leg, 'a', $event.target.value, leg.aDate, leg.aPeriod)"
+                      :list="'dl-exc-' + i + '-l'">
+                    <datalist :id="'dl-exc-' + i + '-l'">
+                      <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 'l-' + t.value" :value="t.display"></option>
+                    </datalist>
+                  </label>
+                  <label class="form-label">日期
                     <input type="date" class="form-input" v-model="leg.aDate">
+                  </label>
+                  <label class="form-label">節次
                     <select class="form-select" v-model="leg.aPeriod">
                       <option v-for="p in periodOptions" :key="'ex' + i + 'sp-' + p.value" :value="p.value">{{ p.label }}</option>
                     </select>
-                  </span>
-                </label>
-                <label class="form-label">代課教師
-                  <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
-                    :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.aDate, leg.aPeriod)"
-                    :list="'dl-exc-' + i + '-s'">
-                  <datalist :id="'dl-exc-' + i + '-s'">
-                    <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 's-' + t.value" :value="t.display"></option>
-                  </datalist>
-                </label>
-                <label class="form-label">經費（同一般流程選項）
-                  <select class="form-select" v-model="leg.subFee">
-                    <option v-for="f in feeOptions" :key="'ex' + i + 'f-' + f" :value="f">{{ f }}</option>
-                  </select>
-                </label>
+                  </label>
+                </div>
+                <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 8px;">
+                  <label class="form-label">代課教師
+                    <input type="text" class="form-input" placeholder="輸入姓名或 Email 篩選"
+                      :value="leg.bText" @input="onTeacherInput(leg, 'b', $event.target.value, leg.aDate, leg.aPeriod)"
+                      :list="'dl-exc-' + i + '-s'">
+                    <datalist :id="'dl-exc-' + i + '-s'">
+                      <option v-for="t in slotTeachers(leg.aDate, leg.aPeriod)" :key="'ex' + i + 's-' + t.value" :value="t.display"></option>
+                    </datalist>
+                  </label>
+                  <label class="form-label">經費（同一般流程選項）
+                    <select class="form-select" v-model="leg.subFee">
+                      <option v-for="f in feeOptions" :key="'ex' + i + 'f-' + f" :value="f">{{ f }}</option>
+                    </select>
+                  </label>
+                </div>
               </div>
-              <div style="font-size: 0.78rem; margin-top: 6px; color: var(--text-secondary);">{{ legText(i) }}</div>
+              <div v-if="legHasInput(i)" style="font-size: 0.78rem; margin-top: 6px; color: var(--text-secondary);">{{ legText(i) }}</div>
             </div>
             <button v-if="legs.length < maxLegs" type="button" class="btn btn-secondary" style="align-self: flex-start;" @click="addLeg">＋ 加一腿（調課／代課）</button>
             <label class="form-label">事由（必填，記入備註備查）
@@ -288,6 +297,11 @@ function slotText(slot) {
   if (!slot.teacherEmail || !slot.dateStr || slot.period === '') return '—';
   if (!slot.className) return '（該格無基礎課程）';
   return slot.dateStr + ' 第' + slot.period + '節 ' + slot.className + (slot.subject ? ' ' + slot.subject : '');
+}
+function legHasInput(i) {
+  var leg = legs.value[i];
+  if (!leg) return false;
+  return !!(leg.aEmail || leg.aDate || leg.bEmail || leg.bDate);
 }
 function legText(i) {
   var leg = legs.value[i];

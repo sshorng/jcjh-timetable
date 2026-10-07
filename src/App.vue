@@ -1621,7 +1621,7 @@
              </button>
              <button
                type="button"
-               class="btn btn-secondary"
+               class="btn btn-pill btn-secondary"
                title="組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單"
                @click="openExceptionComposer"
              >
