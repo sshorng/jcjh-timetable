@@ -325,6 +325,13 @@
                   <button
                     v-if="isAdmin"
                     type="button"
+                    class="btn btn-sm btn-secondary"
+                    title="組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單"
+                    @click="openExceptionComposer"
+                  >🛠️ 特例調代</button>
+                  <button
+                    v-if="isAdmin"
+                    type="button"
                     class="btn btn-sm"
                     :class="isScheduleEditMode ? 'btn-success' : 'btn-secondary'"
                     @click="isScheduleEditMode = !isScheduleEditMode"
@@ -1618,14 +1625,6 @@
                @click="adminSubTab = 'schoolExport'"
              >
                📄 課表匯出
-             </button>
-             <button
-               type="button"
-               class="btn btn-pill btn-secondary"
-               title="組合有效但單步規則擋下的特例（含同節互換），由管理員背書建單"
-               @click="openExceptionComposer"
-             >
-               🛠️ 特例調代
              </button>
             </div>
 
