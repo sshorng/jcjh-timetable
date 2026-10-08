@@ -125,12 +125,38 @@ test('api contract tests（v1 移植，GAS 傳輸層）', async () => {
   );
 
   responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
+  responses.push({ status: 200, body: { success: true, retried: true } });
+  // 穩定化：讀取類遇瞬斷（HTTP 503）自動重試一次即成功
+  const retryResult = await client.fetchPendingOnly();
+  assert.equal(retryResult.retried, true);
+
+  responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
+  responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
+  responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
   // v1 以 FieldMap.formatGasError 恆等樁測試，期望原始訊息；v2 用真 FieldMap，
   // 503 經過錯誤中文化（與 v1 生產環境行為一致），期望真實訊息。
+  // 重試耗盡（預設 2 次）後才拋錯。
   await assert.rejects(client.fetchPendingOnly(), /無法連線至伺服器/);
 
   responses.push({ status: 200, parseError: true });
+  responses.push({ status: 200, body: { success: true, parsed: true } });
+  // 穩定化：HTML 錯誤頁造成解析失敗也重試（拿新的 user_content_key）
+  const parseRetryResult = await client.fetchPendingOnly();
+  assert.equal(parseRetryResult.parsed, true);
+
+  responses.push({ status: 200, parseError: true });
+  responses.push({ status: 200, parseError: true });
+  responses.push({ status: 200, parseError: true });
   await assert.rejects(client.fetchPendingOnly(), /伺服器回應格式錯誤/);
+
+  // 穩定化：寫入類不自動重試（避免重複落地），訊息要求先重新整理確認
+  const callsBeforeWrite = calls.length;
+  responses.push({ status: 404, statusText: 'Not Found', body: { success: false } });
+  await assert.rejects(
+    client.callGasApi('submitRequest', { request: { '申請單ID': 'req-no-retry' } }),
+    /重新整理/
+  );
+  assert.equal(calls.length, callsBeforeWrite + 1);
 
   responses.push({ status: 200, body: {
     success: true,
@@ -152,4 +178,4 @@ test('api contract tests（v1 移植，GAS 傳輸層）', async () => {
   globalThis.location = prevLocation;
 
   console.log('api contract tests PASS');
-});
+}, 30000);

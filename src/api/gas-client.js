@@ -419,6 +419,16 @@ const GasApi = (() => {
     function cancelAllInflight() {
       Object.keys(_inflightControllers).forEach(cancelInflight);
     }
+    function sleepMs(ms) {
+      return new Promise(function (resolve) { setTimeout(resolve, ms); });
+    }
+    function isTransientHttpStatus(status) {
+      return status === 404 || status === 408 || status === 429
+        || status === 500 || status === 502 || status === 503 || status === 504;
+    }
+    function isTransientNetworkMessage(msg) {
+      return /timed out|timeout|temporarily|try again|Failed to fetch|NetworkError|network|abort|econn|ecconnreset|socket hang up/i.test(String(msg || ''));
+    }
 
     async function postJson(action, data, options) {
       options = options || {};
@@ -469,13 +479,28 @@ const GasApi = (() => {
 
       let response;
       var timeoutMs = Number(options.timeoutMs || ACTION_TIMEOUT_MS[action] || 45000);
-      var controller = null;
-      var timeoutId = null;
-      var timedOut = false;
+      // 寫入重送可能重複落地：只對讀取類自動重試；寫入一律不重試，靠明確訊息請使用者先重新整理確認。
+      var isWrite = !!WRITE_ACTIONS[action];
+      var maxRetries = options.retries != null ? Number(options.retries)
+        : (options.retry != null ? Number(options.retry) : (isWrite ? 0 : 2));
+      if (!(maxRetries >= 0)) maxRetries = isWrite ? 0 : 2;
+      var retryBaseMs = Number(options.retryDelayMs || 600);
+      if (!(retryBaseMs >= 0)) retryBaseMs = 600;
+      // abortPrevious：先取消上一代，整次呼叫（含重試）不再佔用舊 controller
       if (typeof AbortController === 'function' && !options.signal) {
         if (options.abortPrevious && _inflightControllers[action]) {
           cancelInflight(action);
         }
+      }
+      var attempt = 0;
+      var lastTransientErr = null;
+      var res = null;
+      try {
+      while (true) {
+      var controller = null;
+      var timeoutId = null;
+      var timedOut = false;
+      if (typeof AbortController === 'function' && !options.signal) {
         controller = new AbortController();
         if (options.abortPrevious) _inflightControllers[action] = controller;
       }
@@ -490,36 +515,82 @@ const GasApi = (() => {
         response = await fetch(url, {
           method: 'POST',
           mode: 'cors',
+          // user_content_key 是一次性跳轉：絕不快取，避免重播過期跳轉 URL 造成 404
+          cache: 'no-store',
+          redirect: 'follow',
+          credentials: 'omit',
+          referrerPolicy: 'no-referrer',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify(payload),
           signal: signal
         });
       } catch (netErr) {
         var netMsg = String(netErr && netErr.message ? netErr.message : netErr);
-        if (timedOut || /abort|timeout|timed out|Failed to fetch|NetworkError|network/i.test(netMsg)) {
-          throw new Error(formatError(new Error(
+        var superseded = !!(options.abortPrevious && controller && _inflightControllers[action] && _inflightControllers[action] !== controller);
+        if (timeoutId) clearTimeout(timeoutId);
+        if (controller && options.abortPrevious && _inflightControllers[action] === controller) {
+          delete _inflightControllers[action];
+        }
+        // 被新請求取代：不重試，直接結束舊請求
+        if (superseded || ((signal && signal.aborted) && !timedOut)) {
+          throw new Error(formatError(new Error('已取消舊請求'), action));
+        }
+        if (timedOut || isTransientNetworkMessage(netMsg)) {
+          lastTransientErr = new Error(
             '連線逾時或中斷（可能 GAS 處理較久）。請稍候再試；若剛完成寫入，可按 ↻ 重新整理確認。'
-          ), action));
+          );
+          if (!isWrite && attempt < maxRetries) {
+            attempt += 1;
+            await sleepMs(retryBaseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200));
+            continue;
+          }
+          throw new Error(formatError(lastTransientErr, action));
         }
         throw new Error(formatError(netErr, action));
       } finally {
-        if (progressTimer) clearInterval(progressTimer);
         if (timeoutId) clearTimeout(timeoutId);
-        if (controller && _inflightControllers[action] === controller) {
+        if (controller && options.abortPrevious && _inflightControllers[action] === controller) {
           delete _inflightControllers[action];
         }
       }
-      if (progressTimer) clearInterval(progressTimer);
       if (!response.ok) {
+        var httpStatus = Number(response.status || 0);
+        var httpTransient = isTransientHttpStatus(httpStatus);
+        if (controller && options.abortPrevious && _inflightControllers[action] === controller) {
+          delete _inflightControllers[action];
+        }
+        if (!isWrite && httpTransient && attempt < maxRetries) {
+          attempt += 1;
+          lastTransientErr = new Error('網路連線失敗：HTTP ' + response.status + ' ' + (response.statusText || ''));
+          await sleepMs(retryBaseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200));
+          continue;
+        }
+        if (isWrite && httpTransient) {
+          throw new Error(
+            formatError(new Error(
+              '後端連線不穩（HTTP ' + response.status + '）。寫入可能已生效，請先按 ↻ 重新整理確認，勿直接重送，避免重複送出。'
+            ), action)
+          );
+        }
         throw new Error(
           formatError(new Error('網路連線失敗：HTTP ' + response.status + ' ' + (response.statusText || '')), action)
         );
       }
-      let res;
       try {
         res = await response.json();
       } catch (parseErr) {
+        // Google 邊界偶發回 HTML 錯誤頁：讀取類用全新 POST 重試（拿新的 user_content_key）
+        if (!isWrite && attempt < maxRetries) {
+          attempt += 1;
+          await sleepMs(retryBaseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200));
+          continue;
+        }
         throw new Error(formatError(new Error('伺服器回應格式錯誤，請確認 GAS 部署是否正常。'), action));
+      }
+      break;
+      }
+      } finally {
+        if (progressTimer) clearInterval(progressTimer);
       }
       if (!res.success) {
         const errMsg = res.error || '未知錯誤';
