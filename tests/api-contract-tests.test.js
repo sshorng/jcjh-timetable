@@ -24,6 +24,7 @@ globalThis.atob = (value) => Buffer.from(value, 'base64').toString('binary');
 globalThis.fetch = async function (url, options) {
   calls.push({ url, options });
   const fixture = responses.shift() || { status: 200, body: { success: true } };
+  if (fixture.throw) throw new Error(fixture.throw);
   return {
     ok: fixture.status >= 200 && fixture.status < 300,
     status: fixture.status,
@@ -133,10 +134,15 @@ test('api contract tests（v1 移植，GAS 傳輸層）', async () => {
   responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
   responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
   responses.push({ status: 503, statusText: 'Unavailable', body: { success: false } });
-  // v1 以 FieldMap.formatGasError 恆等樁測試，期望原始訊息；v2 用真 FieldMap，
-  // 503 經過錯誤中文化（與 v1 生產環境行為一致），期望真實訊息。
-  // 重試耗盡（預設 2 次）後才拋錯。
-  await assert.rejects(client.fetchPendingOnly(), /無法連線至伺服器/);
+  // v1 以 FieldMap.formatGasError 恆等樁測試，期望原始訊息；v2 用真 FieldMap。
+  // 重試耗盡（預設 2 次）後拋錯，且保留狀態碼供回報診斷。
+  await assert.rejects(client.fetchPendingOnly(), /HTTP 503/);
+
+  // 斷線類重試耗盡：保留重試次數＋網路／後端忙碌提示
+  responses.push({ throw: 'Failed to fetch' });
+  responses.push({ throw: 'Failed to fetch' });
+  responses.push({ throw: 'Failed to fetch' });
+  await assert.rejects(client.fetchPendingOnly(), /仍無法連線/);
 
   responses.push({ status: 200, parseError: true });
   responses.push({ status: 200, body: { success: true, parsed: true } });

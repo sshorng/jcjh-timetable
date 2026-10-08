@@ -480,9 +480,13 @@ const GasApi = (() => {
       let response;
       var timeoutMs = Number(options.timeoutMs || ACTION_TIMEOUT_MS[action] || 45000);
       // 寫入重送可能重複落地：只對讀取類自動重試；寫入一律不重試，靠明確訊息請使用者先重新整理確認。
+      // 全量載入（getInitialData）單次成本高：預設只重試 1 次，避免慢後端被連打拖垮。
       var isWrite = !!WRITE_ACTIONS[action];
+      var READ_RETRY_DEFAULTS = { getInitialData: 1 };
+      var defaultRetries = isWrite ? 0
+        : (READ_RETRY_DEFAULTS[action] != null ? READ_RETRY_DEFAULTS[action] : 2);
       var maxRetries = options.retries != null ? Number(options.retries)
-        : (options.retry != null ? Number(options.retry) : (isWrite ? 0 : 2));
+        : (options.retry != null ? Number(options.retry) : defaultRetries);
       if (!(maxRetries >= 0)) maxRetries = isWrite ? 0 : 2;
       var retryBaseMs = Number(options.retryDelayMs || 600);
       if (!(retryBaseMs >= 0)) retryBaseMs = 600;
@@ -536,14 +540,14 @@ const GasApi = (() => {
           throw new Error(formatError(new Error('已取消舊請求'), action));
         }
         if (timedOut || isTransientNetworkMessage(netMsg)) {
-          lastTransientErr = new Error(
-            '連線逾時或中斷（可能 GAS 處理較久）。請稍候再試；若剛完成寫入，可按 ↻ 重新整理確認。'
-          );
           if (!isWrite && attempt < maxRetries) {
             attempt += 1;
             await sleepMs(retryBaseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200));
             continue;
           }
+          lastTransientErr = new Error(
+            '仍無法連線至伺服器（已重試 ' + attempt + ' 次）。請檢查網路後再試；若網路正常但持續失敗，可能是後端忙碌，請稍候再試。'
+          );
           throw new Error(formatError(lastTransientErr, action));
         }
         throw new Error(formatError(netErr, action));
@@ -564,6 +568,14 @@ const GasApi = (() => {
           lastTransientErr = new Error('網路連線失敗：HTTP ' + response.status + ' ' + (response.statusText || ''));
           await sleepMs(retryBaseMs * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 200));
           continue;
+        }
+        // 重試耗盡仍是瞬斷碼：保留狀態碼與重試次數供回報診斷（formatGasError 會加動作前綴）
+        if (!isWrite && httpTransient) {
+          throw new Error(
+            formatError(new Error(
+              '後端 HTTP ' + response.status + '（已重試 ' + attempt + ' 次仍失敗），請稍候再試；若持續發生請回報此代碼。'
+            ), action)
+          );
         }
         if (isWrite && httpTransient) {
           throw new Error(
