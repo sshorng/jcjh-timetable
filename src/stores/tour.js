@@ -6,7 +6,7 @@ import DomainActivityCover from '../domain/domain-activity-cover.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import FeeUtils from '../domain/fee-utils.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
-import { UiTour } from '../modules/ui-tour.js';
+import { ensureUiTourModule, tabModulesReady } from '../modules/tab-gates.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
 import { useInteractionStore } from './interaction.js';
@@ -108,11 +108,34 @@ export const useTourStore = defineStore('tour', () => {
       }
       return DomainActivityCover || null;
     };
+// 2.1e：UiTour 改閘門按需載入（導覽／示範動作才抓）；未載入前回 null（既有守衛語義）。
+let UiTour = null;
+let _tourModulesPromise = null;
+const ensureTourModule = () => {
+  if (!_tourModulesPromise) {
+    _tourModulesPromise = ensureUiTourModule().then((m) => { UiTour = m; })
+      .catch((e) => { _tourModulesPromise = null; throw e; });
+  }
+  return _tourModulesPromise;
+};
+// 2.1e內聯：自動導覽判定為純函式（登入流程同步調用），與 ui-tour.js 同邏輯。
+    const shouldAutoStartOnboarding = () => {
+      if (storeToRefs(useMutualStore()).classReadonlyMode.value) return false;
+      const suppressed = storeToRefs(useSubmitStore()).notificationsSuppressed.value;
+      const storageKey = suppressed ? 'jcjh_onboarding_paper_v1' : 'jcjh_onboarding_v2';
+      try {
+        return !localStorage.getItem(storageKey);
+      } catch (e) {
+        return true;
+      }
+    };
     let _tourApi = null;
 const getTourApi = () => {
+      // 讀 ready 使呼叫端在模組載入後自動重算（未載入照舊回 null）。
+      const _tourReady = tabModulesReady.value.tour;
       if (_tourApi) return _tourApi;
       if (!UiTour) {
-        console.error('UiTour 未載入');
+        if (_tourModulesPromise) console.error('UiTour 未載入');
         return null;
       }
       _tourApi = UiTour.create({
@@ -131,81 +154,95 @@ const getTourApi = () => {
       return _tourApi;
     };
 
-    const ensureOnboardingTour = (...args) => {
+    const ensureOnboardingTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.ensureOnboardingTour(...args) : undefined;
     };
-    const findDemoScheduleCell = (...args) => {
+    const findDemoScheduleCell = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.findDemoScheduleCell(...args) : undefined;
     };
-    const openMatchDemoForTour = (...args) => {
+    const openMatchDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.openMatchDemoForTour(...args) : undefined;
     };
-    const closeMatchDemoForTour = (...args) => {
+    const closeMatchDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.closeMatchDemoForTour(...args) : undefined;
     };
-    const openExchangeModeDemoForTour = (...args) => {
+    const openExchangeModeDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.openExchangeModeDemoForTour(...args) : undefined;
     };
-    const openCompareDemoForTour = (...args) => {
+    const openCompareDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.openCompareDemoForTour(...args) : undefined;
     };
-    const closeCompareDemoForTour = (...args) => {
+    const closeCompareDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.closeCompareDemoForTour(...args) : undefined;
     };
-    const openPaperPrintDemoForTour = (...args) => {
+    const openPaperPrintDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.openPaperPrintDemoForTour(...args) : undefined;
     };
-    const closePaperPrintDemoForTour = (...args) => {
+    const closePaperPrintDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.closePaperPrintDemoForTour(...args) : undefined;
     };
-    const openLineDemoForTour = (...args) => {
+    const openLineDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.openLineDemoForTour(...args) : undefined;
     };
-    const closeLineDemoForTour = (...args) => {
+    const closeLineDemoForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.closeLineDemoForTour(...args) : undefined;
     };
-    const clearTourDemoInvite = (...args) => {
+    const clearTourDemoInvite = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.clearTourDemoInvite(...args) : undefined;
     };
-    const showTourDemoInvite = (...args) => {
+    const showTourDemoInvite = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.showTourDemoInvite(...args) : undefined;
     };
-    const tourDemoInviteRespond = (...args) => {
+    const tourDemoInviteRespond = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.tourDemoInviteRespond(...args) : undefined;
     };
-    const goTimetableForTour = (...args) => {
+    const goTimetableForTour = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.goTimetableForTour(...args) : undefined;
     };
-    const tourCallbacks = (...args) => {
+    const tourCallbacks = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.tourCallbacks(...args) : undefined;
     };
-    const startOnboarding = (...args) => {
+    const startOnboarding = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.startOnboarding(...args) : undefined;
     };
-    const skipOnboarding = (...args) => {
+    const skipOnboarding = async (...args) => {
+      await ensureTourModule();
       const a = getTourApi();
       return a ? a.skipOnboarding(...args) : undefined;
-    };
-    const shouldAutoStartOnboarding = (...args) => {
-      const a = getTourApi();
-      return a ? a.shouldAutoStartOnboarding(...args) : undefined;
     };
     function initImmediateTour1() {
     watch(mutualSkipNotify, () => { useMutualStore().persistMutualPanelDraft(); });
@@ -213,5 +250,5 @@ const getTourApi = () => {
     function initImmediateTour2() {
     watch(mutualNote, () => { useMutualStore().persistMutualPanelDraft(); });
     }
-  return { tourDemoInvite, nextOnboardingStep, prevOnboardingStep, showOnboarding, onboardingStep, onboardingSteps, mySentRequests, myPendingRequests, adminPendingRequests, allPendingRequests, matchMode, activeCell, matchPreview, inputRequestDate, recommendedTeachers, recommendationLoading, trianglePickB, trianglePickC, triangleReason, triangleNote, triangleSubmitting, batchSelectMode, batchFlowMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote, batchAssignMode, batchActiveSlotKey, isMutualCover, QUOTA_DEDUCT_FEE, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, isQuotaDeductFee, PERIOD8_FEE, TIMETABLE_ONLY_FEE, isTimetableOnlyFee, MUTUAL_PANEL_LS_KEY, mutualAwayClasses, mutualLeadEmails, mutualSkipNotify, directApproveSkipNotify, mutualNote, mutualDrafts, mutualActivityStart, mutualActivityEnd, mutualActivityStartPeriod, mutualActivityEndPeriod, mutualActivityPeriodMode, mutualActivityPeriods, DAC, isMutualActivitySlotInRange, ensureDAC, getTourApi, ensureOnboardingTour, findDemoScheduleCell, openMatchDemoForTour, closeMatchDemoForTour, openExchangeModeDemoForTour, openCompareDemoForTour, closeCompareDemoForTour, openPaperPrintDemoForTour, closePaperPrintDemoForTour, openLineDemoForTour, closeLineDemoForTour, clearTourDemoInvite, showTourDemoInvite, tourDemoInviteRespond, goTimetableForTour, tourCallbacks, startOnboarding, skipOnboarding, shouldAutoStartOnboarding, initImmediateTour1, initImmediateTour2 };
+  return { tourDemoInvite, nextOnboardingStep, prevOnboardingStep, showOnboarding, onboardingStep, onboardingSteps, mySentRequests, myPendingRequests, adminPendingRequests, allPendingRequests, matchMode, activeCell, matchPreview, inputRequestDate, recommendedTeachers, recommendationLoading, trianglePickB, trianglePickC, triangleReason, triangleNote, triangleSubmitting, batchSelectMode, batchFlowMode, batchSlots, showBatchConfirmModal, batchSubTeacher, batchReason, batchSubFee, batchNote, batchAssignMode, batchActiveSlotKey, isMutualCover, QUOTA_DEDUCT_FEE, MUTUAL_COVER_FEE, ACTIVITY_PUBLIC_FEE, isQuotaDeductFee, PERIOD8_FEE, TIMETABLE_ONLY_FEE, isTimetableOnlyFee, MUTUAL_PANEL_LS_KEY, mutualAwayClasses, mutualLeadEmails, mutualSkipNotify, directApproveSkipNotify, mutualNote, mutualDrafts, mutualActivityStart, mutualActivityEnd, mutualActivityStartPeriod, mutualActivityEndPeriod, mutualActivityPeriodMode, mutualActivityPeriods, DAC, isMutualActivitySlotInRange, ensureDAC, getTourApi, ensureTourModule, ensureOnboardingTour, findDemoScheduleCell, openMatchDemoForTour, closeMatchDemoForTour, openExchangeModeDemoForTour, openCompareDemoForTour, closeCompareDemoForTour, openPaperPrintDemoForTour, closePaperPrintDemoForTour, openLineDemoForTour, closeLineDemoForTour, clearTourDemoInvite, showTourDemoInvite, tourDemoInviteRespond, goTimetableForTour, tourCallbacks, startOnboarding, skipOnboarding, shouldAutoStartOnboarding, initImmediateTour1, initImmediateTour2 };
 });

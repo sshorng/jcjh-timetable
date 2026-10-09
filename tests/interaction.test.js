@@ -25,6 +25,11 @@ test('interaction：切頁＋詳情 modal 全鏈無錯', async () => {
     // → pending（r2 待王老師簽核）
     await clickAndFlush(t.el, '[data-tour="nav-pending"]');
     expect(session.activeTab).toBe('pending');
+    // pending 列表來自按需載入的 history／approval 模組（首訪多等一拍）
+    for (let i = 0; i < 200 && !html().includes('陳老師'); i++) {
+      await nextTick();
+      await new Promise((r) => setTimeout(r, 100));
+    }
     expect(html()).toContain('陳老師');
     quiet();
 

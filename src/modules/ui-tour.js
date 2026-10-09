@@ -4,6 +4,7 @@ import { nextTick } from 'vue';
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
  */
 import DateUtils from '../domain/date-utils.js';
+import { notifyChunkLoadFailed } from './vendor-libs.js';
 
 /**
  * ui-tour.js — 新手導覽（示範操作／邀請／回放）（從 app.js 抽出，2A）
@@ -55,24 +56,22 @@ const UiTour = (() => {
     var closeMatchModal = deps.closeMatchModal;
     let _tourDemoCellCache = null; // 重用示範格，少重算／少重複 API
     let _onboardingLoadP = null;
-     const ONBOARDING_SCRIPT = 'onboarding-tour.js?v=20260831-combined3';
     const ONBOARDING_PAPER_STORAGE_KEY = 'jcjh_onboarding_paper_v1';
 
 const ensureOnboardingTour = () => {
-  if (window.OnboardingTour && typeof window.OnboardingTour.start === 'function') {
+  if (typeof window !== 'undefined' && window.OnboardingTour && typeof window.OnboardingTour.start === 'function') {
     return Promise.resolve(window.OnboardingTour);
   }
   if (_onboardingLoadP) return _onboardingLoadP;
-  _onboardingLoadP = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = ONBOARDING_SCRIPT;
-    s.async = true;
-    s.onload = () => resolve(window.OnboardingTour);
-    s.onerror = () => {
-      _onboardingLoadP = null;
-      reject(new Error('無法載入操作教學'));
-    };
-    document.head.appendChild(s);
+  // 2.1a：ESM 動態載入（取代已不存在的 onboarding-tour.js script 檔回退）。
+  _onboardingLoadP = import('./onboarding-tour.js').then((m) => {
+    const tour = m.OnboardingTour;
+    if (typeof window !== 'undefined') window.OnboardingTour = tour;
+    return tour;
+  }).catch((e) => {
+    _onboardingLoadP = null;
+    try { notifyChunkLoadFailed(); } catch (_) {}
+    throw e;
   });
   return _onboardingLoadP;
 };

@@ -2716,7 +2716,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, getCurrentInstance, onMounted } from 'vue';
+import { defineAsyncComponent, getCurrentInstance, onMounted, watch } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
@@ -2869,7 +2869,18 @@ mutualStore.initImmediateMutual11();
 tourStore.initImmediateTour1();
 tourStore.initImmediateTour2();
 sessionStore.initImmediateSession11();
+// 2.1c：媒合抽屜開啟即背景預載 match 模組（開啟點分散各靜態模組，此處單點涵蓋；列表經 ready 自動重算）。
+watch(showMatchModal, (open) => {
+  if (open) matchStore.ensureMatchModule().catch(() => {});
+});
 onMounted(() => {
+  // 2.1c追補：媒合抽屜為高頻路徑，掛載後背景預熱 match 模組（不擋首屏；抽屜開啟時多半已就緒）。
+  // （開啟時 watcher 仍會確保，預熱只是把載入提前到空閒時段。）
+  try {
+    const prewarm = () => { try { matchStore.ensureMatchModule().catch(() => {}); } catch (e) {} };
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') window.requestIdleCallback(prewarm, { timeout: 3000 });
+    else setTimeout(prewarm, 1500);
+  } catch (e) {}
   mutualStore.initMutual1();
   mutualStore.initMutual2();
   requestsStore.initRequests1();

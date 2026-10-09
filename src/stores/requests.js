@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import FieldMap from '../domain/field-map.js';
-import { UiApproval } from '../modules/ui-approval.js';
+import { ensureUiApprovalModule, tabModulesReady } from '../modules/tab-gates.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
 import { showConfirm, showToast } from '../ui/toast.js';
@@ -22,10 +22,8 @@ export const useRequestsStore = defineStore('requests', () => {
   const { getStatusText, isTriangleRequest } = UiListHelpers;
   const { formatLeaveClassSlot } = UiLineTemplate;
     let _approvalApi = null;
-    const selectedAdminPendingIds = computed(() => {
-      const a = getApprovalApi();
-      return a ? a.selectedAdminPendingIds.value : [];
-    });
+    // 2.1d：選取狀態由 store 持有（:checked render 路徑），模組改注入共用，免經 approvalApi。
+    const selectedAdminPendingIds = ref([]);
     const lastBatchPrintIds = computed(() => {
       const a = getApprovalApi();
       return a ? a.lastBatchPrintIds.value : [];
@@ -34,14 +32,66 @@ export const useRequestsStore = defineStore('requests', () => {
       const a = getApprovalApi();
       return a ? a.showBatchPrintPrompt.value : false;
     });
+// 2.1d：UiApproval 改閘門按需載入（pending／admin 頁籤及簽核動作才抓）；未載入前回 null（既有守衛語義）。
+let UiApproval = null;
+let _approvalModulesPromise = null;
+const ensureApprovalModule = () => {
+  if (!_approvalModulesPromise) {
+    _approvalModulesPromise = ensureUiApprovalModule().then((m) => { UiApproval = m; })
+      .catch((e) => { _approvalModulesPromise = null; throw e; });
+  }
+  return _approvalModulesPromise;
+};
+// 2.1d內聯：紙本／代申請判定為純函式（render＋boot 路徑多處同步調用），與 ui-approval.js 同邏輯。
+const isPaperFlowValue = (value) => {
+  if (value === true || value === 1) return true;
+  const normalized = String(value == null ? '' : value).trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === '是' || normalized === '紙本';
+};
+    const isProxySubmitRequest = (r) => {
+      if (!r) return false;
+      if (r.isProxySubmit === true) return true;
+      if (r.proxyByName) return true;
+      const note = String(r.note || '');
+      return note.indexOf('[行政代申請') >= 0;
+    };
+    const isPaperFlowRequest = (request) => {
+      if (!request) return false;
+      if (isPaperFlowValue(request.paperFlow)) return true;
+      const pendingPaperStatus = request.status === 'pending_admin' || request.status === 'pending_teacher';
+      const suppressed = storeToRefs(useSubmitStore()).notificationsSuppressed.value;
+      if (suppressed && pendingPaperStatus && !isProxySubmitRequest(request)) return true;
+      if (request.paperFlowSpecified === true) return false;
+      if (Object.prototype.hasOwnProperty.call(request, '紙本流程')) {
+        return isPaperFlowValue(request['紙本流程']);
+      }
+      return !!(suppressed && pendingPaperStatus && !isProxySubmitRequest(request));
+    };
+    const isAdminPendingSelected = (id) => {
+      try {
+        if (typeof document !== 'undefined') {
+          const el = document.querySelector('.admin-select-cb[data-req-id="' + String(id) + '"]');
+          if (el) return !!el.checked;
+        }
+      } catch (e) { /* ignore */ }
+      return selectedAdminPendingIds.value.some((selectedId) => String(selectedId) === String(id));
+    };
+    const isAdminBatchGroupSelected = (group) => {
+      const ids = (group && group.items || []).filter((row) => row && row.id != null).map((row) => String(row.id));
+      if (!ids.length) return false;
+      const selected = new Set((selectedAdminPendingIds.value || []).map((sid) => String(sid)));
+      return ids.every((sid) => selected.has(sid));
+    };
 const getApprovalApi = () => {
+      // 讀 ready 使呼叫端 computed 在模組載入後自動重算（未載入照舊回 null）。
+      const _approvalReady = tabModulesReady.value.approval;
       if (_approvalApi) return _approvalApi;
       if (!UiApproval) {
-        console.error('UiApproval 未載入');
+        if (_approvalModulesPromise) console.error('UiApproval 未載入');
         return null;
       }
       _approvalApi = UiApproval.create({
-        ref,
+        ref, selectedAdminPendingIds,
         callGasApi: useGasStore().callGasApi, callGasApiWithProgress: useSessionStore().callGasApiWithProgress, showToast, showConfirm, loading: storeToRefs(useSessionStore()).loading, loadingMessage: storeToRefs(useSessionStore()).loadingMessage,
         getStatusText, getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, isAdmin: storeToRefs(useSessionStore()).isAdmin, notificationsSuppressed: storeToRefs(useSubmitStore()).notificationsSuppressed,
         syncHistorySelectionFromDom: useBackofficeStore().syncHistorySelectionFromDom, substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords, requestsList: storeToRefs(useSessionStore()).requestsList,
@@ -66,79 +116,88 @@ const getApprovalApi = () => {
       return _approvalApi;
     };
 
-    const isAdminPendingSelected = (...args) => {
-      const a = getApprovalApi();
-      return a ? a.isAdminPendingSelected(...args) : false;
-    };
-    const toggleAdminPendingSelect = (...args) => {
+    const toggleAdminPendingSelect = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.toggleAdminPendingSelect(...args) : undefined;
     };
-    const toggleSelectAllAdminPending = (...args) => {
+    const toggleSelectAllAdminPending = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.toggleSelectAllAdminPending(...args) : undefined;
     };
-    const isAdminBatchGroupSelected = (...args) => {
-      const a = getApprovalApi();
-      return a ? a.isAdminBatchGroupSelected(...args) : false;
-    };
-    const toggleAdminBatchGroupSelection = (...args) => {
+    const toggleAdminBatchGroupSelection = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.toggleAdminBatchGroupSelection(...args) : undefined;
     };
-    const clearAdminPendingSelection = (...args) => {
+    const clearAdminPendingSelection = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.clearAdminPendingSelection(...args) : undefined;
     };
-    const respondToRequest = (...args) => {
+    const respondToRequest = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.respondToRequest(...args) : undefined;
     };
-    const respondToBatch = (...args) => {
+    const respondToBatch = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.respondToBatch(...args) : undefined;
     };
-    const adminApprove = (...args) => {
+    const adminApprove = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.adminApprove(...args) : undefined;
     };
-    const adminReject = (...args) => {
+    const adminReject = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.adminReject(...args) : undefined;
     };
-    const batchAdminApprove = (...args) => {
+    const batchAdminApprove = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.batchAdminApprove(...args) : undefined;
     };
-    const batchAdminReject = (...args) => {
+    const batchAdminReject = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.batchAdminReject(...args) : undefined;
     };
-    const printLastBatchNotices = (...args) => {
+    const printLastBatchNotices = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.printLastBatchNotices(...args) : undefined;
     };
-    const dismissBatchPrintPrompt = (...args) => {
+    const dismissBatchPrintPrompt = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.dismissBatchPrintPrompt(...args) : undefined;
     };
-    const cancelRequest = (...args) => {
+    const cancelRequest = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.cancelRequest(...args) : undefined;
     };
-    const deleteSubstitutionRecord = (...args) => {
+    const deleteSubstitutionRecord = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.deleteSubstitutionRecord(...args) : undefined;
     };
-    const sendSelectedBatchNotices = (...args) => {
+    const sendSelectedBatchNotices = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.sendSelectedBatchNotices(...args) : undefined;
     };
-    const startCombinedReturn = (...args) => {
+    const startCombinedReturn = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.startCombinedReturn(...args) : undefined;
     };
-    const executeEmptySlotAssign = (...args) => {
+    const executeEmptySlotAssign = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.executeEmptySlotAssign(...args) : undefined;
     };
@@ -154,23 +213,25 @@ const getApprovalApi = () => {
       const a = getApprovalApi();
       return a ? a.formatApproveBatchRiskSummary(...args) : '';
     };
+    // 模板形狀安全：未載入回空進度物件（.summary／.steps 照常用），載入後經 ready 自動重算。
     const getRequestProgressSteps = (...args) => {
       const a = getApprovalApi();
-      return a ? a.getRequestProgressSteps(...args) : [];
+      return a ? a.getRequestProgressSteps(...args) : { steps: [], summary: '', failed: false, overdue: false, overdueHint: '' };
     };
-    const isPaperFlowRequest = (...args) => {
-      const a = getApprovalApi();
-      return a ? a.isPaperFlowRequest(...args) : false;
-    };
-    const isProxySubmitRequest = (...args) => {
-      const a = getApprovalApi();
-      return a ? a.isProxySubmitRequest(...args) : false;
-    };
-    const submitTriangleRequest = (...args) => {
+    const submitTriangleRequest = async (...args) => {
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.submitTriangleRequest(...args) : undefined;
     };
-    const checkUrlCallback = (...args) => {
+    const checkUrlCallback = async (...args) => {
+      // 免載入短路：無簽核回呼也無班級深連結時不抓模組（每次登入都跑此函式）。
+      try {
+        const q = String((typeof window !== 'undefined' && window.location && window.location.search) || '');
+        const hasAction = /(^|[?&])action=respond/.test(q);
+        const hasClass = /(^|[?&])(class|cls|view)=/.test(q);
+        if (!hasAction && !hasClass) return undefined;
+      } catch (e) { /* 保守起見繼續載入 */ }
+      await ensureApprovalModule();
       const a = getApprovalApi();
       return a ? a.checkUrlCallback(...args) : undefined;
     };
@@ -178,5 +239,5 @@ const getApprovalApi = () => {
       useInteractionStore().bindFlagModal(storeToRefs(useBackofficeStore()).showClassAwayModal, () => { storeToRefs(useBackofficeStore()).showClassAwayModal.value = false; }, '空堂事件');
       useInteractionStore().bindFlagModal(showBatchPrintPrompt, () => { dismissBatchPrintPrompt(); }, '批次列印');
     }
-  return { selectedAdminPendingIds, lastBatchPrintIds, showBatchPrintPrompt, getApprovalApi, isAdminPendingSelected, toggleAdminPendingSelect, toggleSelectAllAdminPending, isAdminBatchGroupSelected, toggleAdminBatchGroupSelection, clearAdminPendingSelection, respondToRequest, respondToBatch, adminApprove, adminReject, batchAdminApprove, batchAdminReject, printLastBatchNotices, dismissBatchPrintPrompt, cancelRequest, deleteSubstitutionRecord, sendSelectedBatchNotices, startCombinedReturn, executeEmptySlotAssign, formatRequestSummary, getApproveRiskFlags, formatApproveBatchRiskSummary, getRequestProgressSteps, isPaperFlowRequest, isProxySubmitRequest, submitTriangleRequest, checkUrlCallback, initRequests1 };
+  return { selectedAdminPendingIds, lastBatchPrintIds, showBatchPrintPrompt, getApprovalApi, ensureApprovalModule, isAdminPendingSelected, toggleAdminPendingSelect, toggleSelectAllAdminPending, isAdminBatchGroupSelected, toggleAdminBatchGroupSelection, clearAdminPendingSelection, respondToRequest, respondToBatch, adminApprove, adminReject, batchAdminApprove, batchAdminReject, printLastBatchNotices, dismissBatchPrintPrompt, cancelRequest, deleteSubstitutionRecord, sendSelectedBatchNotices, startCombinedReturn, executeEmptySlotAssign, formatRequestSummary, getApproveRiskFlags, formatApproveBatchRiskSummary, getRequestProgressSteps, isPaperFlowRequest, isProxySubmitRequest, submitTriangleRequest, checkUrlCallback, initRequests1 };
 });

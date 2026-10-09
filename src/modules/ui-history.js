@@ -707,7 +707,7 @@ const loadHistoryMonth = async (monthStr, opts) => {
       semesterId: currentSemester.value,
       month: ym
     });
-    const n = mergeRequestsFromServer((res && res.requests) || []);
+    const n = await mergeRequestsFromServer((res && res.requests) || []);
     if (historyLoadedMonths.value.indexOf(ym) < 0) {
       historyLoadedMonths.value = historyLoadedMonths.value.concat([ym]);
     }

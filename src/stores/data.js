@@ -7,7 +7,7 @@ import { UiData } from '../modules/ui-data.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
 import { UiSubmitHelpers } from '../modules/ui-request.js';
 import { UiStyle } from '../modules/ui-style.js';
-import { UiSync } from '../modules/ui-sync.js';
+import { ensureUiSyncModule } from '../modules/tab-gates.js';
 import { ensureAccounting } from '../modules/export-gates.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
@@ -18,6 +18,7 @@ import { useInteractionStore } from './interaction.js';
 import { useMatchStore } from './match.js';
 import { useMutualStore } from './mutual.js';
 import { useOutputStore } from './output.js';
+import { useRequestsStore } from './requests.js';
 import { useSessionStore } from './session.js';
 import { useSubmitStore } from './submit.js';
 import { useTimetableStore } from './timetable.js';
@@ -497,10 +498,20 @@ const getDataApi = () => {
       return _dataApi;
     };
 
+// 2.1f：UiSync 改閘門按需載入（背景同步動作才抓）；呼叫端皆已 await，轉 async 安全。
+let UiSync = null;
+let _syncModulesPromise = null;
+const ensureSyncModule = () => {
+  if (!_syncModulesPromise) {
+    _syncModulesPromise = ensureUiSyncModule().then((m) => { UiSync = m; })
+      .catch((e) => { _syncModulesPromise = null; throw e; });
+  }
+  return _syncModulesPromise;
+};
 const getSyncApi = () => {
       if (_syncApi) return _syncApi;
       if (!UiSync) {
-        console.error('UiSync 未載入');
+        if (_syncModulesPromise) console.error('UiSync 未載入');
         return null;
       }
       _syncApi = UiSync.create({
@@ -515,19 +526,23 @@ const getSyncApi = () => {
       return _syncApi;
     };
 
-    const mergeRequestsFromServer = (...args) => {
+    const mergeRequestsFromServer = async (...args) => {
+      await ensureSyncModule();
       const a = getSyncApi();
       return a ? a.mergeRequestsFromServer(...args) : undefined;
     };
-    const softSyncPendingOnly = (...args) => {
+    const softSyncPendingOnly = async (...args) => {
+      await ensureSyncModule();
       const a = getSyncApi();
       return a ? a.softSyncPendingOnly(...args) : undefined;
     };
-    const softSyncRequestsDelta = (...args) => {
+    const softSyncRequestsDelta = async (...args) => {
+      await ensureSyncModule();
       const a = getSyncApi();
       return a ? a.softSyncRequestsDelta(...args) : undefined;
     };
-    const softSyncRequestsOnly = (...args) => {
+    const softSyncRequestsOnly = async (...args) => {
+      await ensureSyncModule();
       const a = getSyncApi();
       return a ? a.softSyncRequestsOnly(...args) : undefined;
     };
@@ -657,8 +672,19 @@ const getSyncApi = () => {
       () => {
         monthlyReportRevision += 1;
         // 2.0b：進管理頁籤即背景預載列印／匯出／報表模組（教師頁籤不觸發）。
-        if (storeToRefs(useSessionStore()).activeTab.value === 'admin') {
+        // 2.1c／d：進 records 預載 history＋homeroom；進 pending 再加 approval；admin 全加。
+        const tabNow = storeToRefs(useSessionStore()).activeTab.value;
+        if (tabNow === 'admin') {
           useOutputStore().ensureOutputModules().catch(() => {});
+          useRequestsStore().ensureApprovalModule().catch(() => {});
+          useHomeroomStore().ensureHomeroomModule().catch(() => {});
+        } else if (tabNow === 'pending') {
+          useHistoryStore().ensureHistoryModule().catch(() => {});
+          useHomeroomStore().ensureHomeroomModule().catch(() => {});
+          useRequestsStore().ensureApprovalModule().catch(() => {});
+        } else if (tabNow === 'records') {
+          useHistoryStore().ensureHistoryModule().catch(() => {});
+          useHomeroomStore().ensureHomeroomModule().catch(() => {});
         }
         if (storeToRefs(useSessionStore()).activeTab.value === 'admin' && storeToRefs(useSessionStore()).adminSubTab.value === 'billing') {
           useOutputStore().scheduleMonthlyReportCalculation();
@@ -685,5 +711,5 @@ const getSyncApi = () => {
     }
     function initData1() { useInteractionStore().bindFlagModal(showEmptySlotModal, () => { showEmptySlotModal.value = false; }, '空堂排班'); }
     const nextDataLoadSeq = () => { _dataLoadSeq += 1; return _dataLoadSeq; };
-  return { requestWindowInfo, historyFullLoaded, historyLoadingFull, historyLoadedMonths, historyMonthLoading, bumpRequestsWatermarkFromRows, watermarkAgeMs, ensureHistoryMonthLoaded, showHistoryEditModal, historyEditForm, pendingPage, pendingPageSize, isScheduleEditMode, REPORT_PERIOD_STORAGE_KEY, isValidReportPeriod, readStoredReportPeriod, todayForReport, reportMonth, accountingPeriodMonth, monthEndDate, defaultReportPeriod, reportStartDate, reportEndDate, accountingPeriod, reportWeeksCount, monthlyReportData, monthlyReportLoading, monthlyReportRevision, monthlyReportKey, monthlyReportTotals, accountingExportLoading, period8Ready, period8Loading, period8ExportLoading, directApproveMode, period8RosterData, period8RosterRows, period8CellsFor, period8StatusLabel, classScheduleIndex, getPeriodLabel, isLunchPeriod, getPeriodClass, formatClassName, getBatchCompareSlots, batchCompareWeeks, batchCompareWeekIndex, batchExchangePreviewBatchId, batchCompareWeekTotal, batchCompareWeekDates, batchCompareWeekSlotCount, shiftBatchCompareWeek, compareDisplayDatesA, compareDisplayDatesB, setCompareWeekSelection, isCrossWeekExchange, getLeaveTimePresetRange, updatePendingLeaveTime, proxyTargetName, filteredProxyTeachers, proxyGrantCandidateTeachers, proxyGrantedTeachers, isProxySubmitEmailGranted, userRoleText, clearProxyTarget, clearAllProxySubmitEmails, setProxySubmitEnabled, subjectsList, filteredTeachers, changeWeek, getPeriodTimeSpan, getWeekDayText, formatDateMMDD, formatMoney, getTodayString, teachersByEmail, lookupTeacher, getTeacherNameByEmail, getTeacherSubjectByEmail, teacherTimetableHours, getTeacherIdentityTooltip, normalizeSubjectColorName, getSubjectStyle, getClassBadgeStyle, devTeacherQuery, filteredDevTeachers, isAdminDirectRequest, effectiveUserEmail, sheetRequestToFront, optimisticUpsertRequest, SOFT_REFRESH_MIN_GAP_MS, dataUpdatedAt, dataRefreshing, softSyncing, dataUpdatedLabel, selectClassForView, openAddSemesterModal, openEditSemesterModal, resolveExchangeTargetCell, cellIsRestricted, isLeaveClassRestricted, isExchangeClassRestricted, formatExchangeClassSlot, formatQuickTodoTitle, showEmptySlotModal, emptySlotForm, getDataApi, getSyncApi, mergeRequestsFromServer, softSyncPendingOnly, softSyncRequestsDelta, softSyncRequestsOnly, changeMatchMode, getTeacherTimetableHours, getRealTeacherName, getTriangleGroupRequests, isMySentRequest, applyInitialPayload, recomputeRequestBuckets, optimisticPatchRequestStatuses, optimisticPatchRequestStatus, optimisticPatchTriangleGroup, optimisticRemoveRequest, markDataUpdated, manualRefreshData, softRefreshInBackground, resolveUserRoleFromTeachers, loadSemesters, applyClassPayload, preflightGoogleLogin, loadPublicClassData, loadWeeklyData, saveClientSettings, saveSemester, deleteSemester, setDefaultSemester, initImmediateData1, initImmediateData2, initImmediateData3, initData1, nextDataLoadSeq };
+  return { requestWindowInfo, historyFullLoaded, historyLoadingFull, historyLoadedMonths, historyMonthLoading, bumpRequestsWatermarkFromRows, watermarkAgeMs, ensureHistoryMonthLoaded, showHistoryEditModal, historyEditForm, pendingPage, pendingPageSize, isScheduleEditMode, REPORT_PERIOD_STORAGE_KEY, isValidReportPeriod, readStoredReportPeriod, todayForReport, reportMonth, accountingPeriodMonth, monthEndDate, defaultReportPeriod, reportStartDate, reportEndDate, accountingPeriod, reportWeeksCount, monthlyReportData, monthlyReportLoading, monthlyReportRevision, monthlyReportKey, monthlyReportTotals, accountingExportLoading, period8Ready, period8Loading, period8ExportLoading, directApproveMode, period8RosterData, period8RosterRows, period8CellsFor, period8StatusLabel, classScheduleIndex, getPeriodLabel, isLunchPeriod, getPeriodClass, formatClassName, getBatchCompareSlots, batchCompareWeeks, batchCompareWeekIndex, batchExchangePreviewBatchId, batchCompareWeekTotal, batchCompareWeekDates, batchCompareWeekSlotCount, shiftBatchCompareWeek, compareDisplayDatesA, compareDisplayDatesB, setCompareWeekSelection, isCrossWeekExchange, getLeaveTimePresetRange, updatePendingLeaveTime, proxyTargetName, filteredProxyTeachers, proxyGrantCandidateTeachers, proxyGrantedTeachers, isProxySubmitEmailGranted, userRoleText, clearProxyTarget, clearAllProxySubmitEmails, setProxySubmitEnabled, subjectsList, filteredTeachers, changeWeek, getPeriodTimeSpan, getWeekDayText, formatDateMMDD, formatMoney, getTodayString, teachersByEmail, lookupTeacher, getTeacherNameByEmail, getTeacherSubjectByEmail, teacherTimetableHours, getTeacherIdentityTooltip, normalizeSubjectColorName, getSubjectStyle, getClassBadgeStyle, devTeacherQuery, filteredDevTeachers, isAdminDirectRequest, effectiveUserEmail, sheetRequestToFront, optimisticUpsertRequest, SOFT_REFRESH_MIN_GAP_MS, dataUpdatedAt, dataRefreshing, softSyncing, dataUpdatedLabel, selectClassForView, openAddSemesterModal, openEditSemesterModal, resolveExchangeTargetCell, cellIsRestricted, isLeaveClassRestricted, isExchangeClassRestricted, formatExchangeClassSlot, formatQuickTodoTitle, showEmptySlotModal, emptySlotForm, getDataApi, getSyncApi, ensureSyncModule, mergeRequestsFromServer, softSyncPendingOnly, softSyncRequestsDelta, softSyncRequestsOnly, changeMatchMode, getTeacherTimetableHours, getRealTeacherName, getTriangleGroupRequests, isMySentRequest, applyInitialPayload, recomputeRequestBuckets, optimisticPatchRequestStatuses, optimisticPatchRequestStatus, optimisticPatchTriangleGroup, optimisticRemoveRequest, markDataUpdated, manualRefreshData, softRefreshInBackground, resolveUserRoleFromTeachers, loadSemesters, applyClassPayload, preflightGoogleLogin, loadPublicClassData, loadWeeklyData, saveClientSettings, saveSemester, deleteSemester, setDefaultSemester, initImmediateData1, initImmediateData2, initImmediateData3, initData1, nextDataLoadSeq };
 });

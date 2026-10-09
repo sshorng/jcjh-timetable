@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
 import FieldMap from '../domain/field-map.js';
-import { UiCalendar } from '../modules/ui-calendar.js';
+import { ensureUiCalendarModule } from '../modules/tab-gates.js';
 import { UiClassView } from '../modules/ui-classview.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
@@ -275,10 +275,20 @@ export const useTimetableStore = defineStore('timetable', () => {
     let _classViewApi = null;
     let _schoolSwapApi = null;
     let _scheduleApi = null;
+// 2.1b：UiCalendar 改閘門按需載入（加入日曆動作才抓）；未載入前回 null（既有守衛語義）。
+let UiCalendar = null;
+let _calendarModulesPromise = null;
+const ensureCalendarModule = () => {
+  if (!_calendarModulesPromise) {
+    _calendarModulesPromise = ensureUiCalendarModule().then((m) => { UiCalendar = m; })
+      .catch((e) => { _calendarModulesPromise = null; throw e; });
+  }
+  return _calendarModulesPromise;
+};
 const getCalendarApi = () => {
       if (_calendarApi) return _calendarApi;
       if (!UiCalendar) {
-        console.error('UiCalendar 未載入');
+        if (_calendarModulesPromise) console.error('UiCalendar 未載入');
         return null;
       }
       _calendarApi = UiCalendar.create({
@@ -405,19 +415,23 @@ const getScheduleApi = () => {
       const a = getSchoolSwapApi();
       return a ? a.buildClassSchoolSwapChanges(...args) : undefined;
     };
-    const getCalendarDetails = (...args) => {
+    const getCalendarDetails = async (...args) => {
+      await ensureCalendarModule();
       const a = getCalendarApi();
       return a ? a.getCalendarDetails(...args) : null;
     };
-    const addToGoogleCalendar = (...args) => {
+    const addToGoogleCalendar = async (...args) => {
+      await ensureCalendarModule();
       const a = getCalendarApi();
       return a ? a.addToGoogleCalendar(...args) : undefined;
     };
-    const downloadIcsCalendar = (...args) => {
+    const downloadIcsCalendar = async (...args) => {
+      await ensureCalendarModule();
       const a = getCalendarApi();
       return a ? a.downloadIcsCalendar(...args) : undefined;
     };
-    const addEventToCalendar = (...args) => {
+    const addEventToCalendar = async (...args) => {
+      await ensureCalendarModule();
       const a = getCalendarApi();
       return a ? a.addEventToCalendar(...args) : undefined;
     };
@@ -625,5 +639,5 @@ const getScheduleApi = () => {
     });
     }
 
-  return { parseScheduleClasses, timetablePeriods, formatPeriodText, isCombinedClass, currentWeekDates, classUsesPublicData, classScheduleRows, classSubstitutionRows, displayTimetableTeachers, TT_PAGE_SIZE_DEFAULT, ttPageSize, ttPage, ttTotalPages, visibleTimetableTeachers, ttNeedPager, changeTtPage, pendingCount, myInviteCount, adminTodoCount, quickTodoSentOpen, hasQuickTodo, allTeachersList, teachersListDetails, TEACHERS_PAGE_SIZE_DEFAULT, teachersPageSize, teachersPage, teachersTotalPages, teachersNeedPager, pagedTeachersListDetails, changeTeachersPage, accountingPlanOptions, getExpensePlanSummary, isExpensePlanSlotConfig, pendingHomeroomRecords, getHomeroomCoverCandidates, filteredManualCoverTeachers, getTodayYmdStr, homeroomTeachersList, showManualHomeroomModal, homeroomStatusFilter, manualHomeroomForm, currentMonthHomeroomRecords, currentMonthHomeroomFeeTotal, currentMonthHomeroomAssignedCount, currentMonthHomeroomPendingCount, exchangeTeachersList, myTeacherProfile, isRequestValid, filteredHistoryRecords, dateFilteredHistoryRecords, batchGroupExpanded, getBatchGroupStateKey, isBatchGroupExpanded, toggleBatchGroup, historyBatchGroups, historyTotalPages, paginatedHistoryRecords, pendingMyPendingPage, pendingMySentPage, pendingAdminPage, pendingSearchQuery, filteredMyPendingRequests, filteredMySentRequests, filteredAdminPendingRequests, paginatedMyPending, sentBatchGroups, adminPendingBatchGroups, paginatedMySent, paginatedAdminPending, pendingMyPendingTotal, pendingMySentTotal, pendingAdminTotal, recommendedExchangeList, isPeriod8FeeLocked, isSubFeeLockedToSelf, quotaDeductPreview, quotaDeductInsufficient, getCalendarApi, getTimetableApi, getClassViewApi, getSchoolSwapApi, getScheduleApi, resolveCellFromBaseAndSubs, convertRequestsToSubstitutions, getClassAwayEventName, openAddSchoolSwapModal, openEditSchoolSwapModal, saveSchoolSwap, deleteSchoolSwap, buildClassSchoolSwapChanges, getCalendarDetails, addToGoogleCalendar, downloadIcsCalendar, addEventToCalendar, timetableApiOrNull, resolveDetailRequest, copyLineMessageForRequest, getExchangeWeekDates, fetchRecommendations, getApprovedScheduleForDate, getScheduleForDate, clearScheduleCache, findCombinedReturnCandidates, triangleTeacherKey, triangleSlotKey, triangleCellIsUsable, triangleSourceParticipant, triangleCandidateParticipant, triangleCandidateIsRestricted, buildTriangleOccupiedByTeacher, triangleCandidateSearchText, createTriangleScheduleGetter, validateTriangleSelection, triangleCandidateCanMoveTo, triangleCandidateSort, triangleCandidatePriority, triangleCandidateBPriority, selectTriangleCandidateB, selectTriangleCandidateC, loadMoreTriangleCandidates, openTriangleTimetablePreview, resetTriangleDraft, isAwayClassCell, getClassCellClassForDate, getClassCellClassForClass, mapPublicClassRequests, cellFromGrid, findPriorDutyAtSlot, normalizeRechangeRequestId, isEffectiveChangedDuty, hasOtherChangedDutyAtSlot, resolveHistoryLeaveClassSubject, resolveRestrictionForHistoryRec, isHistoryLeaveRechanged, isHistoryExchangeRechanged, isRequestLeaveRechanged, isRequestExchangeRechanged, formatHistoryLeaveSlot, formatHistoryExchangeSlot, findBaseScheduleSlot, isHistoryLeaveRestricted, isHistoryExchangeRestricted, initImmediateTimetable1, initImmediateTimetable2 };
+  return { parseScheduleClasses, timetablePeriods, formatPeriodText, isCombinedClass, currentWeekDates, classUsesPublicData, classScheduleRows, classSubstitutionRows, displayTimetableTeachers, TT_PAGE_SIZE_DEFAULT, ttPageSize, ttPage, ttTotalPages, visibleTimetableTeachers, ttNeedPager, changeTtPage, pendingCount, myInviteCount, adminTodoCount, quickTodoSentOpen, hasQuickTodo, allTeachersList, teachersListDetails, TEACHERS_PAGE_SIZE_DEFAULT, teachersPageSize, teachersPage, teachersTotalPages, teachersNeedPager, pagedTeachersListDetails, changeTeachersPage, accountingPlanOptions, getExpensePlanSummary, isExpensePlanSlotConfig, pendingHomeroomRecords, getHomeroomCoverCandidates, filteredManualCoverTeachers, getTodayYmdStr, homeroomTeachersList, showManualHomeroomModal, homeroomStatusFilter, manualHomeroomForm, currentMonthHomeroomRecords, currentMonthHomeroomFeeTotal, currentMonthHomeroomAssignedCount, currentMonthHomeroomPendingCount, exchangeTeachersList, myTeacherProfile, isRequestValid, filteredHistoryRecords, dateFilteredHistoryRecords, batchGroupExpanded, getBatchGroupStateKey, isBatchGroupExpanded, toggleBatchGroup, historyBatchGroups, historyTotalPages, paginatedHistoryRecords, pendingMyPendingPage, pendingMySentPage, pendingAdminPage, pendingSearchQuery, filteredMyPendingRequests, filteredMySentRequests, filteredAdminPendingRequests, paginatedMyPending, sentBatchGroups, adminPendingBatchGroups, paginatedMySent, paginatedAdminPending, pendingMyPendingTotal, pendingMySentTotal, pendingAdminTotal, recommendedExchangeList, isPeriod8FeeLocked, isSubFeeLockedToSelf, quotaDeductPreview, quotaDeductInsufficient, ensureCalendarModule, getCalendarApi, getTimetableApi, getClassViewApi, getSchoolSwapApi, getScheduleApi, resolveCellFromBaseAndSubs, convertRequestsToSubstitutions, getClassAwayEventName, openAddSchoolSwapModal, openEditSchoolSwapModal, saveSchoolSwap, deleteSchoolSwap, buildClassSchoolSwapChanges, getCalendarDetails, addToGoogleCalendar, downloadIcsCalendar, addEventToCalendar, timetableApiOrNull, resolveDetailRequest, copyLineMessageForRequest, getExchangeWeekDates, fetchRecommendations, getApprovedScheduleForDate, getScheduleForDate, clearScheduleCache, findCombinedReturnCandidates, triangleTeacherKey, triangleSlotKey, triangleCellIsUsable, triangleSourceParticipant, triangleCandidateParticipant, triangleCandidateIsRestricted, buildTriangleOccupiedByTeacher, triangleCandidateSearchText, createTriangleScheduleGetter, validateTriangleSelection, triangleCandidateCanMoveTo, triangleCandidateSort, triangleCandidatePriority, triangleCandidateBPriority, selectTriangleCandidateB, selectTriangleCandidateC, loadMoreTriangleCandidates, openTriangleTimetablePreview, resetTriangleDraft, isAwayClassCell, getClassCellClassForDate, getClassCellClassForClass, mapPublicClassRequests, cellFromGrid, findPriorDutyAtSlot, normalizeRechangeRequestId, isEffectiveChangedDuty, hasOtherChangedDutyAtSlot, resolveHistoryLeaveClassSubject, resolveRestrictionForHistoryRec, isHistoryLeaveRechanged, isHistoryExchangeRechanged, isRequestLeaveRechanged, isRequestExchangeRechanged, formatHistoryLeaveSlot, formatHistoryExchangeSlot, findBaseScheduleSlot, isHistoryLeaveRestricted, isHistoryExchangeRestricted, initImmediateTimetable1, initImmediateTimetable2 };
 });

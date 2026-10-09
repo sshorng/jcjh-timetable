@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
-import { UiMatch } from '../modules/ui-match.js';
+import { ensureUiMatchModule, tabModulesReady } from '../modules/tab-gates.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
 import { useHistoryStore } from './history.js';
@@ -65,11 +65,23 @@ export const useMatchStore = defineStore('match', () => {
       const a = useSubmitStore().getSubmitApi();
       return a ? a.hasSubTeacherConflict.value : false;
     });
+// 2.1c：UiMatch 改閘門按需載入（媒合抽屜開啟才抓）；未載入前回 null（既有守衛語義）。
+let UiMatch = null;
+let _matchModulesPromise = null;
+const ensureMatchModule = () => {
+  if (!_matchModulesPromise) {
+    _matchModulesPromise = ensureUiMatchModule().then((m) => { UiMatch = m; })
+      .catch((e) => { _matchModulesPromise = null; throw e; });
+  }
+  return _matchModulesPromise;
+};
     let _matchApi = null;
 const getMatchApi = () => {
+      // 2.1c：讀 ready 使呼叫端 computed 在模組載入後自動重算（未載入照舊回 null）。
+      const _matchReady = tabModulesReady.value.match;
       if (_matchApi) return _matchApi;
       if (!UiMatch) {
-        console.error('UiMatch 未載入');
+        if (_matchModulesPromise) console.error('UiMatch 未載入');
         return null;
       }
       _matchApi = UiMatch.create({
@@ -85,61 +97,94 @@ const getMatchApi = () => {
       return _matchApi;
     };
 
-    const setBatchExchangePreviewSlot = (...args) => {
+    const setBatchExchangePreviewSlot = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.setBatchExchangePreviewSlot(...args) : undefined;
     };
-    const quotaTeacherNameOf = (...args) => {
-      const a = getMatchApi();
-      return a ? a.quotaTeacherNameOf(...args) : undefined;
+    // 2.1c內聯：純函式（查教師名），免經 matchApi，模組未載也正確（與 ui-match.js 同邏輯）。
+    const quotaTeacherNameOf = (email) => {
+      const em = String(email || '').toLowerCase().trim();
+      if (!em) return '';
+      try {
+        const lookupTeacher = useDataStore().lookupTeacher;
+        const getTeacherNameByEmail = useDataStore().getTeacherNameByEmail;
+        const t = (typeof lookupTeacher === 'function' ? lookupTeacher(em) : null);
+        const nm = (t && (t.teacherName || t.name)) || (typeof getTeacherNameByEmail === 'function' ? getTeacherNameByEmail(em) : '') || '';
+        return String(nm || '').trim();
+      } catch (e) { return ''; }
     };
-    const warmQuotaPackCache = (...args) => {
+    const warmQuotaPackCache = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.warmQuotaPackCache(...args) : undefined;
     };
-    const fetchQuotaPackPreview = (...args) => {
+    const fetchQuotaPackPreview = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.fetchQuotaPackPreview(...args) : undefined;
     };
-    const doFetchQuotaPackPreview = (...args) => {
+    const doFetchQuotaPackPreview = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.doFetchQuotaPackPreview(...args) : undefined;
     };
-    const resetQuotaPackOverride = (...args) => {
+    const resetQuotaPackOverride = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.resetQuotaPackOverride(...args) : undefined;
     };
-    const loadMoreMatches = (...args) => {
+    const loadMoreMatches = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.loadMoreMatches(...args) : undefined;
     };
-    const bindMatchNativeSelect = (...args) => {
+    const bindMatchNativeSelect = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.bindMatchNativeSelect(...args) : undefined;
     };
-    const unbindMatchNativeSelect = (...args) => {
+    const unbindMatchNativeSelect = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.unbindMatchNativeSelect(...args) : undefined;
     };
-    const selectMatchPreviewSub = (...args) => {
+    const selectMatchPreviewSub = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a && a.selectMatchPreviewSub ? a.selectMatchPreviewSub(...args) : undefined;
     };
-    const selectMatchPreviewExchange = (...args) => {
+    const selectMatchPreviewExchange = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a && a.selectMatchPreviewExchange ? a.selectMatchPreviewExchange(...args) : undefined;
     };
-    const clearMatchPreview = (...args) => {
+    const clearMatchPreview = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.clearMatchPreview(...args) : undefined;
     };
-    const closeMatchModal = (...args) => {
+    const closeMatchModal = async (...args) => {
+      await ensureMatchModule();
       const a = getMatchApi();
       return a ? a.closeMatchModal(...args) : undefined;
     };
-    const getMatchSlotDateMMDD = (...args) => {
-      const a = getMatchApi();
-      return a ? a.getMatchSlotDateMMDD(...args) : '';
+    // 2.1c內聯：純函式（週次日期格式），免經 matchApi（與 ui-match.js 同邏輯；抽屜模板 render 路徑）。
+    const getMatchSlotDateMMDD = (dayOfWeek) => {
+      if (!dayOfWeek) return '';
+      const dates = useTimetableStore().getExchangeWeekDates();
+      if (dates && dates[dayOfWeek - 1]) {
+        const baseStr = dates[dayOfWeek - 1];
+        const offset = parseInt(storeToRefs(useMutualStore()).exchangeWeekOffset.value, 10) || 0;
+        if (offset === 0) return DateUtils.formatDateMMDD(baseStr);
+        const d = new Date(String(baseStr).replace(/-/g, '/'));
+        if (!isNaN(d.getTime())) {
+          d.setDate(d.getDate() + offset * 7);
+          return DateUtils.formatDateMMDD(DateUtils.toLocalDateStr(d));
+        }
+        return DateUtils.formatDateMMDD(baseStr);
+      }
+      return '';
     };
     function initImmediateMatch1() {
     watch(storeToRefs(useMutualStore()).pendingRequestData, (pending) => {
@@ -162,5 +207,5 @@ const getMatchApi = () => {
       if (pending && pending.isBatch) storeToRefs(useDataStore()).batchCompareWeekIndex.value = 0;
     });
     }
-  return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
+  return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
 });

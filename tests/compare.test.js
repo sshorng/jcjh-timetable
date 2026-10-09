@@ -72,7 +72,7 @@ test('compare：媒合選人對照後送出', async () => {
 
     // 2. 點候選人「模擬」進對照 modal
     let compared = false;
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       await nextTick();
       await new Promise((r) => setTimeout(r, 100));
       const simBtns = [...t.el.querySelectorAll('.match-drawer button')].filter((b) => b.textContent.trim() === '模擬');

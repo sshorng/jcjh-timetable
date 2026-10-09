@@ -62,15 +62,14 @@ test('match：空堂格媒合抽屜＋推薦渲染', async () => {
       if (session.showMatchModal === true) { opened = true; break; }
     }
     expect(opened, '媒合抽屜未開').toBe(true);
-    // 等推薦寫入
+    // 等推薦寫入＋列表渲染（match 模組為開啟後按需載入，多等一拍）
     let hasRec = false;
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 200; i++) {
       await nextTick();
       await new Promise((r) => setTimeout(r, 100));
-      if (html().includes('match-drawer') && tour.recommendedTeachers.length > 0) { hasRec = true; break; }
+      if (html().includes('match-drawer') && tour.recommendedTeachers.length > 0 && html().includes('李老師')) { hasRec = true; break; }
     }
     expect(hasRec, '推薦名單未渲染').toBe(true);
-    expect(html()).toContain('李老師');
     quiet();
 
     // 關抽屜

@@ -144,7 +144,7 @@ export const useOutputStore = defineStore('output', () => {
 const getExportApi = () => {
       if (_exportApi) return _exportApi;
       if (!UiExport) {
-        console.error('UiExport 未載入');
+        if (_outputModulesPromise) console.error('UiExport 未載入');
         return null;
       }
       _exportApi = UiExport.create({
@@ -166,7 +166,7 @@ const getExportApi = () => {
 const getReportApi = () => {
       if (_reportApi) return _reportApi;
       if (!UiReport) {
-        console.error('UiReport 未載入');
+        if (_outputModulesPromise) console.error('UiReport 未載入');
         return null;
       }
       _reportApi = UiReport.create({
@@ -195,7 +195,7 @@ const getReportApi = () => {
 const getPrintApi = () => {
       if (_printApi) return _printApi;
       if (!UiPrint) {
-        console.error('UiPrint 未載入');
+        if (_outputModulesPromise) console.error('UiPrint 未載入');
         return null;
       }
       _printApi = UiPrint.create({

@@ -246,7 +246,8 @@ const UiApproval = (() => {
     var detailRequest = deps.detailRequest;
     var detailSubRecord = deps.detailSubRecord;
 
-    var selectedAdminPendingIds = ref([]);
+    // 2.1d：選取狀態由 requests store 持有並注入（:checked render 路徑免經 api）；直驗沿用自建。
+    var selectedAdminPendingIds = deps.selectedAdminPendingIds || ref([]);
     var lastBatchPrintIds = ref([]);
     var showBatchPrintPrompt = ref(false);
 

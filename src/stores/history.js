@@ -1,7 +1,7 @@
 /** v2 stores/history.js — 由 v1 setup() §分節機械分解（gen-final.cjs）。 */
 import { defineStore } from 'pinia';
 import { computed, watch } from 'vue';
-import { UiHistory } from '../modules/ui-history.js';
+import { ensureUiHistoryModule, tabModulesReady } from '../modules/tab-gates.js';
 import { useAdminStore } from './admin.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
@@ -17,11 +17,24 @@ export const useHistoryStore = defineStore('history', () => {
       const h = getHistoryApi();
       return h ? h.dashboardStats.value : null;
     });
+// 2.1c：UiHistory 改閘門按需載入（records／pending 頁籤才抓）；未載入前回 null（既有守衛語義）。
+let UiHistory = null;
+let _historyModulesPromise = null;
+const ensureHistoryModule = () => {
+  if (!_historyModulesPromise) {
+    _historyModulesPromise = ensureUiHistoryModule().then((m) => { UiHistory = m; })
+      .catch((e) => { _historyModulesPromise = null; throw e; });
+  }
+  return _historyModulesPromise;
+};
     let _historyApi = null;
 const getHistoryApi = () => {
+      // 2.1c：讀 ready 使呼叫端 computed 在模組載入後自動重算（未載入照舊回 null）。
+      const _historyReady = tabModulesReady.value.history;
       if (_historyApi) return _historyApi;
       if (!UiHistory) {
-        console.error('UiHistory 未載入');
+        // 尚未 ensure 屬正常（首屏不載）；載入中仍取不到才值得報。
+        if (_historyModulesPromise) console.error('UiHistory 未載入');
         return null;
       }
       _historyApi = UiHistory.create({
@@ -42,37 +55,45 @@ const getHistoryApi = () => {
       return _historyApi;
     };
 
-    const loadHistoryMonth = (...args) => {
+    const loadHistoryMonth = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.loadHistoryMonth(...args) : undefined;
     };
-    const setHistoryFilterMode = (...args) => {
+    const setHistoryFilterMode = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.setHistoryFilterMode(...args) : undefined;
     };
-    const setHistoryTypeFilter = (...args) => {
+    const setHistoryTypeFilter = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.setHistoryTypeFilter(...args) : undefined;
     };
-    const loadFullSemesterHistory = (...args) => {
+    const loadFullSemesterHistory = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.loadFullSemesterHistory(...args) : undefined;
     };
-    const reloadWindowedHistory = (...args) => {
+    const reloadWindowedHistory = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.reloadWindowedHistory(...args) : undefined;
     };
-    const getWeekStart = (...args) => {
+    const getWeekStart = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.getWeekStart(...args) : '';
     };
-    const getMonthStart = (...args) => {
+    const getMonthStart = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.getMonthStart(...args) : '';
     };
-    const matchPendingSearch = (...args) => {
+    const matchPendingSearch = async (...args) => {
+      await ensureHistoryModule();
       const a = getHistoryApi();
       return a ? a.matchPendingSearch(...args) : true;
     };
-  return { dashboardStats, getHistoryApi, loadHistoryMonth, setHistoryFilterMode, setHistoryTypeFilter, loadFullSemesterHistory, reloadWindowedHistory, getWeekStart, getMonthStart, matchPendingSearch };
+  return { dashboardStats, getHistoryApi, ensureHistoryModule, loadHistoryMonth, setHistoryFilterMode, setHistoryTypeFilter, loadFullSemesterHistory, reloadWindowedHistory, getWeekStart, getMonthStart, matchPendingSearch };
 });
