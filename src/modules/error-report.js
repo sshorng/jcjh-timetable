@@ -91,14 +91,14 @@ function installErrorReporting(opts) {
   function onError(message, source, lineno, colno, error) {
     // 資源載入失敗（CSS／圖）只有 target 沒有 message：略過，避免洗版
     if (!message && !error) return false;
-    report(String(message || (error && error.message) || 'unknown error'), error && error.stack);
+    report('[window] ' + String(message || (error && error.message) || 'unknown error'), error && error.stack);
     return false;
   }
   function onUnhandledRejection(ev) {
     var reason = ev && ev.reason;
     if (isAbortNoise(reason)) return;
     var msg = reason && (reason.message || reason);
-    report(String(msg || 'unhandled rejection'), reason && reason.stack);
+    report('[promise] ' + String(msg || 'unhandled rejection'), reason && reason.stack);
   }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('error', function (ev) {
