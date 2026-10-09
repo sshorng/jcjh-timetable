@@ -10,6 +10,7 @@ import { UiListHelpers } from '../modules/ui-list-helpers.js';
 
 import { UiSchedule } from '../modules/ui-schedule.js';
 import { UiSchoolSwap } from '../modules/ui-schoolswap.js';
+import { outputModulesReady } from '../modules/output-gates.js';
 import { UiTimetable } from '../modules/ui-timetable.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
@@ -104,6 +105,7 @@ export const useTimetableStore = defineStore('timetable', () => {
       teachersPage.value = UiListHelpers.clampPage(n, teachersTotalPages.value);
     };
     const accountingPlanOptions = computed(() => {
+      const _outputReady = outputModulesReady.value;
       const a = useOutputStore().getReportApi();
       return a ? a.accountingPlanOptions.value : [];
     });

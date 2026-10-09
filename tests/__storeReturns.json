@@ -735,6 +735,7 @@
   "decodePaperTimeKey",
   "openPaperPrintDraftForSubmittedRequests",
   "openPaperPrintDraftFromCompare",
+  "ensureOutputModules",
   "getExportApi",
   "getReportApi",
   "getPrintApi",

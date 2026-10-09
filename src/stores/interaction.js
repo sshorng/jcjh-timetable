@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
+import { outputModulesReady } from '../modules/output-gates.js';
 import { UiInteraction } from '../modules/ui-interaction.js';
 import { useAdminStore } from './admin.js';
 import { useBackofficeStore } from './backoffice.js';
@@ -53,6 +54,7 @@ export const useInteractionStore = defineStore('interaction', () => {
     const schoolExportTeacherFilter = ref('');
     let _schoolExportKnownEmails = {};
     const filteredSchoolExportTeachers = computed(() => {
+      const _outputReady = outputModulesReady.value;
       const a = useOutputStore().getReportApi();
       return a ? a.filteredSchoolExportTeachers.value : [];
     });

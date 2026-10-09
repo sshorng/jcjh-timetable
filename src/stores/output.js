@@ -3,11 +3,24 @@ import { defineStore } from 'pinia';
 import { computed, nextTick, ref } from 'vue';
 import DateUtils from '../domain/date-utils.js';
 import DomainSchedule from '../domain/domain-schedule.js';
-import { UiExport } from '../modules/ui-export.js';
+import { ensureUiExportModule, ensureUiPrintModule, ensureUiReportModule, outputModulesReady } from '../modules/output-gates.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
-import { UiPrint } from '../modules/ui-print.js';
-import { UiReport } from '../modules/ui-report.js';
+// 2.0b：UiExport／UiPrint／UiReport 改閘門按需載入；未載入前 getXApi() 回 null（既有守衛語義）。
+let UiExport = null;
+let UiPrint = null;
+let UiReport = null;
+let _outputModulesPromise = null;
+const ensureOutputModules = () => {
+  if (!_outputModulesPromise) {
+    _outputModulesPromise = Promise.all([
+      ensureUiExportModule().then((m) => { UiExport = m; }),
+      ensureUiPrintModule().then((m) => { UiPrint = m; }),
+      ensureUiReportModule().then((m) => { UiReport = m; }),
+    ]).then(() => { outputModulesReady.value = true; }).catch((e) => { _outputModulesPromise = null; throw e; });
+  }
+  return _outputModulesPromise;
+};
 import { useBackofficeStore } from './backoffice.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
@@ -115,13 +128,19 @@ export const useOutputStore = defineStore('output', () => {
     let _reportApi = null;
     let _printApi = null;
     const ensurePrintReady = async () => {
+      await ensureOutputModules();
       const a = getPrintApi();
       if (!a) throw new Error('列印模組尚未載入');
     };
     const decodePaperTimeKey = DateUtils.decodePaperTimeKey;
-    const openPaperPrintDraftForSubmittedRequests = (requests) =>
-      openPaperPrintDraft(buildPaperRecordsForSubmittedRequests(requests), { canPrint: true });
-    const openPaperPrintDraftFromCompare = () => openPaperPrintDraft(null, { returnTo: 'compare', canPrint: false });
+    const openPaperPrintDraftForSubmittedRequests = async (requests) => {
+      await ensureOutputModules();
+      return openPaperPrintDraft(buildPaperRecordsForSubmittedRequests(requests), { canPrint: true });
+    };
+    const openPaperPrintDraftFromCompare = async () => {
+      await ensureOutputModules();
+      return openPaperPrintDraft(null, { returnTo: 'compare', canPrint: false });
+    };
 const getExportApi = () => {
       if (_exportApi) return _exportApi;
       if (!UiExport) {
@@ -196,7 +215,8 @@ const getPrintApi = () => {
       return _printApi;
     };
 
-    const printSingleRequest = (...args) => {
+    const printSingleRequest = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.printSingleRequest(...args) : undefined;
     };
@@ -208,15 +228,18 @@ const getPrintApi = () => {
       const a = getReportApi();
       return a ? a.cancelScheduledMonthlyReport(...args) : undefined;
     };
-    const scheduleMonthlyReportCalculation = (...args) => {
+    const scheduleMonthlyReportCalculation = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.scheduleMonthlyReportCalculation(...args) : undefined;
     };
-    const shiftReportPeriod = (...args) => {
+    const shiftReportPeriod = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.shiftReportPeriod(...args) : undefined;
     };
-    const ensureBillingReady = (...args) => {
+    const ensureBillingReady = async (...args) => {
+      await ensureOutputModules();
       const a = getExportApi();
       return a ? a.ensureBillingReady(...args) : Promise.reject(new Error('匯出模組未載入'));
     };
@@ -232,15 +255,18 @@ const getPrintApi = () => {
       const a = getReportApi();
       return a ? a.ensureBillingRequestsForPeriod(...args) : undefined;
     };
-    const ensurePeriod8Ready = (...args) => {
+    const ensurePeriod8Ready = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.ensurePeriod8Ready(...args) : undefined;
     };
-    const calculateMonthlyReport = (...args) => {
+    const calculateMonthlyReport = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.calculateMonthlyReport(...args) : undefined;
     };
-    const exportReportToExcel = (...args) => {
+    const exportReportToExcel = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.exportReportToExcel(...args) : undefined;
     };
@@ -252,35 +278,44 @@ const getPrintApi = () => {
       const a = getExportApi();
       return a ? await a.exportPeriod8Accounting(...args) : undefined;
     };
-    const isSchoolExportTeacherSelected = (...args) => {
-      const a = getReportApi();
-      return a ? a.isSchoolExportTeacherSelected(...args) : undefined;
+    // 2.0b內聯：純 ref 讀取（:checked render 路徑），免經 reportApi，模組未載也正確。
+    const isSchoolExportTeacherSelected = (email) => {
+      const em = String(email || '').toLowerCase();
+      const list = storeToRefs(useInteractionStore()).schoolExportSelectedEmails.value || [];
+      return list.indexOf(em) >= 0;
     };
-    const toggleSchoolExportTeacher = (...args) => {
+    const toggleSchoolExportTeacher = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.toggleSchoolExportTeacher(...args) : undefined;
     };
-    const selectAllSchoolExportTeachers = (...args) => {
+    const selectAllSchoolExportTeachers = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.selectAllSchoolExportTeachers(...args) : undefined;
     };
-    const clearSchoolExportTeachers = (...args) => {
+    const clearSchoolExportTeachers = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.clearSchoolExportTeachers(...args) : undefined;
     };
-    const setSchoolExportThisWeek = (...args) => {
+    const setSchoolExportThisWeek = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.setSchoolExportThisWeek(...args) : undefined;
     };
-    const exportSchoolTimetableWord = (...args) => {
+    const exportSchoolTimetableWord = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.exportSchoolTimetableWord(...args) : undefined;
     };
-    const ensureActivityCoverReady = (...args) => {
+    const ensureActivityCoverReady = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.ensureActivityCoverReady(...args) : undefined;
     };
-    const fetchQuotaLedgerHistoryForExport = (...args) => {
+    const fetchQuotaLedgerHistoryForExport = async (...args) => {
+      await ensureOutputModules();
       const a = getExportApi();
       return a ? a.fetchQuotaLedgerHistoryForExport(...args) : Promise.reject(new Error('匯出模組未載入'));
     };
@@ -292,7 +327,8 @@ const getPrintApi = () => {
       const a = getReportApi();
       return a ? a.buildDefaultInvigilationTitle(...args) : undefined;
     };
-    const ensureInvigilationExportReady = (...args) => {
+    const ensureInvigilationExportReady = async (...args) => {
+      await ensureOutputModules();
       const a = getReportApi();
       return a ? a.ensureInvigilationExportReady(...args) : undefined;
     };
@@ -308,43 +344,53 @@ const getPrintApi = () => {
       const a = getPrintApi();
       return a ? a.createPrintContext(...args) : undefined;
     };
-    const ensureExportReady = (...args) => {
+    const ensureExportReady = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.ensureExportReady(...args) : undefined;
     };
-    const printSelectedForms = (...args) => {
+    const printSelectedForms = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.printSelectedForms(...args) : undefined;
     };
-    const openPrintPreview = (...args) => {
+    const openPrintPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openPrintPreview(...args) : undefined;
     };
-    const openHistoryPrintPreview = (...args) => {
+    const openHistoryPrintPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openHistoryPrintPreview(...args) : undefined;
     };
-    const closePrintPreview = (...args) => {
+    const closePrintPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.closePrintPreview(...args) : undefined;
     };
-    const confirmPrintPreview = (...args) => {
+    const confirmPrintPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.confirmPrintPreview(...args) : undefined;
     };
-    const getPrintPreviewPngBlob = (...args) => {
+    const getPrintPreviewPngBlob = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.getPrintPreviewPngBlob(...args) : undefined;
     };
-    const getPrintPreviewFileName = (...args) => {
+    const getPrintPreviewFileName = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.getPrintPreviewFileName(...args) : undefined;
     };
-    const downloadPrintPreviewImage = (...args) => {
+    const downloadPrintPreviewImage = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.downloadPrintPreviewImage(...args) : undefined;
     };
-    const copyPrintPreviewImage = (...args) => {
+    const copyPrintPreviewImage = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.copyPrintPreviewImage(...args) : undefined;
     };
@@ -360,38 +406,46 @@ const getPrintApi = () => {
       const a = getPrintApi();
       return a ? a.buildTrianglePaperDraftRecords(...args) : undefined;
     };
-    const openPaperPrintDraft = (...args) => {
+    const openPaperPrintDraft = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openPaperPrintDraft(...args) : undefined;
     };
-    const openPaperPrintForRequest = (...args) => {
+    const openPaperPrintForRequest = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openPaperPrintForRequest(...args) : undefined;
     };
-    const openTrianglePaperPreview = (...args) => {
+    const openTrianglePaperPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openTrianglePaperPreview(...args) : undefined;
     };
-    const openPaperPrintMutualDrafts = (...args) => {
+    const openPaperPrintMutualDrafts = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openPaperPrintMutualDrafts(...args) : undefined;
     };
-    const printPaperDraft = (...args) => {
+    const printPaperDraft = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.printPaperDraft(...args) : undefined;
     };
-    const openPaperDraftPreview = (...args) => {
+    const openPaperDraftPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openPaperDraftPreview(...args) : undefined;
     };
-    const openSuccessPrintPreview = (...args) => {
+    const openSuccessPrintPreview = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.openSuccessPrintPreview(...args) : undefined;
     };
-    const addSuccessToCalendar = (...args) => {
+    const addSuccessToCalendar = async (...args) => {
+      await ensureOutputModules();
       const a = getPrintApi();
       return a ? a.addSuccessToCalendar(...args) : undefined;
     };
     const isReportNavigating = () => accountingPeriodNavigation;
-  return { accountingPeriodNavigation, monthlyReportCalculationId, scheduleIndex, weekScheduleGrid, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC, triangleCandidateSearch, triangleCandidateDisplayCount, triangleParticipants, triangleCandidateOptions, triangleDirectExchangeKeys, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateBOptions, triangleCandidateBReadyCount, displayedTriangleCOptions, displayedTriangleBOptions, triangleLegs, triangleValidation, trianglePreviewRows, trianglePreviewWeekDates, triangleTimetablePreview, triangleReady, ensurePrintReady, decodePaperTimeKey, openPaperPrintDraftForSubmittedRequests, openPaperPrintDraftFromCompare, getExportApi, getReportApi, getPrintApi, printSingleRequest, markLocalPrinted, cancelScheduledMonthlyReport, scheduleMonthlyReportCalculation, shiftReportPeriod, ensureBillingReady, getBillingRequestWindow, billingRequestWindowIsLoaded, ensureBillingRequestsForPeriod, ensurePeriod8Ready, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel, exportPeriod8Accounting, isSchoolExportTeacherSelected, toggleSchoolExportTeacher, selectAllSchoolExportTeachers, clearSchoolExportTeachers, setSchoolExportThisWeek, exportSchoolTimetableWord, ensureActivityCoverReady, fetchQuotaLedgerHistoryForExport, exportActivityCoverWord, buildDefaultInvigilationTitle, ensureInvigilationExportReady, exportInvigilationWorkbook, generateFormHtml, createPrintContext, ensureExportReady, printSelectedForms, openPrintPreview, openHistoryPrintPreview, closePrintPreview, confirmPrintPreview, getPrintPreviewPngBlob, getPrintPreviewFileName, downloadPrintPreviewImage, copyPrintPreviewImage, buildPaperDraftRecords, buildPaperRecordsForSubmittedRequests, buildTrianglePaperDraftRecords, openPaperPrintDraft, openPaperPrintForRequest, openTrianglePaperPreview, openPaperPrintMutualDrafts, printPaperDraft, openPaperDraftPreview, openSuccessPrintPreview, addSuccessToCalendar, isReportNavigating };
+  return { accountingPeriodNavigation, monthlyReportCalculationId, ensureOutputModules, scheduleIndex, weekScheduleGrid, triangleCandidates, triangleCandidateB, triangleCandidateCList, triangleCandidateC, triangleCandidateSearch, triangleCandidateDisplayCount, triangleParticipants, triangleCandidateOptions, triangleDirectExchangeKeys, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateBOptions, triangleCandidateBReadyCount, displayedTriangleCOptions, displayedTriangleBOptions, triangleLegs, triangleValidation, trianglePreviewRows, trianglePreviewWeekDates, triangleTimetablePreview, triangleReady, ensurePrintReady, decodePaperTimeKey, openPaperPrintDraftForSubmittedRequests, openPaperPrintDraftFromCompare, getExportApi, getReportApi, getPrintApi, printSingleRequest, markLocalPrinted, cancelScheduledMonthlyReport, scheduleMonthlyReportCalculation, shiftReportPeriod, ensureBillingReady, getBillingRequestWindow, billingRequestWindowIsLoaded, ensureBillingRequestsForPeriod, ensurePeriod8Ready, calculateMonthlyReport, exportReportToExcel, exportSubFeeToExcel, exportPeriod8Accounting, isSchoolExportTeacherSelected, toggleSchoolExportTeacher, selectAllSchoolExportTeachers, clearSchoolExportTeachers, setSchoolExportThisWeek, exportSchoolTimetableWord, ensureActivityCoverReady, fetchQuotaLedgerHistoryForExport, exportActivityCoverWord, buildDefaultInvigilationTitle, ensureInvigilationExportReady, exportInvigilationWorkbook, generateFormHtml, createPrintContext, ensureExportReady, printSelectedForms, openPrintPreview, openHistoryPrintPreview, closePrintPreview, confirmPrintPreview, getPrintPreviewPngBlob, getPrintPreviewFileName, downloadPrintPreviewImage, copyPrintPreviewImage, buildPaperDraftRecords, buildPaperRecordsForSubmittedRequests, buildTrianglePaperDraftRecords, openPaperPrintDraft, openPaperPrintForRequest, openTrianglePaperPreview, openPaperPrintMutualDrafts, printPaperDraft, openPaperDraftPreview, openSuccessPrintPreview, addSuccessToCalendar, isReportNavigating };
 });

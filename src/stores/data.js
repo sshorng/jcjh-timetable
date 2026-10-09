@@ -656,6 +656,10 @@ const getSyncApi = () => {
       [storeToRefs(useSessionStore()).substitutionRecords, storeToRefs(useSessionStore()).teachersList, storeToRefs(useSessionStore()).allSchedules, storeToRefs(useSessionStore()).schoolSwaps, storeToRefs(useSessionStore()).classAwayEvents, storeToRefs(useSessionStore()).semesterEndDate, reportMonth, reportStartDate, reportEndDate, reportWeeksCount, storeToRefs(useSessionStore()).adminSubTab, storeToRefs(useSessionStore()).activeTab],
       () => {
         monthlyReportRevision += 1;
+        // 2.0b：進管理頁籤即背景預載列印／匯出／報表模組（教師頁籤不觸發）。
+        if (storeToRefs(useSessionStore()).activeTab.value === 'admin') {
+          useOutputStore().ensureOutputModules().catch(() => {});
+        }
         if (storeToRefs(useSessionStore()).activeTab.value === 'admin' && storeToRefs(useSessionStore()).adminSubTab.value === 'billing') {
           useOutputStore().scheduleMonthlyReportCalculation();
         } else {
