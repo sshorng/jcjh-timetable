@@ -383,38 +383,14 @@ const getScheduleApi = () => {
       return _scheduleApi;
     };
 
-    const resolveCellFromBaseAndSubs = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.resolveCellFromBaseAndSubs(...args) : null;
-    };
-    const convertRequestsToSubstitutions = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.convertRequestsToSubstitutions(...args) : [];
-    };
-    const getClassAwayEventName = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.getClassAwayEventName(...args) : undefined;
-    };
-    const openAddSchoolSwapModal = (...args) => {
-      const a = getSchoolSwapApi();
-      return a ? a.openAddSchoolSwapModal(...args) : undefined;
-    };
-    const openEditSchoolSwapModal = (...args) => {
-      const a = getSchoolSwapApi();
-      return a ? a.openEditSchoolSwapModal(...args) : undefined;
-    };
-    const saveSchoolSwap = (...args) => {
-      const a = getSchoolSwapApi();
-      return a ? a.saveSchoolSwap(...args) : undefined;
-    };
-    const deleteSchoolSwap = (...args) => {
-      const a = getSchoolSwapApi();
-      return a ? a.deleteSchoolSwap(...args) : undefined;
-    };
-    const buildClassSchoolSwapChanges = (...args) => {
-      const a = getSchoolSwapApi();
-      return a ? a.buildClassSchoolSwapChanges(...args) : undefined;
-    };
+    const resolveCellFromBaseAndSubs = (...args) => getTimetableApi().resolveCellFromBaseAndSubs(...args);
+    const convertRequestsToSubstitutions = (...args) => getTimetableApi().convertRequestsToSubstitutions(...args);
+    const getClassAwayEventName = (...args) => getTimetableApi().getClassAwayEventName(...args);
+    const openAddSchoolSwapModal = (...args) => getSchoolSwapApi().openAddSchoolSwapModal(...args);
+    const openEditSchoolSwapModal = (...args) => getSchoolSwapApi().openEditSchoolSwapModal(...args);
+    const saveSchoolSwap = (...args) => getSchoolSwapApi().saveSchoolSwap(...args);
+    const deleteSchoolSwap = (...args) => getSchoolSwapApi().deleteSchoolSwap(...args);
+    const buildClassSchoolSwapChanges = (...args) => getSchoolSwapApi().buildClassSchoolSwapChanges(...args);
     const getCalendarDetails = async (...args) => {
       await ensureCalendarModule();
       const a = getCalendarApi();
@@ -436,18 +412,9 @@ const getScheduleApi = () => {
       return a ? a.addEventToCalendar(...args) : undefined;
     };
     const timetableApiOrNull = () => getTimetableApi();
-    const resolveDetailRequest = (...args) => {
-      const a = getClassViewApi();
-      return a ? a.resolveDetailRequest(...args) : null;
-    };
-    const copyLineMessageForRequest = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.copyLineMessageForRequest(...args) : undefined;
-    };
-    const getExchangeWeekDates = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.getExchangeWeekDates(...args) : [];
-    };
+    const resolveDetailRequest = (...args) => getClassViewApi().resolveDetailRequest(...args);
+    const copyLineMessageForRequest = (...args) => getTimetableApi().copyLineMessageForRequest(...args);
+    const getExchangeWeekDates = (...args) => getTimetableApi().getExchangeWeekDates(...args);
     const fetchRecommendations = () => {
       const a = getTimetableApi();
       if (!a) return;
@@ -468,86 +435,26 @@ const getScheduleApi = () => {
       return a ? a.getScheduleForDate(teacherEmail, dateStr, period, dayOfWeek) : null;
     };
     const clearScheduleCache = () => { const a = getTimetableApi(); if (a) a.clearScheduleCache(); };
-    const findCombinedReturnCandidates = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.findCombinedReturnCandidates(...args) : [];
-    };
-    const triangleTeacherKey = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleTeacherKey(...args) : String(args[0] || '').trim().toLowerCase();
-    };
-    const triangleSlotKey = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleSlotKey(...args) : '';
-    };
-    const triangleCellIsUsable = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCellIsUsable(...args) : false;
-    };
-    const triangleSourceParticipant = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleSourceParticipant(...args) : { email: '', teacherName: '', slot: {}, course: {} };
-    };
-    const triangleCandidateParticipant = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateParticipant(...args) : null;
-    };
-    const triangleCandidateIsRestricted = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateIsRestricted(...args) : false;
-    };
-    const buildTriangleOccupiedByTeacher = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.buildTriangleOccupiedByTeacher(...args) : {};
-    };
-    const triangleCandidateSearchText = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateSearchText(...args) : '';
-    };
-    const createTriangleScheduleGetter = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.createTriangleScheduleGetter(...args) : (() => null);
-    };
-    const validateTriangleSelection = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.validateTriangleSelection(...args) : { ok: false, errors: ['三角調模組尚未載入'] };
-    };
-    const triangleCandidateCanMoveTo = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateCanMoveTo(...args) : false;
-    };
-    const triangleCandidateSort = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateSort(...args) : 0;
-    };
-    const triangleCandidatePriority = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidatePriority(...args) : 2;
-    };
-    const triangleCandidateBPriority = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.triangleCandidateBPriority(...args) : 2;
-    };
-    const selectTriangleCandidateB = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.selectTriangleCandidateB(...args) : undefined;
-    };
-    const selectTriangleCandidateC = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.selectTriangleCandidateC(...args) : undefined;
-    };
-    const loadMoreTriangleCandidates = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.loadMoreTriangleCandidates(...args) : undefined;
-    };
-    const openTriangleTimetablePreview = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.openTriangleTimetablePreview(...args) : false;
-    };
-    const resetTriangleDraft = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.resetTriangleDraft(...args) : undefined;
-    };
+    const findCombinedReturnCandidates = (...args) => getTimetableApi().findCombinedReturnCandidates(...args);
+    const triangleTeacherKey = (...args) => getTimetableApi().triangleTeacherKey(...args);
+    const triangleSlotKey = (...args) => getTimetableApi().triangleSlotKey(...args);
+    const triangleCellIsUsable = (...args) => getTimetableApi().triangleCellIsUsable(...args);
+    const triangleSourceParticipant = (...args) => getTimetableApi().triangleSourceParticipant(...args);
+    const triangleCandidateParticipant = (...args) => getTimetableApi().triangleCandidateParticipant(...args);
+    const triangleCandidateIsRestricted = (...args) => getTimetableApi().triangleCandidateIsRestricted(...args);
+    const buildTriangleOccupiedByTeacher = (...args) => getTimetableApi().buildTriangleOccupiedByTeacher(...args);
+    const triangleCandidateSearchText = (...args) => getTimetableApi().triangleCandidateSearchText(...args);
+    const createTriangleScheduleGetter = (...args) => getTimetableApi().createTriangleScheduleGetter(...args);
+    const validateTriangleSelection = (...args) => getTimetableApi().validateTriangleSelection(...args);
+    const triangleCandidateCanMoveTo = (...args) => getTimetableApi().triangleCandidateCanMoveTo(...args);
+    const triangleCandidateSort = (...args) => getTimetableApi().triangleCandidateSort(...args);
+    const triangleCandidatePriority = (...args) => getTimetableApi().triangleCandidatePriority(...args);
+    const triangleCandidateBPriority = (...args) => getTimetableApi().triangleCandidateBPriority(...args);
+    const selectTriangleCandidateB = (...args) => getTimetableApi().selectTriangleCandidateB(...args);
+    const selectTriangleCandidateC = (...args) => getTimetableApi().selectTriangleCandidateC(...args);
+    const loadMoreTriangleCandidates = (...args) => getTimetableApi().loadMoreTriangleCandidates(...args);
+    const openTriangleTimetablePreview = (...args) => getTimetableApi().openTriangleTimetablePreview(...args);
+    const resetTriangleDraft = (...args) => getTimetableApi().resetTriangleDraft(...args);
     const isAwayClassCell = (className, dateStr, period) => {
       const a = getTimetableApi();
       return a ? a.isAwayClassCell(className, dateStr, period) : false;
@@ -562,74 +469,26 @@ const getScheduleApi = () => {
          ? a.getClassCellClassForClass({ classSchedules: storeToRefs(useInteractionStore()).classSchedules, selectedClassWeekDates: storeToRefs(useMutualStore()).selectedClassWeekDates, classSubstitutionMap: storeToRefs(useMutualStore()).classSubstitutionMap, isClassAwayOnDate: useSessionStore().isClassAwayOnDate }, className, day, period)
         : 'is-empty';
     };
-    const mapPublicClassRequests = (...args) => {
-      const a = getClassViewApi();
-      return a ? a.mapPublicClassRequests(...args) : [];
-    };
+    const mapPublicClassRequests = (...args) => getClassViewApi().mapPublicClassRequests(...args);
     const cellFromGrid = (email, day, period) => {
       const a = getTimetableApi();
       return a ? a.cellFromGrid(email, day, period) : null;
     };
-    const findPriorDutyAtSlot = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.findPriorDutyAtSlot(...args) : null;
-    };
-    const normalizeRechangeRequestId = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.normalizeRechangeRequestId(...args) : String(args[0] || '').trim();
-    };
-    const isEffectiveChangedDuty = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isEffectiveChangedDuty(...args) : false;
-    };
-    const hasOtherChangedDutyAtSlot = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.hasOtherChangedDutyAtSlot(...args) : false;
-    };
-    const resolveHistoryLeaveClassSubject = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.resolveHistoryLeaveClassSubject(...args) : { className: '', subject: '', priorDuty: null };
-    };
-    const resolveRestrictionForHistoryRec = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.resolveRestrictionForHistoryRec(...args) : false;
-    };
-    const isHistoryLeaveRechanged = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isHistoryLeaveRechanged(...args) : false;
-    };
-    const isHistoryExchangeRechanged = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isHistoryExchangeRechanged(...args) : false;
-    };
-    const isRequestLeaveRechanged = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isRequestLeaveRechanged(...args) : false;
-    };
-    const isRequestExchangeRechanged = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isRequestExchangeRechanged(...args) : false;
-    };
-    const formatHistoryLeaveSlot = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.formatHistoryLeaveSlot(...args) : '—';
-    };
-    const formatHistoryExchangeSlot = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.formatHistoryExchangeSlot(...args) : '—';
-    };
-    const findBaseScheduleSlot = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.findBaseScheduleSlot(...args) : null;
-    };
-    const isHistoryLeaveRestricted = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isHistoryLeaveRestricted(...args) : false;
-    };
-    const isHistoryExchangeRestricted = (...args) => {
-      const a = getTimetableApi();
-      return a ? a.isHistoryExchangeRestricted(...args) : false;
-    };
+    const findPriorDutyAtSlot = (...args) => getTimetableApi().findPriorDutyAtSlot(...args);
+    const normalizeRechangeRequestId = (...args) => getTimetableApi().normalizeRechangeRequestId(...args);
+    const isEffectiveChangedDuty = (...args) => getTimetableApi().isEffectiveChangedDuty(...args);
+    const hasOtherChangedDutyAtSlot = (...args) => getTimetableApi().hasOtherChangedDutyAtSlot(...args);
+    const resolveHistoryLeaveClassSubject = (...args) => getTimetableApi().resolveHistoryLeaveClassSubject(...args);
+    const resolveRestrictionForHistoryRec = (...args) => getTimetableApi().resolveRestrictionForHistoryRec(...args);
+    const isHistoryLeaveRechanged = (...args) => getTimetableApi().isHistoryLeaveRechanged(...args);
+    const isHistoryExchangeRechanged = (...args) => getTimetableApi().isHistoryExchangeRechanged(...args);
+    const isRequestLeaveRechanged = (...args) => getTimetableApi().isRequestLeaveRechanged(...args);
+    const isRequestExchangeRechanged = (...args) => getTimetableApi().isRequestExchangeRechanged(...args);
+    const formatHistoryLeaveSlot = (...args) => getTimetableApi().formatHistoryLeaveSlot(...args);
+    const formatHistoryExchangeSlot = (...args) => getTimetableApi().formatHistoryExchangeSlot(...args);
+    const findBaseScheduleSlot = (...args) => getTimetableApi().findBaseScheduleSlot(...args);
+    const isHistoryLeaveRestricted = (...args) => getTimetableApi().isHistoryLeaveRestricted(...args);
+    const isHistoryExchangeRestricted = (...args) => getTimetableApi().isHistoryExchangeRestricted(...args);
     function initImmediateTimetable1() {
     watch(ttPageSize, () => { ttPage.value = 1; });
     }
@@ -641,3 +500,4 @@ const getScheduleApi = () => {
 
   return { parseScheduleClasses, timetablePeriods, formatPeriodText, isCombinedClass, currentWeekDates, classUsesPublicData, classScheduleRows, classSubstitutionRows, displayTimetableTeachers, TT_PAGE_SIZE_DEFAULT, ttPageSize, ttPage, ttTotalPages, visibleTimetableTeachers, ttNeedPager, changeTtPage, pendingCount, myInviteCount, adminTodoCount, quickTodoSentOpen, hasQuickTodo, allTeachersList, teachersListDetails, TEACHERS_PAGE_SIZE_DEFAULT, teachersPageSize, teachersPage, teachersTotalPages, teachersNeedPager, pagedTeachersListDetails, changeTeachersPage, accountingPlanOptions, getExpensePlanSummary, isExpensePlanSlotConfig, pendingHomeroomRecords, getHomeroomCoverCandidates, filteredManualCoverTeachers, getTodayYmdStr, homeroomTeachersList, showManualHomeroomModal, homeroomStatusFilter, manualHomeroomForm, currentMonthHomeroomRecords, currentMonthHomeroomFeeTotal, currentMonthHomeroomAssignedCount, currentMonthHomeroomPendingCount, exchangeTeachersList, myTeacherProfile, isRequestValid, filteredHistoryRecords, dateFilteredHistoryRecords, batchGroupExpanded, getBatchGroupStateKey, isBatchGroupExpanded, toggleBatchGroup, historyBatchGroups, historyTotalPages, paginatedHistoryRecords, pendingMyPendingPage, pendingMySentPage, pendingAdminPage, pendingSearchQuery, filteredMyPendingRequests, filteredMySentRequests, filteredAdminPendingRequests, paginatedMyPending, sentBatchGroups, adminPendingBatchGroups, paginatedMySent, paginatedAdminPending, pendingMyPendingTotal, pendingMySentTotal, pendingAdminTotal, recommendedExchangeList, isPeriod8FeeLocked, isSubFeeLockedToSelf, quotaDeductPreview, quotaDeductInsufficient, ensureCalendarModule, getCalendarApi, getTimetableApi, getClassViewApi, getSchoolSwapApi, getScheduleApi, resolveCellFromBaseAndSubs, convertRequestsToSubstitutions, getClassAwayEventName, openAddSchoolSwapModal, openEditSchoolSwapModal, saveSchoolSwap, deleteSchoolSwap, buildClassSchoolSwapChanges, getCalendarDetails, addToGoogleCalendar, downloadIcsCalendar, addEventToCalendar, timetableApiOrNull, resolveDetailRequest, copyLineMessageForRequest, getExchangeWeekDates, fetchRecommendations, getApprovedScheduleForDate, getScheduleForDate, clearScheduleCache, findCombinedReturnCandidates, triangleTeacherKey, triangleSlotKey, triangleCellIsUsable, triangleSourceParticipant, triangleCandidateParticipant, triangleCandidateIsRestricted, buildTriangleOccupiedByTeacher, triangleCandidateSearchText, createTriangleScheduleGetter, validateTriangleSelection, triangleCandidateCanMoveTo, triangleCandidateSort, triangleCandidatePriority, triangleCandidateBPriority, selectTriangleCandidateB, selectTriangleCandidateC, loadMoreTriangleCandidates, openTriangleTimetablePreview, resetTriangleDraft, isAwayClassCell, getClassCellClassForDate, getClassCellClassForClass, mapPublicClassRequests, cellFromGrid, findPriorDutyAtSlot, normalizeRechangeRequestId, isEffectiveChangedDuty, hasOtherChangedDutyAtSlot, resolveHistoryLeaveClassSubject, resolveRestrictionForHistoryRec, isHistoryLeaveRechanged, isHistoryExchangeRechanged, isRequestLeaveRechanged, isRequestExchangeRechanged, formatHistoryLeaveSlot, formatHistoryExchangeSlot, findBaseScheduleSlot, isHistoryLeaveRestricted, isHistoryExchangeRestricted, initImmediateTimetable1, initImmediateTimetable2 };
 });
+

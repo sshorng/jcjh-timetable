@@ -281,122 +281,35 @@ const getAuthApi = () => {
       return _authApi;
     };
 
-    const isGoogleGsiReady = (...args) => {
-      const a = getAuthApi();
-      return a ? a.isGoogleGsiReady(...args) : undefined;
-    };
-    const waitForGoogleGsi = (...args) => {
-      const a = getAuthApi();
-      return a ? a.waitForGoogleGsi(...args) : undefined;
-    };
-    const gsiCredentialBridge = (...args) => {
-      const a = getAuthApi();
-      return a ? a.gsiCredentialBridge(...args) : undefined;
-    };
-    const isSecureHttpsOrigin = (...args) => {
-      const a = getAuthApi();
-      return a ? a.isSecureHttpsOrigin(...args) : undefined;
-    };
-    const isGsiInitialized = (...args) => {
-      const a = getAuthApi();
-      return a ? a.isGsiInitialized(...args) : undefined;
-    };
-    const suppressGsiAutoLogin = (...args) => {
-      const a = getAuthApi();
-      return a ? a.suppressGsiAutoLogin(...args) : undefined;
-    };
-    const ensureGsiInitialized = (...args) => {
-      const a = getAuthApi();
-      return a ? a.ensureGsiInitialized(...args) : undefined;
-    };
-    const setupGoogleSignInUi = (...args) => {
-      const a = getAuthApi();
-      return a ? a.setupGoogleSignInUi(...args) : undefined;
-    };
-    const reloadGsiLoginButton = (...args) => {
-      const a = getAuthApi();
-      return a ? a.reloadGsiLoginButton(...args) : undefined;
-    };
-    const getOAuthRedirectUri = (...args) => {
-      const a = getAuthApi();
-      return a ? a.getOAuthRedirectUri(...args) : undefined;
-    };
-    const makeOAuthNonce = (...args) => {
-      const a = getAuthApi();
-      return a ? a.makeOAuthNonce(...args) : undefined;
-    };
-    const clearOAuthUrlResidue = (...args) => {
-      const a = getAuthApi();
-      return a ? a.clearOAuthUrlResidue(...args) : undefined;
-    };
-    const parseOAuthReturnParams = (...args) => {
-      const a = getAuthApi();
-      return a ? a.parseOAuthReturnParams(...args) : undefined;
-    };
-    const consumeOAuthRedirectToken = (...args) => {
-      const a = getAuthApi();
-      return a ? a.consumeOAuthRedirectToken(...args) : undefined;
-    };
-    const loginWithGoogle = (...args) => {
-      const a = getAuthApi();
-      return a ? a.loginWithGoogle(...args) : undefined;
-    };
-    const refreshGoogleIdToken = (...args) => {
-      const a = getAuthApi();
-      return a ? a.refreshGoogleIdToken(...args) : undefined;
-    };
-    const gasProgressHandler = (...args) => {
-      const a = getAuthApi();
-      return a ? a.gasProgressHandler(...args) : undefined;
-    };
-    const applySettings = (...args) => {
-      const a = getAuthApi();
-      return a ? a.applySettings(...args) : undefined;
-    };
-    const assertSchoolDomain = (...args) => {
-      const a = getAuthApi();
-      return a ? a.assertSchoolDomain(...args) : undefined;
-    };
-    const initMobileDay = (...args) => {
-      const a = getAuthApi();
-      return a ? a.initMobileDay(...args) : undefined;
-    };
-    const persistNavPosition = (...args) => {
-      const a = getAuthApi();
-      return a ? a.persistNavPosition(...args) : undefined;
-    };
-    const setActiveTab = (...args) => {
-      const a = getAuthApi();
-      return a ? a.setActiveTab(...args) : undefined;
-    };
-    const canOperateOnTeacherEmail = (...args) => {
-      const a = getProxyApi();
-      return a ? a.canOperateOnTeacherEmail(...args) : undefined;
-    };
-    const ensureProxyTargetForTeacher = (...args) => {
-      const a = getProxyApi();
-      return a ? a.ensureProxyTargetForTeacher(...args) : undefined;
-    };
-    const setProxyTarget = (...args) => {
-      const a = getProxyApi();
-      return a ? a.setProxyTarget(...args) : undefined;
-    };
-    const filterStaffEmailsOnly = (...args) => {
-      const a = getProxyApi();
-      return a ? a.filterStaffEmailsOnly(...args) : undefined;
-    };
-    const persistProxySubmitEmails = (...args) => {
-      const a = getProxyApi();
-      return a ? a.persistProxySubmitEmails(...args) : undefined;
-    };
-    const toggleProxySubmitEmail = (...args) => {
-      const a = getProxyApi();
-      return a ? a.toggleProxySubmitEmail(...args) : undefined;
-    };
-    const setOnlineSubstitutionEnabled = (...args) => {
-      const a = getProxyApi();
-      return a ? a.setOnlineSubstitutionEnabled(...args) : undefined;
-    };
+    const isGoogleGsiReady = (...args) => getAuthApi().isGoogleGsiReady(...args);
+    const waitForGoogleGsi = (...args) => getAuthApi().waitForGoogleGsi(...args);
+    const gsiCredentialBridge = (...args) => getAuthApi().gsiCredentialBridge(...args);
+    const isSecureHttpsOrigin = (...args) => getAuthApi().isSecureHttpsOrigin(...args);
+    const isGsiInitialized = (...args) => getAuthApi().isGsiInitialized(...args);
+    const suppressGsiAutoLogin = (...args) => getAuthApi().suppressGsiAutoLogin(...args);
+    const ensureGsiInitialized = (...args) => getAuthApi().ensureGsiInitialized(...args);
+    const setupGoogleSignInUi = (...args) => getAuthApi().setupGoogleSignInUi(...args);
+    const reloadGsiLoginButton = (...args) => getAuthApi().reloadGsiLoginButton(...args);
+    const getOAuthRedirectUri = (...args) => getAuthApi().getOAuthRedirectUri(...args);
+    const makeOAuthNonce = (...args) => getAuthApi().makeOAuthNonce(...args);
+    const clearOAuthUrlResidue = (...args) => getAuthApi().clearOAuthUrlResidue(...args);
+    const parseOAuthReturnParams = (...args) => getAuthApi().parseOAuthReturnParams(...args);
+    const consumeOAuthRedirectToken = (...args) => getAuthApi().consumeOAuthRedirectToken(...args);
+    const loginWithGoogle = (...args) => getAuthApi().loginWithGoogle(...args);
+    const refreshGoogleIdToken = (...args) => getAuthApi().refreshGoogleIdToken(...args);
+    const gasProgressHandler = (...args) => getAuthApi().gasProgressHandler(...args);
+    const applySettings = (...args) => getAuthApi().applySettings(...args);
+    const assertSchoolDomain = (...args) => getAuthApi().assertSchoolDomain(...args);
+    const initMobileDay = (...args) => getAuthApi().initMobileDay(...args);
+    const persistNavPosition = (...args) => getAuthApi().persistNavPosition(...args);
+    const setActiveTab = (...args) => getAuthApi().setActiveTab(...args);
+    const canOperateOnTeacherEmail = (...args) => getProxyApi().canOperateOnTeacherEmail(...args);
+    const ensureProxyTargetForTeacher = (...args) => getProxyApi().ensureProxyTargetForTeacher(...args);
+    const setProxyTarget = (...args) => getProxyApi().setProxyTarget(...args);
+    const filterStaffEmailsOnly = (...args) => getProxyApi().filterStaffEmailsOnly(...args);
+    const persistProxySubmitEmails = (...args) => getProxyApi().persistProxySubmitEmails(...args);
+    const toggleProxySubmitEmail = (...args) => getProxyApi().toggleProxySubmitEmail(...args);
+    const setOnlineSubstitutionEnabled = (...args) => getProxyApi().setOnlineSubstitutionEnabled(...args);
     function initImmediateSession1() {
     watch(user, () => {
       avatarLoadFailed.value = false;

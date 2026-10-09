@@ -156,34 +156,13 @@ export const useMutualStore = defineStore('mutual', () => {
       const part = lineBatchParts.value[idx];
       if (part && part.text) copyLineMessage(part.text);
     };
-    const isExchangeLikeRequest = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.isExchangeLikeRequest(...args) : false;
-    };
-    const getTargetSubject = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getTargetSubject(...args) : '';
-    };
-    const getTargetClassAndSubject = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getTargetClassAndSubject(...args) : { className: '', subject: '' };
-    };
-    const getOriginalRequestSubject = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getOriginalRequestSubject(...args) : '';
-    };
-    const getOriginalRequestClass = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getOriginalRequestClass(...args) : '';
-    };
-    const getOriginalTargetSubject = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getOriginalTargetSubject(...args) : '';
-    };
-    const getOriginalTargetClass = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.getOriginalTargetClass(...args) : '';
-    };
+    const isExchangeLikeRequest = (...args) => useTimetableStore().timetableApiOrNull().isExchangeLikeRequest(...args);
+    const getTargetSubject = (...args) => useTimetableStore().timetableApiOrNull().getTargetSubject(...args);
+    const getTargetClassAndSubject = (...args) => useTimetableStore().timetableApiOrNull().getTargetClassAndSubject(...args);
+    const getOriginalRequestSubject = (...args) => useTimetableStore().timetableApiOrNull().getOriginalRequestSubject(...args);
+    const getOriginalRequestClass = (...args) => useTimetableStore().timetableApiOrNull().getOriginalRequestClass(...args);
+    const getOriginalTargetSubject = (...args) => useTimetableStore().timetableApiOrNull().getOriginalTargetSubject(...args);
+    const getOriginalTargetClass = (...args) => useTimetableStore().timetableApiOrNull().getOriginalTargetClass(...args);
     const pendingRequestData = ref({
       mode: '', leaveTeacher: '', subTeacher: '', cls: '', subject: '', date: '', timeKey: '',
       reason: '', leaveReasonBeforeCourseAdjustment: '', courseAdjustmentOnly: false,
@@ -453,3 +432,4 @@ const {
     _getMutualImportEventId = () => (mutualImportEventId && mutualImportEventId.value) || '';
   return { onMutualLeadChipClick, bustQuotaLedgerViewCache, selectedClass, classReadonlyMode, pendingClassView, classDirectory, classViewSchedules, classViewSchoolSwaps, classViewSubstitutionRecords, classViewClassAwayEvents, classViewLoadedClass, selectedClassDate, period8WeekDate, selectedClassWeekDates, period8WeekDates, classWeekNumber, period8WeekNumber, classSubstitutionMap, classChangeSummary, classChangeTypeLabels, getClassChangeTypeLabel, matchSearchQuery, matchDisplayCount, matchShowNoTeacherWarning, matchEmptyReasons, exchangeTeacherEmail, exchangeTeacherClasses, exchangePeriodId, exchangeTargetDate, exchangeWeekOffset, exchangeWeekdayFilter, exchangeWeekdayOptions, setExchangeWeekdayFilter, showCompareModal, showTriangleTimetablePreview, showSuccessModal, showLineMessageModal, lineMessageTitle, lineMessageText, successModalTitle, successModalMessage, successFlowMode, successActionRequests, lineCopyText, hasLineTemplate, lineBatchParts, copyLineMessage, sendLineMessage, openLineMessageEditor, copyEditedLineMessage, sendEditedLineMessage, copyLineBatchPart, isExchangeLikeRequest, getTargetSubject, getTargetClassAndSubject, getOriginalRequestSubject, getOriginalRequestClass, getOriginalTargetSubject, getOriginalTargetClass, pendingRequestData, combinedReturnCandidates, askFirstLineText, askFirstLineDraft, selectedRecordIds, showDevDropdown, paperPrintDraft, paperSignatureByTeacher, showPrintPreviewModal, printPreview, printPreviewImageBusy, isSubmitting, showDetailModal, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, historyFilterMode, historyTypeFilter, historyFilterDate, historySearchQuery, historyPage, isHistoryExchangeType, historyPageSize, classList, getMutualPanelApi, mutualImportableEvents, mutualImportEventId, applyClassAwayEventById, applyClassAwayToMutualPanel, mutualCoverStats, setMutualActivityPeriodBoundary, persistMutualPanelDraft, restoreMutualPanelDraft, applyMutualPanelDraft, clearMutualPanel, ensureMutualActivityRange, setMutualActivityThisWeek, setMutualActivityPeriodMode, toggleMutualActivityPeriod, isMutualActivityPeriodSelected, activityBalanceCtx, patchLocalMutualQuota, recalculateMutualQuotasFromActivity, toggleMutualLead, isMutualLead, setMutualCover, getMutualDraftAt, removeMutualDraft, clearMutualDrafts, assignMutualDraftFromMatch, toggleMutualAwayClass, selectAwayGrade, initImmediateMutual1, initImmediateMutual2, initImmediateMutual3, initImmediateMutual4, initImmediateMutual5, initImmediateMutual6, initImmediateMutual7, initImmediateMutual8, initImmediateMutual9, initImmediateMutual10, initMutual1, initMutual2, initImmediateMutual11 };
 });
+

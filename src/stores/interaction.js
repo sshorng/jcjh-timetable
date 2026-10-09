@@ -86,66 +86,21 @@ const getInteractApi = () => {
     };
 
 
-    const scrollMainToTop = (...args) => {
-      const a = getInteractApi();
-      return a ? a.scrollMainToTop(...args) : undefined;
-    };
-    const jumpToTeacherTimetable = (...args) => {
-      const a = getInteractApi();
-      return a ? a.jumpToTeacherTimetable(...args) : undefined;
-    };
-    const showDetailForRecord = (...args) => {
-      const a = getInteractApi();
-      return a ? a.showDetailForRecord(...args) : undefined;
-    };
-    const bindVueModalA11y = (...args) => {
-      const a = getInteractApi();
-      return a ? a.bindVueModalA11y(...args) : undefined;
-    };
-    const bindFlagModal = (...args) => {
-      const a = getInteractApi();
-      return a ? a.bindFlagModal(...args) : undefined;
-    };
-    const paintMatchSourceDom = (...args) => {
-      const a = getInteractApi();
-      return a ? a.paintMatchSourceDom(...args) : undefined;
-    };
-    const applyClassViewFromUrl = (...args) => {
-      const a = getInteractApi();
-      return a ? a.applyClassViewFromUrl(...args) : undefined;
-    };
-    const resolvePendingClassView = (...args) => {
-      const a = getInteractApi();
-      return a ? a.resolvePendingClassView(...args) : undefined;
-    };
-    const getClassReadonlyLink = (...args) => {
-      const a = getInteractApi();
-      return a ? a.getClassReadonlyLink(...args) : undefined;
-    };
-    const copyClassReadonlyLink = (...args) => {
-      const a = getInteractApi();
-      return a ? a.copyClassReadonlyLink(...args) : undefined;
-    };
-    const handleClassCellClick = (...args) => {
-      const a = getInteractApi();
-      return a ? a.handleClassCellClick(...args) : undefined;
-    };
-    const handlePeriod8CellClick = (...args) => {
-      const a = getInteractApi();
-      return a ? a.handlePeriod8CellClick(...args) : undefined;
-    };
-    const handleCellClick = (...args) => {
-      const a = getInteractApi();
-      return a ? a.handleCellClick(...args) : undefined;
-    };
-    const startSecondSub = (...args) => {
-      const a = getInteractApi();
-      return a ? a.startSecondSub(...args) : undefined;
-    };
-    const loadTeacherClassesForExchange = (...args) => {
-      const a = getInteractApi();
-      return a ? a.loadTeacherClassesForExchange(...args) : undefined;
-    };
+    const scrollMainToTop = (...args) => getInteractApi().scrollMainToTop(...args);
+    const jumpToTeacherTimetable = (...args) => getInteractApi().jumpToTeacherTimetable(...args);
+    const showDetailForRecord = (...args) => getInteractApi().showDetailForRecord(...args);
+    const bindVueModalA11y = (...args) => getInteractApi().bindVueModalA11y(...args);
+    const bindFlagModal = (...args) => getInteractApi().bindFlagModal(...args);
+    const paintMatchSourceDom = (...args) => getInteractApi().paintMatchSourceDom(...args);
+    const applyClassViewFromUrl = (...args) => getInteractApi().applyClassViewFromUrl(...args);
+    const resolvePendingClassView = (...args) => getInteractApi().resolvePendingClassView(...args);
+    const getClassReadonlyLink = (...args) => getInteractApi().getClassReadonlyLink(...args);
+    const copyClassReadonlyLink = (...args) => getInteractApi().copyClassReadonlyLink(...args);
+    const handleClassCellClick = (...args) => getInteractApi().handleClassCellClick(...args);
+    const handlePeriod8CellClick = (...args) => getInteractApi().handlePeriod8CellClick(...args);
+    const handleCellClick = (...args) => getInteractApi().handleCellClick(...args);
+    const startSecondSub = (...args) => getInteractApi().startSecondSub(...args);
+    const loadTeacherClassesForExchange = (...args) => getInteractApi().loadTeacherClassesForExchange(...args);
     function initImmediateInteraction1() {
     watch(storeToRefs(useSessionStore()).teachersList, (list) => {
       if (!list || !list.length) return;

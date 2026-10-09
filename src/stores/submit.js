@@ -109,102 +109,30 @@ const getSubmitApi = () => {
       return _submitApi;
     };
 
-    const deductMutualQuotaForRows = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.deductMutualQuotaForRows(...args) : undefined;
-    };
-    const restoreMutualQuotaForRows = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.restoreMutualQuotaForRows(...args) : undefined;
-    };
-    const sendLineBatchPart = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.sendLineBatchPart(...args) : undefined;
-    };
-    const getWeekDatesForCompare = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.getWeekDatesForCompare(...args) : undefined;
-    };
-    const getExchangeEndpointText = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.getExchangeEndpointText(...args) : undefined;
-    };
-    const setLeaveTimePreset = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.setLeaveTimePreset(...args) : undefined;
-    };
-    const toggleCourseAdjustmentOnly = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.toggleCourseAdjustmentOnly(...args) : undefined;
-    };
-    const assertCanSubmitAsLeaveTeacher = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.assertCanSubmitAsLeaveTeacher(...args) : undefined;
-    };
-    const assertQuotaDeductAllowed = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.assertQuotaDeductAllowed(...args) : undefined;
-    };
-    const runComparePreparation = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.runComparePreparation(...args) : undefined;
-    };
-    const prepCompare = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.prepCompare(...args) : undefined;
-    };
-    const previewBatchCandidate = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.previewBatchCandidate(...args) : undefined;
-    };
-    const closeCompareModal = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.closeCompareModal(...args) : undefined;
-    };
-    const isBatchSlotAt = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.isBatchSlotAt(...args) : undefined;
-    };
-    const resolveCompareBEmail = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.resolveCompareBEmail(...args) : undefined;
-    };
-    const getBatchSlotForCompareB = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.getBatchSlotForCompareB(...args) : undefined;
-    };
-    const isSlotConflict = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.isSlotConflict(...args) : undefined;
-    };
-    const confirmIfTargetPatrol = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.confirmIfTargetPatrol(...args) : undefined;
-    };
-    const getCompareCellText = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.getCompareCellText(...args) : undefined;
-    };
-    const getCompareCellClass = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.getCompareCellClass(...args) : undefined;
-    };
-    const validateSubmitRequest = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.validateSubmitRequest(...args) : undefined;
-    };
-    const buildSubmitPayload = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.buildSubmitPayload(...args) : undefined;
-    };
-    const validateBatchExchangeSlot = (...args) => {
-      const a = getSubmitApi();
-      return a ? a.validateBatchExchangeSlot(...args) : undefined;
-    };
-    const executeSubmitRequest = async (...args) => {
-      const a = getSubmitApi();
-      return a ? a.executeSubmitRequest(...args) : undefined;
-    };
+    const deductMutualQuotaForRows = (...args) => getSubmitApi().deductMutualQuotaForRows(...args);
+    const restoreMutualQuotaForRows = (...args) => getSubmitApi().restoreMutualQuotaForRows(...args);
+    const sendLineBatchPart = (...args) => getSubmitApi().sendLineBatchPart(...args);
+    const getWeekDatesForCompare = (...args) => getSubmitApi().getWeekDatesForCompare(...args);
+    const getExchangeEndpointText = (...args) => getSubmitApi().getExchangeEndpointText(...args);
+    const setLeaveTimePreset = (...args) => getSubmitApi().setLeaveTimePreset(...args);
+    const toggleCourseAdjustmentOnly = (...args) => getSubmitApi().toggleCourseAdjustmentOnly(...args);
+    const assertCanSubmitAsLeaveTeacher = (...args) => getSubmitApi().assertCanSubmitAsLeaveTeacher(...args);
+    const assertQuotaDeductAllowed = (...args) => getSubmitApi().assertQuotaDeductAllowed(...args);
+    const runComparePreparation = async (...args) => getSubmitApi().runComparePreparation(...args);
+    const prepCompare = async (...args) => getSubmitApi().prepCompare(...args);
+    const previewBatchCandidate = async (...args) => getSubmitApi().previewBatchCandidate(...args);
+    const closeCompareModal = (...args) => getSubmitApi().closeCompareModal(...args);
+    const isBatchSlotAt = (...args) => getSubmitApi().isBatchSlotAt(...args);
+    const resolveCompareBEmail = (...args) => getSubmitApi().resolveCompareBEmail(...args);
+    const getBatchSlotForCompareB = (...args) => getSubmitApi().getBatchSlotForCompareB(...args);
+    const isSlotConflict = (...args) => getSubmitApi().isSlotConflict(...args);
+    const confirmIfTargetPatrol = async (...args) => getSubmitApi().confirmIfTargetPatrol(...args);
+    const getCompareCellText = (...args) => getSubmitApi().getCompareCellText(...args);
+    const getCompareCellClass = (...args) => getSubmitApi().getCompareCellClass(...args);
+    const validateSubmitRequest = async (...args) => getSubmitApi().validateSubmitRequest(...args);
+    const buildSubmitPayload = (...args) => getSubmitApi().buildSubmitPayload(...args);
+    const validateBatchExchangeSlot = (...args) => getSubmitApi().validateBatchExchangeSlot(...args);
+    const executeSubmitRequest = async (...args) => getSubmitApi().executeSubmitRequest(...args);
     function initImmediateSubmit1() {
     watch([paperMode, storeToRefs(useSessionStore()).isAdmin, storeToRefs(useSessionStore()).activeTab], ([paper, admin, tab]) => {
       if (paper && !admin && tab === 'pending' && storeToRefs(useTourStore()).isMutualCover.value && !paperFlow.value) {

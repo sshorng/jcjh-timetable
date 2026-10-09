@@ -428,30 +428,12 @@ export const useDataStore = defineStore('data', () => {
       storeToRefs(useSessionStore()).semesterForm.value = { id: sem.id, name: sem.name, startDate: sem.startDate, endDate: sem.endDate };
       storeToRefs(useSessionStore()).showSemesterModal.value = true;
     };
-    const resolveExchangeTargetCell = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.resolveExchangeTargetCell(...args) : null;
-    };
-    const cellIsRestricted = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.cellIsRestricted(...args) : false;
-    };
-    const isLeaveClassRestricted = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.isLeaveClassRestricted(...args) : false;
-    };
-    const isExchangeClassRestricted = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.isExchangeClassRestricted(...args) : false;
-    };
-    const formatExchangeClassSlot = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.formatExchangeClassSlot(...args) : '—';
-    };
-    const formatQuickTodoTitle = (...args) => {
-      const a = useTimetableStore().timetableApiOrNull();
-      return a ? a.formatQuickTodoTitle(...args) : '—';
-    };
+    const resolveExchangeTargetCell = (...args) => useTimetableStore().timetableApiOrNull().resolveExchangeTargetCell(...args);
+    const cellIsRestricted = (...args) => useTimetableStore().timetableApiOrNull().cellIsRestricted(...args);
+    const isLeaveClassRestricted = (...args) => useTimetableStore().timetableApiOrNull().isLeaveClassRestricted(...args);
+    const isExchangeClassRestricted = (...args) => useTimetableStore().timetableApiOrNull().isExchangeClassRestricted(...args);
+    const formatExchangeClassSlot = (...args) => useTimetableStore().timetableApiOrNull().formatExchangeClassSlot(...args);
+    const formatQuickTodoTitle = (...args) => useTimetableStore().timetableApiOrNull().formatQuickTodoTitle(...args);
     const showEmptySlotModal = ref(false);
     const emptySlotForm = ref({
       teacherEmail: '',
@@ -546,102 +528,30 @@ const getSyncApi = () => {
       const a = getSyncApi();
       return a ? a.softSyncRequestsOnly(...args) : undefined;
     };
-    const changeMatchMode = (...args) => {
-      const a = getDataApi();
-      return a ? a.changeMatchMode(...args) : undefined;
-    };
-    const getTeacherTimetableHours = (...args) => {
-      const a = getDataApi();
-      return a ? a.getTeacherTimetableHours(...args) : undefined;
-    };
-    const getRealTeacherName = (...args) => {
-      const a = getDataApi();
-      return a ? a.getRealTeacherName(...args) : undefined;
-    };
-    const getTriangleGroupRequests = (...args) => {
-      const a = getDataApi();
-      return a ? a.getTriangleGroupRequests(...args) : undefined;
-    };
-    const isMySentRequest = (...args) => {
-      const a = getDataApi();
-      return a ? a.isMySentRequest(...args) : undefined;
-    };
-    const applyInitialPayload = (...args) => {
-      const a = getDataApi();
-      return a ? a.applyInitialPayload(...args) : undefined;
-    };
-    const recomputeRequestBuckets = (...args) => {
-      const a = getDataApi();
-      return a ? a.recomputeRequestBuckets(...args) : undefined;
-    };
-    const optimisticPatchRequestStatuses = (...args) => {
-      const a = getDataApi();
-      return a ? a.optimisticPatchRequestStatuses(...args) : undefined;
-    };
-    const optimisticPatchRequestStatus = (...args) => {
-      const a = getDataApi();
-      return a ? a.optimisticPatchRequestStatus(...args) : undefined;
-    };
-    const optimisticPatchTriangleGroup = (...args) => {
-      const a = getDataApi();
-      return a ? a.optimisticPatchTriangleGroup(...args) : undefined;
-    };
-    const optimisticRemoveRequest = (...args) => {
-      const a = getDataApi();
-      return a ? a.optimisticRemoveRequest(...args) : undefined;
-    };
-    const markDataUpdated = (...args) => {
-      const a = getDataApi();
-      return a ? a.markDataUpdated(...args) : undefined;
-    };
-    const manualRefreshData = (...args) => {
-      const a = getDataApi();
-      return a ? a.manualRefreshData(...args) : undefined;
-    };
-    const softRefreshInBackground = (...args) => {
-      const a = getDataApi();
-      return a ? a.softRefreshInBackground(...args) : undefined;
-    };
-    const resolveUserRoleFromTeachers = (...args) => {
-      const a = getDataApi();
-      return a ? a.resolveUserRoleFromTeachers(...args) : undefined;
-    };
-    const loadSemesters = (...args) => {
-      const a = getDataApi();
-      return a ? a.loadSemesters(...args) : undefined;
-    };
-    const applyClassPayload = (...args) => {
-      const a = getDataApi();
-      return a ? a.applyClassPayload(...args) : undefined;
-    };
-    const preflightGoogleLogin = (...args) => {
-      const a = getDataApi();
-      return a ? a.preflightGoogleLogin(...args) : undefined;
-    };
-    const loadPublicClassData = (...args) => {
-      const a = getDataApi();
-      return a ? a.loadPublicClassData(...args) : undefined;
-    };
-    const loadWeeklyData = (...args) => {
-      const a = getDataApi();
-      return a ? a.loadWeeklyData(...args) : undefined;
-    };
-    const saveClientSettings = (...args) => {
-      const a = getDataApi();
-      return a ? a.saveClientSettings(...args) : undefined;
-    };
-    const saveSemester = (...args) => {
-      const a = getDataApi();
-      return a ? a.saveSemester(...args) : undefined;
-    };
-    const deleteSemester = (...args) => {
-      const a = getDataApi();
-      return a ? a.deleteSemester(...args) : undefined;
-    };
-    const setDefaultSemester = (...args) => {
-      const a = getDataApi();
-      return a ? a.setDefaultSemester(...args) : undefined;
-    };
+    const changeMatchMode = (...args) => getDataApi().changeMatchMode(...args);
+    const getTeacherTimetableHours = (...args) => getDataApi().getTeacherTimetableHours(...args);
+    const getRealTeacherName = (...args) => getDataApi().getRealTeacherName(...args);
+    const getTriangleGroupRequests = (...args) => getDataApi().getTriangleGroupRequests(...args);
+    const isMySentRequest = (...args) => getDataApi().isMySentRequest(...args);
+    const applyInitialPayload = (...args) => getDataApi().applyInitialPayload(...args);
+    const recomputeRequestBuckets = (...args) => getDataApi().recomputeRequestBuckets(...args);
+    const optimisticPatchRequestStatuses = (...args) => getDataApi().optimisticPatchRequestStatuses(...args);
+    const optimisticPatchRequestStatus = (...args) => getDataApi().optimisticPatchRequestStatus(...args);
+    const optimisticPatchTriangleGroup = (...args) => getDataApi().optimisticPatchTriangleGroup(...args);
+    const optimisticRemoveRequest = (...args) => getDataApi().optimisticRemoveRequest(...args);
+    const markDataUpdated = (...args) => getDataApi().markDataUpdated(...args);
+    const manualRefreshData = (...args) => getDataApi().manualRefreshData(...args);
+    const softRefreshInBackground = (...args) => getDataApi().softRefreshInBackground(...args);
+    const resolveUserRoleFromTeachers = (...args) => getDataApi().resolveUserRoleFromTeachers(...args);
+    const loadSemesters = (...args) => getDataApi().loadSemesters(...args);
+    const applyClassPayload = (...args) => getDataApi().applyClassPayload(...args);
+    const preflightGoogleLogin = (...args) => getDataApi().preflightGoogleLogin(...args);
+    const loadPublicClassData = (...args) => getDataApi().loadPublicClassData(...args);
+    const loadWeeklyData = (...args) => getDataApi().loadWeeklyData(...args);
+    const saveClientSettings = (...args) => getDataApi().saveClientSettings(...args);
+    const saveSemester = (...args) => getDataApi().saveSemester(...args);
+    const deleteSemester = (...args) => getDataApi().deleteSemester(...args);
+    const setDefaultSemester = (...args) => getDataApi().setDefaultSemester(...args);
     function initImmediateData1() {
     watch([reportStartDate, reportEndDate], ([start, end]) => {
       if (!useOutputStore().isReportNavigating() && /^\d{4}-\d{2}-\d{2}$/.test(String(start || ''))) {
