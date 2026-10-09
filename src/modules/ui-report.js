@@ -1,13 +1,13 @@
 import { ensureExcelJS, ensureJSZip } from './vendor-libs.js';
 import { downloadJsonSheets } from './excel-io.js';
-import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable } from './export-gates.js';
+import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable, getDomainBillingSync } from './export-gates.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
  */
 import DateUtils from '../domain/date-utils.js';
-import DomainBilling from '../domain/domain-billing.js';
 import FieldMap from '../domain/field-map.js';
+// 2.0a：DomainBilling 改經 export-gates 按需載入（首屏不含）；同步讀取走 getDomainBillingSync()。
 
 /**
  * ui-report.js — 經費報表（結算窗／月報／課表匯出／監考匯出）（從 app.js 抽出，2A）
@@ -152,7 +152,7 @@ const ensureBillingRequestsForPeriod = async () => {
 };
 
 const ensurePeriod8Ready = async () => {
-  if (period8Ready.value && DomainBilling) return;
+  if (period8Ready.value && getDomainBillingSync()) return;
   if (!period8ReadyPromise) {
     period8Loading.value = true;
     period8ReadyPromise = ensureBillingReady()
@@ -192,7 +192,9 @@ const calculateMonthlyReport = async () => {
     return;
   }
   try {
-    const rows = DomainBilling.buildMonthlyReportRows({
+    const Billing = getDomainBillingSync();
+    if (!Billing) throw new Error('大鐘點模組未載入');
+    const rows = Billing.buildMonthlyReportRows({
       teachers: teachersList.value,
       allSchedules: allSchedules.value,
       schoolSwaps: schoolSwaps.value,
@@ -226,11 +228,13 @@ const exportReportToExcel = async () => {
     return;
   }
   await calculateMonthlyReport();
-  const data = DomainBilling.toExcelRows(monthlyReportData.value);
+  const Billing = getDomainBillingSync();
+  if (!Billing) { showToast('大鐘點模組載入失敗', 'error'); return; }
+  const data = Billing.toExcelRows(monthlyReportData.value);
   const rangeLabel = `${reportStartDate.value}_${reportEndDate.value}`;
   const sheets = [{ name: `${rangeLabel}大鐘點1-7午休`, rows: data }];
-  if (DomainBilling.toPeriod8ExcelRows) {
-    const p8 = DomainBilling.toPeriod8ExcelRows({
+  if (Billing.toPeriod8ExcelRows) {
+    const p8 = Billing.toPeriod8ExcelRows({
       preparedPayout: monthlyReportData.value && monthlyReportData.value.period8Payout,
       reportMonth: reportMonth.value,
       reportStartDate: reportStartDate.value,
@@ -459,11 +463,12 @@ const scheduleMonthlyReportCalculation = () => {
   }
 };
 
-const monthlyReportTotals = computed(() =>
-  DomainBilling && typeof DomainBilling.sumMonthlyReportRows === 'function'
-    ? DomainBilling.sumMonthlyReportRows(monthlyReportData.value)
-    : {}
-);
+const monthlyReportTotals = computed(() => {
+  const Billing = getDomainBillingSync();
+  return Billing && typeof Billing.sumMonthlyReportRows === 'function'
+    ? Billing.sumMonthlyReportRows(monthlyReportData.value)
+    : {};
+});
 
 const accountingPlanOptions = computed(() => {
   const sources = new Set();

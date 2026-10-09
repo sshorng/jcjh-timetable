@@ -2,7 +2,7 @@
  * 自 v1 ui-export.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
  */
-import DomainBilling from '../domain/domain-billing.js';
+import { ensureDomainBilling } from './export-gates.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
@@ -26,8 +26,9 @@ const UiExport = (() => {
     deps = deps || {};
     var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
     async function ensureBillingReady() {
-      // R-v2接線：DomainBilling 靜態 import 常駐
-      if (!DomainBilling) throw new Error('大鐘點模組未載入');
+      // 2.0a：billing 按需載入（教師首屏不抓）；載入後同步 holder 供各 computed 取用。
+      const billing = await ensureDomainBilling();
+      if (!billing) throw new Error('大鐘點模組未載入');
     }
     async function fetchQuotaLedgerHistoryForExport() {
       if (typeof fetchMutualQuotaLedger !== 'function') {

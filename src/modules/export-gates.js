@@ -20,6 +20,21 @@ function _cached(key, load) {
   return _cache[key];
 }
 
+// domain-billing（2,363 行）只在月報／第8節／匯出用到：教師首屏永遠不碰。
+// 月報自動計算只在 admin＋billing 頁籤觸發（data.js initImmediateData2），
+// 故可移出主包；同步 computed（period8RosterData／monthlyReportTotals）經
+// getDomainBillingSync() 取，未載入時回空（既有 !DomainBilling 守衛語義不變）。
+let _domainBillingSync = null;
+function ensureDomainBilling() {
+  return _cached('domainBilling', () => import('../domain/domain-billing.js').then((m) => {
+    _domainBillingSync = m.default || m.DomainBilling;
+    return _domainBillingSync;
+  }));
+}
+function getDomainBillingSync() {
+  return _domainBillingSync;
+}
+
 function ensureActivityCover() {
   return _cached('activityCover', () => import('./export-activity-cover.js').then((m) => m.ExportActivityCover));
 }
@@ -40,4 +55,4 @@ function ensureSchoolTimetable() {
   return _cached('schoolTimetable', () => import('./export-school-timetable.js').then((m) => m.ExportSchoolTimetable));
 }
 
-export { ensureActivityCover, ensureInvigilation, ensureAccounting, ensurePeriod8, ensureSchoolTimetable };
+export { ensureActivityCover, ensureInvigilation, ensureAccounting, ensurePeriod8, ensureSchoolTimetable, ensureDomainBilling, getDomainBillingSync };

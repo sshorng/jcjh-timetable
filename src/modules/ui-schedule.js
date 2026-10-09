@@ -3,7 +3,8 @@
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
  */
 import DateUtils from '../domain/date-utils.js';
-import DomainBilling from '../domain/domain-billing.js';
+// 2.0a：DomainBilling 改經 export-gates 按需載入（period8 視圖才用，首屏不含）。
+import { getDomainBillingSync } from './export-gates.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import DomainSchoolSwap from '../domain/domain-school-swap.js';
@@ -99,11 +100,12 @@ const classList = computed(() => {
 
 const period8RosterData = computed(() => {
   const dates = period8WeekDates.value || [];
-  if (!period8Ready.value || !DomainBilling
-      || typeof DomainBilling.buildPeriod8ClassRoster !== 'function') {
+  const Billing = getDomainBillingSync();
+  if (!period8Ready.value || !Billing
+      || typeof Billing.buildPeriod8ClassRoster !== 'function') {
     return { dates, rows: [] };
   }
-  return DomainBilling.buildPeriod8ClassRoster({
+  return Billing.buildPeriod8ClassRoster({
     dates,
     classNames: classList.value,
     allSchedules: allSchedules.value,
