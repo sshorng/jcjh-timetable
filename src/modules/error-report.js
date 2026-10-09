@@ -143,6 +143,11 @@ function installVueErrorHandler(app, report, opts) {
           + (info ? ' ' + info : '') + (ctx ? ' ' + ctx : '') + '] ';
         report(tag + String((err && err.message) || err), err && err.stack);
       } catch (eRep) { /* ignore */ }
+      // 還原 Vue 預設可見性：自訂 handler 會吃掉原本的 console 輸出，
+      // 不補印的話生產 console 會異常安靜（曾誤判為修好）。
+      try {
+        if (typeof console !== 'undefined' && console.error) console.error(err);
+      } catch (eLog) { /* ignore */ }
       try {
         if (typeof prev === 'function') return prev.apply(this, arguments);
       } catch (ePrev) { /* ignore */ }
