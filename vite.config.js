@@ -19,6 +19,9 @@ export default defineConfig({
     }
   },
   test: {
+    // 4.2 測試加速實測：本專案（60 檔＋Google Drive I/O）threads 比預設 forks 快約 40～60 秒
+    //（forks 173～219s → threads 106～125s，60/60 全過）。純 JS 無原生模組，threads 安全。
+    pool: 'threads',
     environment: 'node',
     include: ['tests/**/*.test.js'],
     setupFiles: ['tests/setup.js'],

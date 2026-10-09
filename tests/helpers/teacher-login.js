@@ -105,6 +105,7 @@ export async function mountAsTeacher(opts) {
     await new Promise((r) => setTimeout(r, 100));
     if (session.user && session.user.email === email && session.loading === false) { ok = true; break; }
   }
+  await warmupAsyncModals();
   await settleAsync(el);
   return {
     app, el, session, seen, errors, warnings,
@@ -120,6 +121,17 @@ export async function mountAsTeacher(opts) {
     }
   };
 }
+// App.vue 的 modal 皆為 defineAsyncComponent：掛載當下只觸發 chunk 載入，
+// 在高並行下 transform 可能比 DOM 穩定檢查更慢，造成「DOM 暫穩、chunk 未到」的誤判。
+// 這裡把 components/*.vue 全部預載一次（import.meta.glob 可被 Vite 靜態分析），
+// 讓 App 內的非同步載入命中已轉換好的模組快取；之後的 settle 只需等渲染節拍。
+// 注意 glob 路徑以本檔為準：tests/helpers/ → ../../src/components/。
+const modalPreloads = import.meta.glob('../../src/components/*.vue');
+export async function warmupAsyncModals() {
+  await Promise.all(Object.values(modalPreloads).map((load) => load().catch(() => {})));
+  await nextTick();
+}
+
 /** 等非同步元件（defineAsyncComponent 的 modal chunk）載入並渲染穩定後才回傳。
  *  App.vue 的 modal 改為非同步載入後，掛載當下 DOM 只有佔位註解，
  *  測試若立刻斷言會讀到空殼；這裡以 DOM 不再變化作為「已穩定」判準。 */
