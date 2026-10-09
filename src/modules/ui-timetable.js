@@ -2792,8 +2792,9 @@ const getClassAwayEventName = (className, dateStr, period) => {
     : value => String(value || '').split(/[,，、/／\s]+/).map(item => item.trim()).filter(Boolean);
   const classNames = parseClasses(className);
   if (!classNames.length || typeof DomainClassAway.eventsActiveOnDate !== 'function') return '';
+  if (typeof getTodayString !== 'function' || typeof getClassAwayEventsForView !== 'function') return '';
   const activeEvents = DomainClassAway.eventsActiveOnDate(
-    dateStr || getTodayString(), getClassAwayEventsForView(), semesterEndDate.value, period
+    dateStr || getTodayString(), getClassAwayEventsForView(), (typeof semesterEndDate !== 'undefined' && semesterEndDate && semesterEndDate.value) || '', period
   );
   const names = [];
   activeEvents.forEach(event => {
@@ -2818,15 +2819,17 @@ const getClassAwayEventName = (className, dateStr, period) => {
     // R-v2：activeAwayBanner 需排在 dep 賦值之後（eager computed stub 下亦成立；
     // 真 Vue 懶求值語義不變）。原 v1 位置在 dep 賦值之前，屬潛伏排序問題。
     const activeAwayBanner = computed(() => {
-      if (!DomainClassAway) return null;
+      if (!DomainClassAway || typeof getTodayString !== 'function' || typeof getClassAwayEventsForView !== 'function') return null;
+      const endDate = (semesterEndDate && semesterEndDate.value) || '';
+      const allClasses = (classList && classList.value) || [];
       const today = getTodayString();
       const active = DomainClassAway.eventsActiveOnDate(
-        today, getClassAwayEventsForView(), semesterEndDate.value
+        today, getClassAwayEventsForView(), endDate
       );
       if (!active.length) return null;
       const names = active.map(e => e.name || '未命名').join('、');
       const classes = DomainClassAway.getActiveAwayClasses(
-        today, getClassAwayEventsForView(), semesterEndDate.value, undefined, { allClasses: classList.value }
+        today, getClassAwayEventsForView(), endDate, undefined, { allClasses: allClasses }
       );
       return { names, classes, count: classes.length };
     });

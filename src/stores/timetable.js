@@ -313,7 +313,7 @@ const getTimetableApi = () => {
          batchSelectMode: storeToRefs(useTourStore()).batchSelectMode, batchFlowMode: storeToRefs(useTourStore()).batchFlowMode, isBatchSlotSelected: useSubmitStore().isBatchSlotSelected, isMutualCover: storeToRefs(useTourStore()).isMutualCover, getMutualDraftAt: useMutualStore().getMutualDraftAt,
          mutualDrafts: storeToRefs(useTourStore()).mutualDrafts, mutualAwayClasses: storeToRefs(useTourStore()).mutualAwayClasses, mutualActivityStart: storeToRefs(useTourStore()).mutualActivityStart, mutualActivityEnd: storeToRefs(useTourStore()).mutualActivityEnd,
          mutualActivityStartPeriod: storeToRefs(useTourStore()).mutualActivityStartPeriod, mutualActivityEndPeriod: storeToRefs(useTourStore()).mutualActivityEndPeriod, isMutualActivitySlotInRange: useTourStore().isMutualActivitySlotInRange, DAC: useTourStore().DAC,
-        getTodayString: DateUtils.getTodayString, getClassAwayEventsForView: useSessionStore().getClassAwayEventsForView, semesterEndDate: storeToRefs(useSessionStore()).semesterEndDate,
+        getTodayString: DateUtils.getTodayString, getClassAwayEventsForView: useSessionStore().getClassAwayEventsForView, semesterEndDate: storeToRefs(useSessionStore()).semesterEndDate, classList: storeToRefs(useMutualStore()).classList,
       });
       return _timetableApi;
     };

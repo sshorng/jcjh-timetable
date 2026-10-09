@@ -200,7 +200,7 @@ export const useSessionStore = defineStore('session', () => {
     };
     const activeAwayBanner = computed(() => {
       const a = useTimetableStore().getTimetableApi();
-      return a ? a.activeAwayBanner.value : null;
+      return a && a.activeAwayBanner ? a.activeAwayBanner.value : null;
     });
     const showSchoolSwapModal = ref(false);
     const schoolSwapModalMode = ref('add');
