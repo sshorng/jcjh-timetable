@@ -4,7 +4,9 @@ import {
   normalizeErrorEntry,
   createErrorGate,
   isAbortNoise,
-  installErrorReporting
+  installErrorReporting,
+  describeVueInstance,
+  installVueErrorHandler
 } from '../src/modules/error-report.js';
 
 test('error report：正規化截斷超長欄位', () => {
@@ -49,4 +51,29 @@ test('error report：無 window 時安裝不報錯', () => {
   const api = installErrorReporting({});
   assert.equal(typeof api.report, 'function');
   console.log('error report tests PASS');
+});
+
+test('error report：Vue handler 帶元件名＋info＋tab', () => {
+  assert.equal(
+    describeVueInstance({ type: { __name: 'CompareModal' }, parent: { type: { name: 'App' } }, proxy: {} }),
+    'CompareModal > App'
+  );
+  assert.equal(describeVueInstance(null), '');
+  assert.equal(describeVueInstance({}), 'anonymous');
+  const seen = [];
+  const fakeApp = { config: {} };
+  installVueErrorHandler(fakeApp, (msg) => { seen.push(msg); }, {
+    getContext: () => 'tab=timetable'
+  });
+  assert.equal(typeof fakeApp.config.errorHandler, 'function');
+  fakeApp.config.errorHandler(new Error('Cannot read properties of undefined'), { type: { __name: 'DetailModal' } }, 'render function');
+  assert.ok(seen[0].includes('[Vue:DetailModal render function tab=timetable]'));
+  assert.ok(seen[0].includes('Cannot read properties of undefined'));
+  let prevCalled = false;
+  const fakeApp2 = { config: { errorHandler: () => { prevCalled = true; } } };
+  installVueErrorHandler(fakeApp2, () => {});
+  fakeApp2.config.errorHandler(new Error('x'), null, '');
+  assert.equal(prevCalled, true);
+  installVueErrorHandler(null, () => {});
+  installVueErrorHandler({}, () => {});
 });

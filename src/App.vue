@@ -2716,7 +2716,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, onMounted } from 'vue';
+import { defineAsyncComponent, getCurrentInstance, onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
@@ -2763,7 +2763,7 @@ import { useTourStore } from './stores/tour.js';
 import { useGasStore } from './stores/gas.js';
 import { UiLineTemplate } from './modules/ui-line-template.js';
 import { UiListHelpers } from './modules/ui-list-helpers.js';
-import { installErrorReporting } from './modules/error-report.js';
+import { installErrorReporting, installVueErrorHandler } from './modules/error-report.js';
 const sessionStore = useSessionStore();
 const dataStore = useDataStore();
 const timetableStore = useTimetableStore();
@@ -2780,12 +2780,21 @@ const mutualStore = useMutualStore();
 const tourStore = useTourStore();
 const gasStore = useGasStore();
 // 全域前端錯誤回報（fire-and-forget；免登入亦可報；見 modules/error-report.js）
-installErrorReporting({
+const errorReporter = installErrorReporting({
   getEmail: () => {
     const u = sessionStore.user;
     return u && u.email ? String(u.email) : '';
   },
   send: (entry) => gasStore.callGasApi('logClientError', entry, { skipAuth: true }).catch(() => false)
+});
+// Vue 渲染／生命週期錯誤一併回報（附元件名＋當前景籤），以便定位生產問題
+installVueErrorHandler(getCurrentInstance().appContext.app, errorReporter.report, {
+  getContext: () => {
+    try {
+      const t = storeToRefs(sessionStore).activeTab;
+      return 'tab=' + (t && t.value ? t.value : '');
+    } catch (e) { return ''; }
+  }
 });
 const { canOperateOnTeacherEmail, ensureProxyTargetForTeacher, initMobileDay, loginWithGoogle, persistProxySubmitEmails, reloadGsiLoginButton, setActiveTab, setOnlineSubstitutionEnabled, setProxyTarget, toggleProxySubmitEmail } = sessionStore;
 const { checkMobile, handleAvatarError, isClassAwayOnDate, isSingleWeek, schoolSwapWeekdayText, toLocalDateStr } = sessionStore;

@@ -4,6 +4,8 @@
  * window.onerror＋unhandledrejection 捕捉 → 同訊息 1 分鐘去重＋單次載入上限 10 筆
  * → GAS logClientError（免 Token，未登入／啟動期亦可報）。回報器本身永不丟錯、
  * 傳送失敗靜默吞掉，不影響主流程。純函數可單測（見 tests/error-report-tests）。
+ * 另有 installVueErrorHandler：把 Vue 渲染／生命週期錯誤（預設只進 console）
+ * 也接進同一管線，並在訊息前綴元件名＋info（不動 GAS 欄位結構）。
  */
 const MAX_PER_LOAD = 10;
 const DEDUPE_WINDOW_MS = 60000;
@@ -108,4 +110,44 @@ function installErrorReporting(opts) {
   return { report: report };
 }
 
-export { normalizeErrorEntry, createErrorGate, isAbortNoise, installErrorReporting };
+function describeVueInstance(instance) {
+  try {
+    const names = [];
+    let cur = instance || null;
+    for (let i = 0; i < 3 && cur; i++) {
+      const t = cur.type || {};
+      const proxyOpts = (cur.proxy && cur.proxy.$options) || {};
+      const nm = t.name || t.__name || proxyOpts.name || proxyOpts.__name;
+      names.push(nm || 'anonymous');
+      cur = cur.parent || null;
+    }
+    return names.filter(Boolean).join(' > ');
+  } catch (eDesc) { return ''; }
+}
+
+// 把 Vue 渲染／生命週期內的錯誤也接進同一條回報管線。
+// 用法：在根元件 setup 內以 getCurrentInstance().appContext.app 取得 app 後呼叫。
+// opts.getContext 可回傳額外字串（如當前景籤），一併寫進訊息前綴。
+// 回報器本身永不丟錯；本函式亦同（全程 try/catch），且會串連既有的 errorHandler。
+function installVueErrorHandler(app, report, opts) {
+  opts = opts || {};
+  try {
+    if (!app || !app.config) return;
+    const prev = app.config.errorHandler;
+    const getContext = typeof opts.getContext === 'function' ? opts.getContext : function () { return ''; };
+    app.config.errorHandler = function (err, instance, info) {
+      try {
+        let ctx = '';
+        try { ctx = getContext() || ''; } catch (eCtx) { /* ignore */ }
+        const tag = '[Vue:' + (describeVueInstance(instance) || 'unknown')
+          + (info ? ' ' + info : '') + (ctx ? ' ' + ctx : '') + '] ';
+        report(tag + String((err && err.message) || err), err && err.stack);
+      } catch (eRep) { /* ignore */ }
+      try {
+        if (typeof prev === 'function') return prev.apply(this, arguments);
+      } catch (ePrev) { /* ignore */ }
+    };
+  } catch (e) { /* ignore */ }
+}
+
+export { normalizeErrorEntry, createErrorGate, isAbortNoise, installErrorReporting, describeVueInstance, installVueErrorHandler };
