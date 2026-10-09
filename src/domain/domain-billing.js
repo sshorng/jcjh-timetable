@@ -2440,7 +2440,10 @@ const DomainBilling = (() => {
     sumMonthlyReportRows: sumMonthlyReportRows,
     toPeriod8ExcelRows: toPeriod8ExcelRows,
     buildSubFeeExcelWorkbook: buildSubFeeExcelWorkbook,
-    isBillableHomeroomRecord: homeroomIsBillable
+    isBillableHomeroomRecord: homeroomIsBillable,
+    homeroomTimeRangeBounds: homeroomTimeRangeBounds,
+    homeroomFullDayEndMinutes: homeroomFullDayEndMinutes,
+    homeroomIsFullDayLeave: homeroomIsFullDayLeave
   };
 })();
 
