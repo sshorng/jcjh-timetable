@@ -33,8 +33,7 @@ const getHistoryApi = () => {
       const _historyReady = tabModulesReady.value.history;
       if (_historyApi) return _historyApi;
       if (!UiHistory) {
-        // 尚未 ensure 屬正常（首屏不載）；載入中仍取不到才值得報。
-        if (_historyModulesPromise) console.error('UiHistory 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _historyApi = UiHistory.create({

@@ -2878,8 +2878,15 @@ onMounted(() => {
   // （開啟時 watcher 仍會確保，預熱只是把載入提前到空閒時段。）
   try {
     const prewarm = () => { try { matchStore.ensureMatchModule().catch(() => {}); } catch (e) {} };
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') window.requestIdleCallback(prewarm, { timeout: 3000 });
-    else setTimeout(prewarm, 1500);
+    // 2.1hotfix：首頁「個人異動摘要」首屏就要 history（＋其 flatten 依賴 homeroom），同捆預熱否則首登空白。
+    const prewarmFirstPaint = () => {
+      try { historyStore.ensureHistoryModule().catch(() => {}); } catch (e) {}
+      try { homeroomStore.ensureHomeroomModule().catch(() => {}); } catch (e) {}
+    };
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(prewarm, { timeout: 3000 });
+      window.requestIdleCallback(prewarmFirstPaint, { timeout: 5000 });
+    } else { setTimeout(prewarm, 1500); setTimeout(prewarmFirstPaint, 1800); }
   } catch (e) {}
   mutualStore.initMutual1();
   mutualStore.initMutual2();

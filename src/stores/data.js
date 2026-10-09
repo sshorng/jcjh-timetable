@@ -511,7 +511,7 @@ const ensureSyncModule = () => {
 const getSyncApi = () => {
       if (_syncApi) return _syncApi;
       if (!UiSync) {
-        if (_syncModulesPromise) console.error('UiSync 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _syncApi = UiSync.create({

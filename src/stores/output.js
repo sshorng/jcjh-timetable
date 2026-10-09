@@ -144,7 +144,7 @@ export const useOutputStore = defineStore('output', () => {
 const getExportApi = () => {
       if (_exportApi) return _exportApi;
       if (!UiExport) {
-        if (_outputModulesPromise) console.error('UiExport 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _exportApi = UiExport.create({
@@ -166,7 +166,7 @@ const getExportApi = () => {
 const getReportApi = () => {
       if (_reportApi) return _reportApi;
       if (!UiReport) {
-        if (_outputModulesPromise) console.error('UiReport 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _reportApi = UiReport.create({
@@ -195,7 +195,7 @@ const getReportApi = () => {
 const getPrintApi = () => {
       if (_printApi) return _printApi;
       if (!UiPrint) {
-        if (_outputModulesPromise) console.error('UiPrint 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _printApi = UiPrint.create({

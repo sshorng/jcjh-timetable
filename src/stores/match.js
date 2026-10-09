@@ -81,7 +81,7 @@ const getMatchApi = () => {
       const _matchReady = tabModulesReady.value.match;
       if (_matchApi) return _matchApi;
       if (!UiMatch) {
-        if (_matchModulesPromise) console.error('UiMatch 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _matchApi = UiMatch.create({

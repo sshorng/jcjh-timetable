@@ -288,7 +288,7 @@ const ensureCalendarModule = () => {
 const getCalendarApi = () => {
       if (_calendarApi) return _calendarApi;
       if (!UiCalendar) {
-        if (_calendarModulesPromise) console.error('UiCalendar 未載入');
+        // 未載入一律靜默回 null（載入中／尚未排程皆屬正常；失敗由 ensure 拋錯＋toast）。
         return null;
       }
       _calendarApi = UiCalendar.create({
