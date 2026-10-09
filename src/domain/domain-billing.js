@@ -684,6 +684,62 @@ const DomainBilling = (() => {
   }
 
   /** 找出請假紀錄原課格的超鐘點經費來源。 */
+  // 課表桶索引（結算加速）：overtimeExpenseResolutionForRecord 原本對每筆紀錄做全課表
+  // .filter() 掃描（8000 列約 1.4ms／次，2000 筆首掃為 charged-map 6 秒的大宗）。
+  // 查桶只是粗篩（超集）：命中者一律用原謂詞逐字重驗，故與全掃描完全等價；
+  // 真命中要求 parseInt 相等，而桶鍵正是 String(parseInt)，故查無者必不命中。
+  // NaN 在原語義下永不命中（NaN === 任何值皆 false），照樣建桶亦無妨（重驗必排除）。
+  // 桶內存原陣列索引、查時排序還原，輸出陣列的順序與重複語義和全掃描一致。
+  // 以 schedules 陣列引用＋長度為失效條件（與 export-accounting.js 的課表索引同一契約）。
+  var _billingScheduleIndexMemo = null;
+  function billingBucketKey(identityKey, dowKey, periodKey) {
+    return identityKey + '**' + dowKey + '**' + periodKey;
+  }
+  function billingEffectiveDow(schedule) {
+    return parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
+  }
+  function billingEffectivePeriod(schedule) {
+    return parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10);
+  }
+  function getBillingScheduleIndex(schedules) {
+    var list = schedules || [];
+    if (_billingScheduleIndexMemo && _billingScheduleIndexMemo.schedules === list
+        && _billingScheduleIndexMemo.length === list.length) {
+      return _billingScheduleIndexMemo.byKey;
+    }
+    var byKey = {};
+    list.forEach(function (schedule, idx) {
+      if (!schedule) return;
+      var dowKey = String(billingEffectiveDow(schedule));
+      var periodKey = String(billingEffectivePeriod(schedule));
+      var keys = scheduleTeacherKeys(schedule);
+      for (var i = 0; i < keys.length; i++) {
+        var bucket = billingBucketKey(keys[i], dowKey, periodKey);
+        if (!byKey[bucket]) byKey[bucket] = [];
+        byKey[bucket].push(idx);
+      }
+    });
+    _billingScheduleIndexMemo = { schedules: list, length: list.length, byKey: byKey };
+    return byKey;
+  }
+  // 取出候選課表（保持原陣列順序、無重複），呼叫端必須用原謂詞逐字重驗。
+  function billingCandidatesForSlot(schedules, originalKeys, slot) {
+    var list = schedules || [];
+    var byKey = getBillingScheduleIndex(list);
+    var slotDow = String(slot.dayOfWeek);
+    var slotPeriod = String(slot.period);
+    var idxs = [];
+    var seen = {};
+    (originalKeys || []).forEach(function (key) {
+      var bucket = byKey[billingBucketKey(key, slotDow, slotPeriod)] || [];
+      for (var i = 0; i < bucket.length; i++) {
+        if (!seen[bucket[i]]) { seen[bucket[i]] = true; idxs.push(bucket[i]); }
+      }
+    });
+    idxs.sort(function (a, b) { return a - b; });
+    return idxs.map(function (i) { return list[i]; });
+  }
+
   function overtimeExpenseResolutionForRecord(record, teachers, schedules, schoolSwapIndex) {
     if (!record) return { source: '', status: 'missing', canAutoAllocate: false };
     var originalKeys = originalTeacherKeys(record);
@@ -696,7 +752,7 @@ const DomainBilling = (() => {
     var slot = resolveBillingSlot(record, schoolSwapIndex);
     var date = recordDate(record);
     var className = String(record.className || record['班級'] || '').trim();
-    var candidates = (schedules || []).filter(function (schedule) {
+    var candidates = billingCandidatesForSlot(schedules, originalKeys, slot).filter(function (schedule) {
       return hasCommonKey(originalKeys, scheduleTeacherKeys(schedule))
         && parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10) === slot.dayOfWeek
         && parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10) === slot.period
