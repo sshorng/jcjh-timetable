@@ -37,6 +37,7 @@ const getHistoryApi = () => {
         dashboardScope: storeToRefs(useAdminStore()).dashboardScope, currentWeekDates: storeToRefs(useTimetableStore()).currentWeekDates,
         historyLoadedMonths: storeToRefs(useDataStore()).historyLoadedMonths, historyFullLoaded: storeToRefs(useDataStore()).historyFullLoaded, historyMonthLoading: storeToRefs(useDataStore()).historyMonthLoading, fetchHistoryMonth: useGasStore().fetchHistoryMonth, mergeRequestsFromServer: useDataStore().mergeRequestsFromServer,
         ensureHistoryMonthLoaded: useDataStore().ensureHistoryMonthLoaded, historyLoadingFull: storeToRefs(useDataStore()).historyLoadingFull, applyInitialPayload: useDataStore().applyInitialPayload, fetchInitialData: useGasStore().fetchInitialData,
+        currentSemester: storeToRefs(useSessionStore()).currentSemester,
       });
       return _historyApi;
     };
