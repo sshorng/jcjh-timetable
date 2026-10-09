@@ -2716,34 +2716,35 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
+import { defineAsyncComponent, onMounted } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 import TeachersTable from './components/TeachersTable.vue';
 import ClassPanel from './components/ClassPanel.vue';
-import PrintPreviewModal from './components/PrintPreviewModal.vue';
-import HistoryEditModal from './components/HistoryEditModal.vue';
-import ClassAwayModal from './components/ClassAwayModal.vue';
-import SuccessModal from './components/SuccessModal.vue';
-import CompareModal from './components/CompareModal.vue';
-import MatchDrawerModal from './components/MatchDrawerModal.vue';
-import TeacherModal from './components/TeacherModal.vue';
-import ImportTeachersModal from './components/ImportTeachersModal.vue';
-import SchoolSwapModal from './components/SchoolSwapModal.vue';
-import ScheduleEditModal from './components/ScheduleEditModal.vue';
-import ManualHomeroomModal from './components/ManualHomeroomModal.vue';
-import SemesterModal from './components/SemesterModal.vue';
-import QuotaAdjustModal from './components/QuotaAdjustModal.vue';
-import EmptySlotModal from './components/EmptySlotModal.vue';
-
-import OvertimePlanModal from './components/OvertimePlanModal.vue';
-import LineMessageModal from './components/LineMessageModal.vue';
-import QuotaLedgerModal from './components/QuotaLedgerModal.vue';
-import ExpenseAuditModal from './components/ExpenseAuditModal.vue';
-import BatchPrintPromptModal from './components/BatchPrintPromptModal.vue';
-import TrianglePreviewModal from './components/TrianglePreviewModal.vue';
-import DetailModal from './components/DetailModal.vue';
-import ExceptionComposerModal from './components/ExceptionComposerModal.vue';
+// modal 一律改非同步載入：不進首屏主包，掛載時才抓各自的 chunk。
+// LoadingOverlay／LoginCard／TeachersTable／ClassPanel 為首屏必要，維持同步載入。
+const PrintPreviewModal = defineAsyncComponent(() => import('./components/PrintPreviewModal.vue'));
+const HistoryEditModal = defineAsyncComponent(() => import('./components/HistoryEditModal.vue'));
+const ClassAwayModal = defineAsyncComponent(() => import('./components/ClassAwayModal.vue'));
+const SuccessModal = defineAsyncComponent(() => import('./components/SuccessModal.vue'));
+const CompareModal = defineAsyncComponent(() => import('./components/CompareModal.vue'));
+const MatchDrawerModal = defineAsyncComponent(() => import('./components/MatchDrawerModal.vue'));
+const TeacherModal = defineAsyncComponent(() => import('./components/TeacherModal.vue'));
+const ImportTeachersModal = defineAsyncComponent(() => import('./components/ImportTeachersModal.vue'));
+const SchoolSwapModal = defineAsyncComponent(() => import('./components/SchoolSwapModal.vue'));
+const ScheduleEditModal = defineAsyncComponent(() => import('./components/ScheduleEditModal.vue'));
+const ManualHomeroomModal = defineAsyncComponent(() => import('./components/ManualHomeroomModal.vue'));
+const SemesterModal = defineAsyncComponent(() => import('./components/SemesterModal.vue'));
+const QuotaAdjustModal = defineAsyncComponent(() => import('./components/QuotaAdjustModal.vue'));
+const EmptySlotModal = defineAsyncComponent(() => import('./components/EmptySlotModal.vue'));
+const OvertimePlanModal = defineAsyncComponent(() => import('./components/OvertimePlanModal.vue'));
+const LineMessageModal = defineAsyncComponent(() => import('./components/LineMessageModal.vue'));
+const QuotaLedgerModal = defineAsyncComponent(() => import('./components/QuotaLedgerModal.vue'));
+const ExpenseAuditModal = defineAsyncComponent(() => import('./components/ExpenseAuditModal.vue'));
+const BatchPrintPromptModal = defineAsyncComponent(() => import('./components/BatchPrintPromptModal.vue'));
+const TrianglePreviewModal = defineAsyncComponent(() => import('./components/TrianglePreviewModal.vue'));
+const DetailModal = defineAsyncComponent(() => import('./components/DetailModal.vue'));
+const ExceptionComposerModal = defineAsyncComponent(() => import('./components/ExceptionComposerModal.vue'));
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from './stores/session.js';
 import { useDataStore } from './stores/data.js';

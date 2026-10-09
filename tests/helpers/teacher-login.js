@@ -105,6 +105,7 @@ export async function mountAsTeacher(opts) {
     await new Promise((r) => setTimeout(r, 100));
     if (session.user && session.user.email === email && session.loading === false) { ok = true; break; }
   }
+  await settleAsync(el);
   return {
     app, el, session, seen, errors, warnings,
     loginOk: ok,
@@ -119,6 +120,21 @@ export async function mountAsTeacher(opts) {
     }
   };
 }
+/** 等非同步元件（defineAsyncComponent 的 modal chunk）載入並渲染穩定後才回傳。
+ *  App.vue 的 modal 改為非同步載入後，掛載當下 DOM 只有佔位註解，
+ *  測試若立刻斷言會讀到空殼；這裡以 DOM 不再變化作為「已穩定」判準。 */
+export async function settleAsync(el, opts) {
+  const rounds = (opts && opts.rounds) || 80;
+  const stepMs = (opts && opts.stepMs) || 25;
+  let prev = null;
+  for (let i = 0; i < rounds; i++) {
+    await nextTick();
+    await new Promise((r) => setTimeout(r, stepMs));
+    const now = el ? el.innerHTML : '';
+    if (prev !== null && now === prev) return;
+    prev = now;
+  }
+}
 
 /** 點一下＋等渲染 flush */
 export async function clickAndFlush(el, selector) {
@@ -128,4 +144,5 @@ export async function clickAndFlush(el, selector) {
   for (let i = 0; i < 5; i++) await nextTick();
   await new Promise((r) => setTimeout(r, 200));
   await nextTick();
+  await settleAsync(el);
 }

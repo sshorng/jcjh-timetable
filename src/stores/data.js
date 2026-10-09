@@ -8,6 +8,7 @@ import { UiListHelpers } from '../modules/ui-list-helpers.js';
 import { UiSubmitHelpers } from '../modules/ui-request.js';
 import { UiStyle } from '../modules/ui-style.js';
 import { UiSync } from '../modules/ui-sync.js';
+import { ensureAccounting } from '../modules/export-gates.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
 import { useGasStore } from './gas.js';
@@ -642,7 +643,7 @@ const getSyncApi = () => {
           }));
         } catch (e) { /* 瀏覽器封鎖儲存時不影響頁面操作 */ }
         // 結算區間持久化非關鍵路徑：匯出模組按需載入，失敗靜默略過
-        import('../modules/export-lazy.js').then((m) => m.ensureAccounting()).then((ExportAccounting) => {
+        ensureAccounting().then((ExportAccounting) => {
           if (ExportAccounting && typeof ExportAccounting.savePeriodSettings === 'function') {
             ExportAccounting.savePeriodSettings(reportMonth.value, period);
           }

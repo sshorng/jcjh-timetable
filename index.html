@@ -6,9 +6,11 @@
   <title>建成國中線上課表系統</title>
   <meta name="application-name" content="JCJH Timetable">
   <!-- 第三方庫（ExcelJS／JSZip／XLSX）走 npm＋vendor-libs 懶載，不再經 CDN -->
-  <link rel="stylesheet" href="./style.css">
-  <link rel="stylesheet" href="./mobile.css">
-  <link rel="stylesheet" href="./onboarding-tour.css">
+  <!-- 樣式改由 src/main.js 引入 src/styles/*，經 Vite 壓縮並加上 content hash 後輸出到 assets/ -->
+  <!-- 字型以 link 並行載入，不寫在 CSS 內，避免串行請求 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>

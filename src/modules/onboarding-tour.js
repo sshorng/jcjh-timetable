@@ -1,6 +1,10 @@
+// 樣式檔由 Vite 解析成 content hash 的資產路徑（原本寫死 'onboarding-tour.css'，
+// 檔案遷入 src/styles 後需由打包器解析，才吃得到 assets/ 的 immutable 快取）。
+import onboardingTourCssHref from '../styles/onboarding-tour.css?url';
+
 /**
  * 自 v1 onboarding-tour.js 機械移植（port-modules2.cjs，標準 IIFE）：
- * body 與 v1 逐字一致。
+ * body 與 v1 一致，僅 CSS_HREF 改為打包器解析的資產路徑。
  */
 
 /**
@@ -10,7 +14,7 @@
 const OnboardingTour = (() => {
   var STORAGE_KEY = 'jcjh_onboarding_v2';
   var PAPER_STORAGE_KEY = 'jcjh_onboarding_paper_v1';
-  var CSS_HREF = 'onboarding-tour.css';
+  var CSS_HREF = onboardingTourCssHref;
   var _active = false;
   var _idx = 0;
   var _steps = [];

@@ -80,7 +80,12 @@ test('http smoke tests（v2：dist 靜態殼層）', async () => {
     assert.match(root.body.toString('utf8'), /accounts\.google\.com\/gsi\/client/);
     assert.equal(root.headers['cache-control'], 'no-cache');
 
-    for (const asset of ['/style.css', '/mobile.css', '/templates/accounting-template.xlsx', '/templates/activity-cover-template.docx']) {
+    // 樣式已改由 Vite 打包進 assets/（含 content hash），根目錄不再直出未打包的 CSS
+    const cssAssets = fs.readdirSync(path.join(dist, 'assets')).filter((f) => f.endsWith('.css'));
+    assert.ok(cssAssets.length >= 2, 'assets/ 應含打包後的樣式檔: ' + cssAssets.join(','));
+    assert.ok(!fs.existsSync(path.join(dist, 'style.css')), '根目錄不應再有未打包的 style.css');
+    assert.ok(!fs.existsSync(path.join(dist, 'mobile.css')), '根目錄不應再有未打包的 mobile.css');
+    for (const asset of ['/templates/accounting-template.xlsx', '/templates/activity-cover-template.docx']) {
       const res = await request(server, asset);
       assert.equal(res.status, 200, asset + ' 應隨 dist 發布');
       assert.ok(res.body.length > 0, asset + ' 不可為空');

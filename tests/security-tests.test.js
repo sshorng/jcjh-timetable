@@ -14,7 +14,7 @@ test('security tests（v1 移植）', () => {
   const shellSource = fs.readFileSync(path.join(here, '..', 'index.html'), 'utf8');
   const invigilationSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'export-invigilation-recovered.js'), 'utf8');
   const printHelperSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'print-helper.js'), 'utf8');
-  const styleSource = fs.readFileSync(path.join(here, '..', 'public', 'style.css'), 'utf8');
+  const styleSource = fs.readFileSync(path.join(here, '..', 'src', 'styles', 'style.css'), 'utf8');
   const vercelConfig = JSON.parse(fs.readFileSync(path.join(here, '..', 'vercel.json'), 'utf8'));
 
   // v1 dev-server 路徑穿越測試不移植：v2 無 dev-server（Vite dev＋Vercel 靜態部署，遍歷防護由宿主層承接）。

@@ -1,7 +1,7 @@
 /* 學校調代課線上系統 - 校務後台精煉版（高可讀、中密度、低特效）
  * 手機 RWD：請改 mobile.css（不在此檔用 768 覆寫桌機）
+ * 字型改由 index.html 的 link 元素並行載入（原本寫在 CSS 內的遠端載入會造成串行請求）
  */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap');
 
 :root {
   --bg-primary: #eef2f7;

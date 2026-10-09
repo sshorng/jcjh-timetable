@@ -84,10 +84,11 @@ test('compare：媒合選人對照後送出', async () => {
     }
     expect(compared, '沒點到模擬鈕').toBe(true);
     let cmpOpened = false;
+    // modal 為非同步載入：旗標先亮、元件稍後才掛上，故以「已渲染出 modal 根節點」為準
     for (let i = 0; i < 100; i++) {
       await nextTick();
       await new Promise((r) => setTimeout(r, 100));
-      if (mutual.showCompareModal === true) { cmpOpened = true; break; }
+      if (mutual.showCompareModal === true && t.el.querySelector('[data-tour="compare-modal"]')) { cmpOpened = true; break; }
     }
     expect(cmpOpened, '對照 modal 未開 err=' + t.errors.slice(0, 2).join(' || ').slice(0, 600)).toBe(true);
     quiet();

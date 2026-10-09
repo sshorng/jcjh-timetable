@@ -1,37 +1,23 @@
 /**
- * export-lazy.js — 重匯出 payload 的按需載入（首屏不含，點匯出才抓）。
+ * export-lazy.js — 相容舊名的轉接層。
  *
- * 背景：export-accounting／invigilation／activity-cover／period8／school-timetable
- * 合計約 6k 行，只在匯出按鈕觸發時用到；改 import() 後主包減肥。呼叫端一律經由
- * 各模块既有的 ensure*Ready gate（ui-report 內實作，兼做 JSZip／ExcelJS／DAC 檢查）。
+ * 閘門實作已移到 export-gates.js（見該檔的分包契約說明）：本檔只做轉接，
+ * 讓既有文件與引用點不必一次改完。新程式碼請直接引 export-gates.js。
+ * 這裡刻意寫成 import＋export 兩段（不用 export ... from），
+ * 好讓 tests/module-deps-tests 的未綁定識別符掃描看得懂。
  */
-import { notifyChunkLoadFailed } from './vendor-libs.js';
-const _cache = {};
-function _cached(key, load) {
-  if (!_cache[key]) {
-    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(); throw e; });
-  }
-  return _cache[key];
-}
+import {
+  ensureActivityCover,
+  ensureInvigilation,
+  ensureAccounting,
+  ensurePeriod8,
+  ensureSchoolTimetable
+} from './export-gates.js';
 
-function ensureActivityCover() {
-  return _cached('activityCover', () => import('./export-activity-cover.js').then((m) => m.ExportActivityCover));
-}
-
-function ensureInvigilation() {
-  return _cached('invigilation', () => import('./export-invigilation-recovered.js').then((m) => m.ExportInvigilation));
-}
-
-function ensureAccounting() {
-  return _cached('accounting', () => import('./export-accounting.js').then((m) => m.default || m.ExportAccounting));
-}
-
-function ensurePeriod8() {
-  return _cached('period8', () => import('./export-period8-accounting.js').then((m) => m.default || m.ExportPeriod8Accounting));
-}
-
-function ensureSchoolTimetable() {
-  return _cached('schoolTimetable', () => import('./export-school-timetable.js').then((m) => m.ExportSchoolTimetable));
-}
-
-export { ensureActivityCover, ensureInvigilation, ensureAccounting, ensurePeriod8, ensureSchoolTimetable };
+export {
+  ensureActivityCover,
+  ensureInvigilation,
+  ensureAccounting,
+  ensurePeriod8,
+  ensureSchoolTimetable
+};

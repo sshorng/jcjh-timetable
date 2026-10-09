@@ -1,6 +1,6 @@
 import { ensureExcelJS, ensureJSZip } from './vendor-libs.js';
 import { downloadJsonSheets } from './excel-io.js';
-import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable } from './export-lazy.js';
+import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable } from './export-gates.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。

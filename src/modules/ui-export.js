@@ -7,10 +7,11 @@ import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { ensureExcelJS } from './vendor-libs.js';
-// 匯出 payload 改按需載入（export-lazy.js）：首屏主包不含，點匯出才抓。
+// 匯出 payload 改按需載入（export-gates.js）：首屏主包不含，點匯出才抓。
 // activity-cover／invigilation／period8 經 deps 的 ensure*Ready gate（回傳已載模組）；
 // accounting 無 gate，直接用 loader。
-import { ensureAccounting, ensurePeriod8 } from './export-lazy.js';
+// 閘門一律靜態引用：動態 import() 只寫在 export-gates.js 內，Rollup 才切得出 chunk。
+import { ensureAccounting, ensurePeriod8 } from './export-gates.js';
 
 /**
  * ui-export.js — 匯出 orchestration（從 app.js 抽出，2A）

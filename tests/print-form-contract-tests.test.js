@@ -85,8 +85,8 @@ test('print form contract tests（v1 移植）', () => {
     getTeacherNameByEmail: submittedBuilderContext.getTeacherNameByEmail
   }).buildPaperRecordsForSubmittedRequests;
   const printHelperSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'print-helper.js'), 'utf8');
-  const styleSource = fs.readFileSync(path.join(here, '..', 'public', 'style.css'), 'utf8');
-  const mobileSource = fs.readFileSync(path.join(here, '..', 'public', 'mobile.css'), 'utf8');
+  const styleSource = fs.readFileSync(path.join(here, '..', 'src', 'styles', 'style.css'), 'utf8');
+  const mobileSource = fs.readFileSync(path.join(here, '..', 'src', 'styles', 'mobile.css'), 'utf8');
 
 
   const output = generateFormHtml(substitution, 'NoticeTeacher', fixtureContext);
