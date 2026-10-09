@@ -3,7 +3,6 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import FieldMap from '../domain/field-map.js';
 import { UiClassAwayAdmin } from '../modules/ui-activity.js';
-import { UiBackoffice } from '../modules/ui-backoffice.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiMutualPanelState } from '../modules/ui-mutual.js';
 import { showConfirm, showToast } from '../ui/toast.js';
@@ -77,12 +76,11 @@ export const useBackofficeStore = defineStore('backoffice', () => {
       }
       // 保持 Modal 開啟或關閉皆可；複製後仍可選其他按鈕
     };
-const getBackofficeApi = () => {
+const ensureUiBackofficeApi = async () => {
       if (_backofficeApi) return _backofficeApi;
-      if (!UiBackoffice) {
-        console.error('UiBackoffice 未載入');
-        return null;
-      }
+      // ui-backoffice.js 改動態載入：首次操作才抓 chunk，不進首屏主包。
+      // 呼叫端一律經 needUiBackoffice（失敗會 toast）；三個同步查詢已內聯至殼層，不受影響。
+      const { UiBackoffice } = await import('../modules/ui-backoffice.js');
       _backofficeApi = UiBackoffice.create({
         computed, loading: storeToRefs(useSessionStore()).loading, user: storeToRefs(useSessionStore()).user, cancelAll: useGasStore().cancelAll, callGasApi: useGasStore().callGasApi, clearSWR: useGasStore().clearSWR, isGsiInitialized: useSessionStore().isGsiInitialized, isGoogleGsiReady: useSessionStore().isGoogleGsiReady,
         suppressGsiAutoLogin: useSessionStore().suppressGsiAutoLogin, gsiLoggingIn: storeToRefs(useSessionStore()).gsiLoggingIn, paginatedHistoryRecords: storeToRefs(useTimetableStore()).paginatedHistoryRecords, selectedRecordIds: storeToRefs(useMutualStore()).selectedRecordIds,
@@ -115,91 +113,62 @@ const getBackofficeApi = () => {
       });
       return _backofficeApi;
     };
+    const getBackofficeApi = () => ensureUiBackofficeApi();
+    const needUiBackoffice = async (fnName, ...args) => {
+      try {
+        const api = await ensureUiBackofficeApi();
+        if (!api || typeof api[fnName] !== 'function') {
+          showToast('後台功能未就緒', 'error');
+          return;
+        }
+        return await api[fnName](...args);
+      } catch (e) {
+        showToast((e && e.message) || '後台模組載入失敗', 'error');
+      }
+    };
 
-    const logout = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.logout(...args) : undefined;
+    const logout = (...a) => needUiBackoffice('logout', ...a);
+    const toggleSelectAllRecords = (...a) => needUiBackoffice('toggleSelectAllRecords', ...a);
+    // 以下三個查詢為同步渲染用（模板直接讀回傳值），不可改非同步：
+    // 邏輯原在 UiBackoffice，皆為純謂詞，內聯至殼層（讀同一 refs，逐字一致）。
+    const isHistoryRecordSelected = (id) =>
+      (storeToRefs(useMutualStore()).selectedRecordIds.value || []).some(selectedId => String(selectedId) === String(id));
+    const isHistoryBatchGroupSelected = (group) => {
+      const ids = (group && group.items || []).map(item => item && item.id).filter(id => id != null).map(String);
+      if (!ids.length) return false;
+      const selected = new Set((storeToRefs(useMutualStore()).selectedRecordIds.value || []).map(id => String(id)));
+      return ids.every(id => selected.has(id));
     };
-    const toggleSelectAllRecords = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.toggleSelectAllRecords(...args) : undefined;
+    const toggleHistoryBatchGroupSelection = (...a) => needUiBackoffice('toggleHistoryBatchGroupSelection', ...a);
+    const changeHistoryPage = (...a) => needUiBackoffice('changeHistoryPage', ...a);
+    const openBatchPendingPrintPreview = (...a) => needUiBackoffice('openBatchPendingPrintPreview', ...a);
+    const isAdminPendingPageFullySelected = () => {
+      const ids = [];
+      (storeToRefs(useTimetableStore()).paginatedAdminPending.value || []).forEach(row => {
+        if (row && row.displayKind === 'batch') {
+          (row.items || []).forEach(item => {
+            if (item && item.id != null) ids.push(item.id);
+          });
+        } else if (row && row.displayKind === 'item' && row.id != null) {
+          ids.push(row.id);
+        }
+      });
+      const isAdminPendingSelected = useRequestsStore().isAdminPendingSelected;
+      return ids.length > 0 && ids.every(id => isAdminPendingSelected(id));
     };
-    const isHistoryRecordSelected = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.isHistoryRecordSelected(...args) : false;
-    };
-    const isHistoryBatchGroupSelected = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.isHistoryBatchGroupSelected(...args) : false;
-    };
-    const toggleHistoryBatchGroupSelection = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.toggleHistoryBatchGroupSelection(...args) : undefined;
-    };
-    const changeHistoryPage = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.changeHistoryPage(...args) : undefined;
-    };
-    const openBatchPendingPrintPreview = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.openBatchPendingPrintPreview(...args) : undefined;
-    };
-    const isAdminPendingPageFullySelected = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.isAdminPendingPageFullySelected(...args) : false;
-    };
-    const syncHistorySelectionFromDom = (...args) => {
-      const b = getBackofficeApi();
-      return b ? b.syncHistorySelectionFromDom(...args) : undefined;
-    };
-    const openManualQuotaAdjust = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.openManualQuotaAdjust(...args) : undefined;
-    };
-    const saveManualQuotaAdjust = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.saveManualQuotaAdjust(...args) : undefined;
-    };
-    const openEmptySlotAssign = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.openEmptySlotAssign(...args) : undefined;
-    };
-    const openEmptySlotFromDetail = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.openEmptySlotFromDetail(...args) : undefined;
-    };
-    const onLeaveReasonChange = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.onLeaveReasonChange(...args) : undefined;
-    };
-    const previewMutualDraft = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.previewMutualDraft(...args) : undefined;
-    };
-    const submitAllMutualDrafts = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.submitAllMutualDrafts(...args) : undefined;
-    };
-    const toggleMutualCover = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.toggleMutualCover(...args) : undefined;
-    };
-    const resetAppState = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.resetAppState(...args) : undefined;
-    };
-    const restoreNavAfterLogin = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.restoreNavAfterLogin(...args) : undefined;
-    };
-    const devSwitchUser = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.devSwitchUser(...args) : undefined;
-    };
-    const restoreAdmin = (...args) => {
-      const a = getBackofficeApi();
-      return a ? a.restoreAdmin(...args) : undefined;
-    };
+    const syncHistorySelectionFromDom = (...a) => needUiBackoffice('syncHistorySelectionFromDom', ...a);
+    const openManualQuotaAdjust = (...a) => needUiBackoffice('openManualQuotaAdjust', ...a);
+    const saveManualQuotaAdjust = (...a) => needUiBackoffice('saveManualQuotaAdjust', ...a);
+    const openEmptySlotAssign = (...a) => needUiBackoffice('openEmptySlotAssign', ...a);
+    const openEmptySlotFromDetail = (...a) => needUiBackoffice('openEmptySlotFromDetail', ...a);
+    const onLeaveReasonChange = (...a) => needUiBackoffice('onLeaveReasonChange', ...a);
+    const previewMutualDraft = (...a) => needUiBackoffice('previewMutualDraft', ...a);
+    const submitAllMutualDrafts = (...a) => needUiBackoffice('submitAllMutualDrafts', ...a);
+    const toggleMutualCover = (...a) => needUiBackoffice('toggleMutualCover', ...a);
+    const resetAppState = (...a) => needUiBackoffice('resetAppState', ...a);
+    const restoreNavAfterLogin = (...a) => needUiBackoffice('restoreNavAfterLogin', ...a);
+    const devSwitchUser = (...a) => needUiBackoffice('devSwitchUser', ...a);
+    const restoreAdmin = (...a) => needUiBackoffice('restoreAdmin', ...a);
 const {
       showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm,
       openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,

@@ -1,7 +1,6 @@
 /** v2 stores/admin.js — 由 v1 setup() §分節機械分解（gen-final.cjs）。 */
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
-import { UiAdmin } from '../modules/ui-admin.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
 import { useDataStore } from './data.js';
@@ -109,6 +108,9 @@ export const useAdminStore = defineStore('admin', () => {
     };
 const ensureUiAdminApi = async () => {
       if (_uiAdminApi) return _uiAdminApi;
+      // ui-admin.js 改動態載入：管理員首次操作才抓 chunk，不進首屏主包。
+      // 呼叫端一律經 needUiAdmin（失敗會 toast），模板綁定的 state refs 全在殼層，不受影響。
+      const { UiAdmin } = await import('../modules/ui-admin.js');
       _uiAdminApi = UiAdmin.create({
         ref,
         callGasApi: useGasStore().callGasApi,
