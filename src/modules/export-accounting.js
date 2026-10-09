@@ -1177,6 +1177,55 @@ const __root = {
     return String(schedule.attr || schedule['\u8ab2\u5802\u5c6c\u6027'] || '').trim() === '\u4ee3\u8ab2';
   }
 
+  // 課表索引（匯出加速）：isOvertimeSubstitution／isSubstituteAttributePayoutRecord
+  // 原本對每筆紀錄做全課表 .some() 掃描（來源數 × 紀錄數 × 課表數，100 師量級約 100 秒）。
+  // 改為按（教師識別鍵、星期、節次）建桶：boolean 結果與全掃描完全等價——
+  // sameTeacher 本來就是識別鍵交集（teacherIdentityKeys），dow／period 是嚴格相等；
+  // NaN 在原語義下永不命中（NaN === 任何值皆 false），建表時直接略過；
+  // 非數字 dow／period 查詢直接回空陣列（數字 === 非數字永 false）。
+  // 其餘 active／班級／旗標仍逐一重驗，呼叫端語義不變。
+  // 以 schedules 陣列引用＋長度為失效條件（與 _periodPrefilterMemo 同一契約：
+  // 调用端在一次 buildExportData 內傳同一陣列；若有人原地改寫內容，須重建陣列）。
+  var _scheduleIndexMemo = null;
+  function scheduleBucketKey(identityKey, dow, period) {
+    return identityKey + '**' + dow + '**' + period;
+  }
+  function getScheduleIndex(schedules) {
+    var list = schedules || [];
+    if (_scheduleIndexMemo && _scheduleIndexMemo.schedules === list
+        && _scheduleIndexMemo.length === list.length) {
+      return _scheduleIndexMemo.byKey;
+    }
+    var byKey = {};
+    list.forEach(function (schedule) {
+      if (!schedule) return;
+      var dow = Number(schedule.dayOfWeek);
+      var period = Number(schedule.period);
+      if (Number.isNaN(dow) || Number.isNaN(period)) return; // 原語義下永不命中
+      var keys = teacherIdentityKeys(schedule);
+      for (var i = 0; i < keys.length; i++) {
+        var bucket = scheduleBucketKey(keys[i], dow, period);
+        if (!byKey[bucket]) byKey[bucket] = [];
+        byKey[bucket].push(schedule);
+      }
+    });
+    _scheduleIndexMemo = { schedules: list, length: list.length, byKey: byKey };
+    return byKey;
+  }
+  // 取出與（教師名、星期、節次）同桶的候選課表（呼叫端仍需逐一驗 active／班級／旗標）。
+  function scheduleBucketFor(schedules, name, dow, period) {
+    if (typeof dow !== 'number' || typeof period !== 'number') return [];
+    if (Number.isNaN(dow) || Number.isNaN(period)) return [];
+    var byKey = getScheduleIndex(schedules);
+    var out = [];
+    var keys = teacherIdentityKeys(name);
+    for (var i = 0; i < keys.length; i++) {
+      var bucket = byKey[scheduleBucketKey(keys[i], dow, period)] || [];
+      for (var j = 0; j < bucket.length; j++) out.push(bucket[j]);
+    }
+    return out;
+  }
+
   function isSubstituteAttributePayoutRecord(record, schedules, schoolSwapIndex) {
     if (!record) return false;
     if (isTimetableOnlyRecord(record)) return false;
@@ -1185,14 +1234,12 @@ const __root = {
     var period = Number(record.period);
     if (!date || !Number.isFinite(period) || !isWeeklyPeriod(period)) return false;
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
-    return (schedules || []).some(function (schedule) {
-      return sameTeacher(schedule, record.originalTeacherName)
-        && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
-        && Number(schedule.period) === sourceSlot.period
-        && isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
-        && sameScheduleClass(record, schedule)
-        && isSubstituteSchedule(schedule);
-    });
+    return scheduleBucketFor(schedules, record.originalTeacherName, sourceSlot.dayOfWeek, sourceSlot.period)
+      .some(function (schedule) {
+        return isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
+          && sameScheduleClass(record, schedule)
+          && isSubstituteSchedule(schedule);
+      });
   }
 
   function isUsableSubstitution(record) {
@@ -1403,9 +1450,27 @@ const __root = {
     } catch (e) {}
   }
 
+  // 單次建表內的 resolver 快取（匯出加速）：overtimeExpenseSourceForRecord 單次約 3ms，
+  // 一次建表會對同批紀錄呼叫約 8000 次（其中僅約 2000 筆不重複：chargedMap 建立 ×2、
+  // summary 計畫過濾 ×2）。teachers／schedules／schoolSwapIndex 在同一次建表內不變
+  // （全原始碼唯一呼叫點即此處），故結果只與紀錄內容有關；key 取內容 JSON，
+  // 中途即使有人改寫欄位也會自動 miss。每次 buildExportData 進入時換新 Map
+  // （單線程同步執行，無重入問題）。
+  var _domainSourceMemo = null;
+  function resolveDomainExpenseSource(record, teachers, schedules, schoolSwapIndex) {
+    var memo = _domainSourceMemo;
+    var key = null;
+    if (memo) {
+      try { key = '#rec:' + JSON.stringify(record); } catch (e) { key = null; }
+      if (key !== null && Object.prototype.hasOwnProperty.call(memo, key)) return memo[key];
+    }
+    var resolved = root.DomainBilling.overtimeExpenseSourceForRecord(record, teachers, schedules, schoolSwapIndex);
+    if (key !== null) memo[key] = resolved;
+    return resolved;
+  }
   function expenseSourceForChargedRecord(opts, source, record, schoolSwapIndex) {
     if (root.DomainBilling && typeof root.DomainBilling.overtimeExpenseSourceForRecord === 'function') {
-      var resolved = root.DomainBilling.overtimeExpenseSourceForRecord(
+      var resolved = resolveDomainExpenseSource(
         record,
         opts.teachers || [],
         opts.allSchedules || [],
@@ -1454,14 +1519,12 @@ const __root = {
     }
     if (hasCourseAttributeMetadata(record)) return isRecordOvertimeCourse(record);
     var sourceSlot = resolveOvertimeSourceSlot(record, schoolSwapIndex);
-    return (schedules || []).some(function (schedule) {
-       return sameTeacher(schedule, record.originalTeacherName)
-        && Number(schedule.dayOfWeek) === sourceSlot.dayOfWeek
-        && Number(schedule.period) === sourceSlot.period
-        && isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
-        && sameScheduleClass(record, schedule)
-        && isOvertimeSchedule(schedule);
-    });
+    return scheduleBucketFor(schedules, record.originalTeacherName, sourceSlot.dayOfWeek, sourceSlot.period)
+      .some(function (schedule) {
+        return isScheduleActiveOnDate(schedule, String(record.date || '').slice(0, 10))
+          && sameScheduleClass(record, schedule)
+          && isOvertimeSchedule(schedule);
+      });
   }
 
   function chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex, teacher) {
@@ -2217,6 +2280,7 @@ const __root = {
 
   function buildExportData(opts) {
     opts = opts || {};
+    _domainSourceMemo = {}; // 本次建表專用的 resolver 快取（見 expenseSourceForChargedRecord）
     if (!Array.isArray(opts.monthlyReportRows)
         && root.DomainBilling && typeof root.DomainBilling.buildMonthlyReportRows === 'function') {
       opts.monthlyReportRows = root.DomainBilling.buildMonthlyReportRows(opts);
