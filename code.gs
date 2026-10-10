@@ -1315,6 +1315,30 @@ function rowKeyForSheet_(sheetName, row, keyName) {
   return String(key == null ? "" : key);
 }
 
+/**
+ * Phase 3.3：同列跨欄一次讀（key 欄＋學期欄）。
+ * 兩欄近距時一次寬讀省一次 API 往返；跨度超過 8 欄退回兩次窄讀，避免大寬表搬運過多位元組。
+ * @returns {{ keyVals: Array, semesterVals: (Array|null) }}
+ */
+function readKeySemesterCols_(sheet, keyCol, semesterCol, numDataRows) {
+  if (semesterCol < 1) {
+    return { keyVals: sheet.getRange(2, keyCol, numDataRows, 1).getValues(), semesterVals: null };
+  }
+  var span = Math.abs(keyCol - semesterCol) + 1;
+  if (span <= 8) {
+    var lo = Math.min(keyCol, semesterCol);
+    var wide = sheet.getRange(2, lo, numDataRows, span).getValues();
+    return {
+      keyVals: wide.map(function (row) { return [row[keyCol - lo]]; }),
+      semesterVals: wide.map(function (row) { return [row[semesterCol - lo]]; })
+    };
+  }
+  return {
+    keyVals: sheet.getRange(2, keyCol, numDataRows, 1).getValues(),
+    semesterVals: sheet.getRange(2, semesterCol, numDataRows, 1).getValues()
+  };
+}
+
 // 批次儲存/更新（增量：只更新變更列或 append，避免整表 clearContents）
 function saveRows(sheetName, rowsToSave, keyName) {
   if (isNameKeyDomainSheet_(sheetName)) {
@@ -1356,12 +1380,11 @@ function saveRows(sheetName, rowsToSave, keyName) {
     // 學期內 key 才唯一，跨學期必須使用複合 key。
     const numDataRows = lastRow - 1;
     if (numDataRows > 0 && (rowsToSave || []).length <= 40) {
-      // 小批量只讀學期欄與 key 欄，避免先將整張表物件化。
+      // 小批量只讀學期欄與 key 欄，避免先將整張表物件化（3.3：近距一次寬讀）。
       const semesterCol = headers.indexOf("學期代號") + 1;
-      const keyVals = sheet.getRange(2, keyCol, numDataRows, 1).getValues();
-      const semesterVals = semesterCol > 0
-        ? sheet.getRange(2, semesterCol, numDataRows, 1).getValues()
-        : null;
+      const keySem = readKeySemesterCols_(sheet, keyCol, semesterCol, numDataRows);
+      const keyVals = keySem.keyVals;
+      const semesterVals = keySem.semesterVals;
       for (var si = 0; si < keyVals.length; si++) {
         var rawKey = keyVals[si][0];
         if (rawKey === "" || rawKey === null || rawKey === undefined) continue;
@@ -3693,6 +3716,30 @@ function appendQuotaLedgerRowsFast_(rows) {
 }
 
 /**
+ * Phase 3.3：教師名單 email＋學期＋額度三欄一次讀。
+ * 跨度 12 欄內一次寬讀；超寬退回三次窄讀（形狀與舊程式逐格一致）。
+ * @returns {{ emailVals: Array, semVals: (Array|null), quotaVals: Array }}
+ */
+function readTeacherQuotaCols_(sheet, emailCol, semCol, quotaCol, num) {
+  var cols = [emailCol, quotaCol];
+  if (semCol > 0) cols.push(semCol);
+  var lo = Math.min.apply(null, cols);
+  var hi = Math.max.apply(null, cols);
+  if (hi - lo + 1 <= 12) {
+    var wide = sheet.getRange(2, lo, num, hi - lo + 1).getValues();
+    var pick = function (c) {
+      return wide.map(function (row) { return [row[c - lo]]; });
+    };
+    return { emailVals: pick(emailCol), semVals: semCol > 0 ? pick(semCol) : null, quotaVals: pick(quotaCol) };
+  }
+  return {
+    emailVals: sheet.getRange(2, emailCol, num, 1).getValues(),
+    semVals: semCol > 0 ? sheet.getRange(2, semCol, num, 1).getValues() : null,
+    quotaVals: sheet.getRange(2, quotaCol, num, 1).getValues()
+  };
+}
+
+/**
  * 只更新教師名單「折抵額度」欄（本學期列），一次讀 key＋一欄寫回
  * @param {string} semesterId
  * @param {Object} balByEmail email(lower) -> number
@@ -3720,9 +3767,10 @@ function patchTeacherMutualQuotaColumn_(semesterId, balByEmail) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
   var num = lastRow - 1;
-  var emailVals = sheet.getRange(2, emailCol, num, 1).getValues();
-  var semVals = semCol > 0 ? sheet.getRange(2, semCol, num, 1).getValues() : null;
-  var quotaVals = sheet.getRange(2, quotaCol, num, 1).getValues();
+  var quotaCols = readTeacherQuotaCols_(sheet, emailCol, semCol, quotaCol, num);
+  var emailVals = quotaCols.emailVals;
+  var semVals = quotaCols.semVals;
+  var quotaVals = quotaCols.quotaVals;
   var sid = String(semesterId || "");
   var want = {};
   emails.forEach(function (em) { want[String(em).toLowerCase().trim()] = balByEmail[em]; });

@@ -312,6 +312,8 @@ export const GAS_GLOBALS = [
   "quotaNowStr_",
   "quotaTeacherNameForKey_",
   "readActionRoutes_",
+  "readKeySemesterCols_",
+  "readTeacherQuotaCols_",
   "rejectTriangleRequest_",
   "rememberPublicCacheKey_",
   "removeCacheChunked",
