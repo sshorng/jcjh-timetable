@@ -95,8 +95,8 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.match(source, /!isTimetableOnlyFee_\(requestRow\["經費來源"\] \|\| requestRow\.subFee\)/, '代導同步不得處理僅課表申請');
   assert.match(source, /isTimetableOnlyFee_\(feeOne\)/, '單筆申請應限制僅課表費用權限');
   assert.match(source, /isTimetableOnlyFee_\(feeRow\)/, '批次申請應限制僅課表費用權限');
-  const exchangeBatchStart = source.indexOf('} else if (action === "submitExchangeBatch")');
-  const exchangeBatchEnd = source.indexOf('} else if (action === "submitRequestBatch")', exchangeBatchStart);
+   const exchangeBatchStart = source.indexOf('function handlePostSubmitExchangeBatch_');
+   const exchangeBatchEnd = source.indexOf('function handlePostSubmitRequestBatch_', exchangeBatchStart);
   assert.ok(exchangeBatchStart >= 0 && exchangeBatchEnd > exchangeBatchStart, '批次調課應有獨立送出 action');
   const exchangeBatchSource = source.slice(exchangeBatchStart, exchangeBatchEnd);
   assert.match(exchangeBatchSource, /exchangeBatchFailures\.push/, '批次調課需逐組回傳失敗原因');
@@ -130,8 +130,8 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.equal(awayNormContext.normalizeClassAwayPeriod_('第7節'), '第7節');
   assert.equal(awayNormContext.normalizeClassAwayPeriod_('早自習、第1節、第8節'), '早自習、第1節、第8節');
   assert.equal(awayNormContext.normalizeClassAwayPeriod_('0,2,8'), '早自習、第2節、第8節');
-  const adminApproveStart = source.indexOf('} else if (action === "adminApprove")');
-  const adminApproveEnd = source.indexOf('} else if (action === "adminApproveBatch")', adminApproveStart);
+   const adminApproveStart = source.indexOf('function handlePostAdminApprove_');
+   const adminApproveEnd = source.indexOf('function handlePostAdminApproveBatch_', adminApproveStart);
   assert.ok(adminApproveStart >= 0 && adminApproveEnd > adminApproveStart, '單筆核准 action 必須存在');
   assert.match(source.slice(adminApproveStart, adminApproveEnd), /persistRequestRowsWithQuota_\(\[targetReq\], userEmail\)/, '單筆核准應冪等補寫額度帳本');
   const requestLookupStart = source.indexOf('function findRowByKey_');
@@ -159,20 +159,20 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   vm.runInContext(source.slice(requestLookupStart, requestLookupEnd), requestLookupContext, { filename: 'code.gs.request-lookup' });
   const triangleRequest = requestLookupContext.findRowByKey_('申請單', '申請單ID', 'tri_20260929_ab12_1', '115-1');
   assert.equal(triangleRequest['申請單ID'], 'tri_20260929_ab12_1', '單筆查詢不可截掉三角調 ID 的腳次尾碼');
-  const adminApproveBatchStart = source.indexOf('} else if (action === "adminApproveBatch")');
-  const adminApproveBatchEnd = source.indexOf('} else if (action === "adminReject")', adminApproveBatchStart);
+   const adminApproveBatchStart = source.indexOf('function handlePostAdminApproveBatch_');
+   const adminApproveBatchEnd = source.indexOf('function handlePostAdminReject_', adminApproveBatchStart);
   assert.ok(adminApproveBatchStart >= 0 && adminApproveBatchEnd > adminApproveBatchStart, '批次核准 action 必須存在');
   assert.match(source.slice(adminApproveBatchStart, adminApproveBatchEnd), /persistRequestRowsWithQuota_\(apToSave, userEmail\)/, '批次核准應冪等補寫額度帳本');
-  const classAwaySaveStart = source.indexOf('} else if (action === "saveClassAwayEvent")');
-  const classAwaySaveEnd = source.indexOf('} else if (action === "deleteClassAwayEvent")', classAwaySaveStart);
+   const classAwaySaveStart = source.indexOf('function handlePostSaveClassAwayEvent_');
+   const classAwaySaveEnd = source.indexOf('function handlePostDeleteClassAwayEvent_', classAwaySaveStart);
   assert.ok(classAwaySaveStart >= 0 && classAwaySaveEnd > classAwaySaveStart, '空堂事件儲存 action 必須存在');
   const classAwaySaveSource = source.slice(classAwaySaveStart, classAwaySaveEnd);
   assert.match(classAwaySaveSource, /cae\["適用範圍"\] = awayScope/, '儲存空堂事件應寫入適用範圍');
   assert.match(classAwaySaveSource, /cae\["停課節次"\] = normalizeClassAwayPeriod_/, '儲存空堂事件應寫入停課節次');
   assert.match(classAwaySaveSource, /cae\["起始節次"\] = normalizeClassAwayBoundaryPeriod_/, '儲存空堂事件應驗證起點節次');
   assert.match(classAwaySaveSource, /cae\["結束節次"\] = normalizeClassAwayBoundaryPeriod_/, '儲存空堂事件應驗證終點節次');
-  const quotaAdjustStart = source.indexOf('} else if (action === "updateMutualQuotas")');
-  const quotaAdjustEnd = source.indexOf('} else if (action === "earnMutualQuotaFromActivity")', quotaAdjustStart);
+   const quotaAdjustStart = source.indexOf('function handlePostUpdateMutualQuotas_');
+   const quotaAdjustEnd = source.indexOf('function handlePostEarnMutualQuotaFromActivity_', quotaAdjustStart);
   assert.ok(quotaAdjustStart >= 0 && quotaAdjustEnd > quotaAdjustStart, '管理員額度手動調整 action 必須存在');
   const quotaAdjustSource = source.slice(quotaAdjustStart, quotaAdjustEnd);
   assert.match(quotaAdjustSource, /if \(!isAdmin\) throw new Error/, '手動額度調整必須限制管理員');
@@ -200,8 +200,8 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
     scheduleKeyContext.scheduleSlotGroupKey_(Object.assign({}, oldScheduleVersion, { '教師姓名': '李老師' })),
     '課表新版本仍須維持相同教師'
   );
-  const saveScheduleStart = source.indexOf('} else if (action === "saveScheduleCell")');
-  const saveScheduleEnd = source.indexOf('} else if (action === "clearScheduleCell")', saveScheduleStart);
+   const saveScheduleStart = source.indexOf('function handlePostSaveScheduleCell_');
+   const saveScheduleEnd = source.indexOf('function handlePostClearScheduleCell_', saveScheduleStart);
   assert.ok(saveScheduleStart >= 0 && saveScheduleEnd > saveScheduleStart, 'save schedule action must remain discoverable');
   const saveScheduleSource = source.slice(saveScheduleStart, saveScheduleEnd);
   assert.match(saveScheduleSource, /scheduleSlotGroupKey_\(previousRow\) !== scheduleSlotGroupKey_\(reqData\)/, 'new schedule versions should compare stable slot groups');
@@ -219,8 +219,8 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.match(triangleInputSource, /payload\.reason \|\| payload\["請假事由"\].*\|\| "請假"/, 'triangle requests should use the entered reason and default to leave');
   assert.match(triangleInputSource, /"請假事由": triangleReason/, 'triangle rows should persist the selected reason');
   assert.match(triangleInputSource, /"備註": triangleText_\(raw\.note \|\| raw\["備註"\]\) \|\| triangleNote/, 'triangle rows should persist the entered reason note');
-  const triangleSubmitStart = source.indexOf('action === "submitTriangleRequest"');
-  const triangleSubmitEnd = source.indexOf('} else if (action === "submitRequest")', triangleSubmitStart);
+   const triangleSubmitStart = source.indexOf('function handlePostSubmitTriangleRequest_');
+   const triangleSubmitEnd = source.indexOf('function handlePostSubmitRequest_', triangleSubmitStart);
   assert.ok(triangleSubmitStart >= 0 && triangleSubmitEnd > triangleSubmitStart, 'triangle submit action must remain discoverable');
   const triangleSubmitSource = source.slice(triangleSubmitStart, triangleSubmitEnd);
   assert.doesNotMatch(triangleSubmitSource, /紙本模式暫不提供/, 'paper mode must support triangle submissions');
@@ -405,8 +405,8 @@ test('code gs contract tests（後端合約，v1/v2 共用）', () => {
   assert.ok(appHomeroomStart >= 0 && appHomeroomEnd > appHomeroomStart, '代導畫面計費判斷必須存在');
   assert.match(homeroomLibSource.slice(appHomeroomStart, appHomeroomEnd), /matched\.some\(isEmptySlotAssignmentRequest\)/,
     '代導待指定清單與月度統計必須排除空堂任務');
-  const manualHomeroomStart = source.indexOf('} else if (action === "saveManualHomeroomRecord")');
-  const manualHomeroomEnd = source.indexOf('} else if (action === "deleteHomeroomRecord")', manualHomeroomStart);
+   const manualHomeroomStart = source.indexOf('function handlePostSaveManualHomeroomRecord_');
+   const manualHomeroomEnd = source.indexOf('function handlePostDeleteHomeroomRecord_', manualHomeroomStart);
   assert.ok(manualHomeroomStart >= 0 && manualHomeroomEnd > manualHomeroomStart, '手動代導 action 必須存在');
   assert.match(source.slice(manualHomeroomStart, manualHomeroomEnd), /!homeroomRequestIsFullDay_\(\{\s*"請假時間類型": timeType,\s*"請假時間": timeRange\s*\}, origTeacher\)/, '手動代導也必須由後端限制整日請假');
 

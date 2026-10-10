@@ -5583,444 +5583,15 @@ function handleReadAction_(postData) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
 
-  // 代課媒合候選（讀取、不佔寫鎖；短快取 45s，申請寫入時代次戳失效）
-  if (action === "getMatchCandidates") {
-    var mLeaveRaw = nameKeyText_(reqData.leaveName || reqData.leaveEmail || "");
-    var mLeave = readerEmail;
-    var mLeaveName = "";
-    if (mLeaveRaw) {
-      var mDirectory = buildNameKeyDirectory_(readerTeachers);
-      mLeaveName = resolveNameKeyTeacher_(mLeaveRaw, semesterId, mDirectory, "原教師", false);
-      mLeave = nameKeyEmailForName_(semesterId, mLeaveName, mDirectory);
-      if (!mLeave) throw new Error("原教師缺少登入 Email");
-      reqData = Object.assign({}, reqData, { leaveEmail: mLeave, leaveName: mLeaveName });
-    }
-    if (!mLeaveRaw) reqData = Object.assign({}, reqData, { leaveEmail: mLeave });
-    if (!readerIsAdmin && mLeave !== readerEmail
-        && !(readerIsStaff && canUserProxySubmit_(readerEmail, readerTeachers))) {
-      throw new Error("您無權查詢其他教師的媒合候選！");
-    }
-    var mDate = String(reqData.dateStr || reqData.requestDate || "").slice(0, 10);
-    var mDay = parseInt(reqData.dayOfWeek != null ? reqData.dayOfWeek : reqData.targetDay, 10);
-    var mPer = parseInt(reqData.period != null ? reqData.period : reqData.targetPeriod, 10);
-    var mAct = (reqData.activityMode === true || reqData.activityMode === "true") ? "1" : "0";
-    var mCls = String(reqData.myClass || reqData.className || "").trim();
-    var mCourse = String(reqData.myCourse != null ? reqData.myCourse : (reqData.subject || "")).trim();
-    var mAway = "";
-    try {
-      var aw = reqData.awayClasses || [];
-      mAway = (aw || []).map(function (c) { return String(c || "").trim(); }).filter(Boolean).sort().join(",");
-    } catch (eAw) { mAway = ""; }
-    var mAwayRange = [reqData.awayStartDate || "", reqData.awayEndDate || "",
-      reqData.awayStartPeriod || "", reqData.awayEndPeriod || ""].join("_");
-    var mGen = "0";
-    try {
-      mGen = CacheService.getScriptCache().get("jcjh_match_gen_" + String(semesterId || "")) || "0";
-    } catch (eGen) {}
-    // key 控長：away 取前 80 字
-    if (mAway.length > 80) mAway = mAway.slice(0, 80);
-     var matchCacheKey = "jcjh_match_" + CACHE_SCHEMA_VERSION_ + "_" + String(semesterId || "") + "_" + mGen + "_"
-      + mDate + "_" + mDay + "_" + mPer + "_" + mLeave + "_" + mAct + "_"
-      + mCls + "_" + mCourse + "_" + mAway + "_" + mAwayRange;
-    if (scope !== "fresh") {
-      try {
-        var mCached = getCacheChunked(matchCacheKey);
-        if (mCached) {
-          return ContentService.createTextOutput(mCached).setMimeType(ContentService.MimeType.JSON);
-        }
-      } catch (eMc) {}
-    }
-    var matchOut = buildMatchCandidates_(semesterId, reqData);
-    try {
-      putCacheChunked(matchCacheKey, JSON.stringify(matchOut), CACHE_TTL_MATCH_);
-    } catch (eMp) {}
-    return ContentService.createTextOutput(JSON.stringify(matchOut))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === "getMetaData") {
-    var settings = buildSettingsMap_();
-    // 若系統設定未填 allowedHd，回傳 Script Properties 的明確設定。
-    if (!settings.allowedHd) {
-      settings.allowedHd = ALLOWED_HD_;
-    }
-    var metaKey = "jcjh_meta_" + String(semesterId || "");
-    var metaCached = getCacheChunked(metaKey);
-    if (metaCached && scope !== "fresh") {
-      try {
-        var metaObj = JSON.parse(metaCached);
-        if (metaObj && metaObj.success) {
-          var cachedOut = Object.assign({}, metaObj);
-          cachedOut.semesterId = semesterId;
-          cachedOut.teachers = sanitizeTeacherRowsForReader_(readerTeachers, readerEmail, readerIsAdmin, readerIsStaff);
-          cachedOut.settings = sanitizeSettingsForReader_(settings, readerEmail, readerIsAdmin, readerIsStaff, readerTeachers);
-          cachedOut.userRole = readerRole;
-          return ContentService.createTextOutput(JSON.stringify(cachedOut)).setMimeType(ContentService.MimeType.JSON);
-        }
-      } catch (metaE) {}
-    }
-    var metaPayload = {
-      success: true,
-      semesterId: semesterId,
-      semesters: getTableData("學期設定"),
-      teachers: readerTeachers,
-      settings: settings
-    };
-    try { putCacheChunked(metaKey, JSON.stringify(metaPayload), CACHE_TTL_META_); } catch (metaPutE) {}
-    var metaOut = Object.assign({}, metaPayload);
-    metaOut.teachers = sanitizeTeacherRowsForReader_(readerTeachers, readerEmail, readerIsAdmin, readerIsStaff);
-    metaOut.settings = sanitizeSettingsForReader_(settings, readerEmail, readerIsAdmin, readerIsStaff, readerTeachers);
-    metaOut.userRole = readerRole;
-    return ContentService.createTextOutput(JSON.stringify(metaOut)).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 極輕量：只回進行中申請（待辦對齊用，不含課表）
-  if (action === "getPendingOnly") {
-    var teachersP = getSemesterTeachersCached_(semesterId);
-    var isAdminP = resolveIsAdmin_(readerEmail, teachersP);
-    // v2：中文狀態掃描修正後換 key，避免舊空陣列快取鎖 45s
-    var pendingKey = "jcjh_pending_v3_namekey_" + semesterId + "_a";
-    var pending = null;
-    if (scope !== "fresh") {
-      var pendingCached = getCacheChunked(pendingKey);
-      if (pendingCached) {
-        try {
-          var parsedP = JSON.parse(pendingCached);
-          if (Array.isArray(parsedP)) pending = parsedP;
-        } catch (pE) { pending = null; }
-      }
-    }
-    if (pending === null) {
-      // 只掃出 pending 列（中文狀態已 translateStatusToEn）
-      pending = getPendingRequestsFromSheet_(semesterId);
-      try {
-        // 空結果只快取 12 秒，避免誤掃／舊 bug 鎖死待辦
-        var pTtl = (pending && pending.length) ? CACHE_TTL_PENDING_ : 12;
-        putCacheChunked(pendingKey, JSON.stringify(pending || []), pTtl);
-      } catch (pPut) {}
-    }
-    var isStaffP = resolveIsStaff_(readerEmail, teachersP);
-    if (!isAdminP && !isStaffP) {
-      pending = (pending || []).filter(function (req) {
-        return requestVisibleToReader_(req, readerEmail, false);
-      });
-    }
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      kind: "pendingOnly",
-      requests: nameKeyPublicRows_("申請單", pending || []),
-      count: (pending || []).length
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 歷史按月：只回該月申請（含已結案），不含課表／教師
-  if (action === "getHistoryMonth") {
-    var teachersH = getSemesterTeachersCached_(semesterId);
-    var isAdminH = resolveIsAdmin_(readerEmail, teachersH);
-    var monthStr = String(reqData.month || postData.month || "").trim().slice(0, 7); // YYYY-MM
-    if (!/^\d{4}-\d{2}$/.test(monthStr)) {
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: "請提供月份 month=YYYY-MM"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    // 共用未個人化月份列；命中後仍須依讀取者權限過濾並移除內部欄位。
-    var monthRows = getHistoryMonthRowsCached_(semesterId, monthStr, scope === "fresh");
-    var isStaffH = resolveIsStaff_(readerEmail, teachersH);
-    if (!isAdminH && !isStaffH) {
-      monthRows = monthRows.filter(function (req) {
-        return requestVisibleToReader_(req, readerEmail, false);
-      });
-    }
-    var histPayload = {
-      success: true,
-      kind: "historyMonth",
-      month: monthStr,
-      requests: nameKeyPublicRows_("申請單", monthRows),
-      count: monthRows.length
-    };
-    var histJson = JSON.stringify(histPayload);
-    return ContentService.createTextOutput(histJson).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // 折抵額度歷程：讀「額度帳本」列（管理員可查任一師；教師僅自己）
-  if (action === "getMutualQuotaLedger") {
-    var targetRaw = nameKeyText_(reqData.name || reqData.teacherName || reqData.email || reqData.teacherEmail || postData.name || postData.email);
-    var teachersL = getSemesterTeachersCached_(semesterId) || [];
-    var readerHitL = teachersL.find(function (teacher) {
-      return nameKeyTeacherEmail_(teacher) === readerEmail;
+  // ----------------- 讀取 Actions 路由 -----------------
+  // （getPublicClassData 免登入短路、全校帳本特例保留內聯；其餘經 readActionRoutes_。）
+  var readHandler = readActionRoutes_()[action];
+  if (readHandler) {
+    return readHandler({
+      postData: postData, action: action, semesterId: semesterId, reqData: reqData, scope: scope,
+      readerEmail: readerEmail, readerTeachers: readerTeachers, readerRole: readerRole,
+      readerIsAdmin: readerIsAdmin, readerIsStaff: readerIsStaff
     });
-    var targetName = targetRaw && targetRaw.indexOf("@") < 0 ? targetRaw : "";
-    var targetEmail = targetRaw && targetRaw.indexOf("@") >= 0 ? nameKeyNorm_(targetRaw) : "";
-    if (!targetRaw) {
-      targetEmail = readerEmail;
-      targetName = readerHitL ? nameKeyTeacherName_(readerHitL) : "";
-    }
-    if (targetName) {
-      var targetHitByName = teachersL.find(function (teacher) {
-        return nameKeyTeacherName_(teacher) === targetName;
-      });
-      if (!targetHitByName) throw new Error("查無目前學期教師姓名：" + targetName);
-      targetEmail = nameKeyTeacherEmail_(targetHitByName);
-    }
-    var isSelfLed = targetEmail === readerEmail;
-    var isAdminL = resolveIsAdmin_(readerEmail, teachersL);
-    if (!isSelfLed && !isAdminL) {
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: "僅能查看自己的額度歷程"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    if (!targetName && targetEmail) {
-      var targetHitByEmail = teachersL.find(function (teacher) {
-        return nameKeyTeacherEmail_(teacher) === targetEmail;
-      });
-      targetName = targetHitByEmail ? nameKeyTeacherName_(targetHitByEmail) : "";
-    }
-    var limitL = parseInt(reqData.limit != null ? reqData.limit : 50, 10) || 50;
-    if (limitL > 120) limitL = 120;
-    // Per-teacher cache key is name-based; Email is only used for auth lookup.
-    var ledCacheGeneration = getCacheGeneration_("quotaLedgerView", semesterId);
-    var ledCacheKey = "jcjh_qled_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_"
-      + ledCacheGeneration + "_" + nameKeyNorm_(targetName) + "_" + limitL;
-    try {
-      var ledCached = CacheService.getScriptCache().get(ledCacheKey);
-      if (ledCached) {
-        return ContentService.createTextOutput(ledCached).setMimeType(ContentService.MimeType.JSON);
-      }
-    } catch (eLedC) {}
-    // 走 getQuotaLedgerRows_（ScriptCache＋mem）；再 filter 教師
-    var sidL = String(semesterId || "");
-    var idxKeyL = makeQuotaLedgerIndexKey_(sidL, targetName);
-    var balSum = 0;
-    var rowsL = [];
-    (getQuotaLedgerRows_(sidL) || []).forEach(function (r) {
-      var ik = String(r["索引鍵"] || "").trim();
-      if (ik) {
-        if (ik !== idxKeyL) return;
-      } else {
-        var em = String(r["教師Email"] || "").toLowerCase().trim();
-        if (em !== targetEmail) return;
-      }
-      var d = parseFloat(r["異動"]);
-      if (isNaN(d)) d = 0;
-      balSum = Math.round((balSum + d) * 1000) / 1000;
-      rowsL.push(r);
-    });
-    // 時間倒序（新→舊）；同秒再以流水ID 倒序
-    rowsL.sort(function (a, b) {
-      var ta = String(a["時間"] || "").replace("T", " ").trim();
-      var tb = String(b["時間"] || "").replace("T", " ").trim();
-      if (tb !== ta) return tb < ta ? -1 : 1;
-      var ida = String(a["流水ID"] || "");
-      var idb = String(b["流水ID"] || "");
-      if (idb !== ida) return idb < ida ? -1 : 1;
-      return 0;
-    });
-    if (rowsL.length > limitL) rowsL = rowsL.slice(0, limitL);
-    var typeLabel = function (t) {
-      var k = String(t || "").toLowerCase();
-      if (k === "earn") return "發放";
-      if (k === "spend") return "扣用";
-      if (k === "restore") return "還原";
-      if (k === "adjust") return "手動";
-      return t || "—";
-    };
-    var ledger = rowsL.map(function (r) {
-      var d = parseFloat(r["異動"]);
-      if (isNaN(d)) d = 0;
-      d = Math.round(d * 1000) / 1000;
-      var ba = parseFloat(r["餘額後"]);
-      if (isNaN(ba)) ba = 0;
-      ba = Math.round(ba * 1000) / 1000;
-      return {
-        id: r["流水ID"] || "",
-        time: r["時間"] || "",
-        name: r["教師姓名"] || "",
-        delta: d,
-        balanceAfter: ba,
-        type: r["類型"] || "",
-        typeLabel: typeLabel(r["類型"]),
-        packageId: r["包ID"] || "",
-        eventId: r["事件ID"] || "",
-        eventName: r["事件名稱"] || "",
-        startDate: r["起日"] || "",
-        endDate: r["迄日"] || "",
-        requestId: r["申請單ID"] || "",
-        operator: r["操作者"] || "",
-        note: r["備註"] || ""
-      };
-    });
-    var balance = Math.max(0, balSum);
-    var tHit = null;
-    if (teachersL && teachersL.length) {
-      tHit = teachersL.find(function (t) {
-        return String(t["教師Email"] || t.email || "").toLowerCase() === targetEmail;
-      });
-    }
-    var sheetQLed = balance;
-    if (tHit) {
-      var sqL = parseFloat(tHit["折抵額度"] != null ? tHit["折抵額度"] : tHit.mutualQuota);
-      if (isNaN(sqL) || sqL < 0) sqL = 0;
-      sheetQLed = Math.round(sqL * 1000) / 1000;
-    }
-    // 名單餘額優先（與畫面教師列表一致）；帳本加總作備援
-    if (tHit && sheetQLed != null) balance = sheetQLed;
-    var outLed = {
-      success: true,
-      name: tHit ? (tHit["教師姓名"] || tHit.name || "") : (ledger[0] && ledger[0].name) || "",
-      balance: balance,
-      sheetQuota: sheetQLed,
-      ledger: ledger,
-      count: ledger.length
-    };
-    var outLedJson = JSON.stringify(outLed);
-    try { CacheService.getScriptCache().put(ledCacheKey, outLedJson, 120); } catch (eLedP) {}
-    return ContentService.createTextOutput(outLedJson).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === "getHomeroomRecords") {
-    var hTeachers = getSemesterTeachersCached_(semesterId);
-    var hIsAdmin = resolveIsAdmin_(readerEmail, hTeachers);
-    if (!hIsAdmin) {
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: "僅管理員可查看代導紀錄"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      homeroomRecords: nameKeyPublicRows_("代導紀錄", getSemesterHomeroomRecords_(semesterId))
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === "getQuotaSpendPreview") {
-    var pvEmails = reqData.emails || reqData.teacherEmails || [];
-    if (reqData.email && (!pvEmails || !pvEmails.length)) pvEmails = [reqData.email];
-    if (typeof pvEmails === "string") pvEmails = [pvEmails];
-    var pvNames = reqData.names || reqData.teacherNames || [];
-    if (reqData.name && (!pvNames || !pvNames.length)) pvNames = [reqData.name];
-    if (typeof pvNames === "string") pvNames = [pvNames];
-    var pvReqs = reqData.requests || [];
-    var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs, pvNames);
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      preview: preview
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  if (action === "getInitialData") {
-    var teachersForRole = readerTeachers;
-    var personalizeOpts = { isStaff: readerIsStaff, canViewAllTimetables: !!(readerIsAdmin || readerIsStaff) };
-    var partsHint = String(reqData.parts || postData.parts || "").toLowerCase();
-    var historyAllFlag = reqData.historyAll === true || reqData.historyAll === "true" || reqData.historyAll === 1
-      || postData.historyAll === true || postData.historyAll === "true";
-    var requestsOnlyFlag = reqData.requestsOnly === true || reqData.requestsOnly === "true" || reqData.requestsOnly === 1
-      || postData.requestsOnly === true || postData.requestsOnly === "true"
-      || partsHint === "requests";
-    var teachersOnlyFlag = reqData.teachersOnly === true || reqData.teachersOnly === "true" || reqData.teachersOnly === 1
-      || postData.teachersOnly === true || postData.teachersOnly === "true"
-      || partsHint === "teachers";
-    var windowDaysOpt = 14;
-    if (reqData.windowDays != null && reqData.windowDays !== "") windowDaysOpt = reqData.windowDays;
-    else if (postData.windowDays != null && postData.windowDays !== "") windowDaysOpt = postData.windowDays;
-    var wDays = parseInt(windowDaysOpt, 10) || 14;
-    var dataGeneration = getCacheGeneration_("data", semesterId);
-
-    // ── 申請增量：updatedSince 之後變更列（softRefresh 用）──
-    var updatedSinceRaw = reqData.updatedSince || postData.updatedSince || "";
-    // 僅當明確 requestsDelta + 水位線時走增量（避免誤把一般 getInitialData 當 delta）
-    if ((reqData.requestsDelta === true || reqData.requestsDelta === "true" || reqData.requestsDelta === 1
-        || postData.requestsDelta === true || postData.requestsDelta === "true")
-        && String(updatedSinceRaw || "").trim()) {
-      var deltaOut = buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw, readerIsStaff);
-      if (readerIsStaff) deltaOut.scope = "staff";
-      return ContentService.createTextOutput(JSON.stringify(deltaOut))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // ── requestsOnly：申請＋空堂（共用底包後再個人化；淺拷貝）──
-    if (requestsOnlyFlag) {
-      var roSharedKey = "jcjh_reqonly_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays;
-      var roShared = null;
-      var roT0 = perfNow_();
-      if (!historyAllFlag && scope !== "fresh") {
-        var roCached = getCacheChunked(roSharedKey);
-        if (roCached) {
-          try { roShared = JSON.parse(roCached); } catch (eRo) { roShared = null; }
-        }
-      }
-      perfLog_("getInitialData/requestsOnly cache " + (roShared ? "HIT" : "MISS"), roT0, semesterId);
-      if (!roShared) {
-        var roBuildT0 = perfNow_();
-        roShared = buildFullSemesterPayload_(semesterId, {
-          userEmail: "",
-          isAdmin: true,
-          historyAll: historyAllFlag,
-          windowDays: wDays,
-          requestsOnly: true
-        });
-        perfLog_("getInitialData/requestsOnly build", roBuildT0, semesterId);
-        if (!historyAllFlag) {
-          try { putCacheChunked(roSharedKey, JSON.stringify(roShared), CACHE_TTL_REQ_); } catch (eRoPut) {}
-        }
-      }
-      var roOut = personalizeSharedPayload_(roShared, readerEmail, readerIsAdmin, personalizeOpts);
-      return ContentService.createTextOutput(JSON.stringify(roOut))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // ── teachersOnly：只回教師名單（額度發放後 soft；不走課表）──
-    if (teachersOnlyFlag) {
-      var toOut = buildFullSemesterPayload_(semesterId, {
-        userEmail: readerEmail,
-        isAdmin: readerIsAdmin,
-        isStaff: readerIsStaff,
-        teachersOnly: true
-      });
-      return ContentService.createTextOutput(JSON.stringify(toOut))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // ── 全量：admin／教師共用底包（課表全校；申請全校列，回傳前淺拷 filter）──
-    // 行政與教學組皆吃 full 底包（課表不瘦身）；一般教師用 teacher 鍵（內容相同，個人化再瘦）
-    var fullSharedKey = (readerIsAdmin || readerIsStaff)
-      ? ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays)
-      : ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_teacher_w" + wDays);
-    var fullShared = null;
-    var fullT0 = perfNow_();
-    if (!historyAllFlag && scope !== "fresh") {
-      var fullCached = getCacheChunked(fullSharedKey);
-      if (fullCached) {
-        try { fullShared = JSON.parse(fullCached); } catch (eFull) { fullShared = null; }
-      }
-    }
-    perfLog_("getInitialData/full cache " + (fullShared ? "HIT" : "MISS"), fullT0, semesterId);
-    if (!fullShared) {
-      var fullBuildT0 = perfNow_();
-      fullShared = buildFullSemesterPayload_(semesterId, {
-        userEmail: "",
-        isAdmin: true,
-        historyAll: historyAllFlag,
-        windowDays: wDays
-      });
-      perfLog_("getInitialData/full build", fullBuildT0, semesterId);
-      if (fullShared.settings && !fullShared.settings.allowedHd) {
-        fullShared.settings.allowedHd = ALLOWED_HD_;
-      }
-      if (!historyAllFlag) {
-        try {
-          var ttl = (readerIsAdmin || readerIsStaff) ? CACHE_TTL_FULL_ : CACHE_TTL_TEACHER_FULL_;
-          var fullSharedJson = JSON.stringify(fullShared);
-          putCacheChunked(fullSharedKey, fullSharedJson, ttl);
-          // Phase 1B：取消 admin／teacher 雙寫，改為按需懶寫。
-          // 雙寫讓每次冷 miss 付出雙倍 put 配額；另一角色首次請求時 miss 一次即補上，命中率影響極小。
-        } catch (eFullPut) {}
-      }
-    }
-    var fullOut = personalizeSharedPayload_(fullShared, readerEmail, readerIsAdmin, personalizeOpts);
-    return ContentService.createTextOutput(JSON.stringify(fullOut))
-      .setMimeType(ContentService.MimeType.JSON);
   }
 
   return ContentService.createTextOutput(JSON.stringify({ success: false, error: "未知的讀取 Action" }))
@@ -7069,19 +6640,103 @@ function doPost(e) {
     try {
     let cacheKey = "jcjh_data_" + semesterId;
     
-    // ----------------- API Actions 路由 -----------------
-    // 路由表（維護用；實際仍為 if/else 鏈，後續可改 dispatch）
-    // READ (no write-lock): getMetaData | getInitialData
-    // ADMIN: saveSemester, deleteSemester, setDefaultSemester, saveTeacher, deleteTeacher,
-    //        importTeachersBatch, saveScheduleCell, clearScheduleCell, importSchedulesBatch,
-    //        adminApprove, adminReject, deleteSubstitutionRecord, saveHistoryEdit,
-    //        saveMailSettings
-    // STAFF: batchMarkPrinted（列印後僅更新已印標記）
-    // TEACHER: submitRequest, respondToRequest, cancelRequest, withdrawRequest
-
+     // ----------------- API Actions 路由（Phase 3.1：postActionRoutes_ dispatch） -----------------
+     // READ (no write-lock): getMetaData | getInitialData（doPost 前段短路至 handleReadAction_）
+     // ADMIN: saveSemester, deleteSemester, setDefaultSemester, saveTeacher, deleteTeacher,
+     //        importTeachersBatch, saveScheduleCell, clearScheduleCell, importSchedulesBatch,
+     //        adminApprove, adminReject, deleteSubstitutionRecord, saveHistoryEdit,
+     //        saveMailSettings
+     // STAFF: batchMarkPrinted（列印後僅更新已印標記）
+     // TEACHER: submitRequest, respondToRequest, cancelRequest, withdrawRequest
+     // ----------------- API Actions 路由 -----------------
+     // 路由表見 postActionRoutes_（doPost 末）；處理器 handlePost<Action>_ 與原分支同序排列，本體逐字搬移。
+    var postHandler = postActionRoutes_()[action];
+    if (postHandler) {
+      var postRouteResult = postHandler({
+        reqData: reqData, semesterId: semesterId, userEmail: userEmail,
+        isAdmin: isAdmin, isStaff: isStaff, teachers: teachers,
+        currentTeacher: currentTeacher, currentUrl: currentUrl,
+        requestContext: requestContext, cacheKey: cacheKey
+      });
+      if (postRouteResult) return postRouteResult;
+    } else {
+      throw new Error("未定義的 POST Action");
+    }
     
-    // 1. 管理員專屬權限 Actions
-    if (action === "migrateNameKeySchema") {
+    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+    } finally {
+      try { lock.releaseLock(); } catch (ign) {}
+      // P1：放鎖後再寄信（return 的 JSON 已就緒，寄信失敗不影響寫入結果）
+      try { flushDeferredMails_(); } catch (ignM) { logError_("flushDeferredMails_", ignM); }
+    }
+  } catch (err) {
+    _scheduleImportWriteContext_ = false;
+    if (requestContext.action === "importSchedulesBatch") {
+      logOperation_("importSchedulesBatch", "failed", {
+        requestId: requestContext.requestId,
+        operator: requestContext.operator,
+        semesterId: requestContext.semesterId,
+        version: requestContext.importVersion,
+        rolledBack: requestContext.importRolledBack === true,
+        rollbackError: requestContext.importRollbackError || "",
+        error: String(err)
+      });
+    }
+    try { flushDeferredMails_(); } catch (ignM2) {}
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ----------------- doPost Action 處理器（Phase 3.1 路由表化；本體由 doPost 分支逐字搬移，首行解構呼叫端 ctx） -----------------
+function postActionRoutes_() {
+  return {
+    migrateNameKeySchema: handlePostMigrateNameKeySchema_,
+    renameTeacherNameKey: handlePostRenameTeacherNameKey_,
+    saveSemester: handlePostSaveSemester_,
+    deleteSemester: handlePostDeleteSemester_,
+    setDefaultSemester: handlePostSetDefaultSemester_,
+    saveSchoolSwap: handlePostSaveSchoolSwap_,
+    deleteSchoolSwap: handlePostDeleteSchoolSwap_,
+    saveClassAwayEvent: handlePostSaveClassAwayEvent_,
+    deleteClassAwayEvent: handlePostDeleteClassAwayEvent_,
+    backupTeacherExpensePlans: handlePostBackupTeacherExpensePlans_,
+    saveTeacher: handlePostSaveTeacher_,
+    deleteTeacher: handlePostDeleteTeacher_,
+    importTeachersBatch: handlePostImportTeachersBatch_,
+    updateMutualQuotas: handlePostUpdateMutualQuotas_,
+    earnMutualQuotaFromActivity: handlePostEarnMutualQuotaFromActivity_,
+    getMutualQuotaPackages: handlePostGetMutualQuotaPackages_,
+    saveScheduleCell: handlePostSaveScheduleCell_,
+    clearScheduleCell: handlePostClearScheduleCell_,
+    importSchedulesBatch: handlePostImportSchedulesBatch_,
+    saveHomeroomCoverTeacher: handlePostSaveHomeroomCoverTeacher_,
+    saveManualHomeroomRecord: handlePostSaveManualHomeroomRecord_,
+    deleteHomeroomRecord: handlePostDeleteHomeroomRecord_,
+    adminApprove: handlePostAdminApprove_,
+    adminApproveBatch: handlePostAdminApproveBatch_,
+    adminReject: handlePostAdminReject_,
+    adminRejectBatch: handlePostAdminRejectBatch_,
+    deleteSubstitutionRecord: handlePostDeleteSubstitutionRecord_,
+    saveHistoryEdit: handlePostSaveHistoryEdit_,
+    saveMailSettings: handlePostSaveMailSettings_,
+    batchMarkPrinted: handlePostBatchMarkPrinted_,
+    submitTriangleRequest: handlePostSubmitTriangleRequest_,
+    submitRequest: handlePostSubmitRequest_,
+    submitExchangeBatch: handlePostSubmitExchangeBatch_,
+    submitRequestBatch: handlePostSubmitRequestBatch_,
+    sendBatchNotices: handlePostSendBatchNotices_,
+    respondTriangleRequest: handlePostRespondTriangleRequest_,
+    respondToRequest: handlePostRespondToRequest_,
+    respondToBatch: handlePostRespondToBatch_,
+    cancelRequest: handlePostCancelRequest_,
+    withdrawRequest: handlePostWithdrawRequest_,
+  };
+}
+
+function handlePostMigrateNameKeySchema_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var migrationSummary = migrateNameKeySchema_();
       return ContentService.createTextOutput(JSON.stringify({
@@ -7090,7 +6745,10 @@ function doPost(e) {
         sheets: migrationSummary
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "renameTeacherNameKey") {
+}
+
+function handlePostRenameTeacherNameKey_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var renameResult = renameTeacherNameKey_(
         reqData.semesterId || semesterId,
@@ -7102,7 +6760,10 @@ function doPost(e) {
         renamed: renameResult
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "saveSemester") {
+}
+
+function handlePostSaveSemester_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       const teachersToCopy = reqData.teachersToCopy;
       delete reqData.teachersToCopy;
@@ -7115,7 +6776,10 @@ function doPost(e) {
       const sems = getTableData("學期設定");
       sems.forEach(function (s) { invalidateSemesterCaches_(s["學期代號"]); });
       
-    } else if (action === "deleteSemester") {
+}
+
+function handlePostDeleteSemester_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var deleteSid = String(reqData.semesterId || "").trim();
       if (!deleteSid) throw new Error("缺少學期代號！");
@@ -7133,7 +6797,10 @@ function doPost(e) {
       deleteRows("學期設定", "學期代號", deleteSid);
       invalidateScheduleCaches_(deleteSid);
       
-    } else if (action === "setDefaultSemester") {
+}
+
+function handlePostSetDefaultSemester_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       const sems = getTableData("學期設定");
       sems.forEach(s => {
@@ -7142,7 +6809,10 @@ function doPost(e) {
       saveRows("學期設定", sems, "學期代號");
       sems.forEach(function (s) { invalidateSemesterCaches_(s["學期代號"]); });
 
-    } else if (action === "saveSchoolSwap") {
+}
+
+function handlePostSaveSchoolSwap_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var savedSchoolSwap = saveSchoolSwapRow_(reqData || {}, semesterId, userEmail);
       return ContentService.createTextOutput(JSON.stringify({
@@ -7150,7 +6820,10 @@ function doPost(e) {
         schoolSwap: savedSchoolSwap
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "deleteSchoolSwap") {
+}
+
+function handlePostDeleteSchoolSwap_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var deleteSchoolSwapId = String((reqData && (reqData.id || reqData["對調ID"])) || "").trim();
       if (!deleteSchoolSwapId) throw new Error("缺少對調ID！");
@@ -7163,7 +6836,10 @@ function doPost(e) {
         id: deleteSchoolSwapId
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "saveClassAwayEvent") {
+}
+
+function handlePostSaveClassAwayEvent_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var cae = reqData || {};
       if (!cae["事件ID"]) cae["事件ID"] = "cae_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
@@ -7251,7 +6927,10 @@ function doPost(e) {
         classes: cae["班級清單"]
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "deleteClassAwayEvent") {
+}
+
+function handlePostDeleteClassAwayEvent_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var delId = (reqData && (reqData.id || reqData["事件ID"])) || "";
       if (!delId) throw new Error("缺少事件ID！");
@@ -7260,7 +6939,10 @@ function doPost(e) {
        });
       invalidateScheduleCaches_(semesterId);
       
-     } else if (action === "backupTeacherExpensePlans") {
+}
+
+function handlePostBackupTeacherExpensePlans_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
        if (!isAdmin) throw new Error("無管理員權限！");
        var expenseBackup = backupTeacherExpensePlans_(
          semesterId,
@@ -7273,7 +6955,10 @@ function doPost(e) {
          backup: expenseBackup
        })).setMimeType(ContentService.MimeType.JSON);
 
-     } else if (action === "saveTeacher") {
+}
+
+function handlePostSaveTeacher_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       reqData["學期代號"] = semesterId;
       reqData["教師Email"] = normalizeEmail_(reqData["教師Email"] || reqData.email, "教師 Email");
@@ -7295,7 +6980,10 @@ function doPost(e) {
       saveRows("教師名單", [reqData], "教師Email");
       invalidateScheduleCaches_(semesterId);
       
-    } else if (action === "deleteTeacher") {
+}
+
+function handlePostDeleteTeacher_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var deleteTeacherEmail = normalizeEmail_(reqData.email || reqData["教師Email"], "教師 Email");
       assertTeacherNameKeyCanDelete_(semesterId, deleteTeacherEmail);
@@ -7304,7 +6992,10 @@ function doPost(e) {
       });
       invalidateScheduleCaches_(semesterId);
       
-    } else if (action === "importTeachersBatch") {
+}
+
+function handlePostImportTeachersBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       const list = (reqData.list || []).map(function (t) {
         t["學期代號"] = semesterId;
@@ -7340,7 +7031,10 @@ function doPost(e) {
       saveRows("教師名單", list, "教師Email");
       invalidateScheduleCaches_(semesterId);
 
-    } else if (action === "updateMutualQuotas") {
+}
+
+function handlePostUpdateMutualQuotas_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 手動覆寫：一次讀帳本算 prev → 批次 append 帳本 → 一次改額度欄（勿逐人 saveRows）
       if (!isAdmin) throw new Error("無管理員權限！");
       assertNotTooFrequent_(userEmail, "updateMutualQuotas");
@@ -7431,7 +7125,10 @@ function doPost(e) {
         wroteLedger: ledgerRows.length
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "earnMutualQuotaFromActivity") {
+}
+
+function handlePostEarnMutualQuotaFromActivity_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 活動發放：批次一次寫帳本＋教師餘額（勿逐人 saveRows）
       if (!isAdmin) throw new Error("無管理員權限！");
       assertNotTooFrequent_(userEmail, "earnMutualQuotaFromActivity");
@@ -7463,7 +7160,10 @@ function doPost(e) {
         results: batchRes.results
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "getMutualQuotaPackages") {
+}
+
+function handlePostGetMutualQuotaPackages_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 從帳本加總活動包（管理員全校；教師僅自己）
       ensureQuotaSheets_();
       var packs = buildPackagesFromLedger_(semesterId, isAdmin ? "" : userEmail);
@@ -7489,7 +7189,10 @@ function doPost(e) {
         packages: outPacks
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "saveScheduleCell") {
+}
+
+function handlePostSaveScheduleCell_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       reqData = normalizePatrolScheduleRow_(reqData);
       reqData["學期代號"] = semesterId;
@@ -7536,14 +7239,20 @@ function doPost(e) {
       saveRows("教師課表", saveRowsList, "課表ID");
       invalidateScheduleCaches_(semesterId);
       
-    } else if (action === "clearScheduleCell") {
+}
+
+function handlePostClearScheduleCell_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
        deleteRows("教師課表", "課表ID", reqData.id, function (row) {
          return String(row["學期代號"] || "").trim() === String(semesterId || "").trim();
        });
       invalidateScheduleCaches_(semesterId);
       
-    } else if (action === "importSchedulesBatch") {
+}
+
+function handlePostImportSchedulesBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // S1：只清「目前學期」課表後再寫入（其他學期列完整保留；一次整表覆寫，勿逐列 deleteRow）
       if (!isAdmin) throw new Error("無管理員權限！");
       assertNotTooFrequent_(userEmail, "importSchedulesBatch");
@@ -7683,7 +7392,10 @@ function doPost(e) {
         throw importError;
       }
       
-    } else if (action === "saveHomeroomCoverTeacher") {
+}
+
+function handlePostSaveHomeroomCoverTeacher_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var recordId = String(reqData.recordId || reqData.id || "").trim();
       var coverDirectory = buildNameKeyDirectory_(teachers);
@@ -7732,7 +7444,10 @@ function doPost(e) {
         homeroomRecord: coverRow
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "saveManualHomeroomRecord") {
+}
+
+function handlePostSaveManualHomeroomRecord_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var manualDirectory = buildNameKeyDirectory_(teachers);
       var leaveRaw = nameKeyText_(reqData.leaveName || reqData.leaveEmail || reqData.originalTeacherName || reqData.originalTeacherEmail);
@@ -7807,7 +7522,10 @@ function doPost(e) {
         homeroomRecord: manualHit
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "deleteHomeroomRecord") {
+}
+
+function handlePostDeleteHomeroomRecord_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       var delRecordId = String(reqData.recordId || reqData.id || "").trim();
       if (!delRecordId) throw new Error("缺少代導紀錄ID");
@@ -7827,7 +7545,10 @@ function doPost(e) {
         success: true,
         recordId: delRecordId
       })).setMimeType(ContentService.MimeType.JSON);
-    } else if (action === "adminApprove") {
+}
+
+function handlePostAdminApprove_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
        var targetReq = findRowByKey_("申請單", "申請單ID", reqData.requestId, semesterId);
        if (!targetReq) throw new Error("找不到該申請單");
@@ -7853,7 +7574,10 @@ function doPost(e) {
         }
        invalidateSemesterCaches_(semesterId);
 
-    } else if (action === "adminApproveBatch") {
+}
+
+function handlePostAdminApproveBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 批次核准：只讀目標列、一次 saveRows、再寄信
       if (!isAdmin) throw new Error("無管理員權限！");
       assertNotTooFrequent_(userEmail, "adminApproveBatch");
@@ -7915,7 +7639,10 @@ function doPost(e) {
         missing: apMiss
       })).setMimeType(ContentService.MimeType.JSON);
       
-    } else if (action === "adminReject") {
+}
+
+function handlePostAdminReject_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
        var targetReq = findRowByKey_("申請單", "申請單ID", reqData.requestId, semesterId);
        if (!targetReq) throw new Error("找不到該申請單");
@@ -7933,7 +7660,10 @@ function doPost(e) {
        }
        invalidateSemesterCaches_(semesterId);
 
-    } else if (action === "adminRejectBatch") {
+}
+
+function handlePostAdminRejectBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       assertNotTooFrequent_(userEmail, "adminRejectBatch");
       var rjIds = reqData.requestIds || reqData.ids || [];
@@ -7971,7 +7701,10 @@ function doPost(e) {
         missing: rjMiss
       })).setMimeType(ContentService.MimeType.JSON);
       
-    } else if (action === "deleteSubstitutionRecord") {
+}
+
+function handlePostDeleteSubstitutionRecord_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       // 若有 requestId，將申請單狀態改回 cancelled；扣額度單還原折抵額度
       var deletedSubRequest = false;
@@ -8018,7 +7751,10 @@ function doPost(e) {
        if (!deletedSubRequest) throw new Error("找不到可撤銷的已核准申請單！");
        invalidateSemesterCaches_(semesterId);
       
-    } else if (action === "saveHistoryEdit") {
+}
+
+function handlePostSaveHistoryEdit_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 管理員可修正已生效之代／調課全部欄位（教師、日期節次、班級科目、假別經費等）
       if (!isAdmin) throw new Error("無管理員權限！");
       var reqId = String(reqData.id || reqData.requestId || "").replace(/_[12]$/, "");
@@ -8120,7 +7856,10 @@ function doPost(e) {
        syncHomeroomRecordForRequest_(targetReq, userEmail);
       invalidateSemesterCaches_(semesterId);
       
-    } else if (action === "saveMailSettings") {
+}
+
+function handlePostSaveMailSettings_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin) throw new Error("無管理員權限！");
       // 相容舊用法：只傳 url → 寫 gasMailApiUrl
       if (reqData && reqData.url != null && String(reqData.url).trim() !== "") {
@@ -8191,7 +7930,10 @@ function doPost(e) {
       }
       invalidateSemesterCaches_(semesterId);
       
-    } else if (action === "batchMarkPrinted") {
+}
+
+function handlePostBatchMarkPrinted_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       if (!isAdmin && !isStaff) throw new Error("僅管理員或行政可標記列印！");
       var printIds = (reqData.ids || []).map(function (id) {
         return String(id || "").replace(/_[12]$/, "");
@@ -8211,7 +7953,10 @@ function doPost(e) {
       invalidateSemesterCaches_(semesterId);
       
     // 2. 一般教師/受邀教師 Actions (包含基本身分檢驗)
-    } else if (action === "submitTriangleRequest") {
+}
+
+function handlePostSubmitTriangleRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
        assertNotTooFrequent_(userEmail, "submitTriangleRequest");
        var triangleActorName = currentTeacher
          ? String(currentTeacher["教師姓名"] || currentTeacher.name || userEmail)
@@ -8275,7 +8020,10 @@ function doPost(e) {
          ids: triangleRows.map(function (row) { return row["申請單ID"]; })
        })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "submitRequest") {
+}
+
+function handlePostSubmitRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
        assertNotTooFrequent_(userEmail, "submitRequest");
          // 發起調代課申請（狀態一律由伺服器決定，忽略前端竄改）
          if (!reqData.request || typeof reqData.request !== "object") throw new Error("缺少申請單資料！");
@@ -8446,7 +8194,10 @@ function doPost(e) {
       }
       invalidateSemesterCaches_(semesterId);
 
-    } else if (action === "submitExchangeBatch") {
+}
+
+function handlePostSubmitExchangeBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 批次調課逐組驗證、逐組回覆；一組失敗不回滾其他有效組別。
       assertNotTooFrequent_(userEmail, "submitExchangeBatch");
       var rawExchangeList = reqData.requests || [];
@@ -8588,7 +8339,10 @@ function doPost(e) {
         failures: exchangeBatchFailures
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "submitRequestBatch") {
+}
+
+function handlePostSubmitRequestBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 方案 A：多筆申請單＋同一批次ID（每節仍獨立簽核）
       assertNotTooFrequent_(userEmail, "submitRequestBatch");
        var rawList = reqData.requests || [];
@@ -8761,7 +8515,10 @@ function doPost(e) {
          failures: batchFailures
        })).setMimeType(ContentService.MimeType.JSON);
       
-    } else if (action === "sendBatchNotices") {
+}
+
+function handlePostSendBatchNotices_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 歷史紀錄後發通知：核准信寄雙方；邀請信只寄受邀人；同人合併
       if (!isAdmin) throw new Error("僅管理員可批次發通知！");
       if (!isOnlineSubstitutionEnabled_()) {
@@ -8882,7 +8639,10 @@ function doPost(e) {
         failed: failed
       })).setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "respondTriangleRequest") {
+}
+
+function handlePostRespondTriangleRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       var triangleResponseId = String(reqData.requestId || "").trim();
       var triangleResponseRow = findRowByKey_("申請單", "申請單ID", triangleResponseId, semesterId);
       if (!triangleResponseRow || !isTriangleRequest_(triangleResponseRow)) throw new Error("找不到該三角調申請單");
@@ -8893,7 +8653,10 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify(triangleResponseResult))
         .setMimeType(ContentService.MimeType.JSON);
 
-    } else if (action === "respondToRequest") {
+}
+
+function handlePostRespondToRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 同意或拒絕調代課邀請
       var responseOne = String(reqData.response || "").toLowerCase();
       if (responseOne !== "agree" && responseOne !== "decline") throw new Error("簽核回應格式不正確！");
@@ -8929,7 +8692,10 @@ function doPost(e) {
       }
       invalidateSemesterCaches_(semesterId);
 
-    } else if (action === "respondToBatch") {
+}
+
+function handlePostRespondToBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 批次一次全部同意／全部拒絕（僅 pending_teacher 且本人為受邀人）
       assertNotTooFrequent_(userEmail, "respondToBatch");
       var batchId = String(reqData.batchId || "").trim();
@@ -8965,7 +8731,10 @@ function doPost(e) {
         response: resp
       })).setMimeType(ContentService.MimeType.JSON);
       
-    } else if (action === "cancelRequest") {
+}
+
+function handlePostCancelRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 撤回申請
        var targetReq = findRowByKey_("申請單", "申請單ID", reqData.requestId, semesterId);
        if (!targetReq) throw new Error("找不到該申請單");
@@ -8986,7 +8755,10 @@ function doPost(e) {
       syncHomeroomRecordForRequest_(targetReq, userEmail);
       invalidateSemesterCaches_(semesterId);
       
-    } else if (action === "withdrawRequest") {
+}
+
+function handlePostWithdrawRequest_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 已送到行政端待簽核時，一般教師撤回
        var targetReq = findRowByKey_("申請單", "申請單ID", reqData.requestId, semesterId);
        if (!targetReq) throw new Error("找不到該申請單");
@@ -9006,34 +8778,468 @@ function doPost(e) {
       syncHomeroomRecordForRequest_(targetReq, userEmail);
       invalidateSemesterCaches_(semesterId);
       
-    } else {
-      throw new Error("未定義的 POST Action");
+}
+
+// ----------------- 讀取 Action 處理器（Phase 3.2；本體由 handleReadAction_ 逐字搬移） -----------------
+function readActionRoutes_() {
+  return {
+    getMatchCandidates: handleReadGetMatchCandidates_,
+    getMetaData: handleReadGetMetaData_,
+    getPendingOnly: handleReadGetPendingOnly_,
+    getHistoryMonth: handleReadGetHistoryMonth_,
+    getMutualQuotaLedger: handleReadGetMutualQuotaLedger_,
+    getHomeroomRecords: handleReadGetHomeroomRecords_,
+    getQuotaSpendPreview: handleReadGetQuotaSpendPreview_,
+    getInitialData: handleReadGetInitialData_,
+  };
+}
+
+function handleReadGetMatchCandidates_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+  // 代課媒合候選（讀取、不佔寫鎖；短快取 45s，申請寫入時代次戳失效）
+    var mLeaveRaw = nameKeyText_(reqData.leaveName || reqData.leaveEmail || "");
+    var mLeave = readerEmail;
+    var mLeaveName = "";
+    if (mLeaveRaw) {
+      var mDirectory = buildNameKeyDirectory_(readerTeachers);
+      mLeaveName = resolveNameKeyTeacher_(mLeaveRaw, semesterId, mDirectory, "原教師", false);
+      mLeave = nameKeyEmailForName_(semesterId, mLeaveName, mDirectory);
+      if (!mLeave) throw new Error("原教師缺少登入 Email");
+      reqData = Object.assign({}, reqData, { leaveEmail: mLeave, leaveName: mLeaveName });
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+    if (!mLeaveRaw) reqData = Object.assign({}, reqData, { leaveEmail: mLeave });
+    if (!readerIsAdmin && mLeave !== readerEmail
+        && !(readerIsStaff && canUserProxySubmit_(readerEmail, readerTeachers))) {
+      throw new Error("您無權查詢其他教師的媒合候選！");
+    }
+    var mDate = String(reqData.dateStr || reqData.requestDate || "").slice(0, 10);
+    var mDay = parseInt(reqData.dayOfWeek != null ? reqData.dayOfWeek : reqData.targetDay, 10);
+    var mPer = parseInt(reqData.period != null ? reqData.period : reqData.targetPeriod, 10);
+    var mAct = (reqData.activityMode === true || reqData.activityMode === "true") ? "1" : "0";
+    var mCls = String(reqData.myClass || reqData.className || "").trim();
+    var mCourse = String(reqData.myCourse != null ? reqData.myCourse : (reqData.subject || "")).trim();
+    var mAway = "";
+    try {
+      var aw = reqData.awayClasses || [];
+      mAway = (aw || []).map(function (c) { return String(c || "").trim(); }).filter(Boolean).sort().join(",");
+    } catch (eAw) { mAway = ""; }
+    var mAwayRange = [reqData.awayStartDate || "", reqData.awayEndDate || "",
+      reqData.awayStartPeriod || "", reqData.awayEndPeriod || ""].join("_");
+    var mGen = "0";
+    try {
+      mGen = CacheService.getScriptCache().get("jcjh_match_gen_" + String(semesterId || "")) || "0";
+    } catch (eGen) {}
+    // key 控長：away 取前 80 字
+    if (mAway.length > 80) mAway = mAway.slice(0, 80);
+     var matchCacheKey = "jcjh_match_" + CACHE_SCHEMA_VERSION_ + "_" + String(semesterId || "") + "_" + mGen + "_"
+      + mDate + "_" + mDay + "_" + mPer + "_" + mLeave + "_" + mAct + "_"
+      + mCls + "_" + mCourse + "_" + mAway + "_" + mAwayRange;
+    if (scope !== "fresh") {
+      try {
+        var mCached = getCacheChunked(matchCacheKey);
+        if (mCached) {
+          return ContentService.createTextOutput(mCached).setMimeType(ContentService.MimeType.JSON);
+        }
+      } catch (eMc) {}
+    }
+    var matchOut = buildMatchCandidates_(semesterId, reqData);
+    try {
+      putCacheChunked(matchCacheKey, JSON.stringify(matchOut), CACHE_TTL_MATCH_);
+    } catch (eMp) {}
+    return ContentService.createTextOutput(JSON.stringify(matchOut))
       .setMimeType(ContentService.MimeType.JSON);
-    } finally {
-      try { lock.releaseLock(); } catch (ign) {}
-      // P1：放鎖後再寄信（return 的 JSON 已就緒，寄信失敗不影響寫入結果）
-      try { flushDeferredMails_(); } catch (ignM) { logError_("flushDeferredMails_", ignM); }
+}
+
+function handleReadGetMetaData_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+    var settings = buildSettingsMap_();
+    // 若系統設定未填 allowedHd，回傳 Script Properties 的明確設定。
+    if (!settings.allowedHd) {
+      settings.allowedHd = ALLOWED_HD_;
     }
-  } catch (err) {
-    _scheduleImportWriteContext_ = false;
-    if (requestContext.action === "importSchedulesBatch") {
-      logOperation_("importSchedulesBatch", "failed", {
-        requestId: requestContext.requestId,
-        operator: requestContext.operator,
-        semesterId: requestContext.semesterId,
-        version: requestContext.importVersion,
-        rolledBack: requestContext.importRolledBack === true,
-        rollbackError: requestContext.importRollbackError || "",
-        error: String(err)
+    var metaKey = "jcjh_meta_" + String(semesterId || "");
+    var metaCached = getCacheChunked(metaKey);
+    if (metaCached && scope !== "fresh") {
+      try {
+        var metaObj = JSON.parse(metaCached);
+        if (metaObj && metaObj.success) {
+          var cachedOut = Object.assign({}, metaObj);
+          cachedOut.semesterId = semesterId;
+          cachedOut.teachers = sanitizeTeacherRowsForReader_(readerTeachers, readerEmail, readerIsAdmin, readerIsStaff);
+          cachedOut.settings = sanitizeSettingsForReader_(settings, readerEmail, readerIsAdmin, readerIsStaff, readerTeachers);
+          cachedOut.userRole = readerRole;
+          return ContentService.createTextOutput(JSON.stringify(cachedOut)).setMimeType(ContentService.MimeType.JSON);
+        }
+      } catch (metaE) {}
+    }
+    var metaPayload = {
+      success: true,
+      semesterId: semesterId,
+      semesters: getTableData("學期設定"),
+      teachers: readerTeachers,
+      settings: settings
+    };
+    try { putCacheChunked(metaKey, JSON.stringify(metaPayload), CACHE_TTL_META_); } catch (metaPutE) {}
+    var metaOut = Object.assign({}, metaPayload);
+    metaOut.teachers = sanitizeTeacherRowsForReader_(readerTeachers, readerEmail, readerIsAdmin, readerIsStaff);
+    metaOut.settings = sanitizeSettingsForReader_(settings, readerEmail, readerIsAdmin, readerIsStaff, readerTeachers);
+    metaOut.userRole = readerRole;
+    return ContentService.createTextOutput(JSON.stringify(metaOut)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetPendingOnly_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+  // 極輕量：只回進行中申請（待辦對齊用，不含課表）
+    var teachersP = getSemesterTeachersCached_(semesterId);
+    var isAdminP = resolveIsAdmin_(readerEmail, teachersP);
+    // v2：中文狀態掃描修正後換 key，避免舊空陣列快取鎖 45s
+    var pendingKey = "jcjh_pending_v3_namekey_" + semesterId + "_a";
+    var pending = null;
+    if (scope !== "fresh") {
+      var pendingCached = getCacheChunked(pendingKey);
+      if (pendingCached) {
+        try {
+          var parsedP = JSON.parse(pendingCached);
+          if (Array.isArray(parsedP)) pending = parsedP;
+        } catch (pE) { pending = null; }
+      }
+    }
+    if (pending === null) {
+      // 只掃出 pending 列（中文狀態已 translateStatusToEn）
+      pending = getPendingRequestsFromSheet_(semesterId);
+      try {
+        // 空結果只快取 12 秒，避免誤掃／舊 bug 鎖死待辦
+        var pTtl = (pending && pending.length) ? CACHE_TTL_PENDING_ : 12;
+        putCacheChunked(pendingKey, JSON.stringify(pending || []), pTtl);
+      } catch (pPut) {}
+    }
+    var isStaffP = resolveIsStaff_(readerEmail, teachersP);
+    if (!isAdminP && !isStaffP) {
+      pending = (pending || []).filter(function (req) {
+        return requestVisibleToReader_(req, readerEmail, false);
       });
     }
-    try { flushDeferredMails_(); } catch (ignM2) {}
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      kind: "pendingOnly",
+      requests: nameKeyPublicRows_("申請單", pending || []),
+      count: (pending || []).length
+    })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetHistoryMonth_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+  // 歷史按月：只回該月申請（含已結案），不含課表／教師
+    var teachersH = getSemesterTeachersCached_(semesterId);
+    var isAdminH = resolveIsAdmin_(readerEmail, teachersH);
+    var monthStr = String(reqData.month || postData.month || "").trim().slice(0, 7); // YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(monthStr)) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: "請提供月份 month=YYYY-MM"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    // 共用未個人化月份列；命中後仍須依讀取者權限過濾並移除內部欄位。
+    var monthRows = getHistoryMonthRowsCached_(semesterId, monthStr, scope === "fresh");
+    var isStaffH = resolveIsStaff_(readerEmail, teachersH);
+    if (!isAdminH && !isStaffH) {
+      monthRows = monthRows.filter(function (req) {
+        return requestVisibleToReader_(req, readerEmail, false);
+      });
+    }
+    var histPayload = {
+      success: true,
+      kind: "historyMonth",
+      month: monthStr,
+      requests: nameKeyPublicRows_("申請單", monthRows),
+      count: monthRows.length
+    };
+    var histJson = JSON.stringify(histPayload);
+    return ContentService.createTextOutput(histJson).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetMutualQuotaLedger_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+  // 折抵額度歷程：讀「額度帳本」列（管理員可查任一師；教師僅自己）
+    var targetRaw = nameKeyText_(reqData.name || reqData.teacherName || reqData.email || reqData.teacherEmail || postData.name || postData.email);
+    var teachersL = getSemesterTeachersCached_(semesterId) || [];
+    var readerHitL = teachersL.find(function (teacher) {
+      return nameKeyTeacherEmail_(teacher) === readerEmail;
+    });
+    var targetName = targetRaw && targetRaw.indexOf("@") < 0 ? targetRaw : "";
+    var targetEmail = targetRaw && targetRaw.indexOf("@") >= 0 ? nameKeyNorm_(targetRaw) : "";
+    if (!targetRaw) {
+      targetEmail = readerEmail;
+      targetName = readerHitL ? nameKeyTeacherName_(readerHitL) : "";
+    }
+    if (targetName) {
+      var targetHitByName = teachersL.find(function (teacher) {
+        return nameKeyTeacherName_(teacher) === targetName;
+      });
+      if (!targetHitByName) throw new Error("查無目前學期教師姓名：" + targetName);
+      targetEmail = nameKeyTeacherEmail_(targetHitByName);
+    }
+    var isSelfLed = targetEmail === readerEmail;
+    var isAdminL = resolveIsAdmin_(readerEmail, teachersL);
+    if (!isSelfLed && !isAdminL) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: "僅能查看自己的額度歷程"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    if (!targetName && targetEmail) {
+      var targetHitByEmail = teachersL.find(function (teacher) {
+        return nameKeyTeacherEmail_(teacher) === targetEmail;
+      });
+      targetName = targetHitByEmail ? nameKeyTeacherName_(targetHitByEmail) : "";
+    }
+    var limitL = parseInt(reqData.limit != null ? reqData.limit : 50, 10) || 50;
+    if (limitL > 120) limitL = 120;
+    // Per-teacher cache key is name-based; Email is only used for auth lookup.
+    var ledCacheGeneration = getCacheGeneration_("quotaLedgerView", semesterId);
+    var ledCacheKey = "jcjh_qled_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_"
+      + ledCacheGeneration + "_" + nameKeyNorm_(targetName) + "_" + limitL;
+    try {
+      var ledCached = CacheService.getScriptCache().get(ledCacheKey);
+      if (ledCached) {
+        return ContentService.createTextOutput(ledCached).setMimeType(ContentService.MimeType.JSON);
+      }
+    } catch (eLedC) {}
+    // 走 getQuotaLedgerRows_（ScriptCache＋mem）；再 filter 教師
+    var sidL = String(semesterId || "");
+    var idxKeyL = makeQuotaLedgerIndexKey_(sidL, targetName);
+    var balSum = 0;
+    var rowsL = [];
+    (getQuotaLedgerRows_(sidL) || []).forEach(function (r) {
+      var ik = String(r["索引鍵"] || "").trim();
+      if (ik) {
+        if (ik !== idxKeyL) return;
+      } else {
+        var em = String(r["教師Email"] || "").toLowerCase().trim();
+        if (em !== targetEmail) return;
+      }
+      var d = parseFloat(r["異動"]);
+      if (isNaN(d)) d = 0;
+      balSum = Math.round((balSum + d) * 1000) / 1000;
+      rowsL.push(r);
+    });
+    // 時間倒序（新→舊）；同秒再以流水ID 倒序
+    rowsL.sort(function (a, b) {
+      var ta = String(a["時間"] || "").replace("T", " ").trim();
+      var tb = String(b["時間"] || "").replace("T", " ").trim();
+      if (tb !== ta) return tb < ta ? -1 : 1;
+      var ida = String(a["流水ID"] || "");
+      var idb = String(b["流水ID"] || "");
+      if (idb !== ida) return idb < ida ? -1 : 1;
+      return 0;
+    });
+    if (rowsL.length > limitL) rowsL = rowsL.slice(0, limitL);
+    var typeLabel = function (t) {
+      var k = String(t || "").toLowerCase();
+      if (k === "earn") return "發放";
+      if (k === "spend") return "扣用";
+      if (k === "restore") return "還原";
+      if (k === "adjust") return "手動";
+      return t || "—";
+    };
+    var ledger = rowsL.map(function (r) {
+      var d = parseFloat(r["異動"]);
+      if (isNaN(d)) d = 0;
+      d = Math.round(d * 1000) / 1000;
+      var ba = parseFloat(r["餘額後"]);
+      if (isNaN(ba)) ba = 0;
+      ba = Math.round(ba * 1000) / 1000;
+      return {
+        id: r["流水ID"] || "",
+        time: r["時間"] || "",
+        name: r["教師姓名"] || "",
+        delta: d,
+        balanceAfter: ba,
+        type: r["類型"] || "",
+        typeLabel: typeLabel(r["類型"]),
+        packageId: r["包ID"] || "",
+        eventId: r["事件ID"] || "",
+        eventName: r["事件名稱"] || "",
+        startDate: r["起日"] || "",
+        endDate: r["迄日"] || "",
+        requestId: r["申請單ID"] || "",
+        operator: r["操作者"] || "",
+        note: r["備註"] || ""
+      };
+    });
+    var balance = Math.max(0, balSum);
+    var tHit = null;
+    if (teachersL && teachersL.length) {
+      tHit = teachersL.find(function (t) {
+        return String(t["教師Email"] || t.email || "").toLowerCase() === targetEmail;
+      });
+    }
+    var sheetQLed = balance;
+    if (tHit) {
+      var sqL = parseFloat(tHit["折抵額度"] != null ? tHit["折抵額度"] : tHit.mutualQuota);
+      if (isNaN(sqL) || sqL < 0) sqL = 0;
+      sheetQLed = Math.round(sqL * 1000) / 1000;
+    }
+    // 名單餘額優先（與畫面教師列表一致）；帳本加總作備援
+    if (tHit && sheetQLed != null) balance = sheetQLed;
+    var outLed = {
+      success: true,
+      name: tHit ? (tHit["教師姓名"] || tHit.name || "") : (ledger[0] && ledger[0].name) || "",
+      balance: balance,
+      sheetQuota: sheetQLed,
+      ledger: ledger,
+      count: ledger.length
+    };
+    var outLedJson = JSON.stringify(outLed);
+    try { CacheService.getScriptCache().put(ledCacheKey, outLedJson, 120); } catch (eLedP) {}
+    return ContentService.createTextOutput(outLedJson).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetHomeroomRecords_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+    var hTeachers = getSemesterTeachersCached_(semesterId);
+    var hIsAdmin = resolveIsAdmin_(readerEmail, hTeachers);
+    if (!hIsAdmin) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: "僅管理員可查看代導紀錄"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      homeroomRecords: nameKeyPublicRows_("代導紀錄", getSemesterHomeroomRecords_(semesterId))
+    })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetQuotaSpendPreview_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+    var pvEmails = reqData.emails || reqData.teacherEmails || [];
+    if (reqData.email && (!pvEmails || !pvEmails.length)) pvEmails = [reqData.email];
+    if (typeof pvEmails === "string") pvEmails = [pvEmails];
+    var pvNames = reqData.names || reqData.teacherNames || [];
+    if (reqData.name && (!pvNames || !pvNames.length)) pvNames = [reqData.name];
+    if (typeof pvNames === "string") pvNames = [pvNames];
+    var pvReqs = reqData.requests || [];
+    var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs, pvNames);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      preview: preview
+    })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleReadGetInitialData_(rctx) {
+  var {postData, action, semesterId, reqData, scope, readerEmail, readerTeachers, readerRole, readerIsAdmin, readerIsStaff} = rctx;
+    var teachersForRole = readerTeachers;
+    var personalizeOpts = { isStaff: readerIsStaff, canViewAllTimetables: !!(readerIsAdmin || readerIsStaff) };
+    var partsHint = String(reqData.parts || postData.parts || "").toLowerCase();
+    var historyAllFlag = reqData.historyAll === true || reqData.historyAll === "true" || reqData.historyAll === 1
+      || postData.historyAll === true || postData.historyAll === "true";
+    var requestsOnlyFlag = reqData.requestsOnly === true || reqData.requestsOnly === "true" || reqData.requestsOnly === 1
+      || postData.requestsOnly === true || postData.requestsOnly === "true"
+      || partsHint === "requests";
+    var teachersOnlyFlag = reqData.teachersOnly === true || reqData.teachersOnly === "true" || reqData.teachersOnly === 1
+      || postData.teachersOnly === true || postData.teachersOnly === "true"
+      || partsHint === "teachers";
+    var windowDaysOpt = 14;
+    if (reqData.windowDays != null && reqData.windowDays !== "") windowDaysOpt = reqData.windowDays;
+    else if (postData.windowDays != null && postData.windowDays !== "") windowDaysOpt = postData.windowDays;
+    var wDays = parseInt(windowDaysOpt, 10) || 14;
+    var dataGeneration = getCacheGeneration_("data", semesterId);
+
+    // ── 申請增量：updatedSince 之後變更列（softRefresh 用）──
+    var updatedSinceRaw = reqData.updatedSince || postData.updatedSince || "";
+    // 僅當明確 requestsDelta + 水位線時走增量（避免誤把一般 getInitialData 當 delta）
+    if ((reqData.requestsDelta === true || reqData.requestsDelta === "true" || reqData.requestsDelta === 1
+        || postData.requestsDelta === true || postData.requestsDelta === "true")
+        && String(updatedSinceRaw || "").trim()) {
+      var deltaOut = buildRequestsDelta_(semesterId, readerEmail, readerIsAdmin, updatedSinceRaw, readerIsStaff);
+      if (readerIsStaff) deltaOut.scope = "staff";
+      return ContentService.createTextOutput(JSON.stringify(deltaOut))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // ── requestsOnly：申請＋空堂（共用底包後再個人化；淺拷貝）──
+    if (requestsOnlyFlag) {
+      var roSharedKey = "jcjh_reqonly_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays;
+      var roShared = null;
+      var roT0 = perfNow_();
+      if (!historyAllFlag && scope !== "fresh") {
+        var roCached = getCacheChunked(roSharedKey);
+        if (roCached) {
+          try { roShared = JSON.parse(roCached); } catch (eRo) { roShared = null; }
+        }
+      }
+      perfLog_("getInitialData/requestsOnly cache " + (roShared ? "HIT" : "MISS"), roT0, semesterId);
+      if (!roShared) {
+        var roBuildT0 = perfNow_();
+        roShared = buildFullSemesterPayload_(semesterId, {
+          userEmail: "",
+          isAdmin: true,
+          historyAll: historyAllFlag,
+          windowDays: wDays,
+          requestsOnly: true
+        });
+        perfLog_("getInitialData/requestsOnly build", roBuildT0, semesterId);
+        if (!historyAllFlag) {
+          try { putCacheChunked(roSharedKey, JSON.stringify(roShared), CACHE_TTL_REQ_); } catch (eRoPut) {}
+        }
+      }
+      var roOut = personalizeSharedPayload_(roShared, readerEmail, readerIsAdmin, personalizeOpts);
+      return ContentService.createTextOutput(JSON.stringify(roOut))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // ── teachersOnly：只回教師名單（額度發放後 soft；不走課表）──
+    if (teachersOnlyFlag) {
+      var toOut = buildFullSemesterPayload_(semesterId, {
+        userEmail: readerEmail,
+        isAdmin: readerIsAdmin,
+        isStaff: readerIsStaff,
+        teachersOnly: true
+      });
+      return ContentService.createTextOutput(JSON.stringify(toOut))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // ── 全量：admin／教師共用底包（課表全校；申請全校列，回傳前淺拷 filter）──
+    // 行政與教學組皆吃 full 底包（課表不瘦身）；一般教師用 teacher 鍵（內容相同，個人化再瘦）
+    var fullSharedKey = (readerIsAdmin || readerIsStaff)
+      ? ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_admin_w" + wDays)
+      : ("jcjh_data_" + DATA_PAYLOAD_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_teacher_w" + wDays);
+    var fullShared = null;
+    var fullT0 = perfNow_();
+    if (!historyAllFlag && scope !== "fresh") {
+      var fullCached = getCacheChunked(fullSharedKey);
+      if (fullCached) {
+        try { fullShared = JSON.parse(fullCached); } catch (eFull) { fullShared = null; }
+      }
+    }
+    perfLog_("getInitialData/full cache " + (fullShared ? "HIT" : "MISS"), fullT0, semesterId);
+    if (!fullShared) {
+      var fullBuildT0 = perfNow_();
+      fullShared = buildFullSemesterPayload_(semesterId, {
+        userEmail: "",
+        isAdmin: true,
+        historyAll: historyAllFlag,
+        windowDays: wDays
+      });
+      perfLog_("getInitialData/full build", fullBuildT0, semesterId);
+      if (fullShared.settings && !fullShared.settings.allowedHd) {
+        fullShared.settings.allowedHd = ALLOWED_HD_;
+      }
+      if (!historyAllFlag) {
+        try {
+          var ttl = (readerIsAdmin || readerIsStaff) ? CACHE_TTL_FULL_ : CACHE_TTL_TEACHER_FULL_;
+          var fullSharedJson = JSON.stringify(fullShared);
+          putCacheChunked(fullSharedKey, fullSharedJson, ttl);
+          // Phase 1B：取消 admin／teacher 雙寫，改為按需懶寫。
+          // 雙寫讓每次冷 miss 付出雙倍 put 配額；另一角色首次請求時 miss 一次即補上，命中率影響極小。
+        } catch (eFullPut) {}
+      }
+    }
+    var fullOut = personalizeSharedPayload_(fullShared, readerEmail, readerIsAdmin, personalizeOpts);
+    return ContentService.createTextOutput(JSON.stringify(fullOut))
       .setMimeType(ContentService.MimeType.JSON);
-  }
 }
 
 // ----------------- 狀態與類型中英文對照翻譯 -----------------
@@ -10194,3 +10400,4 @@ function sendAdminRejectEmail_(req, currentUrl) {
   var htmlBody = _wrapHtmlTemplate_("調代課線上系統 - 申請被行政駁回", "#ef4444", content);
   emails.forEach(function (em) { sendSystemEmail_(em, subject, htmlBody); });
 }
+
