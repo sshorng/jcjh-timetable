@@ -101,3 +101,13 @@ phase 構成由 charged-map 6128ms＋summary:overtime 2810ms 變為 357ms＋1214
 - 併發 3 人同時核准：不再出現 `操作過於頻繁`（寫鎖分級＋友善重試訊息）。
 - GAS `put` 配額：全量請求每冷 miss 只寫 1 把 key（取消雙寫）。
 - ✅ 匯出 ＜2s 在 100 師量級已達標（初測 109s→現約 1.8s，見上三節）；GAS／瀏覽器側基線仍待生產環境補齊。
+ ## 結案量測（2026-10-10，優化計劃收尾：本地可量測終值）
+ - 主包 `assets/index-*.js`：**693.96 kB／gzip 214.00 kB**（Phase 1 驗收門檻 <700kB ✅；起點 1172.54 kB／gzip 358.56 kB）
+ - CSS（Vite 壓縮＋hash）：133.98 kB／gzip 25.02 kB（起點 178 kB 未壓縮 render-blocking）
+ - vendor（vue＋pinia）：75.97 kB／gzip 30.12 kB；exceljs 938.36 kB 與 jszip 97.22 kB 維持懶載（首屏不載）
+ - `npm test`：65 檔／120 測全過，約 99s（起點 466s；Phase 4.2 門檻 <120s ✅）
+ - `npm run e2e:boot`：BOOT_CHECK=PASS；`npm run lint` 零錯誤
+ - 後端 `code.gs`：10451 行；`doPost` 由單一 2043 行函數降為約 127 行 dispatch＋40 `handlePost<Action>_`（Phase 3.1）；
+   讀取 8 `handleRead<Action>_`＋`readActionRoutes_`（Phase 3.2）；同列跨欄一次讀 2 helpers（Phase 3.3，每次寫入省 1～2 次 Sheets API 往返）
+ - 需 live GAS＋瀏覽器的四列（冷／暖首載、softRefresh、8000 筆匯入）本地無法量測，維持「待生產環境量測」，
+   待部署新版 `code.gs` 後以 `?perf=1`＋`PERF_LOG=true` 補齊。
