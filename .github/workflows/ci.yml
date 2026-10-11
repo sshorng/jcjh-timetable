@@ -18,3 +18,5 @@ jobs:
       - run: npm run build
       - run: npm run lint
       - run: npm run test
+      # 主包體積閘門（真實 UTF-8 位元組，raw 720KiB／gzip 220KiB）：守住 Phase 1 成果不可無聲退化
+      - run: npm run check:size
