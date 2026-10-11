@@ -7,10 +7,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # 釘 ubuntu-24.04：ubuntu-latest 將於 2026-10-19 起遷移至 Ubuntu 26，先避開這次變動
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # v7 起目標執行環境為 Node 24（v4 仍為 Node 20，已被 GitHub 棄用警告）
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: npm
