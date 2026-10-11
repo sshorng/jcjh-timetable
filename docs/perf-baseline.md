@@ -111,3 +111,21 @@ phase 構成由 charged-map 6128ms＋summary:overtime 2810ms 變為 357ms＋1214
    讀取 8 `handleRead<Action>_`＋`readActionRoutes_`（Phase 3.2）；同列跨欄一次讀 2 helpers（Phase 3.3，每次寫入省 1～2 次 Sheets API 往返）
  - 需 live GAS＋瀏覽器的四列（冷／暖首載、softRefresh、8000 筆匯入）本地無法量測，維持「待生產環境量測」，
    待部署新版 `code.gs` 後以 `?perf=1`＋`PERF_LOG=true` 補齊。
+ ## ⚠️ 口徑更正（2026-10-10，實測發現 vite 報告值不可直接當位元組）
+
+ 上表「主包 693.96 kB」是 **vite build 的輸出口徑＝字元數 / 1000**，不是 UTF-8 位元組。
+ 本專案含 17,050 個中文字元（每字 3 bytes），故同一檔案有兩組數字：
+
+| 口徑 | 數值 | 說明 |
+|---|---|---|
+ vite 字元數 / 1000 | 693.96 kB | build 輸出、`chunkSizeWarningLimit` 使用的口徑 |
+ **實際檔案 bytes / 1024** | **710.97 KiB（728,030 bytes）** | 瀏覽器實際下載量 |
+ 實際 gzip bytes / 1024 | **208.58 KiB（213,586 bytes）** | 實際傳輸量（vite 報 214.00 kB） |
+
+ 結論（誠實版）：
+ - 真實下載量由 1,172 kB（vite 口徑）降至 710.97 KiB（實際位元組），約降 **39%**。
+ - 原計劃驗收條件寫的「主包 < 700 kB」是 vite 口徑；改用真實位元組後為 710.97 KiB，
+   **超出 11 KiB（約 1.5%）**。gzip 端 208.58 KiB 仍在 <220 KiB 內。
+ - 此 1.5% 差距對使用者無感，故不追砍，改以 `scripts/check-bundle-size.cjs`
+   （raw 720 KiB／gzip 220 KiB，**用真實位元組**）釘死，並接上 CI `npm run check:size`。
+ - 以後引用主包體積一律標明口徑，避免再次「數字漂亮但實際沒降」。

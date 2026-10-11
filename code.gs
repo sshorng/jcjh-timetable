@@ -1,4 +1,8 @@
 // 學校調代課線上系統 - Google Apps Script 後端 API (純 Google Sheets + GSI 驗證版)
+//
+// CODE_VERSION：部署追蹤用。貼上 Apps Script 後台時請同步更新為該次部署的 git 短 hash，
+// 讓「生產環境跑的是哪個 commit」可被回答（老師回報問題時的第一個問題）。
+var CODE_VERSION = "c5bf768";
 
 var _requestSpreadsheet_ = null;
 var _requestSpreadsheetKey_ = "";

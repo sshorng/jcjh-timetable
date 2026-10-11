@@ -14,6 +14,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests scripts",
     "lint:sync-gas": "node scripts/sync-gas-globals.cjs",
+    "check:size": "node scripts/check-bundle-size.cjs",
     "e2e:boot": "npm run build && node scripts/e2e-boot-check.cjs"
   },
   "dependencies": {
