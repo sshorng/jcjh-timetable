@@ -88,6 +88,34 @@ const ExportInvigilationClass = (() => {
     return s === '巡堂' || s.indexOf('巡堂') === 0;
   }
 
+  /**
+   * 巡堂分級：段考巡堂任務帶年級（巡七／巡八／巡九），須填到對應巡堂列。
+   * 回傳 '七' | '八' | '九' | 'plain'（有巡無級）| null（非巡堂）。
+   * 支援：巡七、巡7、七年級巡堂、段考巡七、巡堂(七) 等；數字須緊貼巡字
+   * （巡堂704 不算七，避免班級編號誤判）。
+   */
+  function parsePatrolGrade(s) {
+    if (!s || s.indexOf('巡') < 0) return null;
+    var m = s.match(/[七八九]/);
+    if (m) return m[0];
+    m = s.match(/巡\s*([789])|([789])\s*巡/);
+    if (m) return m[1] === '7' || m[2] === '7' ? '七' : (m[1] === '8' || m[2] === '8' ? '八' : '九');
+    m = s.match(/([789])\s*年\s*級/);
+    if (m) return m[1] === '7' ? '七' : (m[1] === '8' ? '八' : '九');
+    return null;
+  }
+
+  function detectPatrolKind(text) {
+    var s = normText(text);
+    if (!s || s.indexOf('巡') < 0) return null;
+    if (!isPatrolText(text)) {
+      // 非「巡堂」開頭：只有帶分級（巡七…）才視為巡堂，避免班級文字誤收
+      return parsePatrolGrade(s);
+    }
+    var g = parsePatrolGrade(s);
+    return g || 'plain';
+  }
+
   function clonePlain(obj) {
     if (!obj) return null;
     try { return JSON.parse(JSON.stringify(obj)); } catch (e) {
@@ -181,9 +209,11 @@ const ExportInvigilationClass = (() => {
       return { className: name, cells: cells };
     });
 
-    // 每節巡堂教師（考試節才填入巡堂列）
+    // 每節巡堂教師（考試節才填入巡堂列），依分級歸位七／八／九
     var patrolPerSlot = [];
-    for (var s0 = 0; s0 < slotCount; s0++) patrolPerSlot.push([]);
+    for (var s0 = 0; s0 < slotCount; s0++) {
+      patrolPerSlot.push({ '七': [], '八': [], '九': [], other: [] });
+    }
 
     allTeachers.forEach(function (t) {
       if (!t || !t.slots) return;
@@ -194,9 +224,13 @@ const ExportInvigilationClass = (() => {
         if (!slot || typeof slot !== 'object') continue;
         var text = String(slot.text || '').trim();
         if (!text) continue;
-        if (isPatrolText(text)) {
+        var kind = detectPatrolKind(text);
+        if (kind) {
           // 僅考試節收集巡堂；自習節巡堂不需額外巡堂列（與範本一致）
-          if (isExamSlot(s)) patrolPerSlot[s].push({ text: teacherName, changed: !!slot.changed });
+          if (isExamSlot(s)) {
+            var bucket = kind === 'plain' ? patrolPerSlot[s].other : patrolPerSlot[s][kind];
+            bucket.push({ text: teacherName, changed: !!slot.changed });
+          }
           continue;
         }
         splitNames(text).forEach(function (cls) {
@@ -214,22 +248,76 @@ const ExportInvigilationClass = (() => {
       }
     });
 
-    var patrolMax = patrolPerSlot.reduce(function (m, list) { return Math.max(m, list.length); }, 0);
-    var patrolRows = [];
-    for (var p = 0; p < patrolMax; p++) {
+    function joinPatrol(list) {
+      if (!list || !list.length) return { text: '', changed: false };
+      return {
+        text: list.map(function (e) { return e.text; }).join('、'),
+        changed: list.some(function (e) { return e.changed; })
+      };
+    }
+
+    function blankCells() {
+      var out = [];
+      for (var b = 0; b < slotCount; b++) out.push({ text: '', changed: false });
+      return out;
+    }
+
+    // 分級列（七／八／九）＋備用列（無分級或溢出）；統計供匯出提示
+    var gradeCells = { '七': blankCells(), '八': blankCells(), '九': blankCells() };
+    var overflowPerSlot = [];
+    for (var os = 0; os < slotCount; os++) overflowPerSlot.push([]);
+    var gradedSlots = 0;
+    var fallbackSlots = 0;
+    for (var ps = 0; ps < slotCount; ps++) {
+      var buckets = patrolPerSlot[ps];
+      var hasGrade = buckets['七'].length + buckets['八'].length + buckets['九'].length > 0;
+      if (hasGrade) {
+        gradedSlots += 1;
+        gradeCells['七'][ps] = joinPatrol(buckets['七']);
+        gradeCells['八'][ps] = joinPatrol(buckets['八']);
+        gradeCells['九'][ps] = joinPatrol(buckets['九']);
+        overflowPerSlot[ps] = buckets.other;
+      } else if (buckets.other.length) {
+        // 該節無分級資訊：沿用舊順序填入（相容舊資料），溢出進備用列
+        fallbackSlots += 1;
+        gradeCells['七'][ps] = joinPatrol(buckets.other.slice(0, 1));
+        gradeCells['八'][ps] = joinPatrol(buckets.other.slice(1, 2));
+        gradeCells['九'][ps] = joinPatrol(buckets.other.slice(2, 3));
+        overflowPerSlot[ps] = buckets.other.slice(3);
+      }
+    }
+    var overflowMax = overflowPerSlot.reduce(function (m, list) { return Math.max(m, list.length); }, 0);
+    var patrolRows = [
+      { grade: '七', cells: gradeCells['七'] },
+      { grade: '八', cells: gradeCells['八'] },
+      { grade: '九', cells: gradeCells['九'] }
+    ];
+    for (var p = 0; p < overflowMax; p++) {
       var cells = [];
       for (var s2 = 0; s2 < slotCount; s2++) {
         if (!isExamSlot(s2)) {
           cells.push({ text: '', changed: false });
         } else {
-          var entry = patrolPerSlot[s2][p];
+          var entry = overflowPerSlot[s2][p];
           cells.push(entry ? { text: entry.text, changed: !!entry.changed } : { text: '', changed: false });
         }
       }
-      patrolRows.push({ className: '', cells: cells });
+      patrolRows.push({ grade: null, cells: cells });
     }
+    var patrolMax = Math.max(3, patrolRows.length);
+    var overflowCells = 0;
+    overflowPerSlot.forEach(function (list) {
+      list.forEach(function (e) { if (e && e.text) overflowCells += 1; });
+    });
 
-    return { classes: classes, rows: rows, patrolRows: patrolRows, patrolMax: patrolMax, patrolPerSlot: patrolPerSlot };
+    return {
+      classes: classes,
+      rows: rows,
+      patrolRows: patrolRows,
+      patrolMax: patrolMax,
+      patrolPerSlot: patrolPerSlot,
+      patrolStats: { gradedSlots: gradedSlots, fallbackSlots: fallbackSlots, overflowCells: overflowCells }
+    };
   }
 
   function detectClassLayout(ws) {
@@ -301,9 +389,49 @@ const ExportInvigilationClass = (() => {
     var templateClasses = (layout && layout.templateClasses) || [];
     var templatePatrols = (layout && layout.templatePatrols) || [];
     var classCount = actualClasses.length;
-    var patrolCount = (classMatrix && classMatrix.patrolRows ? classMatrix.patrolRows.length : 0);
-    // 至少保留模板巡堂列數，避免版式縮水
-    var keepPatrols = Math.max(patrolCount, templatePatrols.length);
+    // 巡堂列：分級列對位模板標籤（巡七→七），備用列接在後面標巡備N
+    var gradeRowByGrade = {};
+    var overflowSrcRows = [];
+    (classMatrix.patrolRows || []).forEach(function (pr) {
+      if (pr && (pr.grade === '七' || pr.grade === '八' || pr.grade === '九') && !gradeRowByGrade[pr.grade]) {
+        gradeRowByGrade[pr.grade] = pr;
+      } else if (pr) {
+        overflowSrcRows.push(pr);
+      }
+    });
+    function patrolBlankCells() {
+      var out = [];
+      for (var bb = 0; bb < SLOTS_PER_BOOK; bb++) out.push({ text: '', changed: false });
+      return out;
+    }
+    function patrolRowHasText(pr) {
+      return !!(pr && pr.cells && pr.cells.some(function (c) { return c && c.text; }));
+    }
+    var rowsToWrite = [];
+    templatePatrols.forEach(function (lbl) {
+      var g = parsePatrolGrade(lbl);
+      if (g && gradeRowByGrade[g]) {
+        rowsToWrite.push({ label: lbl, row: gradeRowByGrade[g] });
+        gradeRowByGrade[g]._placed = true;
+      } else if (overflowSrcRows.length) {
+        rowsToWrite.push({ label: lbl, row: overflowSrcRows.shift() });
+      } else {
+        rowsToWrite.push({ label: lbl, row: { cells: patrolBlankCells() } });
+      }
+    });
+    ['七', '八', '九'].forEach(function (g) {
+      var r = gradeRowByGrade[g];
+      if (r && !r._placed && patrolRowHasText(r)) {
+        rowsToWrite.push({ label: '巡' + g, row: r });
+        r._placed = true;
+      }
+    });
+    var backupNo = 0;
+    while (overflowSrcRows.length) {
+      backupNo += 1;
+      rowsToWrite.push({ label: '巡備' + backupNo, row: overflowSrcRows.shift() });
+    }
+    var keepPatrols = Math.max(rowsToWrite.length, templatePatrols.length);
     var neededRows = CLASS_ROW_START + classCount + keepPatrols - 1;
     ensureRowCapacity(ws, neededRows);
 
@@ -332,16 +460,13 @@ const ExportInvigilationClass = (() => {
       }
     }
 
-    // 巡堂列
+    // 巡堂列：依 rowsToWrite（分級已對位）寫入
     var patrolStart = CLASS_ROW_START + classCount;
-    var patrolLabels = templatePatrols.slice();
-    while (patrolLabels.length < keepPatrols) {
-      patrolLabels.push('巡' + (patrolLabels.length + 1));
-    }
-    for (var p = 0; p < keepPatrols; p++) {
+    for (var p = 0; p < rowsToWrite.length; p++) {
       var prow = patrolStart + p;
-      try { ws.getCell(prow, 1).value = sanitizeText(patrolLabels[p] || ('巡' + (p + 1))) || null; } catch (e7) {}
-      var prowCells = (classMatrix.patrolRows[p] && classMatrix.patrolRows[p].cells) || [];
+      var witem = rowsToWrite[p];
+      try { ws.getCell(prow, 1).value = sanitizeText(witem.label) || null; } catch (e7) {}
+      var prowCells = (witem.row && witem.row.cells) || [];
       for (var s3 = 0; s3 < SLOTS_PER_BOOK; s3++) {
         var pcol = DATA_COL_START + s3;
         var pcell = null;
@@ -352,7 +477,6 @@ const ExportInvigilationClass = (() => {
         setDataFont(pcell, 40, !!(pentry && pentry.changed && ptext));
       }
     }
-    // 清掉模板殘留的多餘列（例如實際班級較少時原巡堂位置殘留）
     var usedEnd = patrolStart + keepPatrols - 1;
     var templateEnd = CLASS_ROW_START + templateClasses.length + templatePatrols.length - 1;
     for (var cr = usedEnd + 1; cr <= Math.max(templateEnd, ws.rowCount || 0); cr++) {
@@ -556,6 +680,16 @@ const ExportInvigilationClass = (() => {
     var warn = range.warning || '';
     var tip = 'Row2 考科欄（空欄）請依段考範圍手填；自習欄已帶入「自習」。巡堂列僅考試節填值。';
     warn = warn ? (warn + '；' + tip) : tip;
+    var pstats = (classMatrix && classMatrix.patrolStats) || null;
+    if (pstats) {
+      if (pstats.gradedSlots > 0) {
+        warn += '巡堂已按七／八／九分級歸位（' + pstats.gradedSlots + ' 節）';
+        if (pstats.overflowCells > 0) warn += '；另有 ' + pstats.overflowCells + ' 格無分級列於巡備列，請手動歸位';
+        warn += '。';
+      } else if (pstats.fallbackSlots > 0) {
+        warn += '巡堂任務未標註年級，已依原順序填入巡七／八／九（' + pstats.fallbackSlots + ' 節），請核對。';
+      }
+    }
 
     return {
       ok: true,
@@ -566,6 +700,7 @@ const ExportInvigilationClass = (() => {
       patrolCount: fillInfo.patrolCount,
       changedMarked: teacherMatrix.changedCount || 0,
       coverage: coverage,
+      patrolStats: pstats,
       warning: warn,
       dates: range.dates
     };
