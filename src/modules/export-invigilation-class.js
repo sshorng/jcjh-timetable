@@ -95,11 +95,34 @@ const ExportInvigilationClass = (() => {
     }
   }
 
-  function setCellFontPreservingStyle(cell, fontSpec) {
+  /**
+   * 非法 XML 1.0 字元會讓整份 xlsx 在 Excel 桌面版跳「已修復」且內容全空。
+   * 教師名單來自試算表，可能夾帶貼上殘留的控制字元；寫入前一律清除
+   * （保留 \t \n \r 合法空白；中文、○、頓號、括號皆不受影響）。
+   */
+  // 非法 XML 1.0 字元集（ASCII 跳脫寫法；不可貼入字元本身）。
+  var ILLEGAL_XML_SRC = '[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]';
+  var ILLEGAL_XML_RE = new RegExp(ILLEGAL_XML_SRC, 'g');
+  var ILLEGAL_XML_TEST = new RegExp(ILLEGAL_XML_SRC);
+  function sanitizeText(v) {
+    if (v == null) return '';
+    ILLEGAL_XML_RE.lastIndex = 0;
+    return String(v).replace(ILLEGAL_XML_RE, '');
+  }
+
+  /**
+   * 乾淨字型寫入：只碰 cell.font，不碰整個 cell.style。
+   * 全量 clone style 再寫回曾是損毀嫌疑之一；字型只需 標楷體／大小／粗體／底線，
+   * 其餘框線／底色／對齊沿用模板，絕不更動。
+   */
+  var FONT_BLACK = 'FF000000';
+  function setDataFont(cell, size, changed) {
     if (!cell) return;
-    var style = clonePlain(cell.style) || {};
-    style.font = clonePlain(fontSpec) || fontSpec;
-    cell.style = style;
+    try {
+      var spec = { name: '標楷體', size: size, bold: !!changed, color: { argb: FONT_BLACK } };
+      if (changed) spec.underline = 'single';
+      cell.font = spec;
+    } catch (e) { /* ignore */ }
   }
 
   function getExcelJS() {
@@ -247,12 +270,16 @@ const ExportInvigilationClass = (() => {
         if (prev && prev.height != null) row.height = prev.height;
         else row.height = 90;
       } catch (e) { /* ignore */ }
-      // 複製上一列樣式（框線／字型／對齊）到新增列，避免無框線
+      // 非常備後援（範本已預建 40 列，通常不會走到）：逐屬性複製，避免整包 style 覆寫
       for (var c = 1; c <= DATA_COL_END; c++) {
         try {
           var src = ws.getCell(r - 1, c);
           var dst = ws.getCell(r, c);
-          if (src && src.style) dst.style = clonePlain(src.style) || {};
+          if (!src || !dst) continue;
+          if (src.font) { try { dst.font = clonePlain(src.font) || src.font; } catch (eF) {} }
+          if (src.fill) { try { dst.fill = clonePlain(src.fill) || src.fill; } catch (eFl) {} }
+          if (src.border) { try { dst.border = clonePlain(src.border) || src.border; } catch (eB) {} }
+          if (src.alignment) { try { dst.alignment = clonePlain(src.alignment) || src.alignment; } catch (eA) {} }
         } catch (e2) { /* ignore */ }
       }
     }
@@ -264,9 +291,9 @@ const ExportInvigilationClass = (() => {
     var suffix = opts.suffix || '';
     var layout = opts.layout;
 
-    // 日期：B1（合併 B1:H1 主格）、I1（合併 I1:L1 主格）
-    try { ws.getCell(1, 2).value = formatClassDayHeader(dates[0] || '', suffix) || null; } catch (e1) {}
-    try { ws.getCell(1, 9).value = formatClassDayHeader(dates[1] || dates[0] || '', suffix) || null; } catch (e2) {}
+    // 日期：B1（合併 B1:H1 主格）、I1（合併 I1:L1 主格），寫入前過濾非法字元
+    try { ws.getCell(1, 2).value = sanitizeText(formatClassDayHeader(dates[0] || '', suffix)) || null; } catch (e1) {}
+    try { ws.getCell(1, 9).value = sanitizeText(formatClassDayHeader(dates[1] || dates[0] || '', suffix)) || null; } catch (e2) {}
 
     // Row2 考科列不覆寫（模板自習預設＋手填考科，與既有 R3-R8 規則一致）
 
@@ -280,30 +307,20 @@ const ExportInvigilationClass = (() => {
     var neededRows = CLASS_ROW_START + classCount + keepPatrols - 1;
     ensureRowCapacity(ws, neededRows);
 
-    // 班級列
+    // 班級列（值先過濾非法字元；字型只寫乾淨 font，不動整包 style）
     for (var i = 0; i < classCount; i++) {
       var row = CLASS_ROW_START + i;
-      try { ws.getCell(row, 1).value = actualClasses[i]; } catch (e) {}
+      try { ws.getCell(row, 1).value = sanitizeText(actualClasses[i]) || null; } catch (e) {}
       var cells = classMatrix.rows[i] ? classMatrix.rows[i].cells : [];
       for (var s = 0; s < SLOTS_PER_BOOK; s++) {
         var col = DATA_COL_START + s;
         var cell = null;
         try { cell = ws.getCell(row, col); } catch (e3) { continue; }
         var entry = cells[s];
-        var text = entry && entry.text ? entry.text : '';
+        var text = sanitizeText(entry && entry.text ? entry.text : '');
         cell.value = text || null;
-        // 異動粗體底線；其餘確保不粗不底（保留模板字型大小）
-        try {
-          var font = clonePlain(cell.font) || clonePlain(cell.style && cell.style.font) || {};
-          if (entry && entry.changed && text) {
-            font.bold = true;
-            font.underline = 'single';
-          } else {
-            font.bold = false;
-            font.underline = false;
-          }
-          setCellFontPreservingStyle(cell, font);
-        } catch (e4) {}
+        // 異動粗體底線；其餘不粗不底（模板皆無底線，省略即等於清除）
+        setDataFont(cell, 40, !!(entry && entry.changed && text));
       }
     }
     // 模板班級列多於實際時，清空多餘列
@@ -323,26 +340,16 @@ const ExportInvigilationClass = (() => {
     }
     for (var p = 0; p < keepPatrols; p++) {
       var prow = patrolStart + p;
-      try { ws.getCell(prow, 1).value = patrolLabels[p] || ('巡' + (p + 1)); } catch (e7) {}
+      try { ws.getCell(prow, 1).value = sanitizeText(patrolLabels[p] || ('巡' + (p + 1))) || null; } catch (e7) {}
       var prowCells = (classMatrix.patrolRows[p] && classMatrix.patrolRows[p].cells) || [];
       for (var s3 = 0; s3 < SLOTS_PER_BOOK; s3++) {
         var pcol = DATA_COL_START + s3;
         var pcell = null;
         try { pcell = ws.getCell(prow, pcol); } catch (e8) { continue; }
         var pentry = prowCells[s3];
-        var ptext = pentry && pentry.text ? pentry.text : '';
+        var ptext = sanitizeText(pentry && pentry.text ? pentry.text : '');
         pcell.value = ptext || null;
-        try {
-          var pfont = clonePlain(pcell.font) || clonePlain(pcell.style && pcell.style.font) || {};
-          if (pentry && pentry.changed && ptext) {
-            pfont.bold = true;
-            pfont.underline = 'single';
-          } else {
-            pfont.bold = false;
-            pfont.underline = false;
-          }
-          setCellFontPreservingStyle(pcell, pfont);
-        } catch (e9) {}
+        setDataFont(pcell, 40, !!(pentry && pentry.changed && ptext));
       }
     }
     // 清掉模板殘留的多餘列（例如實際班級較少時原巡堂位置殘留）
@@ -418,7 +425,8 @@ const ExportInvigilationClass = (() => {
 
   /**
    * 寫出前驗證：把 writeBuffer 結果載回記憶體，確認日期（B1）與首班（A3）都在，
-   * 避免把損毀／空白檔交給使用者下載（Excel 會顯示「已修復」且內容全空）。
+   * 且全表無非法 XML 字元殘留，避免把損毀／空白檔交給使用者下載
+   * （Excel 會顯示「已修復」且內容全空）。
    */
   async function verifyWorkbookBuffer(ExcelJSLib, outBuf, expectFirstClass) {
     try {
@@ -435,6 +443,19 @@ const ExportInvigilationClass = (() => {
       if (expectFirstClass && (a3 == null || String(a3).trim() === '')) {
         return '驗證失敗：班級列遺失（A3空白，應為' + expectFirstClass + '）';
       }
+      // 全表掃描非法字元（sanitize 若有漏網，此處擋下不上傳損毀檔）
+      var bad = null;
+      try {
+        cws.eachRow({ includeEmpty: true }, function (row) {
+          if (bad) return;
+          row.eachCell({ includeEmpty: true }, function (cell) {
+            if (bad) return;
+            var v = cell.value;
+            if (typeof v === 'string' && ILLEGAL_XML_TEST.test(v)) bad = cell.address;
+          });
+        });
+      } catch (eScan) {}
+      if (bad) return '驗證失敗：' + bad + ' 含非法字元';
       return null;
     } catch (eV) {
       return '驗證失敗：' + (eV && eV.message ? eV.message : eV);

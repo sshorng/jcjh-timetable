@@ -48,3 +48,36 @@ test('invigilation class export（班級版反轉）', () => {
 
   console.log('invigilation class export tests PASS');
 });
+
+test('invigilation class export（非法字元過濾＋乾淨字型）', () => {
+  const cells = new Map();
+  function getCell(r, c) {
+    const k = r + ':' + c;
+    if (!cells.has(k)) cells.set(k, { value: null, font: null });
+    return cells.get(k);
+  }
+  const ws = { getCell, rowCount: 40 };
+  const classMatrix = {
+    classes: ['701'],
+    rows: [{ className: '701', cells: Array.from({ length: 11 }, (_, i) => ({ text: i === 0 ? '王\x0b小明\x07' : '李大華', changed: i === 1 })) }],
+    patrolRows: [],
+    patrolMax: 0
+  };
+  ExportInvigilationClass.fillClassValues(ws, {
+    classMatrix,
+    dates: ['2026-10-12', '2026-10-13'],
+    suffix: '一段',
+    layout: { templateClasses: ['701'], templatePatrols: ['巡七', '巡八', '巡九'], templateDataEnd: 27 }
+  });
+  assert.equal(getCell(1, 2).value, '115年10月12(一)一段');
+  assert.equal(getCell(3, 1).value, '701');
+  assert.equal(getCell(3, 2).value, '王小明', '控制字元應被清除');
+  assert.equal(getCell(3, 3).value, '李大華');
+  assert.equal(getCell(3, 2).font.name, '標楷體');
+  assert.equal(getCell(3, 2).font.size, 40);
+  assert.equal(getCell(3, 2).font.bold, false);
+  assert.equal(getCell(3, 3).font.bold, true);
+  assert.equal(getCell(3, 3).font.underline, 'single');
+  assert.equal(getCell(3, 2).style, undefined, '不得整包覆寫 style');
+  console.log('invigilation class sanitize tests PASS');
+});
