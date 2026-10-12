@@ -12,10 +12,9 @@
  *   coverage = ExportInvigilation.validateClassCoverage(...)
  * 再反轉為 班級 -> 教師（含巡堂列）。
  *
- * 鐵則（沿用既有）：
- * - 只改 value；Row2 考科列不覆寫（由模板自習預設＋手填考科）
- * - 絕不改 border／格線／欄寬／合併（模板原樣）
- * - 異動（代課／調課／空堂排班）粗體底線，其餘有字不粗不底
+ * 鐵則：
+ * - 只改 value，不動字型（全表純文字、無粗體底線）；Row2 考科列不覆寫（由模板自習預設＋手填考科）
+ * - 絕不改 border／格線／欄寬／合併（模板原樣）；寫完刪除下方多餘空白列
  */
 import { ExportInvigilation } from './export-invigilation-recovered.js';
 import { TemplateBuffer } from './template-buffer.js';
@@ -135,20 +134,6 @@ const ExportInvigilationClass = (() => {
     return String(v).replace(ILLEGAL_XML_RE, '');
   }
 
-  /**
-   * 乾淨字型寫入：只碰 cell.font，不碰整個 cell.style。
-   * 全量 clone style 再寫回曾是損毀嫌疑之一；字型只需 標楷體／大小／粗體／底線，
-   * 其餘框線／底色／對齊沿用模板，絕不更動。
-   */
-  var FONT_BLACK = 'FF000000';
-  function setDataFont(cell, size, changed) {
-    if (!cell) return;
-    try {
-      var spec = { name: '標楷體', size: size, bold: !!changed, color: { argb: FONT_BLACK } };
-      if (changed) spec.underline = 'single';
-      cell.font = spec;
-    } catch (e) { /* ignore */ }
-  }
 
   function getExcelJS() {
     if (typeof window !== 'undefined' && window.ExcelJS) return window.ExcelJS;
@@ -421,8 +406,7 @@ const ExportInvigilationClass = (() => {
         var entry = cells[s];
         var text = sanitizeText(entry && entry.text ? entry.text : '');
         cell.value = text || null;
-        // 異動粗體底線；其餘不粗不底（模板皆無底線，省略即等於清除）
-        setDataFont(cell, 40, !!(entry && entry.changed && text));
+        // 純文字：不加粗體底線，字型沿用模板
       }
     }
     // 模板班級列多於實際時，清空多餘列
@@ -448,31 +432,20 @@ const ExportInvigilationClass = (() => {
         var pentry = prowCells[s3];
         var ptext = sanitizeText(pentry && pentry.text ? pentry.text : '');
         pcell.value = ptext || null;
-        setDataFont(pcell, 40, !!(pentry && pentry.changed && ptext));
+        // 純文字：不加粗體底線，字型沿用模板
       }
     }
     var usedEnd = patrolStart + keepPatrols - 1;
-    var templateEnd = CLASS_ROW_START + templateClasses.length + templatePatrols.length - 1;
-    for (var cr = usedEnd + 1; cr <= Math.max(templateEnd, ws.rowCount || 0); cr++) {
-      // 只清資料區，不動列高框線
-      var aval = null;
-      try { aval = ws.getCell(cr, 1).value; } catch (e10) { continue; }
-      if (aval == null || String(aval).trim() === '') {
-        var allEmpty = true;
-        for (var cc = DATA_COL_START; cc <= DATA_COL_END; cc++) {
-          try {
-            var vv = ws.getCell(cr, cc).value;
-            if (vv != null && String(vv).trim() !== '') { allEmpty = false; break; }
-          } catch (e11) {}
-        }
-        if (allEmpty) continue;
-      }
-      // 超出使用範圍的殘留列：若超出模板原始範圍才清，避免誤清
-      if (cr > templateEnd) {
-        try { ws.getCell(cr, 1).value = null; } catch (e12) {}
-        for (var c2 = DATA_COL_START; c2 <= DATA_COL_END; c2++) {
-          try { ws.getCell(cr, c2).value = null; } catch (e13) {}
-        }
+    // 清除使用範圍外的殘留值（A 欄標籤＋B-L 資料；框線列高保留）。
+    // 範本恰好 27 列時此迴圈通常不執行；班級較少等稀疏情況可清掉舊標籤。
+    var maxRow = Math.max(
+      CLASS_ROW_START + templateClasses.length + templatePatrols.length - 1,
+      ws.rowCount || 0
+    );
+    for (var cr = usedEnd + 1; cr <= maxRow; cr++) {
+      try { ws.getCell(cr, 1).value = null; } catch (e10) {}
+      for (var cc = DATA_COL_START; cc <= DATA_COL_END; cc++) {
+        try { ws.getCell(cr, cc).value = null; } catch (e11) {}
       }
     }
 

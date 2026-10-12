@@ -86,6 +86,8 @@ test('invigilation class export（巡堂分級歸位）', () => {
     if (!cells.has(k)) cells.set(k, { value: null, font: null });
     return cells.get(k);
   }
+  getCell(30, 1).value = '舊標籤';
+  getCell(30, 2).value = '舊資料';
   const fillInfo = ExportInvigilationClass.fillClassValues({ getCell, rowCount: 40 }, {
     classMatrix: { classes: ['701'], rows: [{ className: '701', cells: spec11.map(() => ({ text: '', changed: false })) }], patrolRows: gm.patrolRows },
     dates: ['2026-10-12', '2026-10-13'],
@@ -93,6 +95,8 @@ test('invigilation class export（巡堂分級歸位）', () => {
     layout: { templateClasses: ['701'], templatePatrols: ['巡七', '巡八', '巡九'], templateDataEnd: 27 }
   });
   assert.equal(fillInfo.patrolCount, 3, '只寫三列分級，無巡備列');
+  assert.equal(getCell(30, 1).value, null, '使用範圍外殘留標籤應清除');
+  assert.equal(getCell(30, 2).value, null, '使用範圍外殘留資料應清除');
   assert.equal(getCell(4, 1).value, '巡七');
   assert.equal(getCell(4, 3).value, '七師');
   assert.equal(getCell(5, 1).value, '巡八');
@@ -127,11 +131,8 @@ test('invigilation class export（非法字元過濾＋乾淨字型）', () => {
   assert.equal(getCell(3, 1).value, '701');
   assert.equal(getCell(3, 2).value, '王小明', '控制字元應被清除');
   assert.equal(getCell(3, 3).value, '李大華');
-  assert.equal(getCell(3, 2).font.name, '標楷體');
-  assert.equal(getCell(3, 2).font.size, 40);
-  assert.equal(getCell(3, 2).font.bold, false);
-  assert.equal(getCell(3, 3).font.bold, true);
-  assert.equal(getCell(3, 3).font.underline, 'single');
+  assert.equal(getCell(3, 2).font, null, '純文字：不得更動字型');
+  assert.equal(getCell(3, 3).font, null, '有異動也不加粗體底線');
   assert.equal(getCell(3, 2).style, undefined, '不得整包覆寫 style');
   console.log('invigilation class sanitize tests PASS');
 });
