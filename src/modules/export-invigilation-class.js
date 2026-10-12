@@ -18,6 +18,14 @@
  */
 import { ExportInvigilation } from './export-invigilation-recovered.js';
 import { TemplateBuffer } from './template-buffer.js';
+import {
+  normalizeExamSubject,
+  parsePatrolGrade,
+  detectPatrolKind,
+  voteSubject,
+  sanitizeExamText,
+  ILLEGAL_XML_TEST
+} from './export-invigilation-subject.js';
 
 const ExportInvigilationClass = (() => {
   var TEMPLATE_URL = 'templates/invigilation-class-template.xlsx';
@@ -68,48 +76,11 @@ const ExportInvigilationClass = (() => {
     return EXAM_SLOT_INDEXES.indexOf(slotIndex) >= 0;
   }
 
-  function normText(v) {
-    return String(v == null ? '' : v).replace(/[　\s]+/g, '').trim();
-  }
-
   function splitNames(raw) {
     return String(raw == null ? '' : raw)
       .split(/[、,，/／|｜\s]+/)
       .map(function (v) { return v.trim(); })
       .filter(Boolean);
-  }
-
-  function isPatrolText(text) {
-    var s = normText(text);
-    return s === '巡堂' || s.indexOf('巡堂') === 0;
-  }
-
-  /**
-   * 巡堂分級：段考巡堂任務帶年級（巡七／巡八／巡九），須填到對應巡堂列。
-   * 回傳 '七' | '八' | '九' | 'plain'（有巡無級）| null（非巡堂）。
-   * 支援：巡七、巡7、七年級巡堂、段考巡七、巡堂(七) 等；數字須緊貼巡字
-   * （巡堂704 不算七，避免班級編號誤判）。
-   */
-  function parsePatrolGrade(s) {
-    if (!s || s.indexOf('巡') < 0) return null;
-    var m = s.match(/[七八九]/);
-    if (m) return m[0];
-    m = s.match(/巡\s*([789])|([789])\s*巡/);
-    if (m) return m[1] === '7' || m[2] === '7' ? '七' : (m[1] === '8' || m[2] === '8' ? '八' : '九');
-    m = s.match(/([789])\s*年\s*級/);
-    if (m) return m[1] === '7' ? '七' : (m[1] === '8' ? '八' : '九');
-    return null;
-  }
-
-  function detectPatrolKind(text) {
-    var s = normText(text);
-    if (!s || s.indexOf('巡') < 0) return null;
-    if (!isPatrolText(text)) {
-      // 非「巡堂」開頭：只有帶分級（巡七…）才視為巡堂，避免班級文字誤收
-      return parsePatrolGrade(s);
-    }
-    var g = parsePatrolGrade(s);
-    return g || 'plain';
   }
 
   function clonePlain(obj) {
@@ -119,19 +90,10 @@ const ExportInvigilationClass = (() => {
     }
   }
 
-  /**
-   * 非法 XML 1.0 字元會讓整份 xlsx 在 Excel 桌面版跳「已修復」且內容全空。
-   * 教師名單來自試算表，可能夾帶貼上殘留的控制字元；寫入前一律清除
-   * （保留 \t \n \r 合法空白；中文、○、頓號、括號皆不受影響）。
-   */
-  // 非法 XML 1.0 字元集（ASCII 跳脫寫法；不可貼入字元本身）。
-  var ILLEGAL_XML_SRC = '[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]';
-  var ILLEGAL_XML_RE = new RegExp(ILLEGAL_XML_SRC, 'g');
-  var ILLEGAL_XML_TEST = new RegExp(ILLEGAL_XML_SRC);
+  // 巡堂分級／科目正規化／非法字元過濾：共用 export-invigilation-subject.js。
+  // sanitizeText 為薄轉接，沿用既有呼叫點，避免整檔重改。
   function sanitizeText(v) {
-    if (v == null) return '';
-    ILLEGAL_XML_RE.lastIndex = 0;
-    return String(v).replace(ILLEGAL_XML_RE, '');
+    return sanitizeExamText(v);
   }
 
 
@@ -176,9 +138,10 @@ const ExportInvigilationClass = (() => {
   /**
    * 反轉 teacherMatrix → classMatrix
    * teacherMatrix: { left:[{name,email,slots:[{text,changed}...]}], right:[...] }
-   * 回傳 { classes:[names], rows:[{ className, cells:[{text,changed}...] }], patrolRows:[...], patrolMax }
+   * subjectOf: 選配函式，取教師 entries → 任課科目（供考試科目推論；缺則該師不計票）
+   * 回傳 { classes, rows, patrolRows, patrolMax, patrolStats, slotExamSubjects }
    */
-  function buildClassMatrix(teacherMatrix, periodSpec, expectedClasses) {
+  function buildClassMatrix(teacherMatrix, periodSpec, expectedClasses, subjectOf) {
     var allTeachers = [].concat((teacherMatrix && teacherMatrix.left) || [], (teacherMatrix && teacherMatrix.right) || []);
     var slotCount = (periodSpec && periodSpec.length) || SLOTS_PER_BOOK;
     var classes = (expectedClasses || []).slice();
@@ -197,10 +160,13 @@ const ExportInvigilationClass = (() => {
       patrolPerSlot.push({ '七': [], '八': [], '九': [], other: [] });
     }
 
+    var subjectOfFn = (typeof subjectOf === 'function') ? subjectOf : function () { return ''; };
     allTeachers.forEach(function (t) {
       if (!t || !t.slots) return;
       if (t.specialEducation) return;
       var teacherName = t.name || t.email || '';
+      var teacherSubject = '';
+      try { teacherSubject = normalizeExamSubject(subjectOfFn(t)); } catch (eSubj) { teacherSubject = ''; }
       for (var s = 0; s < slotCount; s++) {
         var slot = t.slots[s];
         if (!slot || typeof slot !== 'object') continue;
@@ -211,7 +177,7 @@ const ExportInvigilationClass = (() => {
           // 僅考試節收集巡堂；自習節巡堂不需額外巡堂列（與範本一致）
           if (isExamSlot(s)) {
             var bucket = kind === 'plain' ? patrolPerSlot[s].other : patrolPerSlot[s][kind];
-            bucket.push({ text: teacherName, changed: !!slot.changed });
+            bucket.push({ text: teacherName, changed: !!slot.changed, subject: teacherSubject });
           }
           continue;
         }
@@ -244,10 +210,12 @@ const ExportInvigilationClass = (() => {
       return out;
     }
 
-    // 分級列（七／八／九）＋備用列（無分級或溢出）；統計供匯出提示
+    // 分級列（七／八／九）；統計＋每節考試科目投票供匯出提示與 Row2 填寫
     var gradeCells = { '七': blankCells(), '八': blankCells(), '九': blankCells() };
     var overflowPerSlot = [];
     for (var os = 0; os < slotCount; os++) overflowPerSlot.push([]);
+    var slotExamSubjects = [];
+    for (var es = 0; es < slotCount; es++) slotExamSubjects.push({ subject: '', voters: [], graded: false });
     var gradedSlots = 0;
     var fallbackSlots = 0;
     for (var ps = 0; ps < slotCount; ps++) {
@@ -259,8 +227,17 @@ const ExportInvigilationClass = (() => {
         gradeCells['八'][ps] = joinPatrol(buckets['八']);
         gradeCells['九'][ps] = joinPatrol(buckets['九']);
         overflowPerSlot[ps] = buckets.other;
+        // 該節考試科目：分級巡堂任課科目投票（只用分級巡堂）
+        var votes = [];
+        ['七', '八', '九'].forEach(function (gg) {
+          buckets[gg].forEach(function (e) {
+            if (e && e.subject) votes.push({ grade: gg, teacher: e.text, subject: e.subject });
+          });
+        });
+        var decided = voteSubject(votes.map(function (v) { return v.subject; }));
+        slotExamSubjects[ps] = { subject: decided, voters: votes, graded: true };
       } else if (buckets.other.length) {
-        // 該節無分級資訊：沿用舊順序填入（相容舊資料），溢出進備用列
+        // 該節無分級資訊：沿用舊順序填入（相容舊資料），溢出只計數不寫入
         fallbackSlots += 1;
         gradeCells['七'][ps] = joinPatrol(buckets.other.slice(0, 1));
         gradeCells['八'][ps] = joinPatrol(buckets.other.slice(1, 2));
@@ -285,7 +262,8 @@ const ExportInvigilationClass = (() => {
       patrolRows: patrolRows,
       patrolMax: patrolRows.length,
       patrolPerSlot: patrolPerSlot,
-      patrolStats: { gradedSlots: gradedSlots, fallbackSlots: fallbackSlots, overflowCells: overflowCells }
+      patrolStats: { gradedSlots: gradedSlots, fallbackSlots: fallbackSlots, overflowCells: overflowCells },
+      slotExamSubjects: slotExamSubjects
     };
   }
 
@@ -352,7 +330,18 @@ const ExportInvigilationClass = (() => {
     try { ws.getCell(1, 2).value = sanitizeText(formatClassDayHeader(dates[0] || '', suffix)) || null; } catch (e1) {}
     try { ws.getCell(1, 9).value = sanitizeText(formatClassDayHeader(dates[1] || dates[0] || '', suffix)) || null; } catch (e2) {}
 
-    // Row2 考科列不覆寫（模板自習預設＋手填考科，與既有 R3-R8 規則一致）
+    // Row2 考試節考科：分級巡堂投票有結論才填入；自習格與無結論留白手填
+    var subjectFills = [];
+    try {
+      var slotSubjects = (classMatrix && classMatrix.slotExamSubjects) || [];
+      EXAM_SLOT_INDEXES.forEach(function (s) {
+        var info = slotSubjects[s];
+        if (!info || !info.subject) return;
+        var subjCell = ws.getCell(2, DATA_COL_START + s);
+        subjCell.value = sanitizeText(info.subject) || null;
+        subjectFills.push({ slot: s, col: DATA_COL_START + s, subject: info.subject, voters: info.voters || [] });
+      });
+    } catch (eSub) {}
 
     var actualClasses = (classMatrix && classMatrix.classes) || [];
     var templateClasses = (layout && layout.templateClasses) || [];
@@ -449,7 +438,7 @@ const ExportInvigilationClass = (() => {
       }
     }
 
-    return { classCount: classCount, patrolCount: keepPatrols };
+    return { classCount: classCount, patrolCount: keepPatrols, subjectFills: subjectFills };
   }
 
   /**
@@ -574,7 +563,24 @@ const ExportInvigilationClass = (() => {
 
     progress('寫入班級監考表…', 0, teachers.length);
     await yieldUi();
-    var classMatrix = buildClassMatrix(teacherMatrix, periodSpec, expected);
+    // 巡堂任課科目對照（email／姓名雙鍵；供考試科目投票）
+    var subjectMap = {};
+    (teachers || []).forEach(function (t) {
+      if (!t) return;
+      var subj = t.subject || t['授課科目'] || t['任課科目'] || '';
+      var em = String(t.email || '').trim().toLowerCase();
+      var nm = String(t.name || t.teacherName || '').trim();
+      if (em) subjectMap['e:' + em] = subj;
+      if (nm) subjectMap['n:' + nm] = subj;
+    });
+    var classMatrix = buildClassMatrix(teacherMatrix, periodSpec, expected, function (t) {
+      if (!t) return '';
+      var em = String(t.email || '').trim().toLowerCase();
+      if (em && subjectMap['e:' + em] != null) return subjectMap['e:' + em];
+      var nm = String(t.name || '').trim();
+      if (nm && subjectMap['n:' + nm] != null) return subjectMap['n:' + nm];
+      return t.subject || '';
+    });
     var fillInfo = fillClassValues(ws, {
       classMatrix: classMatrix,
       dates: range.dates,
@@ -612,6 +618,27 @@ const ExportInvigilationClass = (() => {
         warn += '巡堂任務未標註年級，已依原順序填入巡七／八／九（' + pstats.fallbackSlots + ' 節），請核對。';
       }
     }
+    // 考試科目推論回報（供核對；格式：10/12第2節填自然）
+    var subjectFills = (fillInfo && fillInfo.subjectFills) || [];
+    var blankExamSlots = [];
+    EXAM_SLOT_INDEXES.forEach(function (s) {
+      var hit = null;
+      subjectFills.forEach(function (f) { if (f && f.slot === s) hit = f; });
+      if (hit) return;
+      var spec = (periodSpec && periodSpec[s]) || null;
+      if (spec) blankExamSlots.push(String(spec.date).slice(5) + '第' + spec.period + '節');
+    });
+    if (subjectFills.length) {
+      warn += '考科已自動填入：' + subjectFills.map(function (f) {
+        var spec = (periodSpec && periodSpec[f.slot]) || null;
+        var when = spec ? String(spec.date).slice(5) + '第' + spec.period + '節' : ('第' + (f.slot + 1) + '節');
+        var who = (f.voters || []).map(function (v) { return '巡' + v.grade + v.teacher + '(' + v.subject + ')'; }).join('／');
+        return when + '填' + f.subject + (who ? '（' + who + '）' : '');
+      }).join('；') + '。';
+    }
+    if (blankExamSlots.length) {
+      warn += '以下考試節考科留白請手填：' + blankExamSlots.join('、') + '。';
+    }
 
     return {
       ok: true,
@@ -623,6 +650,7 @@ const ExportInvigilationClass = (() => {
       changedMarked: teacherMatrix.changedCount || 0,
       coverage: coverage,
       patrolStats: pstats,
+      subjectFills: subjectFills,
       warning: warn,
       dates: range.dates
     };

@@ -6,6 +6,12 @@ import DateUtils from '../domain/date-utils.js';
 import DomainActivityCover from '../domain/domain-activity-cover.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import { TemplateBuffer } from './template-buffer.js';
+import {
+  normalizeExamSubject,
+  detectPatrolKind,
+  voteSubject,
+  sanitizeExamText
+} from './export-invigilation-subject.js';
 
 /**
  * 段考監考表匯出
@@ -672,6 +678,11 @@ const ExportInvigilation = (() => {
     var patrolCount = 0;
     var changedCount = 0;
 
+    // 任課科目（供考試科目推論；teachersList 欄位名相容）
+    function teacherSubjectOf(t) {
+      if (!t) return '';
+      return String(t.subject || t['授課科目'] || t['任課科目'] || '').trim();
+    }
     function mapOne(t, idx, tot) {
       if (onProgress && (idx === 0 || (idx + 1) % 10 === 0 || idx === tot - 1)) {
         try { onProgress(idx + 1, tot); } catch (e) { /* ignore */ }
@@ -686,6 +697,7 @@ const ExportInvigilation = (() => {
         return {
           name: t.name || t.email || '',
           email: t.email,
+          subject: teacherSubjectOf(t),
           specialEducation: true,
           slots: slots
         };
@@ -721,7 +733,7 @@ const ExportInvigilation = (() => {
         if (slot.changed) changedCount += 1;
         slots.push(slot);
       }
-      return { name: t.name || t.email || '', email: t.email, slots: slots };
+      return { name: t.name || t.email || '', email: t.email, subject: teacherSubjectOf(t), slots: slots };
     }
 
     var all = (teachers || []).slice();
@@ -915,6 +927,71 @@ const ExportInvigilation = (() => {
     fillSide(matrix.left || [], 1, 2);
     fillSide(matrix.right || [], 13, 14);
 
+    // Row4-6 考科：各年級該節巡堂老師的任課科目（巡七→7年級…）；無分級不填
+    return fillExamSubjects(ws, matrix, opts.periodSpec);
+  }
+
+  // 教師版考科格：左區 C,E,G,J,L＋右區 O,Q,S,V,X，對應 11 節中考試節
+  var EXAM_SUBJECT_COLS_LEFT = [3, 5, 7, 10, 12];
+  var EXAM_SUBJECT_COLS_RIGHT = [15, 17, 19, 22, 24];
+  var EXAM_SLOT_INDEXES = [1, 3, 5, 8, 10];
+  var EXAM_GRADE_ROWS = { '七': 4, '八': 5, '九': 6 };
+  function fillExamSubjects(ws, matrix, periodSpec) {
+    var fills = [];
+    var unplaced = 0;
+    try {
+      var sides = (matrix && matrix.left || []).concat(matrix && matrix.right || []);
+      // 每節每分級：巡堂老師任課科目投票（同級多人取多數，平票留白）
+      var buckets = {};
+      sides.forEach(function (t) {
+        if (!t || t.specialEducation || !t.slots) return;
+        var subj = normalizeExamSubject(t.subject);
+        for (var s = 0; s < 11; s++) {
+          var slot = t.slots[s];
+          if (!slot || typeof slot !== 'object') continue;
+          var kind = detectPatrolKind(slot.text);
+          if (!kind || kind === 'plain') {
+            if (kind === 'plain' && slot.text) unplaced += 1;
+            continue;
+          }
+          if (EXAM_SLOT_INDEXES.indexOf(s) < 0) continue;
+          var key = s + '|' + kind;
+          if (!buckets[key]) buckets[key] = [];
+          if (subj) buckets[key].push(subj);
+          else unplaced += 1;
+        }
+      });
+      Object.keys(buckets).forEach(function (key) {
+        var parts = key.split('|');
+        var s = parseInt(parts[0], 10);
+        var grade = parts[1];
+        var subject = voteSubject(buckets[key]);
+        if (!subject) {
+          unplaced += buckets[key].length;
+          return;
+        }
+        var row = EXAM_GRADE_ROWS[grade];
+        if (!row) return;
+        // s 為 11 節中的序位 → 轉左右兩區欄位（相同內容）
+        var order = EXAM_SLOT_INDEXES.indexOf(s);
+        if (order < 0) return;
+        [EXAM_SUBJECT_COLS_LEFT[order], EXAM_SUBJECT_COLS_RIGHT[order]].forEach(function (col) {
+          try {
+            var cell = ws.getCell(row, col);
+            if (cell) cell.value = sanitizeExamText(subject) || null;
+          } catch (eCell) { /* ignore */ }
+        });
+        var spec = (periodSpec && periodSpec[s]) || null;
+        fills.push({
+          slot: s,
+          date: spec ? spec.date : '',
+          period: spec ? spec.period : null,
+          grade: grade,
+          subject: subject
+        });
+      });
+    } catch (eFill) { /* 考科推論失敗不影響主表匯出 */ }
+    return { fills: fills, unplaced: unplaced };
   }
 
   function personalizeValues(ws, layout, recipientName, before, used, remain, hideQuotaBracket) {
@@ -1127,18 +1204,18 @@ const ExportInvigilation = (() => {
 
     progress('寫入全校文字…', 0, total);
     await yieldUi();
-    fillMasterValues(master, {
+    var masterSubjects = fillMasterValues(master, {
       title: title,
       dates: range.dates,
       matrix: matrix,
-      layout: layout
+      layout: layout,
+      periodSpec: periodSpec
     });
 
     progress('產生底稿…', 0, total);
     await yieldUi();
     var masterBuf = await masterWb.xlsx.writeBuffer();
-
-    // 第一張固定「監考表」：全校內容、不分發、不折抵；B4:X6 手填考科
+    // 第一張固定「監考表」：全校內容、不分發、不折抵；B4:X6 考科已自動推論（無結論留白手填）
     progress('建立主表「監考表」…', 0, total);
     await yieldUi();
     var outWb = new ExcelJSLib.Workbook();
@@ -1231,8 +1308,19 @@ const ExportInvigilation = (() => {
       var tip = '教師 ' + matrix.total + ' 人，表內列出前 ' + matrix.shown + ' 人。';
       warn = warn ? (warn + '；' + tip) : tip;
     }
-    var masterTip = '第1張「監考表」可填 B4:X6 考科；各分發表 A1:X47 已公式連動，A48 保留個人額度備註。';
+    var masterTip = '各分發表 A1:X47 已公式連動主表（含 B4:X6 考科），A48 保留個人額度備註。';
     warn = warn ? (warn + '；' + masterTip) : masterTip;
+    var subjFills = (masterSubjects && masterSubjects.fills) || [];
+    var subjUnplaced = (masterSubjects && masterSubjects.unplaced) || 0;
+    if (subjFills.length) {
+      warn += '考科已自動填入 B4:X6：' + subjFills.map(function (f) {
+        var when = f.date ? String(f.date).slice(5) + '第' + f.period + '節' : ('第' + (f.slot + 1) + '節');
+        return when + '巡' + f.grade + '→' + f.subject;
+      }).join('、') + '。';
+    }
+    if (subjUnplaced > 0) {
+      warn += '另有 ' + subjUnplaced + ' 格巡堂無分級或缺科目，考科留白請手填。';
+    }
 
     return {
       ok: true,
@@ -1244,6 +1332,7 @@ const ExportInvigilation = (() => {
       changedMarked: lastMarked,
       patrolCount: matrix.patrolCount || 0,
       coverage: coverage,
+      subjectFills: subjFills,
       warning: warn,
       dates: range.dates
     };
@@ -1267,6 +1356,7 @@ const ExportInvigilation = (() => {
     highlightRecipientRow: highlightRecipientRow,
     personalizeValues: personalizeValues,
     linkMasterRange: linkMasterRange,
+    fillExamSubjects: fillExamSubjects,
     exportWorkbook: exportWorkbook,
     loadTemplateBuffer: loadTemplateBuffer
   };
