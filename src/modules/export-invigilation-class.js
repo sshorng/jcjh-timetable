@@ -32,9 +32,6 @@ const ExportInvigilationClass = (() => {
   var DATA_COL_START = 2; // B
   var DATA_COL_END = 12; // L
 
-  function pad2(n) {
-    return String(n).padStart(2, '0');
-  }
 
   function parseDate(dateStr) {
     var s = String(dateStr || '').trim().slice(0, 10);
@@ -503,31 +500,6 @@ const ExportInvigilationClass = (() => {
     }
 
     return { classCount: classCount, patrolCount: keepPatrols };
-  }
-
-  function copySheetDimensions(srcSheet, targetSheet) {
-    if (!srcSheet || !targetSheet) return;
-    if (srcSheet.columns) {
-      srcSheet.columns.forEach(function (col, idx) {
-        if (!col || col.width == null) return;
-        try { targetSheet.getColumn(idx + 1).width = col.width; } catch (eW) {}
-      });
-    }
-    try {
-      srcSheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-        var targetRow = targetSheet.getRow(rowNumber);
-        if (row.height != null) targetRow.height = row.height;
-      });
-    } catch (eR) {}
-  }
-
-  function copyPrintSettings(srcSheet, targetSheet) {
-    if (!srcSheet || !targetSheet) return;
-    try {
-      var sourceSetup = srcSheet.pageSetup || {};
-      var setup = clonePlain(sourceSetup) || {};
-      targetSheet.pageSetup = setup;
-    } catch (e) {}
   }
 
   /**
