@@ -399,6 +399,48 @@ const ExportInvigilationClass = (() => {
     } catch (e) {}
   }
 
+  /**
+   * 列印設定消毒：班級版模板的 horizontalDpi／verticalDpi 為 4294967295（0xFFFFFFFF，
+   * 產生器寫入的 -1 遺留值），ExcelJS 會原樣寫回，Excel 桌面版可能跳「已修復」並清空內容。
+   * 超出合理範圍一律移除（Excel 缺省即預設 DPI），其餘邊界／方向／縮放保留模板原樣。
+   */
+  function sanitizePrintSettings(ws) {
+    if (!ws || !ws.pageSetup) return;
+    try {
+      ['horizontalDpi', 'verticalDpi'].forEach(function (k) {
+        var v = ws.pageSetup[k];
+        if (typeof v === 'number' && (v < 0 || v > 1200 || v === 4294967295)) {
+          try { ws.pageSetup[k] = undefined; } catch (eDel) {}
+        }
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  /**
+   * 寫出前驗證：把 writeBuffer 結果載回記憶體，確認日期（B1）與首班（A3）都在，
+   * 避免把損毀／空白檔交給使用者下載（Excel 會顯示「已修復」且內容全空）。
+   */
+  async function verifyWorkbookBuffer(ExcelJSLib, outBuf, expectFirstClass) {
+    try {
+      var checkWb = new ExcelJSLib.Workbook();
+      var bytes = outBuf;
+      if (bytes && typeof bytes.slice === 'function') { try { bytes = bytes.slice(0); } catch (eS) {} }
+      await checkWb.xlsx.load(bytes);
+      var cws = checkWb.worksheets[0];
+      if (!cws) return '驗證失敗：讀回後沒有工作表';
+      var b1 = null; var a3 = null;
+      try { b1 = cws.getCell(1, 2).value; } catch (e1) {}
+      try { a3 = cws.getCell(3, 1).value; } catch (e2) {}
+      if (b1 == null || String(b1).trim() === '') return '驗證失敗：日期列遺失（B1空白）';
+      if (expectFirstClass && (a3 == null || String(a3).trim() === '')) {
+        return '驗證失敗：班級列遺失（A3空白，應為' + expectFirstClass + '）';
+      }
+      return null;
+    } catch (eV) {
+      return '驗證失敗：' + (eV && eV.message ? eV.message : eV);
+    }
+  }
+
   async function exportWorkbook(opts) {
     opts = opts || {};
     var onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
@@ -472,8 +514,7 @@ const ExportInvigilationClass = (() => {
       suffix: suffix,
       layout: layout
     });
-    copySheetDimensions(ws, ws);
-    copyPrintSettings(ws, ws);
+    sanitizePrintSettings(ws);
     try {
       if (layout.templateClasses.length === 0 && ws.name) ws.name = '班級版';
       else if (!ws.name || !String(ws.name).trim()) ws.name = '班級版';
@@ -484,6 +525,11 @@ const ExportInvigilationClass = (() => {
     var fname = opts.filename
       || ('段考監考表_班級版_' + String(range.dates[0]).replace(/-/g, '') + '.xlsx');
     var outBuf = await wb.xlsx.writeBuffer();
+    var verifyError = await verifyWorkbookBuffer(ExcelJSLib, outBuf, (classMatrix.classes || [])[0] || '');
+    if (verifyError) {
+      try { console.error('[invigilation-class]', verifyError, { bytes: outBuf && outBuf.byteLength }); } catch (eL) {}
+      return { ok: false, error: '班級版匯出' + verifyError + '，未下載檔案以免損毀。請截圖 F12 Console 回報' };
+    }
     downloadBlob(outBuf, fname);
 
     var warn = range.warning || '';
