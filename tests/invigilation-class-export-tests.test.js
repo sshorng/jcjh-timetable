@@ -76,8 +76,8 @@ test('invigilation class export（巡堂分級歸位）', () => {
   assert.equal(gm.patrolRows[0].cells[0].text, '', '自習節巡堂不收集');
   assert.equal(gm.patrolRows[1].cells[1].text, '八師');
   assert.equal(gm.patrolRows[2].cells[1].text, '九師');
-  assert.equal(gm.patrolRows[3].grade, null);
-  assert.equal(gm.patrolRows[3].cells[1].text, '普師');
+  assert.equal(gm.patrolRows.length, 3, '備用列已取消，只剩分級列');
+  assert.equal(gm.patrolMax, 3);
 
   // 分級列對位模板標籤：巡七列應為七師（C欄＝index1）
   const cells = new Map();
@@ -86,20 +86,20 @@ test('invigilation class export（巡堂分級歸位）', () => {
     if (!cells.has(k)) cells.set(k, { value: null, font: null });
     return cells.get(k);
   }
-  ExportInvigilationClass.fillClassValues({ getCell, rowCount: 40 }, {
+  const fillInfo = ExportInvigilationClass.fillClassValues({ getCell, rowCount: 40 }, {
     classMatrix: { classes: ['701'], rows: [{ className: '701', cells: spec11.map(() => ({ text: '', changed: false })) }], patrolRows: gm.patrolRows },
     dates: ['2026-10-12', '2026-10-13'],
     suffix: '一段',
     layout: { templateClasses: ['701'], templatePatrols: ['巡七', '巡八', '巡九'], templateDataEnd: 27 }
   });
+  assert.equal(fillInfo.patrolCount, 3, '只寫三列分級，無巡備列');
   assert.equal(getCell(4, 1).value, '巡七');
   assert.equal(getCell(4, 3).value, '七師');
   assert.equal(getCell(5, 1).value, '巡八');
   assert.equal(getCell(5, 3).value, '八師');
   assert.equal(getCell(6, 1).value, '巡九');
   assert.equal(getCell(6, 3).value, '九師');
-  assert.equal(getCell(7, 1).value, '巡備1');
-  assert.equal(getCell(7, 3).value, '普師');
+  assert.equal(getCell(7, 1).value, null, '無分級溢出不寫入，不應有巡備列');
 
   console.log('invigilation class patrol grade tests PASS');
 });
