@@ -22,7 +22,7 @@ const outputModulesReady = ref(false);
 const _cache = {};
 function _cached(key, load) {
   if (!_cache[key]) {
-    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(); throw e; });
+    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(e, key); throw e; });
   }
   return _cache[key];
 }

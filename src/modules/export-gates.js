@@ -15,7 +15,7 @@ import { notifyChunkLoadFailed } from './vendor-libs.js';
 const _cache = {};
 function _cached(key, load) {
   if (!_cache[key]) {
-    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(); throw e; });
+    _cache[key] = load().catch((e) => { _cache[key] = null; notifyChunkLoadFailed(e, key); throw e; });
   }
   return _cache[key];
 }
@@ -46,7 +46,6 @@ function ensureInvigilation() {
 function ensureInvigilationClass() {
   return _cached('invigilationClass', () => import('./export-invigilation-class.js').then((m) => m.ExportInvigilationClass));
 }
-
 
 function ensureAccounting() {
   return _cached('accounting', () => import('./export-accounting.js').then((m) => m.default || m.ExportAccounting));

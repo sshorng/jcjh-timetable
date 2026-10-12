@@ -27,7 +27,7 @@ function _cached(key, load) {
         tabModulesReady.value = Object.assign({}, tabModulesReady.value, { [key]: true });
         return m;
       })
-      .catch((e) => { _cache[key] = null; notifyChunkLoadFailed(); throw e; });
+      .catch((e) => { _cache[key] = null; notifyChunkLoadFailed(e, key); throw e; });
   }
   return _cache[key];
 }

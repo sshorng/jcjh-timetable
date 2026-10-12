@@ -70,7 +70,7 @@ const ensureOnboardingTour = () => {
     return tour;
   }).catch((e) => {
     _onboardingLoadP = null;
-    try { notifyChunkLoadFailed(); } catch (_) {}
+    try { notifyChunkLoadFailed(e, 'onboarding-tour'); } catch (_) {}
     throw e;
   });
   return _onboardingLoadP;
