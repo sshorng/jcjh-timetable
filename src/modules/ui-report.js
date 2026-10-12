@@ -1,6 +1,6 @@
 import { ensureExcelJS, ensureJSZip } from './vendor-libs.js';
 import { downloadJsonSheets } from './excel-io.js';
-import { ensureActivityCover, ensureInvigilation, ensureSchoolTimetable, getDomainBillingSync } from './export-gates.js';
+import { ensureActivityCover, ensureInvigilation, ensureInvigilationClass, ensureSchoolTimetable, getDomainBillingSync } from './export-gates.js';
 /**
  * 自 v1 ui-report.js 機械移植（port-modules.cjs）：
  * IIFE 掛載改 ESM export；body 與 v1 逐字一致。
@@ -424,6 +424,19 @@ const ensureInvigilationExportReady = async () => {
   return loaded;
 };
 
+const ensureInvigilationClassReady = async () => {
+  await ensureExcelJS();
+  await ensureDAC();
+  const loaded = await ensureInvigilationClass().catch(() => null);
+  if (!loaded || !loaded.exportWorkbook) {
+    throw new Error('監考表（班級版）匯出模組尚未載入');
+  }
+  if (!(window.ExcelJS || (typeof ExcelJS !== 'undefined' && ExcelJS))) {
+    throw new Error('ExcelJS 未載入（套版需要）');
+  }
+  return loaded;
+};
+
 const cancelScheduledMonthlyReport = () => {
   if (monthlyReportScheduleTimer) {
     clearTimeout(monthlyReportScheduleTimer);
@@ -498,7 +511,9 @@ const accountingPlanOptions = computed(() => {
       exportSchoolTimetableWord: exportSchoolTimetableWord,
       ensureActivityCoverReady: ensureActivityCoverReady,
       buildDefaultInvigilationTitle: buildDefaultInvigilationTitle,
-      ensureInvigilationExportReady: ensureInvigilationExportReady,      cancelScheduledMonthlyReport: cancelScheduledMonthlyReport,
+      ensureInvigilationExportReady: ensureInvigilationExportReady,
+      ensureInvigilationClassReady: ensureInvigilationClassReady,
+      cancelScheduledMonthlyReport: cancelScheduledMonthlyReport,
       scheduleMonthlyReportCalculation: scheduleMonthlyReportCalculation,
       monthlyReportTotals: monthlyReportTotals,
       accountingPlanOptions: accountingPlanOptions,

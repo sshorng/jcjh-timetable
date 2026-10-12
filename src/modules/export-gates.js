@@ -43,6 +43,11 @@ function ensureInvigilation() {
   return _cached('invigilation', () => import('./export-invigilation-recovered.js').then((m) => m.ExportInvigilation));
 }
 
+function ensureInvigilationClass() {
+  return _cached('invigilationClass', () => import('./export-invigilation-class.js').then((m) => m.ExportInvigilationClass));
+}
+
+
 function ensureAccounting() {
   return _cached('accounting', () => import('./export-accounting.js').then((m) => m.default || m.ExportAccounting));
 }
@@ -55,4 +60,4 @@ function ensureSchoolTimetable() {
   return _cached('schoolTimetable', () => import('./export-school-timetable.js').then((m) => m.ExportSchoolTimetable));
 }
 
-export { ensureActivityCover, ensureInvigilation, ensureAccounting, ensurePeriod8, ensureSchoolTimetable, ensureDomainBilling, getDomainBillingSync };
+export { ensureActivityCover, ensureInvigilation, ensureInvigilationClass, ensureAccounting, ensurePeriod8, ensureSchoolTimetable, ensureDomainBilling, getDomainBillingSync };

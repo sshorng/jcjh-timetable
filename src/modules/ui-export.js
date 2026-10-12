@@ -62,6 +62,7 @@ const UiExport = (() => {
     var buildDefaultInvigilationTitle = deps.buildDefaultInvigilationTitle;
     var invigilationExportTitle = deps.invigilationExportTitle;
     var ensureInvigilationExportReady = deps.ensureInvigilationExportReady;
+    var ensureInvigilationClassReady = deps.ensureInvigilationClassReady;
     var schoolExportSelectedEmails = deps.schoolExportSelectedEmails;
     var loading = deps.loading;
     var loadingMessage = deps.loadingMessage;
@@ -541,6 +542,114 @@ const UiExport = (() => {
       }
     }
 
+    const exportInvigilationClassWorkbook = async () => {
+      if (!isAdmin.value) {
+        showToast('僅管理員可匯出監考表', 'warning');
+        return;
+      }
+      if (!schoolExportStart.value || !schoolExportEnd.value) {
+        showToast('請先選擇起迄日期', 'warning');
+        return;
+      }
+      const defaultTitle = (typeof buildDefaultInvigilationTitle === 'function' && buildDefaultInvigilationTitle()) || '';
+      let ExportInvigilationClass;
+      try {
+        ExportInvigilationClass = await ensureInvigilationClassReady();
+      } catch (e) {
+        showToast('匯出模組載入失敗：' + (e && e.message ? e.message : e), 'error');
+        return;
+      }
+      const selectedSet = {};
+      (schoolExportSelectedEmails.value || []).forEach(e => {
+        selectedSet[String(e || '').toLowerCase()] = 1;
+      });
+      const teachers = (teachersList.value || []).filter(t => t && t.email && selectedSet[String(t.email || '').toLowerCase()]);
+      if (!teachers.length) {
+        showToast('請在下方勾選要匯出的教師（至少一位）', 'warning');
+        return;
+      }
+      loading.value = true;
+      loadingMessage.value = '產生監考表（班級版）中…';
+      try {
+        const getCellFn = (email, dateStr, period, dayOfWeek) => {
+          let cell = null;
+          if (typeof getScheduleForDate === 'function') {
+            cell = getScheduleForDate(email, dateStr, period, dayOfWeek);
+          } else if (typeof getApprovedScheduleForDate === 'function') {
+            cell = getApprovedScheduleForDate(email, dateStr, period, dayOfWeek);
+          }
+          if (!cell && dateStr) {
+            const d = new Date(String(dateStr).replace(/-/g, '/'));
+            const gd = !Number.isNaN(d.getTime()) ? d.getDay() : null;
+            if (gd != null && gd !== dayOfWeek) {
+              if (typeof getScheduleForDate === 'function') {
+                cell = getScheduleForDate(email, dateStr, period, gd);
+              } else if (typeof getApprovedScheduleForDate === 'function') {
+                cell = getApprovedScheduleForDate(email, dateStr, period, gd);
+              }
+            }
+          }
+          if (!cell && Array.isArray(allSchedules.value)) {
+            const em = String(email || '').toLowerCase();
+            const p = parseInt(period, 10);
+            const dow = parseInt(dayOfWeek, 10);
+            const hit = allSchedules.value.find((s) => {
+              if (!s || String(s.teacherEmail || '').toLowerCase() !== em) return false;
+              if (parseInt(s.period, 10) !== p) return false;
+              if (parseInt(s.dayOfWeek, 10) !== dow) return false;
+              if (DomainSchedule && DomainSchedule.isActiveOnDate
+                  && !DomainSchedule.isActiveOnDate(s, dateStr)) return false;
+              const a = String(s.attr || '').trim();
+              const cn = String(s.className || '').trim();
+              const sub = String(s.subject || '').trim();
+              return a === '巡堂' || a.indexOf('巡堂') >= 0 || cn === '巡堂' || sub === '巡堂';
+            });
+            if (hit) {
+              cell = {
+                className: '巡堂',
+                subject: '巡堂',
+                attr: '巡堂',
+                isPatrol: true,
+                teacherEmail: email,
+                dayOfWeek: dayOfWeek,
+                period: period
+              };
+            }
+          }
+          return cell;
+        };
+        const res = await ExportInvigilationClass.exportWorkbook({
+          title: defaultTitle,
+          startDate: schoolExportStart.value,
+          endDate: schoolExportEnd.value,
+          teachers: teachers,
+          getCell: getCellFn,
+          requests: requestsList.value || [],
+          allSchedules: allSchedules.value || [],
+          classNames: classList.value || [],
+          onProgress: (p) => {
+            if (p && p.message) loadingMessage.value = p.message;
+          }
+        });
+        if (!res || !res.ok) {
+          showToast((res && res.error) || '匯出失敗', 'warning');
+          return;
+        }
+        if (res.warning) showToast(res.warning, 'info');
+        showToast(
+          '已下載：' + res.fileName
+          + '（' + res.classCount + ' 班 × ' + res.dayCount + ' 日；異動 '
+          + (res.changedMarked != null ? res.changedMarked : '?') + ' 格）',
+          'success'
+        );
+      } catch (err) {
+        console.error(err);
+        showToast('監考表（班級版）匯出失敗：' + (err && err.message ? err.message : err), 'error');
+      } finally {
+        loading.value = false;
+      }
+    };
+
     const exportSubFeeToExcel = async () => {
       if (accountingExportLoading.value) return;
       accountingExportLoading.value = true;
@@ -701,6 +810,7 @@ const UiExport = (() => {
       exportActivityCoverWord: exportActivityCoverWord,
       buildPaperRecordsForSubmittedRequests: buildPaperRecordsForSubmittedRequests,
       exportInvigilationWorkbook: exportInvigilationWorkbook,
+      exportInvigilationClassWorkbook: exportInvigilationClassWorkbook,
       exportSubFeeToExcel: exportSubFeeToExcel,
       exportPeriod8Accounting: exportPeriod8Accounting
     };

@@ -9,6 +9,7 @@
 import {
   ensureActivityCover,
   ensureInvigilation,
+  ensureInvigilationClass,
   ensureAccounting,
   ensurePeriod8,
   ensureSchoolTimetable
@@ -17,6 +18,7 @@ import {
 export {
   ensureActivityCover,
   ensureInvigilation,
+  ensureInvigilationClass,
   ensureAccounting,
   ensurePeriod8,
   ensureSchoolTimetable
