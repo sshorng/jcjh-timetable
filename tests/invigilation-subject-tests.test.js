@@ -11,8 +11,8 @@ import {
 import { ExportInvigilation } from '../src/modules/export-invigilation-recovered.js';
 import { ExportInvigilationClass } from '../src/modules/export-invigilation-class.js';
 
-test('invigilation subject（正規化：只合併社會）', () => {
-  assert.deepEqual(SUBJECT_MERGE_MAP, { '地理': '社會', '歷史': '社會', '公民': '社會' });
+test('invigilation subject（正規化）', () => {
+  assert.deepEqual(SUBJECT_MERGE_MAP, { '地理': '社會', '歷史': '社會', '公民': '社會', '英語資優': '英語' });
   assert.equal(normalizeExamSubject('地理'), '社會');
   assert.equal(normalizeExamSubject('歷史'), '社會');
   assert.equal(normalizeExamSubject('公民'), '社會');
@@ -22,6 +22,11 @@ test('invigilation subject（正規化：只合併社會）', () => {
   assert.equal(normalizeExamSubject('國文'), '國文');
   assert.equal(normalizeExamSubject('數學'), '數學');
   assert.equal(normalizeExamSubject('英語'), '英語');
+  assert.equal(normalizeExamSubject('英語資優'), '英語');
+  assert.equal(normalizeExamSubject('生物', 'class'), '自然');
+  assert.equal(normalizeExamSubject('理化', 'class'), '自然');
+  assert.equal(normalizeExamSubject('自然', 'class'), '自然');
+  assert.equal(normalizeExamSubject('國文', 'class'), '國文');
   assert.equal(normalizeExamSubject(''), '');
   assert.equal(normalizeExamSubject(null), '');
   console.log('subject normalize tests PASS');
@@ -106,6 +111,32 @@ test('invigilation subject（教師版 B4:X6 按年級填入）', () => {
   console.log('teacher exam subject tests PASS');
 });
 
+test('invigilation subject（教師版英語資優併英語）', () => {
+  function slots11(text) {
+    return Array.from({ length: 11 }, (_, i) => ({ text: i === 1 ? text : '', changed: false }));
+  }
+  const matrix = {
+    left: [
+      { name: '七師', email: 'a@x', subject: '英語資優', slots: slots11('巡七') },
+      { name: '八師', email: 'b@x', subject: '英語', slots: slots11('巡八') },
+      { name: '九師', email: 'c@x', subject: '英語', slots: slots11('巡九') }
+    ],
+    right: []
+  };
+  const cells = new Map();
+  function getCell(r, c) {
+    const k = r + ':' + c;
+    if (!cells.has(k)) cells.set(k, { value: null });
+    return cells.get(k);
+  }
+  const res = ExportInvigilation.fillExamSubjects({ getCell }, matrix, ExportInvigilation.buildPeriodSpec(['2026-10-12', '2026-10-13']));
+  assert.equal(res.fills.length, 3);
+  assert.equal(getCell(4, 3).value, '英語');
+  assert.equal(getCell(5, 3).value, '英語');
+  assert.equal(getCell(6, 3).value, '英語');
+  console.log('teacher gifted english tests PASS');
+});
+
 test('invigilation subject（班級版 Row2 投票填入）', () => {
   function slots11(text) {
     return Array.from({ length: 11 }, (_, i) => ({ text: i === 1 ? text : '', changed: false }));
@@ -124,10 +155,10 @@ test('invigilation subject（班級版 Row2 投票填入）', () => {
   assert.equal(cm.slotExamSubjects[1].subject, '社會');
   assert.equal(cm.slotExamSubjects[1].voters.length, 3);
   assert.equal(cm.slotExamSubjects[0].subject, '');
-  // 七生物八理化九自然：各自獨立，平票留白
+  // 七生物八理化九自然：班級版合併為自然
   const subjects2 = { '七師': '生物', '八師': '理化', '九師': '自然' };
   const cm2 = ExportInvigilationClass.buildClassMatrix(teacherMatrix, spec11, ['701'], (t) => subjects2[t.name] || '');
-  assert.equal(cm2.slotExamSubjects[1].subject, '');
+  assert.equal(cm2.slotExamSubjects[1].subject, '自然');
   // Row2 寫入 C2（index1）
   const cells = new Map();
   function getCell(r, c) {

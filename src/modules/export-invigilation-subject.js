@@ -4,27 +4,37 @@
  * 背景：巡堂任務帶年級（巡七／巡八／巡九），而該節該年級巡堂老師的任課科目
  * 通常就是考試科目。班級版用三位巡堂投票填 Row2；教師版用各年級巡堂填 B4:X6。
  *
- * 科目對照（20261013 版：只合併社會；生物／理化／自然各自獨立）：
- *   地理／歷史／公民 → 社會，其餘原名直用。
- * 要增減合併只改 SUBJECT_MERGE_MAP。
+ * 科目對照：兩版通用為地理／歷史／公民 → 社會、英語資優 → 英語；
+ * 班級版另行合併生物／理化 → 自然（教師版維持各自獨立）。
+ * 要增減合併只改 SUBJECT_MERGE_MAP／CLASS_SCIENCE_MAP。
  */
 
 function normText(v) {
-  return String(v == null ? '' : v).replace(/[　\s]+/g, '').trim();
+  return String(v == null ? '' : v).replace(/[　\\s]+/g, '').trim();
 }
 
 var SUBJECT_MERGE_MAP = {
   '地理': '社會',
   '歷史': '社會',
-  '公民': '社會'
+  '公民': '社會',
+  '英語資優': '英語'
 };
 
-function normalizeExamSubject(subject) {
+// 班級版另行合併（教師版維持各自獨立）
+var CLASS_SCIENCE_MAP = {
+  '生物': '自然',
+  '理化': '自然'
+};
+
+function normalizeExamSubject(subject, mode) {
   var s = String(subject == null ? '' : subject).trim();
   if (!s) return '';
-  var key = s.replace(/[　\s]+/g, '');
+  var key = s.replace(/[　\\s]+/g, '');
   if (Object.prototype.hasOwnProperty.call(SUBJECT_MERGE_MAP, key)) {
     return SUBJECT_MERGE_MAP[key];
+  }
+  if (mode === 'class' && Object.prototype.hasOwnProperty.call(CLASS_SCIENCE_MAP, key)) {
+    return CLASS_SCIENCE_MAP[key];
   }
   return s;
 }

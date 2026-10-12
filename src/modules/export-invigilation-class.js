@@ -166,7 +166,7 @@ const ExportInvigilationClass = (() => {
       if (t.specialEducation) return;
       var teacherName = t.name || t.email || '';
       var teacherSubject = '';
-      try { teacherSubject = normalizeExamSubject(subjectOfFn(t)); } catch (eSubj) { teacherSubject = ''; }
+      try { teacherSubject = normalizeExamSubject(subjectOfFn(t), 'class'); } catch (eSubj) { teacherSubject = ''; }
       for (var s = 0; s < slotCount; s++) {
         var slot = t.slots[s];
         if (!slot || typeof slot !== 'object') continue;
