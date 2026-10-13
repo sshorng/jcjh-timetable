@@ -79,8 +79,9 @@ const getInteractApi = () => {
         showCompareModal: storeToRefs(useMutualStore()).showCompareModal, batchSelectMode: storeToRefs(useTourStore()).batchSelectMode, batchFlowMode: storeToRefs(useTourStore()).batchFlowMode, toggleBatchSlot: useSubmitStore().toggleBatchSlot,
         canStartSecondSubFromDetail, exchangeTeacherClasses: storeToRefs(useMutualStore()).exchangeTeacherClasses, allSchedules: storeToRefs(useSessionStore()).allSchedules, openEmptySlotAssign: useBackofficeStore().openEmptySlotAssign,
         displayTimetableTeachers: storeToRefs(useTimetableStore()).displayTimetableTeachers, ttPageSize: storeToRefs(useTimetableStore()).ttPageSize, TT_PAGE_SIZE_DEFAULT: storeToRefs(useTimetableStore()).TT_PAGE_SIZE_DEFAULT, ttPage: storeToRefs(useTimetableStore()).ttPage, formatDateMMDD: DateUtils.formatDateMMDD,
-        teachersList: storeToRefs(useSessionStore()).teachersList,
-        classList: storeToRefs(useMutualStore()).classList,
+        teachersList: storeToRefs(useSessionStore()).teachersList, lookupTeacher: useDataStore().lookupTeacher,
+        classList: storeToRefs(useMutualStore()).classList, selectedWeekDate: storeToRefs(useSessionStore()).selectedWeekDate, selectedSubject: storeToRefs(useSessionStore()).selectedSubject, searchQuery: storeToRefs(useSessionStore()).searchQuery,
+        isMutualCover: storeToRefs(useTourStore()).isMutualCover, mutualActivityStart: storeToRefs(useTourStore()).mutualActivityStart, mutualActivityEnd: storeToRefs(useTourStore()).mutualActivityEnd, currentWeekDates: storeToRefs(useTimetableStore()).currentWeekDates,
       });
       return _interactApi;
     };

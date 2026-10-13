@@ -270,7 +270,12 @@ const loadTeacherClassesForExchange = () => {
 const jumpToTeacherTimetable = (email, opts) => {
   const em = String(email || '').trim();
   if (!em) return;
-  const t = lookupTeacher(em);
+  const lookup = (typeof lookupTeacher === 'function') ? lookupTeacher : ((addr) => {
+    const key = String(addr || '').toLowerCase();
+    const list = (teachersList && teachersList.value) || [];
+    return list.find(x => String(x.email || '').toLowerCase() === key) || null;
+  });
+  const t = lookup(em);
   if (!t) {
     showToast('找不到該教師', 'warning');
     return;
@@ -278,20 +283,21 @@ const jumpToTeacherTimetable = (email, opts) => {
   opts = opts || {};
   // 活動互代：預設跳到活動起日所在週
   let jumpDate = opts.date ? String(opts.date).slice(0, 10) : '';
-  if (!jumpDate && (opts.useActivityWeek || isMutualCover.value)) {
-    jumpDate = String(mutualActivityStart.value || mutualActivityEnd.value || '').slice(0, 10);
+  const mutualOn = !!(opts.useActivityWeek || (isMutualCover && isMutualCover.value));
+  if (!jumpDate && mutualOn && mutualActivityStart) {
+    jumpDate = String((mutualActivityStart.value || (mutualActivityEnd && mutualActivityEnd.value) || '')).slice(0, 10);
   }
   if (jumpDate && /^\d{4}-\d{2}-\d{2}$/.test(jumpDate)) {
-    selectedWeekDate.value = jumpDate;
+    if (selectedWeekDate) selectedWeekDate.value = jumpDate;
   }
-  activeTab.value = 'timetable';
-  selectedSubject.value = 'all';
-  searchQuery.value = t.name || '';
+  if (activeTab) activeTab.value = 'timetable';
+  if (selectedSubject) selectedSubject.value = 'all';
+  if (searchQuery) searchQuery.value = t.name || '';
   nextTick(() => {
-    const list = displayTimetableTeachers.value || [];
+    const list = (displayTimetableTeachers && displayTimetableTeachers.value) || [];
     const idx = list.findIndex(x => String(x.email || '').toLowerCase() === String(t.email).toLowerCase());
-    if (idx >= 0) {
-      const size = ttPageSize.value || TT_PAGE_SIZE_DEFAULT;
+    if (idx >= 0 && ttPage) {
+      const size = (ttPageSize && ttPageSize.value) || TT_PAGE_SIZE_DEFAULT || 10;
       ttPage.value = Math.floor(idx / size) + 1;
     }
     nextTick(() => {
@@ -302,9 +308,11 @@ const jumpToTeacherTimetable = (email, opts) => {
         el.classList.add('tt-teacher-flash');
         setTimeout(() => el.classList.remove('tt-teacher-flash'), 1600);
       }
-      const weekTip = jumpDate
-        ? `（週次 ${formatDateMMDD(currentWeekDates.value[0])}～${formatDateMMDD(currentWeekDates.value[4])}）`
-        : '';
+      let weekTip = '';
+      try {
+        const w = (currentWeekDates && currentWeekDates.value) || [];
+        if (jumpDate && w[0] && w[4]) weekTip = `（週次 ${formatDateMMDD(w[0])}～${formatDateMMDD(w[4])}）`;
+      } catch (eTip) { /* ignore */ }
       showToast(`已定位：${t.name} 老師課表${weekTip}`, 'success');
     });
   });
