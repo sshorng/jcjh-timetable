@@ -457,7 +457,7 @@ function getOfficialGridLayout() {
   const endpointInset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
   const startEdge = edgePoint(start, end, endpointInset);
   const endEdge = edgePoint(end, start, endpointInset);
-  // 直線：同天垂直線平移半格、避開置中文字；跨天維持原直線。
+  // 直線：同天垂直線貼格內側邊（離框約 1mm），避開「資訊科技」這類寬字；跨天維持原直線。
   const isSameDay = points[0].dayIndex === points[1].dayIndex;
   let sx1 = startEdge.x;
   let sy1 = startEdge.y;
@@ -465,7 +465,7 @@ function getOfficialGridLayout() {
   let sy2 = endEdge.y;
   if (isSameDay) {
     const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
-    const xOff = Math.min(avgHalfWidth * 0.55, 3.5);
+    const xOff = Math.max(4.5, avgHalfWidth - 1);
     sx1 += xOff;
     sx2 += xOff;
   }
@@ -538,22 +538,28 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const source = leg.source;
     const target = leg.target;
     const sameDay = Math.abs(target.x - source.x) < 1e-9;
-    // 同天分道後端點已錯開，起訖貼齊格線不伸進格內；跨天維持原內縮避免箭頭重疊。
     const srcB = edgeDistanceFor(source, target).edgeDistance;
     const tgtB = edgeDistanceFor(target, source).edgeDistance;
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
-    const start = edgePoint(source, target, sameDay ? 0 : crossInset);
-    const end = edgePoint(target, source, sameDay ? 0 : crossInset);
-    // 直線：同天垂直線左右分道（短腿右、長腿左），不走中道、不遮字；跨天維持原直線。
+    let start = edgePoint(source, target, sameDay ? 0 : crossInset);
+    let end = edgePoint(target, source, sameDay ? 0 : crossInset);
+    // 直線：同天垂直線走格內側邊（離框約 1mm，寬字也蓋不到），左右分道短右長左；跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
     if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const laneOff = Math.min(avgHalfWidth * 0.55, 3.5);
+      const laneOff = Math.max(4.5, avgHalfWidth - 1);
       const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
-      x1 += off;
-      x2 += off;
+      const baseX1 = edgePoint(source, target, 0).x + off;
+      const baseX2 = edgePoint(target, source, 0).x + off;
+      // 端點各往自家格內收 2mm：站在格內不站在共用格線上，歸屬才精確。
+      const down = end.y > start.y;
+      x1 = baseX1;
+      x2 = baseX2;
+      start = { x: x1, y: down ? start.y - 2 : start.y + 2 };
+      end = { x: x2, y: down ? end.y + 2 : end.y - 2 };
     }
+    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
     return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
   });
   if (!lines.length) return '';

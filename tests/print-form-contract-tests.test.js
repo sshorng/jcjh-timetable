@@ -689,7 +689,10 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.equal(sameDayArrows.length, 3, '同天三角調應有三條箭頭');
   assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天三角調走左右兩道、不遮中間文字');
   assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天箭頭應為垂直直線');
-  sameDayArrows.forEach(a => [a[1], a[3]].forEach(y => assert.ok(Math.abs(y / 13.1 - Math.round(y / 13.1)) < 0.01, '箭頭端點應貼齊格線、不伸進格內')));
+  sameDayArrows.forEach(a => [a[1], a[3]].forEach(y => {
+    const distToLine = Math.min(y % 13.1, 13.1 - (y % 13.1));
+    assert.ok(Math.abs(distToLine - 2) < 0.05, '箭頭端點應收進格內 2mm、不站在共用格線上');
+  }));
 
   const triangleLeaveRecords = triangleRecords.map(record => Object.assign({}, record, { reason: '公假' }));
   const triangleLeaveGroup = buildPrintGroups([triangleLeaveRecords[0]], triangleLeaveRecords)[0];
