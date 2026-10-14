@@ -418,8 +418,6 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.ok(closeArrow, '相鄰課節應產生調課箭頭');
   assert.ok(Math.abs(Number(closeArrow[4]) - Number(closeArrow[2])) > 4, '相鄰課節箭頭端點應保留清楚間距');
   assert.equal(Number(closeArrow[1]), Number(closeArrow[3]), '同天調課應為垂直直線');
-  assert.equal(Number(closeArrow[2]), 32.75, '調課箭頭起點應壓在第3節格子正中央');
-  assert.equal(Number(closeArrow[4]), 45.85, '調課箭頭終點應壓在第4節格子正中央');
   assert.doesNotMatch(closeExchangeOutput, /official-exchange-label/, '不應再有節次文字牌');
   const exchangePreview = buildPrintPreview(Object.assign({}, fixtureContext, {
     selectedRecordIds: { value: exchange.records.map(record => record.id) },
@@ -687,10 +685,11 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayTriangleGroup = buildPrintGroups([sameDayTriangleRecords[0]], sameDayTriangleRecords)[0];
   assert.equal(sameDayTriangleGroup.isTriangle, true);
   const sameDayTriangleOutput = generateFormHtml(sameDayTriangleGroup, 'NoticeClass', fixtureContext);
-  const sameDayLanes = [...sameDayTriangleOutput.matchAll(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*x2="([\d.-]+)"/g)].map(m => m[1] + '|' + m[2]);
-  assert.equal(sameDayLanes.length, 3, '同天三角調應有三條箭頭');
-  assert.equal(new Set(sameDayLanes).size, 3, '同天三角調三腿應各走一道、互不相碰');
-  assert.ok(sameDayLanes.every(lane => lane.split('|')[0] === lane.split('|')[1]), '同天箭頭應為垂直直線');
+  const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*y1="([\d.-]+)"[^>]*x2="([\d.-]+)"[^>]*y2="([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
+  assert.equal(sameDayArrows.length, 3, '同天三角調應有三條箭頭');
+  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天三角調走左右兩道、不遮中間文字');
+  assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天箭頭應為垂直直線');
+  sameDayArrows.forEach(a => [a[1], a[3]].forEach(y => assert.ok(Math.abs(y / 13.1 - Math.round(y / 13.1)) < 0.01, '箭頭端點應貼齊格線、不伸進格內')));
 
   const triangleLeaveRecords = triangleRecords.map(record => Object.assign({}, record, { reason: '公假' }));
   const triangleLeaveGroup = buildPrintGroups([triangleLeaveRecords[0]], triangleLeaveRecords)[0];

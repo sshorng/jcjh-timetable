@@ -428,12 +428,41 @@ function getOfficialGridLayout() {
   });
   const start = toPoint(points[0]);
   const end = toPoint(points[1]);
-  // 雙箭頭兩端壓在格子正中央（同天另平移半格避開置中文字），一眼看出是哪兩格互調。
+  const edgeDistanceFor = (from, to) => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const scaleX = dx ? from.halfWidth / Math.abs(dx) : Infinity;
+    const scaleY = dy ? from.halfHeight / Math.abs(dy) : Infinity;
+    const length = Math.hypot(dx, dy) || 1;
+    return {
+      dx,
+      dy,
+      length,
+      edgeDistance: Math.min(scaleX, scaleY) * length
+    };
+  };
+  const edgePoint = (from, to, inset) => {
+    const vector = edgeDistanceFor(from, to);
+    const distance = Math.max(0, vector.edgeDistance - inset);
+    return {
+      x: from.x + (vector.dx / vector.length) * distance,
+      y: from.y + (vector.dy / vector.length) * distance
+    };
+  };
+  const startBoundary = edgeDistanceFor(start, end).edgeDistance;
+  const endBoundary = edgeDistanceFor(end, start).edgeDistance;
+  const centerDistance = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+  const boundaryGap = Math.max(0, centerDistance - startBoundary - endBoundary);
+  // 相鄰格的雙向箭頭頭部會重疊，短線時將端點收回格內留出清楚間距。
+  const endpointInset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
+  const startEdge = edgePoint(start, end, endpointInset);
+  const endEdge = edgePoint(end, start, endpointInset);
+  // 直線：同天垂直線平移半格、避開置中文字；跨天維持原直線。
   const isSameDay = points[0].dayIndex === points[1].dayIndex;
-  let sx1 = start.x;
-  let sy1 = start.y;
-  let sx2 = end.x;
-  let sy2 = end.y;
+  let sx1 = startEdge.x;
+  let sy1 = startEdge.y;
+  let sx2 = endEdge.x;
+  let sy2 = endEdge.y;
   if (isSameDay) {
     const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
     const xOff = Math.min(avgHalfWidth * 0.55, 3.5);
@@ -489,7 +518,7 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   };
   const number = value => Number(value.toFixed(2));
   const markerId = `triangle-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
-  // 同天腿各走一道才分得清：3 腿時依跨度由短到長走中、右、左道；2 腿走右、左道；1 腿走右道。
+  // 先收集有效腿：同天走左右兩道（長腿左、短腿右），不走中道、不遮字。
   const legs = [];
   (rows || []).forEach(row => {
     const sPeriod = parseInt(row.sourcePeriod != null ? row.sourcePeriod : row.period, 10);
@@ -501,37 +530,27 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     legs.push({ source, target, sDay: source.dayIndex, sPeriod, tDay: target.dayIndex, tPeriod });
   });
   const sameDayLegs = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
-  const laneOf = new Map();
-  if (sameDayLegs.length >= 3) {
-    const bySpan = sameDayLegs.slice().sort((a, b) => Math.abs(a.target.y - a.source.y) - Math.abs(b.target.y - b.source.y));
-    laneOf.set(bySpan[0], 0);
-    for (let i = 1; i < bySpan.length; i++) laneOf.set(bySpan[i], i % 2 === 1 ? 1 : -1);
-  } else if (sameDayLegs.length === 2) {
-    const a = sameDayLegs[0];
-    const b = sameDayLegs[1];
-    const bLonger = Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y);
-    laneOf.set(a, bLonger ? 1 : -1);
-    laneOf.set(b, bLonger ? -1 : 1);
-  } else if (sameDayLegs.length === 1) {
-    laneOf.set(sameDayLegs[0], 1);
+  let longLeg = null;
+  if (sameDayLegs.length >= 2) {
+    longLeg = sameDayLegs.reduce((a, b) => (Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y) ? b : a));
   }
   const lines = legs.map(leg => {
     const source = leg.source;
     const target = leg.target;
     const sameDay = Math.abs(target.x - source.x) < 1e-9;
-    // 起訖壓在格子正中央；跨天維持原內縮，箭頭才不會在相鄰格重疊。
+    // 同天分道後端點已錯開，起訖貼齊格線不伸進格內；跨天維持原內縮避免箭頭重疊。
     const srcB = edgeDistanceFor(source, target).edgeDistance;
     const tgtB = edgeDistanceFor(target, source).edgeDistance;
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
-    const start = edgePoint(source, target, sameDay ? srcB : crossInset);
-    const end = edgePoint(target, source, sameDay ? tgtB : crossInset);
-    // 同天腿各走一道（中／右／左），跨天維持原直線。
+    const start = edgePoint(source, target, sameDay ? 0 : crossInset);
+    const end = edgePoint(target, source, sameDay ? 0 : crossInset);
+    // 直線：同天垂直線左右分道（短腿右、長腿左），不走中道、不遮字；跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
     if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
       const laneOff = Math.min(avgHalfWidth * 0.55, 3.5);
-      const off = (laneOf.has(leg) ? laneOf.get(leg) : 1) * laneOff;
+      const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
       x1 += off;
       x2 += off;
     }
