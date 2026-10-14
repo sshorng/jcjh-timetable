@@ -676,6 +676,21 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(triangleOutput, /orient="auto-start-reverse"/);
   assert.match(triangleOutput, /fill="none" stroke="#111827" stroke-width="\.25"/);
   assert.equal(getPrintAudienceLabels(triangleGroups[0], fixtureContext).slice(1, 3).join('\n'), '三角調教師：王小明、林小美、陳小華\n實際授課教師：陳小華、王小明、林小美');
+  const sameDayTriangleRecords = [2, 5, 7].map((period, i) => ({
+    id: 'TRI-SAME-' + (i + 1), triangleId: 'TRI-SAME', triangleLegIndex: i + 1, type: 'triangle', serial: 'TRI-SAME',
+    originalTeacherEmail: ['b', 'c', 'a'][i] + '@school.example', originalTeacherName: ['B', 'C', 'A'][i],
+    actualTeacherEmail: ['a', 'b', 'c'][i] + '@school.example', actualTeacherName: ['A', 'B', 'C'][i],
+    date: '2026-09-08', period, triangleSourceDate: '2026-09-08', triangleSourcePeriod: period,
+    triangleTargetDate: '2026-09-08', triangleTargetPeriod: [5, 7, 2][i],
+    className: '806', subject: ['資訊科技', '數學', '輔導'][i], reason: '課務調整'
+  }));
+  const sameDayTriangleGroup = buildPrintGroups([sameDayTriangleRecords[0]], sameDayTriangleRecords)[0];
+  assert.equal(sameDayTriangleGroup.isTriangle, true);
+  const sameDayTriangleOutput = generateFormHtml(sameDayTriangleGroup, 'NoticeClass', fixtureContext);
+  const sameDayLanes = [...sameDayTriangleOutput.matchAll(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*x2="([\d.-]+)"/g)].map(m => m[1] + '|' + m[2]);
+  assert.equal(sameDayLanes.length, 3, '同天三角調應有三條箭頭');
+  assert.equal(new Set(sameDayLanes).size, 3, '同天三角調三腿應各走一道、互不相碰');
+  assert.ok(sameDayLanes.every(lane => lane.split('|')[0] === lane.split('|')[1]), '同天箭頭應為垂直直線');
 
   const triangleLeaveRecords = triangleRecords.map(record => Object.assign({}, record, { reason: '公假' }));
   const triangleLeaveGroup = buildPrintGroups([triangleLeaveRecords[0]], triangleLeaveRecords)[0];
