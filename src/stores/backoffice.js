@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import FieldMap from '../domain/field-map.js';
 import { UiClassAwayAdmin } from '../modules/ui-activity.js';
+import { notifyChunkLoadFailed } from '../modules/vendor-libs.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiMutualPanelState } from '../modules/ui-mutual.js';
 import { showConfirm, showToast } from '../ui/toast.js';
@@ -80,7 +81,10 @@ const ensureUiBackofficeApi = async () => {
       if (_backofficeApi) return _backofficeApi;
       // ui-backoffice.js 改動態載入：首次操作才抓 chunk，不進首屏主包。
       // 呼叫端一律經 needUiBackoffice（失敗會 toast）；三個同步查詢已內聯至殼層，不受影響。
-      const { UiBackoffice } = await import('../modules/ui-backoffice.js');
+      const { UiBackoffice } = await import('../modules/ui-backoffice.js').catch((e) => {
+        notifyChunkLoadFailed(e, 'ui-backoffice');
+        throw e;
+      });
       _backofficeApi = UiBackoffice.create({
         computed, loading: storeToRefs(useSessionStore()).loading, user: storeToRefs(useSessionStore()).user, cancelAll: useGasStore().cancelAll, callGasApi: useGasStore().callGasApi, clearSWR: useGasStore().clearSWR, isGsiInitialized: useSessionStore().isGsiInitialized, isGoogleGsiReady: useSessionStore().isGoogleGsiReady,
         suppressGsiAutoLogin: useSessionStore().suppressGsiAutoLogin, gsiLoggingIn: storeToRefs(useSessionStore()).gsiLoggingIn, paginatedHistoryRecords: storeToRefs(useTimetableStore()).paginatedHistoryRecords, selectedRecordIds: storeToRefs(useMutualStore()).selectedRecordIds,

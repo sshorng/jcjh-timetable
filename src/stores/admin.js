@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import { showConfirm, showToast } from '../ui/toast.js';
+import { notifyChunkLoadFailed } from '../modules/vendor-libs.js';
 import { useBackofficeStore } from './backoffice.js';
 import { useDataStore } from './data.js';
 import { useGasStore } from './gas.js';
@@ -110,7 +111,10 @@ const ensureUiAdminApi = async () => {
       if (_uiAdminApi) return _uiAdminApi;
       // ui-admin.js 改動態載入：管理員首次操作才抓 chunk，不進首屏主包。
       // 呼叫端一律經 needUiAdmin（失敗會 toast），模板綁定的 state refs 全在殼層，不受影響。
-      const { UiAdmin } = await import('../modules/ui-admin.js');
+      const { UiAdmin } = await import('../modules/ui-admin.js').catch((e) => {
+        notifyChunkLoadFailed(e, 'ui-admin');
+        throw e;
+      });
       _uiAdminApi = UiAdmin.create({
         ref,
         callGasApi: useGasStore().callGasApi,
