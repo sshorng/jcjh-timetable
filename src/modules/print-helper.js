@@ -377,8 +377,8 @@ const OFFICIAL_DAY_COLS = Object.freeze([3, 3, 1, 3, 2]);
 const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
 /** 同側線道往外彎的弧度；共用同一節時端點沿格線挪開的距離；收尾控制點留在外側讓箭頭斜指進格（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
-const OFFICIAL_LANE_BASE = 0.8;
-const OFFICIAL_LANE_STEP = 1.8;
+const OFFICIAL_LANE_BASE = 1.2;
+const OFFICIAL_LANE_STEP = 2.2;
 const OFFICIAL_LANE_NUDGE = 2.5;
 const OFFICIAL_LANE_TIP = 1.8;
 function getOfficialGridLayout() {
