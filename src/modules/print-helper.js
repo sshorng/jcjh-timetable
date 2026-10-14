@@ -532,12 +532,12 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
     let start = edgePoint(source, target, sameDay ? 0 : crossInset);
     let end = edgePoint(target, source, sameDay ? 0 : crossInset);
-    // 直線：同天貼近內容（約半格）的左右兩道，端點各收 2mm 再畫空心圓錨點；跨天維持原直線。
+    // 同天走左右兩條邊框道（離框約 0.8mm）：邊框處無文字，寬字也蓋不到；短腿右、長腿左。
     let x1 = start.x;
     let x2 = end.x;
     if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const laneOff = Math.max(4.5, avgHalfWidth * 0.55);
+      const laneOff = Math.max(0.8, avgHalfWidth - 0.8);
       const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
       const down = target.y > source.y;
       const baseX = edgePoint(source, target, 0).x + off;
