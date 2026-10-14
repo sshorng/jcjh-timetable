@@ -393,11 +393,24 @@ function getOfficialGridLayout() {
   return { dayCenters, dayHalfWidths };
 }
 
-function getOfficialArrowMarkerHtml(markerId) {
-  return `<defs><marker id="${markerId}" markerWidth="2.4" markerHeight="2.4" refX="2.4" refY="1.2" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 0 0 L 2.4 1.2 L 0 2.4" fill="none" stroke="#111827" stroke-width=".25" stroke-linejoin="round"></path></marker></defs>`;
-}
+  function getOfficialArrowMarkerHtml(markerId) {
+    return `<defs><marker id="${markerId}" markerWidth="2.4" markerHeight="2.4" refX="2.4" refY="1.2" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><path d="M 0 0 L 2.4 1.2 L 0 2.4" fill="none" stroke="#111827" stroke-width=".25" stroke-linejoin="round"></path></marker></defs>`;
+  }
 
-function getExchangeArrowSvg(group, rows, weekDates) {
+
+  const OFFICIAL_DAY_CHARS = ['一', '二', '三', '四', '五'];
+  /** 箭頭中點節次牌：同天顯示「3→6」，跨天加註星期「三3→五6」。 */
+  function officialArrowLabelSpan(x, y, text) {
+    return `<span class="official-exchange-label" style="left:${Number(x.toFixed(2))}%;top:calc(43.43mm + ${Number(y.toFixed(2))}mm)">${escapePrintHtml(text)}</span>`;
+  }
+  function officialPeriodLabel(aDay, aPeriod, bDay, bPeriod, doubleHeaded) {
+    const arrow = doubleHeaded ? '⇄' : '→';
+    if (aDay === bDay) return `${aPeriod}${arrow}${bPeriod}`;
+    const name = i => OFFICIAL_DAY_CHARS[i] || '';
+    return `${name(aDay)}${aPeriod}${arrow}${name(bDay)}${bPeriod}`;
+  }
+
+  function getExchangeArrowSvg(group, rows, weekDates) {
   if (!group || !group.isExchange) return '';
   const dateLists = Array.isArray(weekDates && weekDates[0])
     ? weekDates
@@ -469,7 +482,9 @@ function getExchangeArrowSvg(group, rows, weekDates) {
   }
   const markerId = `exchange-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
   const number = value => Number(value.toFixed(2));
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>`;
+  const label = officialArrowLabelSpan((sx1 + sx2) / 2, (sy1 + sy2) / 2,
+    officialPeriodLabel(points[0].dayIndex, points[0].period, points[1].dayIndex, points[1].period, true));
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>${label}`;
 }
 
 function getTriangleArrowSvg(group, rows, weekDates) {
@@ -519,18 +534,22 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   // 先收集有效腿，找出同天腿中跨度最長者（長腿走左道、短腿走右道，避免三線疊合）。
   const legs = [];
   (rows || []).forEach(row => {
+    const sPeriod = parseInt(row.sourcePeriod != null ? row.sourcePeriod : row.period, 10);
+    const tPeriod = parseInt(row.targetPeriod != null ? row.targetPeriod : row.triangleTargetPeriod, 10);
     const source = toPoint(row.sourceDate || row.date, row.sourcePeriod != null ? row.sourcePeriod : row.period);
     const target = toPoint(row.targetDate || row.triangleTargetDate,
       row.targetPeriod != null ? row.targetPeriod : row.triangleTargetPeriod);
-    if (!source || !target || (source.x === target.x && source.y === target.y)) return;
-    legs.push({ source, target });
+    if (!source || !target || Number.isNaN(sPeriod) || Number.isNaN(tPeriod) || (source.x === target.x && source.y === target.y)) return;
+    legs.push({ source, target, sDay: source.dayIndex, sPeriod, tDay: target.dayIndex, tPeriod });
   });
   const sameDayLegs = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
   let longLeg = null;
   if (sameDayLegs.length >= 2) {
     longLeg = sameDayLegs.reduce((a, b) => (Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y) ? b : a));
   }
-  const lines = legs.map(leg => {
+  const lines = [];
+  const labels = [];
+  legs.forEach(leg => {
     const source = leg.source;
     const target = leg.target;
     const sameDay = Math.abs(target.x - source.x) < 1e-9;
@@ -548,10 +567,12 @@ function getTriangleArrowSvg(group, rows, weekDates) {
       x1 += off;
       x2 += off;
     }
-    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
+    lines.push(`<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`);
+    labels.push(officialArrowLabelSpan((x1 + x2) / 2, (start.y + end.y) / 2,
+      officialPeriodLabel(leg.sDay, leg.sPeriod, leg.tDay, leg.tPeriod, false)));
   });
   if (!lines.length) return '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>${labels.join('')}`;
 }
 
 function generateFormHtml(g, currentType, ctx) {
@@ -1287,7 +1308,8 @@ function getPrintPreviewCss() {
     .official-proxy-value { text-align: right !important; }
     .official-processing-cell { padding: 0 .8mm !important; font-size: 8.5pt; line-height: 1; }
     .official-leave-row, .official-course-row { height: 4.15mm; }
-    .official-leave-row td, .official-course-row td { font-size: 8.3pt; }
+     .official-leave-row td, .official-course-row td { font-size: 8.3pt; }
+     .official-exchange-label { position: absolute; z-index: 4; transform: translate(-50%, -50%); background: #fff; border: .4pt solid #111827; border-radius: 1mm; padding: 0 1mm; font-size: 7pt; line-height: 1.35; white-space: nowrap; color: #111827; pointer-events: none; }
     .official-label { text-align: center; }
     .official-check-option { text-align: left; white-space: normal; }
     .official-date-cell { text-align: left !important; white-space: nowrap; font-size: 7.4pt !important; line-height: 1.05; padding-left: 1.2mm !important; }
@@ -1566,6 +1588,7 @@ async function printSelectedForms(formType, ctx) {
             .official-section-caption { vertical-align: middle; }
             .official-exchange-overlay { position: absolute; z-index: 3; top: 43.43mm; left: 0; width: 127.265mm; height: 104.8mm; overflow: visible; pointer-events: none; }
             .official-exchange-arrow-line { fill: none; stroke: #111827; stroke-width: 0.25; stroke-linecap: round; }
+             .official-exchange-label { position: absolute; z-index: 4; transform: translate(-50%, -50%); background: #fff; border: 0.4pt solid #111827; border-radius: 1mm; padding: 0 1mm; font-size: 7pt; line-height: 1.35; white-space: nowrap; color: #111827; pointer-events: none; }
           .official-signature-header { text-align: center; font-size: 9pt; }
           .official-signature-cell { text-align: center; font-size: 10pt; line-height: 1.25; }
           .official-signature-name { font-size: 9pt; }
