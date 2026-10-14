@@ -688,18 +688,22 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<path class="official-exchange-arrow-line" d="M ([\d.-]+) ([\d.-]+) C [^"]*? ([\d.-]+) ([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
   assert.equal(sameDayArrows.length, 3, '同天三角調應有三條曲線箭頭');
   assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天曲線起訖應在同一側格線');
-  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 3, '三條線道 x 必須互異，端點才不會疊在一起');
-  // 線道在格子邊框外側（x 越過 ±半寬），弧線朝外，格內文字不被碰到。
+  // 端點 x 必須貼在格線上（中線 ± 半寬），線才連著格子、歸屬明確。
   const CENTER_X = 34.8;
   const HALF_W = 7.03;
-  sameDayArrows.forEach(a => assert.ok(Math.abs(a[0] - CENTER_X) > HALF_W, '曲線應落在格子邊框外側'));
-  // 端點＝格線中點：y 為 (p-1)*13.1 + 6.55。
+  sameDayArrows.forEach(a => assert.ok(Math.abs(Math.abs(a[0] - CENTER_X) - HALF_W) < 0.02, '端點應貼齊左右格線'));
+  // 端點 y ＝ 格線中點；同側共用同一節時才沿格線挪 2.5，兩支箭頭不疊。
   const midOf = p => (p - 1) * 13.1 + 6.55;
   const expect = [[2, 5], [5, 7], [7, 2]];
   sameDayArrows.forEach((a, i) => {
-    assert.ok(Math.abs(a[1] - midOf(expect[i][0])) < 0.01, `${expect[i][0]}→${expect[i][1]} 起始應在來源格中點`);
-    assert.ok(Math.abs(a[3] - midOf(expect[i][1])) < 0.01, `${expect[i][0]}→${expect[i][1]} 終點應在目標格中點`);
+    [[a[1], expect[i][0]], [a[3], expect[i][1]]].forEach(([y, p]) => {
+      const diff = Math.abs(y - midOf(p));
+      assert.ok(diff < 0.01 || Math.abs(diff - 2.5) < 0.01, `${p} 端點應在中點或避開 2.5mm`);
+    });
   });
+  // 同側共用第七節時兩端點必須真的分開，不能疊在一起。
+  const cellSeven = sameDayArrows.flatMap(a => [a[1], a[3]]).filter(y => Math.abs(y - midOf(7)) < 3);
+  assert.equal(new Set(cellSeven).size, cellSeven.length, '共用節次的端點不可重疊');
   // 方向：2→5、5→7 朝下，7→2 朝上。
   assert.ok(sameDayArrows[0][3] > sameDayArrows[0][1], '2→5 應朝下');
   assert.ok(sameDayArrows[1][3] > sameDayArrows[1][1], '5→7 應朝下');
