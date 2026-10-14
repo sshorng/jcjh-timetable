@@ -465,7 +465,8 @@ function getOfficialGridLayout() {
   let sy2 = endEdge.y;
   if (isSameDay) {
     const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
-    const xOff = Math.max(4.5, avgHalfWidth - 1);
+    // 貼格內邊框（離框約 1mm）：邊框處無文字，寬字也蓋不到。
+    const xOff = avgHalfWidth - 0.8;
     sx1 += xOff;
     sx2 += xOff;
   }
@@ -543,23 +544,22 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
     let start = edgePoint(source, target, sameDay ? 0 : crossInset);
     let end = edgePoint(target, source, sameDay ? 0 : crossInset);
-    // 直線：同天垂直線走格內側邊（離框約 1mm，寬字也蓋不到），左右分道短右長左；跨天維持原直線。
+    // 直線：同天垂直線貼格內邊框（離框約 1mm，邊框無文字），左右分道短右長左；跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
     if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const laneOff = Math.max(4.5, avgHalfWidth - 1);
+      const laneOff = avgHalfWidth - 0.8;
       const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
       const baseX1 = edgePoint(source, target, 0).x + off;
       const baseX2 = edgePoint(target, source, 0).x + off;
-      // 端點各往自家格內收 2mm：站在格內不站在共用格線上，歸屬才精確。
-      const down = end.y > start.y;
+      // 方向取自兩格中心（相鄰節次共用格線時起訖同點，不可用起訖判斷）；端點各往自家格內收 2mm。
+      const down = target.y > source.y;
       x1 = baseX1;
       x2 = baseX2;
       start = { x: x1, y: down ? start.y - 2 : start.y + 2 };
       end = { x: x2, y: down ? end.y + 2 : end.y - 2 };
     }
-    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
     return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
   });
   if (!lines.length) return '';
