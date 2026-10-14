@@ -457,22 +457,10 @@ function getOfficialGridLayout() {
   const endpointInset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
   const startEdge = edgePoint(start, end, endpointInset);
   const endEdge = edgePoint(end, start, endpointInset);
-  // 直線：同天垂直線貼格內側邊（離框約 1mm），避開「資訊科技」這類寬字；跨天維持原直線。
-  const isSameDay = points[0].dayIndex === points[1].dayIndex;
-  let sx1 = startEdge.x;
-  let sy1 = startEdge.y;
-  let sx2 = endEdge.x;
-  let sy2 = endEdge.y;
-  if (isSameDay) {
-    const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
-    // 貼格內邊框（離框約 1mm）：邊框處無文字，寬字也蓋不到。
-    const xOff = avgHalfWidth - 0.8;
-    sx1 += xOff;
-    sx2 += xOff;
-  }
+  // 單純對調維持置中直線（原本最好看）；跨天亦維持原直線。
   const markerId = `exchange-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
   const number = value => Number(value.toFixed(2));
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(startEdge.x)}" y1="${number(startEdge.y)}" x2="${number(endEdge.x)}" y2="${number(endEdge.y)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>`;
 }
 
 function getTriangleArrowSvg(group, rows, weekDates) {
@@ -544,19 +532,17 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
     let start = edgePoint(source, target, sameDay ? 0 : crossInset);
     let end = edgePoint(target, source, sameDay ? 0 : crossInset);
-    // 直線：同天垂直線貼格內邊框（離框約 1mm，邊框無文字），左右分道短右長左；跨天維持原直線。
+    // 直線：同天貼近內容（約半格）的左右兩道，端點各收 2mm 再畫空心圓錨點；跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
     if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const laneOff = avgHalfWidth - 0.8;
+      const laneOff = Math.max(4.5, avgHalfWidth * 0.55);
       const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
-      const baseX1 = edgePoint(source, target, 0).x + off;
-      const baseX2 = edgePoint(target, source, 0).x + off;
-      // 方向取自兩格中心（相鄰節次共用格線時起訖同點，不可用起訖判斷）；端點各往自家格內收 2mm。
       const down = target.y > source.y;
-      x1 = baseX1;
-      x2 = baseX2;
+      const baseX = edgePoint(source, target, 0).x + off;
+      x1 = baseX;
+      x2 = baseX;
       start = { x: x1, y: down ? start.y - 2 : start.y + 2 };
       end = { x: x2, y: down ? end.y + 2 : end.y - 2 };
     }
@@ -1310,7 +1296,6 @@ function getPrintPreviewCss() {
      .official-section-caption { vertical-align: middle; }
      .official-exchange-overlay { position: absolute; z-index: 3; top: 43.43mm; left: 0; width: 127.265mm; height: 104.8mm; overflow: visible; pointer-events: none; }
      .official-exchange-arrow-line { fill: none; stroke: #111827; stroke-width: .25; stroke-linecap: round; }
-    .official-signature-header { text-align: center; font-size: 9pt; }
     .official-signature-cell { text-align: center; font-size: 10pt; line-height: 1.25; }
     .official-signature-name { font-size: 9pt; }
     .official-signature-hint { color: #9ca3af; font-size: 8pt; margin-left: 2px; }

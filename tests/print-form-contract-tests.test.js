@@ -688,7 +688,7 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*y1="([\d.-]+)"[^>]*x2="([\d.-]+)"[^>]*y2="([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
   assert.equal(sameDayArrows.length, 3, '同天三角調應有三條箭頭');
   assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天三角調走左右兩道、不遮中間文字');
-  assert.ok(Math.max(...sameDayArrows.map(a => a[0])) - Math.min(...sameDayArrows.map(a => a[0])) > 12.2, '兩道應貼近格子左右邊框');
+  assert.ok(Math.max(...sameDayArrows.map(a => a[0])) - Math.min(...sameDayArrows.map(a => a[0])) > 7, '兩道應在內容兩側錯開、不遮中間文字');
   assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天箭頭應為垂直直線');
   // 腿順序即 rows 順序：2→5 下、5→7 下、7→2 上；相鄰腿不可反向。
   assert.ok(sameDayArrows[0][3] > sameDayArrows[0][1], '2→5 應朝下');
