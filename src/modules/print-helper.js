@@ -376,9 +376,9 @@ const OFFICIAL_COL_WIDTHS = Object.freeze([417, 400, 172, 137, 416, 461, 232, 70
 const OFFICIAL_DAY_COLS = Object.freeze([3, 3, 1, 3, 2]);
 const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
-/** 同側線道往外彎的弧度；共用同一節時端點沿格線挪開的距離；收尾控制點留在外側讓箭頭斜指進格（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
-const OFFICIAL_LANE_BASE = 1.2;
-const OFFICIAL_LANE_STEP = 2.2;
+/** 同側線道往外彎的弧度；共用同一節時端點沿格線挪開的距離（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
+const OFFICIAL_LANE_BASE = 2;
+const OFFICIAL_LANE_STEP = 2.6;
 const OFFICIAL_LANE_NUDGE = 2.5;
 function getOfficialGridLayout() {
   const total = OFFICIAL_COL_WIDTHS.reduce((sum, width) => sum + width, 0);
@@ -547,6 +547,7 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const lane = laneOf.get(leg);
     if (lane) {
       const halfWidth = (source.halfWidth + target.halfWidth) / 2;
+      // 端點壓在左右格線中點，不跑進格子裡。
       const x = lane.side === 'L' ? source.x - halfWidth : source.x + halfWidth;
       const midY = p => (p - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
       const dirY = leg.tPeriod >= leg.sPeriod ? 1 : -1;
@@ -559,12 +560,13 @@ function getTriangleArrowSvg(group, rows, weekDates) {
       const y0 = freePoint(leg.sPeriod);
       const y1 = freePoint(leg.tPeriod);
       const dy = y1 - y0;
-      // 端點壓在格線中點；收尾控制點留在外側，箭頭便斜指進該格。
+      // 端點壓著格線中點；收尾控制點放得比線身更外、更靠上游，
+      // 箭頭切線便帶一點朝格內的斜度，且整條弧的彎度更飽滿。
       const out = lane.side === 'L' ? -1 : 1;
-      const cx = x + out * lane.bow;
-      // 收尾順著弧線：控制點取在弧線自然路徑上，讓箭頭切線延續彎曲，而非急勾進格。
-      const c2x = x + out * lane.bow * 0.55;
-      return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.3)} ${number(c2x)} ${number(y1 - dy * 0.22)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
+      const big = lane.bow >= 2 ? 1 : 0.7;
+      const cx = x + out * lane.bow * big * 1.4;
+      const c2x = x + out * lane.bow * big * 1.05;
+      return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.32)} ${number(c2x)} ${number(y1 - dy * 0.3)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
     }
     // 跨天維持原直線（兩端留內縮，箭頭才不會在相鄰格重疊）。
     const srcB = edgeDistanceFor(source, target).edgeDistance;
