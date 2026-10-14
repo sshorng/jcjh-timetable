@@ -688,10 +688,11 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<path class="official-exchange-arrow-line" d="M ([\d.-]+) ([\d.-]+) C [^"]*? ([\d.-]+) ([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
   assert.equal(sameDayArrows.length, 3, '同天三角調應有三條曲線箭頭');
   assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天曲線起訖應在同一側格線');
-  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天曲線只分左右兩側，不左右互換');
-  // 端點貼在格子左右邊框（來源格中線 ± 半寬），彎弧朝外不侵入文字。
-  const halfW = sameDayArrows[0][0] > 34.8 ? sameDayArrows[0][0] - 34.8 + 0.8 : 34.8 - sameDayArrows[0][0] + 0.8;
-  assert.ok(halfW > 6 && halfW < 8, '曲線應貼在格子邊框上');
+  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 3, '三條線道 x 必須互異，端點才不會疊在一起');
+  // 線道在格子邊框外側（x 越過 ±半寬），弧線朝外，格內文字不被碰到。
+  const CENTER_X = 34.8;
+  const HALF_W = 7.03;
+  sameDayArrows.forEach(a => assert.ok(Math.abs(a[0] - CENTER_X) > HALF_W, '曲線應落在格子邊框外側'));
   // 端點＝格線中點：y 為 (p-1)*13.1 + 6.55。
   const midOf = p => (p - 1) * 13.1 + 6.55;
   const expect = [[2, 5], [5, 7], [7, 2]];

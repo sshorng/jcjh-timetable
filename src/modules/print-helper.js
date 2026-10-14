@@ -376,11 +376,11 @@ const OFFICIAL_COL_WIDTHS = Object.freeze([417, 400, 172, 137, 416, 461, 232, 70
 const OFFICIAL_DAY_COLS = Object.freeze([3, 3, 1, 3, 2]);
 const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
-/** 箭頭道離格線的距離（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
-const OFFICIAL_BORDER_LANE_MM = 0.8;
-/** 同側線道彎度：首條貼框，其後每條再加深，避免平行重疊。 */
-const OFFICIAL_LANE_BASE = 1.2;
-const OFFICIAL_LANE_STEP = 3;
+/** 線道往外側的弧度（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
+const OFFICIAL_LANE_BOW = 1.2;
+/** 同側線道彼此的間隔：每多一條就往外再推一段，端點因此不會疊在一起。 */
+const OFFICIAL_LANE_BASE = 0.8;
+const OFFICIAL_LANE_STEP = 2.2;
 
 function getOfficialGridLayout() {
   const total = OFFICIAL_COL_WIDTHS.reduce((sum, width) => sum + width, 0);
@@ -545,11 +545,10 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   });
   const laneOf = new Map();
   Object.keys(lanes).forEach((side) => {
-    // 同側再依跨距排序：最長的那條彎最深＝最外圈。
-    const sorted = lanes[side].slice().sort((a, b) => spanOf(b) - spanOf(a));
+    // 同側依跨距由短到長排：越長越往外圈，且每條線道 x 各自獨立，端點不會疊在一起。
+    const sorted = lanes[side].slice().sort((a, b) => spanOf(a) - spanOf(b));
     sorted.forEach((leg, index) => {
-      const nth = sorted.length - 1 - index;
-      laneOf.set(leg, { side, bow: OFFICIAL_LANE_BASE + OFFICIAL_LANE_STEP * nth });
+      laneOf.set(leg, { side, offset: OFFICIAL_LANE_BASE + OFFICIAL_LANE_STEP * index });
     });
   });
   const shapes = legs.map((leg) => {
@@ -558,15 +557,15 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const lane = laneOf.get(leg);
     if (lane) {
       const halfWidth = (source.halfWidth + target.halfWidth) / 2;
+      // 線道落在格線外側且各條 x 互異：端點不會疊在一起，格內文字也不會被碰到。
+      const out = lane.side === 'L' ? -1 : 1;
       const x = lane.side === 'L'
-        ? source.x - halfWidth + OFFICIAL_BORDER_LANE_MM
-        : source.x + halfWidth - OFFICIAL_BORDER_LANE_MM;
-      // 往外側彎（靠邊框者向外），格子內文字完全不被碰到。
-      const dir = lane.side === 'L' ? -1 : 1;
+        ? source.x - halfWidth - lane.offset
+        : source.x + halfWidth + lane.offset;
       const y0 = (leg.sPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
       const y1 = (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
       const dy = y1 - y0;
-      const cx = x + dir * lane.bow;
+      const cx = x + out * OFFICIAL_LANE_BOW;
       return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.35)} ${number(cx)} ${number(y1 - dy * 0.35)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
     }
     // 跨天維持原直線（兩端留內縮，箭頭才不會在相鄰格重疊）。
