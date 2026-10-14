@@ -523,16 +523,34 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     if (!source || !target || Number.isNaN(sPeriod) || Number.isNaN(tPeriod) || (source.x === target.x && source.y === target.y)) return;
     legs.push({ source, target, sDay: source.dayIndex, sPeriod, tDay: target.dayIndex, tPeriod });
   });
-  // 同天線道：起訖都在「同一側」格線中點（不左右互換，曲線不會交叉成 X）。
-  // 側別依序分配左右；同側多條時加深彎度，讓各線平行錯開。
-  const sideCount = { L: 0, R: 0 };
+  // 同天線道：起訖都在「同一側」格線中點（不左右互換，曲線不會交叉成 X），彎弧一律朝外。
+  // 線道依「跨距」分配：跨距越大越靠外圈，短線靠內圈，長短一目了然。
+  const spanOf = leg => Math.abs(
+    (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM - (leg.sPeriod - 1) * OFFICIAL_GRID_PERIOD_MM
+  );
+  const sameDay = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
+  const bySpan = sameDay.slice().sort((a, b) => spanOf(b) - spanOf(a));
+  const lanes = { L: [], R: [] };
+  // 先依跨距大→小挑「與既有線重疊最少」的一側，長線自然被推到外圈、彼此不打架。
+  bySpan.forEach((leg) => {
+    const lo = Math.min(leg.sPeriod, leg.tPeriod);
+    const hi = Math.max(leg.sPeriod, leg.tPeriod);
+    const overlapCount = side => lanes[side].filter(other => {
+      const oLo = Math.min(other.sPeriod, other.tPeriod);
+      const oHi = Math.max(other.sPeriod, other.tPeriod);
+      return lo <= oHi && oLo <= hi;
+    }).length;
+    const side = overlapCount('L') <= overlapCount('R') ? 'L' : 'R';
+    lanes[side].push(leg);
+  });
   const laneOf = new Map();
-  legs.forEach((leg) => {
-    if (Math.abs(leg.target.x - leg.source.x) >= 1e-9) return;
-    const side = sideCount.L <= sideCount.R ? 'L' : 'R';
-    const nth = sideCount[side];
-    sideCount[side] += 1;
-    laneOf.set(leg, { side, bow: OFFICIAL_LANE_BASE + OFFICIAL_LANE_STEP * nth });
+  Object.keys(lanes).forEach((side) => {
+    // 同側再依跨距排序：最長的那條彎最深＝最外圈。
+    const sorted = lanes[side].slice().sort((a, b) => spanOf(b) - spanOf(a));
+    sorted.forEach((leg, index) => {
+      const nth = sorted.length - 1 - index;
+      laneOf.set(leg, { side, bow: OFFICIAL_LANE_BASE + OFFICIAL_LANE_STEP * nth });
+    });
   });
   const shapes = legs.map((leg) => {
     const source = leg.source;
