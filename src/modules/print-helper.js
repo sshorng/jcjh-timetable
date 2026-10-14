@@ -455,27 +455,21 @@ function getExchangeArrowSvg(group, rows, weekDates) {
   const endpointInset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
   const startEdge = edgePoint(start, end, endpointInset);
   const endEdge = edgePoint(end, start, endpointInset);
-  // 曲線：同天垂直線向側邊彎、跨天斜線微微上拱，避開格內置中文字。
+  // 直線：同天垂直線平移半格、避開置中文字；跨天維持原直線。
   const isSameDay = points[0].dayIndex === points[1].dayIndex;
-  let ctrl;
+  let sx1 = startEdge.x;
+  let sy1 = startEdge.y;
+  let sx2 = endEdge.x;
+  let sy2 = endEdge.y;
   if (isSameDay) {
     const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
-    const bowX = Math.max(2.2, Math.min(avgHalfWidth * 0.9, 5));
-    const dir = points[0].dayIndex >= 4 ? -1 : 1;
-    ctrl = { x: (startEdge.x + endEdge.x) / 2 + dir * bowX, y: (startEdge.y + endEdge.y) / 2 };
-  } else {
-    const dx = endEdge.x - startEdge.x;
-    const dy = endEdge.y - startEdge.y;
-    const len = Math.hypot(dx, dy) || 1;
-    let nx = -dy / len;
-    let ny = dx / len;
-    if (ny > 0) { nx = -nx; ny = -ny; }
-    const curv = Math.min(3, len * 0.12);
-    ctrl = { x: (startEdge.x + endEdge.x) / 2 + nx * curv, y: (startEdge.y + endEdge.y) / 2 + ny * curv };
+    const xOff = Math.min(avgHalfWidth * 0.55, 3.5);
+    sx1 += xOff;
+    sx2 += xOff;
   }
   const markerId = `exchange-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
   const number = value => Number(value.toFixed(2));
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<path class="official-exchange-arrow-line" d="M ${number(startEdge.x)} ${number(startEdge.y)} Q ${number(ctrl.x)} ${number(ctrl.y)} ${number(endEdge.x)} ${number(endEdge.y)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></path></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>`;
 }
 
 function getTriangleArrowSvg(group, rows, weekDates) {
@@ -522,13 +516,23 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   };
   const number = value => Number(value.toFixed(2));
   const markerId = `triangle-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
-  const paths = [];
-  let sameDaySeen = 0;
+  // 先收集有效腿，找出同天腿中跨度最長者（長腿走左道、短腿走右道，避免三線疊合）。
+  const legs = [];
   (rows || []).forEach(row => {
     const source = toPoint(row.sourceDate || row.date, row.sourcePeriod != null ? row.sourcePeriod : row.period);
     const target = toPoint(row.targetDate || row.triangleTargetDate,
       row.targetPeriod != null ? row.targetPeriod : row.triangleTargetPeriod);
     if (!source || !target || (source.x === target.x && source.y === target.y)) return;
+    legs.push({ source, target });
+  });
+  const sameDayLegs = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
+  let longLeg = null;
+  if (sameDayLegs.length >= 2) {
+    longLeg = sameDayLegs.reduce((a, b) => (Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y) ? b : a));
+  }
+  const lines = legs.map(leg => {
+    const source = leg.source;
+    const target = leg.target;
     const centerDistance = Math.hypot(target.x - source.x, target.y - source.y) || 1;
     const sourceBoundary = edgeDistanceFor(source, target).edgeDistance;
     const targetBoundary = edgeDistanceFor(target, source).edgeDistance;
@@ -536,32 +540,20 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     const inset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
     const start = edgePoint(source, target, inset);
     const end = edgePoint(target, source, inset);
-    // 曲線：同天垂直線向側邊彎（多條同天時左右分開）、跨天斜線微微上拱。
-    let ctrl;
-    const sameDay = Math.abs(target.x - source.x) < 1e-9;
-    if (sameDay) {
+    // 直線：同天垂直線左右分道（短腿右、長腿左），跨天維持原直線。
+    let x1 = start.x;
+    let x2 = end.x;
+    if (Math.abs(target.x - source.x) < 1e-9) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const factors = [0.9, -0.9, 0.35];
-      let factor = factors[sameDaySeen % factors.length];
-      if (source.dayIndex >= 4) factor = -Math.abs(factor);
-      else if (source.dayIndex <= 0) factor = Math.abs(factor);
-      sameDaySeen += 1;
-      const bowX = Math.max(2.2, Math.min(avgHalfWidth * Math.abs(factor), 5)) * (factor < 0 ? -1 : 1);
-      ctrl = { x: (start.x + end.x) / 2 + bowX, y: (start.y + end.y) / 2 };
-    } else {
-      const dx = end.x - start.x;
-      const dy = end.y - start.y;
-      const len = Math.hypot(dx, dy) || 1;
-      let nx = -dy / len;
-      let ny = dx / len;
-      if (ny > 0) { nx = -nx; ny = -ny; }
-      const curv = Math.min(3, len * 0.12);
-      ctrl = { x: (start.x + end.x) / 2 + nx * curv, y: (start.y + end.y) / 2 + ny * curv };
+      const laneOff = Math.min(avgHalfWidth * 0.55, 3.5);
+      const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
+      x1 += off;
+      x2 += off;
     }
-    paths.push(`<path class="official-exchange-arrow-line" d="M ${number(start.x)} ${number(start.y)} Q ${number(ctrl.x)} ${number(ctrl.y)} ${number(end.x)} ${number(end.y)}" marker-end="url(#${markerId})"></path>`);
+    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
   });
-  if (!paths.length) return '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${paths.join('')}</svg>`;
+  if (!lines.length) return '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>`;
 }
 
 function generateFormHtml(g, currentType, ctx) {

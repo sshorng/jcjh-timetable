@@ -414,10 +414,10 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
     ]
   };
   const closeExchangeOutput = generateFormHtml(closeExchange, 'NoticeClass', fixtureContext);
-  const closeArrow = closeExchangeOutput.match(/<(?:line|path) class="official-exchange-arrow-line"[^>]*(?:y1="([\d.-]+)"[^>]*y2="([\d.-]+)"|d="M ([\d.-]+) ([\d.-]+) Q ([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)")/);
+  const closeArrow = closeExchangeOutput.match(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*y1="([\d.-]+)"[^>]*x2="([\d.-]+)"[^>]*y2="([\d.-]+)"/);
   assert.ok(closeArrow, '相鄰課節應產生調課箭頭');
-  if (closeArrow[1] !== undefined) assert.ok(Math.abs(Number(closeArrow[2]) - Number(closeArrow[1])) > 4, '相鄰課節箭頭端點應保留清楚間距');
-  else { assert.ok(Math.abs(Number(closeArrow[8]) - Number(closeArrow[4])) > 4, '相鄰課節箭頭端點應保留清楚間距'); assert.notEqual(Number(closeArrow[5]), Number(closeArrow[3]), '同天調課箭頭應為曲線、控制點須偏離中線以避開文字'); }
+  assert.ok(Math.abs(Number(closeArrow[4]) - Number(closeArrow[2])) > 4, '相鄰課節箭頭端點應保留清楚間距');
+  assert.equal(Number(closeArrow[1]), Number(closeArrow[3]), '同天調課應為垂直直線');
   const exchangePreview = buildPrintPreview(Object.assign({}, fixtureContext, {
     selectedRecordIds: { value: exchange.records.map(record => record.id) },
     substitutionRecords: { value: exchange.records }
