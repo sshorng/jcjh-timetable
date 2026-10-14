@@ -461,7 +461,7 @@ const UiMutualPanelState = (() => {
         : '';
       var ok = await showConfirm(
         '將寫入「額度帳本」並更新教師名單餘額（同活動不重複）\n'
-        + '規則：一般課表未上 1 節＝發 1；小鐘點不發額度（未授課另扣）；扣額度須滿 1 才扣 1\n'
+        + '規則：早自習／1～7／午休未上 1 節＝發 1；小鐘點不發額度（未授課另扣）；扣額度須滿 1 才扣 1\n'
          + '空堂事件：' + eventName + '\n'
          + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + ' · '
          + (mutualActivityPeriodMode.value === 'daily'

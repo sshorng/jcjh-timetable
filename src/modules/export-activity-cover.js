@@ -416,10 +416,10 @@ const ExportActivityCover = (() => {
   /**
    * 從已送出申請組矩陣
    * 統計口徑（與發放額度／輪值文案）：
-   * - demand(OO)＝事件第一天開始時的剩餘未執行堂數
-   * - arranged(XX)＝1～7 已排且「扣額度」節數
+   * - demand(OO)＝事件第一天開始時的剩餘未執行堂數（含早自習／午休）
+   * - arranged(XX)＝早自習／1～7／午休已排且「扣額度」節數
    * - remaining＝OO−XX
-   * 表內仍列活動互代（扣額度／活動公費）；第 8 節僅附註、不入 OO／XX
+   * 表內仍列活動互代（扣額度／活動公費）；表格僅列第 1～7 節，早自習／午休計入 XX 但不另列表格；第 8 節僅附註、不入 OO／XX
    */
   function buildMatrix(opts) {
     opts = opts || {};
@@ -449,7 +449,7 @@ const ExportActivityCover = (() => {
       grid[ds] = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
     });
     var period8Lines = [];
-    var arrangedQuota = 0; // XX：1～7 扣額度
+    var arrangedQuota = 0; // XX：早自習／1～7／午休 扣額度
     var arrangedPublic = 0; // 活動公費（表內可有，不計 XX）
 
     uniqueRequests(opts.requests).forEach(function (r) {
@@ -490,6 +490,14 @@ const ExportActivityCover = (() => {
           subName: subName,
           subject: subject
         });
+        return;
+      }
+      // 早自習0／午休45：計入 XX 但不入 1–7 表格（模板無此欄）
+      if (period === 0 || period === 45) {
+        if (belongsToPageTeacher) {
+          if (isQuotaDeductFee(fee)) arrangedQuota++;
+          else if (String(fee || '').trim() === '活動公費') arrangedPublic++;
+        }
         return;
       }
       if (period < 1 || period > 7) return;

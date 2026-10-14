@@ -10,8 +10,8 @@ import DateUtils from './date-utils.js';
 /**
  * 活動互代／外出班釋出空堂（純邏輯）
  * 規則：
- * - 釋出：一般課表未上到 1 節 → 發放額度 1；代課（小鐘點）空堂另扣，不發額度
- * - 1–7 節額度 ≥ 1 → 扣額度（不結鐘點＋扣折抵額度 1）；不足 1 → 活動公費
+ * - 釋出：早自習／1–7／午休一般課表未上到 1 節 → 發放額度 1；代課（小鐘點）空堂另扣，不發額度
+ * - 早自習／1–7／午休額度 ≥ 1 → 扣額度（不結鐘點＋扣折抵額度 1）；不足 1 → 活動公費
  * - 第8節 → 第8節代課（計畫經費，不吃額度）
  * - 請假老師（活動公假）一律不扣鐘點
  */
@@ -248,7 +248,7 @@ const DomainActivityCover = (() => {
       // 小鐘點未授課會在月報另行扣除，不重複發放折抵額度。
       if (s.isSubstitute === true || String(s.attr || s['課堂屬性'] || '').trim() === '代課') return;
       var p = parseInt(s.period, 10);
-      if (p > 7) return;
+      if (!(p === 0 || p === 45 || (p >= 1 && p <= 7))) return;
       var d = parseInt(s.dayOfWeek, 10);
       var dates = datesByDow[d] || [];
       dates.forEach(function (dateStr) {
@@ -774,7 +774,7 @@ const DomainActivityCover = (() => {
   /**
    * 依活動期間＋外出班，為每位教師計算建議寫回的折抵額度
    * mode: 'set' 覆寫為本次釋出額度；'add' 累加
-   * 釋出：1 節 → 1 額度（released）；releasedSlots＝堂數
+   * 釋出：早自習／1–7／午休 1 節 → 1 額度（released）；releasedSlots＝堂數
    * excludeEmails / leaderEmails: 帶隊／請假外出 → 不寫入額度
    * @returns {Array<{email, name, released, releasedSlots, prevQuota, nextQuota, skipped, skipReason}>}
    */
@@ -1142,7 +1142,7 @@ const DomainActivityCover = (() => {
            if (DomainSchedule && DomainSchedule.isActiveOnDate
                 && !DomainSchedule.isActiveOnDate(s, dateStr)) return;
            var per = parseInt(s.period, 10);
-           if (isNaN(per) || per > 7 || per === 45) return; // 釋出額度算早自習與 1–7
+           if (!(per === 0 || per === 45 || (per >= 1 && per <= 7))) return; // 釋出額度算早自習、1–7與午休
            if (!isActivitySlotInRange(dateStr, per, opts)) return;
           var rk = cn + '|' + dateStr + '|' + per;
           if (releasedKeys[rk]) return;

@@ -143,7 +143,7 @@ const UiExport = (() => {
         return isActFee(r.subFee, p);
       });
 
-       // OO＝事件第一天開始時的剩餘未執行堂數；XX＝1～7 扣額度已排（export 內算）。
+       // OO＝事件第一天開始時的剩餘未執行堂數；XX＝早自習／1～7／午休扣額度已排（export 內算）。
        // 個人頁會以額度帳本補回事件第一天以前已扣用的數量。
       let demand = 0;
       let teacherDemandRows = [];
