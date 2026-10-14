@@ -380,7 +380,6 @@ const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
 const OFFICIAL_LANE_BASE = 1.2;
 const OFFICIAL_LANE_STEP = 2.2;
 const OFFICIAL_LANE_NUDGE = 2.5;
-const OFFICIAL_LANE_TIP = 1.8;
 function getOfficialGridLayout() {
   const total = OFFICIAL_COL_WIDTHS.reduce((sum, width) => sum + width, 0);
   let columnOffset = OFFICIAL_COL_WIDTHS.slice(0, 3).reduce((sum, width) => sum + width, 0);
@@ -563,8 +562,9 @@ function getTriangleArrowSvg(group, rows, weekDates) {
       // 端點壓在格線中點；收尾控制點留在外側，箭頭便斜指進該格。
       const out = lane.side === 'L' ? -1 : 1;
       const cx = x + out * lane.bow;
-      const c2x = x + out * OFFICIAL_LANE_TIP;
-      return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.3)} ${number(c2x)} ${number(y1 - dy * 0.08)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
+      // 收尾順著弧線：控制點取在弧線自然路徑上，讓箭頭切線延續彎曲，而非急勾進格。
+      const c2x = x + out * lane.bow * 0.55;
+      return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.3)} ${number(c2x)} ${number(y1 - dy * 0.22)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
     }
     // 跨天維持原直線（兩端留內縮，箭頭才不會在相鄰格重疊）。
     const srcB = edgeDistanceFor(source, target).edgeDistance;
