@@ -378,6 +378,9 @@ const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
 /** 箭頭道離格線的距離（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
 const OFFICIAL_BORDER_LANE_MM = 0.8;
+/** 同側線道彎度：首條貼框，其後每條再加深，避免平行重疊。 */
+const OFFICIAL_LANE_BASE = 1.2;
+const OFFICIAL_LANE_STEP = 3;
 
 function getOfficialGridLayout() {
   const total = OFFICIAL_COL_WIDTHS.reduce((sum, width) => sum + width, 0);
@@ -520,20 +523,33 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     if (!source || !target || Number.isNaN(sPeriod) || Number.isNaN(tPeriod) || (source.x === target.x && source.y === target.y)) return;
     legs.push({ source, target, sDay: source.dayIndex, sPeriod, tDay: target.dayIndex, tPeriod });
   });
+  // 同天線道：起訖都在「同一側」格線中點（不左右互換，曲線不會交叉成 X）。
+  // 側別依序分配左右；同側多條時加深彎度，讓各線平行錯開。
+  const sideCount = { L: 0, R: 0 };
+  const laneOf = new Map();
+  legs.forEach((leg) => {
+    if (Math.abs(leg.target.x - leg.source.x) >= 1e-9) return;
+    const side = sideCount.L <= sideCount.R ? 'L' : 'R';
+    const nth = sideCount[side];
+    sideCount[side] += 1;
+    laneOf.set(leg, { side, bow: OFFICIAL_LANE_BASE + OFFICIAL_LANE_STEP * nth });
+  });
   const shapes = legs.map((leg) => {
     const source = leg.source;
     const target = leg.target;
-    if (Math.abs(target.x - source.x) < 1e-9) {
-      // 同天：起訖都落在「來源格左框中點 → 目標格右框中點」，曲線中途平順換邊。
-      // 每格左框＝出、右框＝入，三腿互不共用端點，一眼看得出誰調到誰。
-      const x0 = source.x - source.halfWidth + OFFICIAL_BORDER_LANE_MM;
-      const x3 = target.x + target.halfWidth - OFFICIAL_BORDER_LANE_MM;
+    const lane = laneOf.get(leg);
+    if (lane) {
+      const halfWidth = (source.halfWidth + target.halfWidth) / 2;
+      const x = lane.side === 'L'
+        ? source.x - halfWidth + OFFICIAL_BORDER_LANE_MM
+        : source.x + halfWidth - OFFICIAL_BORDER_LANE_MM;
+      // 往外側彎（靠邊框者向外），格子內文字完全不被碰到。
+      const dir = lane.side === 'L' ? -1 : 1;
       const y0 = (leg.sPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
-      const y3 = (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
-      const dy = y3 - y0;
-      const c1y = y0 + dy * 0.42;
-      const c2y = y3 - dy * 0.42;
-      return `<path class="official-exchange-arrow-line" d="M ${number(x0)} ${number(y0)} C ${number(x0)} ${number(c1y)} ${number(x3)} ${number(c2y)} ${number(x3)} ${number(y3)}" marker-end="url(#${markerId})"></path>`;
+      const y1 = (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
+      const dy = y1 - y0;
+      const cx = x + dir * lane.bow;
+      return `<path class="official-exchange-arrow-line" d="M ${number(x)} ${number(y0)} C ${number(cx)} ${number(y0 + dy * 0.35)} ${number(cx)} ${number(y1 - dy * 0.35)} ${number(x)} ${number(y1)}" marker-end="url(#${markerId})"></path>`;
     }
     // 跨天維持原直線（兩端留內縮，箭頭才不會在相鄰格重疊）。
     const srcB = edgeDistanceFor(source, target).edgeDistance;

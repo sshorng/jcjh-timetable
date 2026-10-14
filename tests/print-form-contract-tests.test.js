@@ -687,7 +687,11 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayTriangleOutput = generateFormHtml(sameDayTriangleGroup, 'NoticeClass', fixtureContext);
   const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<path class="official-exchange-arrow-line" d="M ([\d.-]+) ([\d.-]+) C [^"]*? ([\d.-]+) ([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
   assert.equal(sameDayArrows.length, 3, '同天三角調應有三條曲線箭頭');
-  assert.ok(sameDayArrows.every(a => a[0] < a[2]), '同天曲線應由來源格左框畫到目標格右框');
+  assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天曲線起訖應在同一側格線');
+  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天曲線只分左右兩側，不左右互換');
+  // 端點貼在格子左右邊框（來源格中線 ± 半寬），彎弧朝外不侵入文字。
+  const halfW = sameDayArrows[0][0] > 34.8 ? sameDayArrows[0][0] - 34.8 + 0.8 : 34.8 - sameDayArrows[0][0] + 0.8;
+  assert.ok(halfW > 6 && halfW < 8, '曲線應貼在格子邊框上');
   // 端點＝格線中點：y 為 (p-1)*13.1 + 6.55。
   const midOf = p => (p - 1) * 13.1 + 6.55;
   const expect = [[2, 5], [5, 7], [7, 2]];
