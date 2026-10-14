@@ -685,19 +685,20 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   const sameDayTriangleGroup = buildPrintGroups([sameDayTriangleRecords[0]], sameDayTriangleRecords)[0];
   assert.equal(sameDayTriangleGroup.isTriangle, true);
   const sameDayTriangleOutput = generateFormHtml(sameDayTriangleGroup, 'NoticeClass', fixtureContext);
-  const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<line class="official-exchange-arrow-line"[^>]*x1="([\d.-]+)"[^>]*y1="([\d.-]+)"[^>]*x2="([\d.-]+)"[^>]*y2="([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
-  assert.equal(sameDayArrows.length, 3, '同天三角調應有三條箭頭');
-  assert.equal(new Set(sameDayArrows.map(a => a[0])).size, 2, '同天三角調走左右兩道、不遮中間文字');
-  assert.ok(Math.max(...sameDayArrows.map(a => a[0])) - Math.min(...sameDayArrows.map(a => a[0])) > 7, '兩道應在內容兩側錯開、不遮中間文字');
-  assert.ok(sameDayArrows.every(a => a[0] === a[2]), '同天箭頭應為垂直直線');
-  // 腿順序即 rows 順序：2→5 下、5→7 下、7→2 上；相鄰腿不可反向。
+  const sameDayArrows = [...sameDayTriangleOutput.matchAll(/<path class="official-exchange-arrow-line" d="M ([\d.-]+) ([\d.-]+) C [^"]*? ([\d.-]+) ([\d.-]+)"/g)].map(m => [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])]);
+  assert.equal(sameDayArrows.length, 3, '同天三角調應有三條曲線箭頭');
+  assert.ok(sameDayArrows.every(a => a[0] < a[2]), '同天曲線應由來源格左框畫到目標格右框');
+  // 端點＝格線中點：y 為 (p-1)*13.1 + 6.55。
+  const midOf = p => (p - 1) * 13.1 + 6.55;
+  const expect = [[2, 5], [5, 7], [7, 2]];
+  sameDayArrows.forEach((a, i) => {
+    assert.ok(Math.abs(a[1] - midOf(expect[i][0])) < 0.01, `${expect[i][0]}→${expect[i][1]} 起始應在來源格中點`);
+    assert.ok(Math.abs(a[3] - midOf(expect[i][1])) < 0.01, `${expect[i][0]}→${expect[i][1]} 終點應在目標格中點`);
+  });
+  // 方向：2→5、5→7 朝下，7→2 朝上。
   assert.ok(sameDayArrows[0][3] > sameDayArrows[0][1], '2→5 應朝下');
   assert.ok(sameDayArrows[1][3] > sameDayArrows[1][1], '5→7 應朝下');
   assert.ok(sameDayArrows[2][3] < sameDayArrows[2][1], '7→2 應朝上');
-  sameDayArrows.forEach(a => [a[1], a[3]].forEach(y => {
-    const distToLine = Math.min(y % 13.1, 13.1 - (y % 13.1));
-    assert.ok(Math.abs(distToLine - 2) < 0.05, '箭頭端點應收進格內 2mm、不站在共用格線上');
-  }));
 
   const triangleLeaveRecords = triangleRecords.map(record => Object.assign({}, record, { reason: '公假' }));
   const triangleLeaveGroup = buildPrintGroups([triangleLeaveRecords[0]], triangleLeaveRecords)[0];

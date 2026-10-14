@@ -376,6 +376,8 @@ const OFFICIAL_COL_WIDTHS = Object.freeze([417, 400, 172, 137, 416, 461, 232, 70
 const OFFICIAL_DAY_COLS = Object.freeze([3, 3, 1, 3, 2]);
 const OFFICIAL_GRID_PERIOD_MM = 13.1;
 const OFFICIAL_GRID_HEIGHT_MM = OFFICIAL_GRID_PERIOD_MM * 8;
+/** 箭頭道離格線的距離（viewBox x 為百分比寬度單位，1 ≈ 1.27mm）。 */
+const OFFICIAL_BORDER_LANE_MM = 0.8;
 
 function getOfficialGridLayout() {
   const total = OFFICIAL_COL_WIDTHS.reduce((sum, width) => sum + width, 0);
@@ -518,38 +520,31 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     if (!source || !target || Number.isNaN(sPeriod) || Number.isNaN(tPeriod) || (source.x === target.x && source.y === target.y)) return;
     legs.push({ source, target, sDay: source.dayIndex, sPeriod, tDay: target.dayIndex, tPeriod });
   });
-  const sameDayLegs = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
-  let longLeg = null;
-  if (sameDayLegs.length >= 2) {
-    longLeg = sameDayLegs.reduce((a, b) => (Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y) ? b : a));
-  }
-  const lines = legs.map(leg => {
+  const shapes = legs.map((leg) => {
     const source = leg.source;
     const target = leg.target;
-    const sameDay = Math.abs(target.x - source.x) < 1e-9;
+    if (Math.abs(target.x - source.x) < 1e-9) {
+      // 同天：起訖都落在「來源格左框中點 → 目標格右框中點」，曲線中途平順換邊。
+      // 每格左框＝出、右框＝入，三腿互不共用端點，一眼看得出誰調到誰。
+      const x0 = source.x - source.halfWidth + OFFICIAL_BORDER_LANE_MM;
+      const x3 = target.x + target.halfWidth - OFFICIAL_BORDER_LANE_MM;
+      const y0 = (leg.sPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
+      const y3 = (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM + OFFICIAL_GRID_PERIOD_MM / 2;
+      const dy = y3 - y0;
+      const c1y = y0 + dy * 0.42;
+      const c2y = y3 - dy * 0.42;
+      return `<path class="official-exchange-arrow-line" d="M ${number(x0)} ${number(y0)} C ${number(x0)} ${number(c1y)} ${number(x3)} ${number(c2y)} ${number(x3)} ${number(y3)}" marker-end="url(#${markerId})"></path>`;
+    }
+    // 跨天維持原直線（兩端留內縮，箭頭才不會在相鄰格重疊）。
     const srcB = edgeDistanceFor(source, target).edgeDistance;
     const tgtB = edgeDistanceFor(target, source).edgeDistance;
     const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
-    let start = edgePoint(source, target, sameDay ? 0 : crossInset);
-    let end = edgePoint(target, source, sameDay ? 0 : crossInset);
-    // 同天走左右兩條邊框道（離框約 0.8mm）：邊框處無文字，寬字也蓋不到；短腿右、長腿左。
-    let x1 = start.x;
-    let x2 = end.x;
-    if (sameDay) {
-      const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
-      const laneOff = Math.max(0.8, avgHalfWidth - 0.8);
-      const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
-      const down = target.y > source.y;
-      const baseX = edgePoint(source, target, 0).x + off;
-      x1 = baseX;
-      x2 = baseX;
-      start = { x: x1, y: down ? start.y - 2 : start.y + 2 };
-      end = { x: x2, y: down ? end.y + 2 : end.y - 2 };
-    }
-    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
+    const start = edgePoint(source, target, crossInset);
+    const end = edgePoint(target, source, crossInset);
+    return `<line class="official-exchange-arrow-line" x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
   });
-  if (!lines.length) return '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>`;
+  if (!shapes.length) return '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${shapes.join('')}</svg>`;
 }
 
 function generateFormHtml(g, currentType, ctx) {
