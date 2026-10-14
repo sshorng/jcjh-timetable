@@ -215,6 +215,7 @@ const getMutualPanelApi = () => {
         activeCell: storeToRefs(useTourStore()).activeCell, inputRequestDate: storeToRefs(useTourStore()).inputRequestDate, recommendedTeachers: storeToRefs(useTourStore()).recommendedTeachers, showMatchModal: storeToRefs(useSessionStore()).showMatchModal, pendingRequestData, batchSubFee: storeToRefs(useTourStore()).batchSubFee, directApproveMode: storeToRefs(useDataStore()).directApproveMode,
         ACTIVITY_PUBLIC_FEE: useTourStore().ACTIVITY_PUBLIC_FEE, PERIOD8_FEE: useTourStore().PERIOD8_FEE, getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, softRefreshInBackground: useDataStore().softRefreshInBackground, defaultSubFeeForReason: useBackofficeStore().defaultSubFeeForReason, getScheduleForDate: useTimetableStore().getScheduleForDate,
         classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
+        fetchMutualQuotaLedger: useGasStore().fetchMutualQuotaLedger,
         getMutualImportEventId: function () { return _getMutualImportEventId(); },
         DAC: useTourStore().DAC
       });

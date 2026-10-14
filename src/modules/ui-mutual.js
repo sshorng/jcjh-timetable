@@ -61,6 +61,7 @@ const UiMutualPanelState = (() => {
     var classAwayEvents = deps.classAwayEvents;
     var getMutualImportEventId = deps.getMutualImportEventId || function () { return ''; };
     var DAC = deps.DAC || function () { return DomainActivityCover; };
+    var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
 
     function persistMutualPanelDraft() {
       try {
@@ -401,6 +402,14 @@ const UiMutualPanelState = (() => {
       var leaders = Array.from(new Set(
         (mutualLeadEmails.value || []).map(function (e) { return String(e).toLowerCase(); }).filter(Boolean)
       ));
+      // 事件名稱／ID：必須對應空堂事件名稱（勿寫死「活動互代」）
+      var eventMeta = resolveEarnEventFromClassAway();
+      var eventId = eventMeta.eventId;
+      var eventName = eventMeta.eventName;
+      if (!eventName) {
+        showToast('請先在上方選取空堂事件（事件名稱會寫入額度帳本）', 'warning');
+        return;
+      }
       var rows = dac.buildQuotaRecalcRows({
         mode: 'add',
         teachers: teachersList.value,
@@ -422,14 +431,56 @@ const UiMutualPanelState = (() => {
         showToast('此期間沒有可發放的釋出節數' + tip, 'info');
         return;
       }
-      // 事件名稱／ID：必須對應空堂事件名稱（勿寫死「活動互代」）
-      var eventMeta = resolveEarnEventFromClassAway();
-      var eventId = eventMeta.eventId;
-      var eventName = eventMeta.eventName;
-      if (!eventName) {
-        showToast('請先在上方選取空堂事件（事件名稱會寫入額度帳本）', 'warning');
-        return;
+      // 本活動帳本已發：逐人加總 earn（事件ID優先、事件名稱備援），本次只補差額
+      loading.value = true;
+      loadingMessage.value = '讀取額度帳本已發紀錄…';
+      var earnedByEmail = {};
+      var ledgerFailed = false;
+      try {
+        if (typeof fetchMutualQuotaLedger === 'function') {
+          var ledgerRes = await fetchMutualQuotaLedger({ allTeachers: true, limit: 'all' });
+          var ledgerRows = (ledgerRes && Array.isArray(ledgerRes.ledger)) ? ledgerRes.ledger : null;
+          if (!ledgerRows && Array.isArray(ledgerRes)) ledgerRows = ledgerRes;
+          if (ledgerRows) {
+            ledgerRows.forEach(function (row) {
+              if (!row) return;
+              var typ = String(row.type != null ? row.type : (row['類型'] != null ? row['類型'] : '')).trim().toLowerCase();
+              if (typ !== 'earn' && typ !== '發放') return;
+              var rid = String(row.eventId != null ? row.eventId : (row['事件ID'] || '')).trim();
+              var rname = String(row.eventName != null ? row.eventName : (row['事件名稱'] || '')).trim();
+              if (eventId && rid && rid === eventId) { /* match */ }
+              else if (eventName && rname && rname === eventName) { /* match */ }
+              else return;
+              var d = parseFloat(row.delta != null ? row.delta : (row.released != null ? row.released : row['異動']));
+              if (isNaN(d) || d <= 0) return;
+              var em = String(row.email || row.loginEmail || row.teacherEmail || row['教師Email'] || '').toLowerCase().trim();
+              if (!em) return;
+              earnedByEmail[em] = Math.round(((earnedByEmail[em] || 0) + d) * 1000) / 1000;
+            });
+          } else {
+            ledgerFailed = true;
+          }
+        } else {
+          ledgerFailed = true;
+        }
+      } catch (eLedger) {
+        ledgerFailed = true;
+      } finally {
+        loading.value = false;
       }
+      changed.forEach(function (r) {
+        var total = parseFloat(r.released) || 0;
+        var already = 0;
+        [(r.loginEmail || r.email), r.email].forEach(function (e) {
+          var k = String(e || '').toLowerCase().trim();
+          if (k && earnedByEmail[k]) already = Math.max(already, earnedByEmail[k]);
+        });
+        already = Math.round(already * 1000) / 1000;
+        var topUp = ledgerFailed ? total : Math.round(Math.max(0, total - already) * 1000) / 1000;
+        r.alreadyEarned = already;
+        r.topUp = topUp;
+        r.nextQuota = (parseFloat(r.prevQuota) || 0) + topUp;
+      });
       // 全列名單（依釋出多→少、再姓名），並加總釋出節數
       var sorted = changed.slice().sort(function (a, b) {
         if ((b.released || 0) !== (a.released || 0)) return (b.released || 0) - (a.released || 0);
@@ -446,21 +497,40 @@ const UiMutualPanelState = (() => {
       var totalSlots = sorted.reduce(function (sum, r) {
         return sum + (parseInt(r.releasedSlots, 10) || 0);
       }, 0);
+      var totalEarned = sorted.reduce(function (sum, r) {
+        return sum + (parseFloat(r.alreadyEarned) || 0);
+      }, 0);
+      totalEarned = Math.round(totalEarned * 1000) / 1000;
+      var totalTopUp = sorted.reduce(function (sum, r) {
+        return sum + (parseFloat(r.topUp) || 0);
+      }, 0);
+      totalTopUp = Math.round(totalTopUp * 1000) / 1000;
+      var topUpCount = sorted.filter(function (r) { return (parseFloat(r.topUp) || 0) > 0; }).length;
+      if (!ledgerFailed && topUpCount === 0) {
+        showToast('本活動已足額發放（已發 ＋' + fmtQ(totalEarned) + '），無需補發', 'info');
+        return;
+      }
       var listLines = sorted.map(function (r, i) {
         var nm = r.name || r.email || '（無名）';
         var rel = parseFloat(r.released) || 0;
         var slots = parseInt(r.releasedSlots, 10) || 0;
         var prev = parseFloat(r.prevQuota) || 0;
-        var next = (typeof r.nextQuota === 'number') ? r.nextQuota : (prev + rel);
-        return (i + 1) + '. ' + nm + '　釋出 ' + slots + ' 節→＋' + fmtQ(rel)
-          + '　（餘額 ' + fmtQ(prev) + '→' + fmtQ(next) + '）';
+        var already = parseFloat(r.alreadyEarned) || 0;
+        var top = parseFloat(r.topUp) || 0;
+        var next = (typeof r.nextQuota === 'number') ? r.nextQuota : (prev + top);
+        var tail = top > 0
+          ? '　已發＋' + fmtQ(already) + '　本次補發＋' + fmtQ(top)
+          : '　已發＋' + fmtQ(already) + '　已足額略過';
+        return (i + 1) + '. ' + nm + '　釋出 ' + slots + ' 節（應發＋' + fmtQ(rel) + '）'
+          + tail + '　（餘額 ' + fmtQ(prev) + '→' + fmtQ(next) + '）';
       }).join('\n');
       var skipTip = skippedLeaders.length
         ? '\n已排除帶隊 ' + skippedLeaders.length + ' 人：'
           + skippedLeaders.map(function (r) { return r.name || r.email; }).join('、')
         : '';
+      var ledgerTip = ledgerFailed ? '\n（讀不到帳本已發紀錄，本次以全額顯示；後端仍會略過已發者）' : '';
       var ok = await showConfirm(
-        '將寫入「額度帳本」並更新教師名單餘額（同活動不重複）\n'
+        '將寫入「額度帳本」並更新教師名單餘額（只補差額，不重複）\n'
         + '規則：早自習／1～7／午休未上 1 節＝發 1；小鐘點不發額度（未授課另扣）；扣額度須滿 1 才扣 1\n'
          + '空堂事件：' + eventName + '\n'
          + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + ' · '
@@ -470,12 +540,14 @@ const UiMutualPanelState = (() => {
            : (DomainClassAway && DomainClassAway.periodRangeLabel
              ? '連續' + DomainClassAway.periodRangeLabel(mutualActivityStartPeriod.value, mutualActivityEndPeriod.value) : '全部節次')) + '\n'
         + '外出班：' + mutualAwayClasses.value.length + ' 班\n'
-        + '發放 ' + sorted.length + ' 位教師　·　合計釋出 ' + totalSlots + ' 節　·　合計額度 ＋' + fmtQ(totalReleased)
-        + skipTip + '\n\n'
+        + '發放 ' + sorted.length + ' 位教師（本次補發 ' + topUpCount + ' 位）　·　應發 ＋' + fmtQ(totalReleased)
+        + '　·　已發 ＋' + fmtQ(totalEarned) + '　·　本次補發 ＋' + fmtQ(totalTopUp)
+        + skipTip + ledgerTip + '\n\n'
         + '── 全名單 ──\n'
         + listLines + '\n\n'
-        + '合計：' + sorted.length + ' 人／' + totalSlots + ' 節／額度 ＋' + fmtQ(totalReleased) + '\n\n'
-        + '確定發放？\n（若本活動已發放過，將略過已發者）',
+        + '合計：' + sorted.length + ' 人／' + totalSlots + ' 節／應發 ＋' + fmtQ(totalReleased)
+        + '／已發 ＋' + fmtQ(totalEarned) + '／補發 ＋' + fmtQ(totalTopUp) + '\n\n'
+        + '確定發放？\n（已發足額者自動略過，只補差額）',
         '發放折抵額度'
       );
       if (!ok) return;
@@ -483,9 +555,15 @@ const UiMutualPanelState = (() => {
       loadingMessage.value = '計算釋出節數並批次寫入額度帳本（約數秒）…';
       try {
         // 只送有釋出者，減輕 payload
-        var payloadList = changed.map(function (r) {
-          return { email: r.loginEmail || r.email, name: r.name || '', released: r.released };
+        // 只送需補發者，減輕 payload；帳本可讀時帶 forceAdd 寫差額列，讀不到時走後端去重
+        var payloadList = sorted.filter(function (r) { return (parseFloat(r.topUp) || 0) > 0; }).map(function (r) {
+          return { email: r.loginEmail || r.email, name: r.name || '', released: r.topUp };
         });
+        if (!payloadList.length) {
+          showToast('無需補發：每人皆已足額', 'info');
+          loading.value = false;
+          return;
+        }
         loadingMessage.value = '正在批次寫入 ' + payloadList.length + ' 人…';
         var gasCall = (typeof callGasApi === 'function') ? callGasApi : null;
         var res = await gasCall('earnMutualQuotaFromActivity', {
@@ -494,6 +572,7 @@ const UiMutualPanelState = (() => {
           startDate: mutualActivityStart.value,
           endDate: mutualActivityEnd.value,
           mode: 'add',
+          forceAdd: !ledgerFailed,
           list: payloadList
         });
         var earnedN = res && res.earned != null ? res.earned : 0;
@@ -519,7 +598,7 @@ const UiMutualPanelState = (() => {
               });
             });
             var prev = t ? (parseFloat(t.mutualQuota) || 0) : 0;
-            patchLocalMutualQuota(r.email, prev + (src ? (src.released || 0) : 0));
+            patchLocalMutualQuota(r.email, prev + (src ? (parseFloat(src.topUp) || 0) : 0));
           });
         }
         var skipMsg = skippedLeaders.length ? '，帶隊排除 ' + skippedLeaders.length : '';
