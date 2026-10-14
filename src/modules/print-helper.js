@@ -398,17 +398,6 @@ function getOfficialGridLayout() {
   }
 
 
-  const OFFICIAL_DAY_CHARS = ['一', '二', '三', '四', '五'];
-  /** 箭頭中點節次牌：同天顯示「3→6」，跨天加註星期「三3→五6」。 */
-  function officialArrowLabelSpan(x, y, text) {
-    return `<span class="official-exchange-label" style="left:${Number(x.toFixed(2))}%;top:calc(43.43mm + ${Number(y.toFixed(2))}mm)">${escapePrintHtml(text)}</span>`;
-  }
-  function officialPeriodLabel(aDay, aPeriod, bDay, bPeriod, doubleHeaded) {
-    const arrow = doubleHeaded ? '⇄' : '→';
-    if (aDay === bDay) return `${aPeriod}${arrow}${bPeriod}`;
-    const name = i => OFFICIAL_DAY_CHARS[i] || '';
-    return `${name(aDay)}${aPeriod}${arrow}${name(bDay)}${bPeriod}`;
-  }
 
   function getExchangeArrowSvg(group, rows, weekDates) {
   if (!group || !group.isExchange) return '';
@@ -460,20 +449,12 @@ function getOfficialGridLayout() {
       y: from.y + (vector.dy / vector.length) * distance
     };
   };
-  const startBoundary = edgeDistanceFor(start, end).edgeDistance;
-  const endBoundary = edgeDistanceFor(end, start).edgeDistance;
-  const centerDistance = Math.hypot(end.x - start.x, end.y - start.y) || 1;
-  const boundaryGap = Math.max(0, centerDistance - startBoundary - endBoundary);
-  // 相鄰格的雙向箭頭頭部會重疊，短線時將端點收回格內留出清楚間距。
-  const endpointInset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
-  const startEdge = edgePoint(start, end, endpointInset);
-  const endEdge = edgePoint(end, start, endpointInset);
-  // 直線：同天垂直線平移半格、避開置中文字；跨天維持原直線。
+  // 雙箭頭兩端壓在格子正中央（同天另平移半格避開置中文字），一眼看出是哪兩格互調。
   const isSameDay = points[0].dayIndex === points[1].dayIndex;
-  let sx1 = startEdge.x;
-  let sy1 = startEdge.y;
-  let sx2 = endEdge.x;
-  let sy2 = endEdge.y;
+  let sx1 = start.x;
+  let sy1 = start.y;
+  let sx2 = end.x;
+  let sy2 = end.y;
   if (isSameDay) {
     const avgHalfWidth = (start.halfWidth + end.halfWidth) / 2;
     const xOff = Math.min(avgHalfWidth * 0.55, 3.5);
@@ -482,9 +463,7 @@ function getOfficialGridLayout() {
   }
   const markerId = `exchange-arrow-${String(group.requestId || 'route').replace(/[^a-zA-Z0-9_-]+/g, '_')}`;
   const number = value => Number(value.toFixed(2));
-  const label = officialArrowLabelSpan((sx1 + sx2) / 2, (sy1 + sy2) / 2,
-    officialPeriodLabel(points[0].dayIndex, points[0].period, points[1].dayIndex, points[1].period, true));
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>${label}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}<line class="official-exchange-arrow-line" x1="${number(sx1)}" y1="${number(sy1)}" x2="${number(sx2)}" y2="${number(sy2)}" marker-start="url(#${markerId})" marker-end="url(#${markerId})"></line></svg>`;
 }
 
 function getTriangleArrowSvg(group, rows, weekDates) {
@@ -547,16 +526,16 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   if (sameDayLegs.length >= 2) {
     longLeg = sameDayLegs.reduce((a, b) => (Math.abs(b.target.y - b.source.y) > Math.abs(a.target.y - a.source.y) ? b : a));
   }
-  const lines = [];
-  const labels = [];
-  legs.forEach(leg => {
+  const lines = legs.map(leg => {
     const source = leg.source;
     const target = leg.target;
     const sameDay = Math.abs(target.x - source.x) < 1e-9;
-    // 同天分道後各端點已錯開，可讓箭頭起訖貼齊格線；跨天維持原內縮避免箭頭重疊。
-    const inset = sameDay ? 0 : (0.35 + Math.max(0, (5.6 - Math.max(0, (Math.hypot(target.x - source.x, target.y - source.y) || 1) - edgeDistanceFor(source, target).edgeDistance - edgeDistanceFor(target, source).edgeDistance)) / 2));
-    const start = edgePoint(source, target, inset);
-    const end = edgePoint(target, source, inset);
+    // 起訖壓在格子正中央；跨天維持原內縮，箭頭才不會在相鄰格重疊。
+    const srcB = edgeDistanceFor(source, target).edgeDistance;
+    const tgtB = edgeDistanceFor(target, source).edgeDistance;
+    const crossInset = 0.35 + Math.max(0, (5.6 - Math.max(0, ((Math.hypot(target.x - source.x, target.y - source.y) || 1) - srcB - tgtB))) / 2);
+    const start = edgePoint(source, target, sameDay ? srcB : crossInset);
+    const end = edgePoint(target, source, sameDay ? tgtB : crossInset);
     // 直線：同天垂直線左右分道（短腿右、長腿左），跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
@@ -567,12 +546,10 @@ function getTriangleArrowSvg(group, rows, weekDates) {
       x1 += off;
       x2 += off;
     }
-    lines.push(`<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`);
-    labels.push(officialArrowLabelSpan((x1 + x2) / 2, (start.y + end.y) / 2,
-      officialPeriodLabel(leg.sDay, leg.sPeriod, leg.tDay, leg.tPeriod, false)));
+    return `<line class="official-exchange-arrow-line" x1="${number(x1)}" y1="${number(start.y)}" x2="${number(x2)}" y2="${number(end.y)}" marker-end="url(#${markerId})"></line>`;
   });
   if (!lines.length) return '';
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>${labels.join('')}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="official-exchange-overlay" aria-hidden="true" viewBox="0 0 100 ${OFFICIAL_GRID_HEIGHT_MM}" preserveAspectRatio="none">${getOfficialArrowMarkerHtml(markerId)}${lines.join('')}</svg>`;
 }
 
 function generateFormHtml(g, currentType, ctx) {
@@ -1309,7 +1286,6 @@ function getPrintPreviewCss() {
     .official-processing-cell { padding: 0 .8mm !important; font-size: 8.5pt; line-height: 1; }
     .official-leave-row, .official-course-row { height: 4.15mm; }
      .official-leave-row td, .official-course-row td { font-size: 8.3pt; }
-     .official-exchange-label { position: absolute; z-index: 4; transform: translate(-50%, -50%); background: #fff; border: .4pt solid #111827; border-radius: 1mm; padding: 0 1mm; font-size: 7pt; line-height: 1.35; white-space: nowrap; color: #111827; pointer-events: none; }
     .official-label { text-align: center; }
     .official-check-option { text-align: left; white-space: normal; }
     .official-date-cell { text-align: left !important; white-space: nowrap; font-size: 7.4pt !important; line-height: 1.05; padding-left: 1.2mm !important; }
@@ -1588,7 +1564,6 @@ async function printSelectedForms(formType, ctx) {
             .official-section-caption { vertical-align: middle; }
             .official-exchange-overlay { position: absolute; z-index: 3; top: 43.43mm; left: 0; width: 127.265mm; height: 104.8mm; overflow: visible; pointer-events: none; }
             .official-exchange-arrow-line { fill: none; stroke: #111827; stroke-width: 0.25; stroke-linecap: round; }
-             .official-exchange-label { position: absolute; z-index: 4; transform: translate(-50%, -50%); background: #fff; border: 0.4pt solid #111827; border-radius: 1mm; padding: 0 1mm; font-size: 7pt; line-height: 1.35; white-space: nowrap; color: #111827; pointer-events: none; }
           .official-signature-header { text-align: center; font-size: 9pt; }
           .official-signature-cell { text-align: center; font-size: 10pt; line-height: 1.25; }
           .official-signature-name { font-size: 9pt; }

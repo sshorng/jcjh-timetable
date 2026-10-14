@@ -418,7 +418,9 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.ok(closeArrow, '相鄰課節應產生調課箭頭');
   assert.ok(Math.abs(Number(closeArrow[4]) - Number(closeArrow[2])) > 4, '相鄰課節箭頭端點應保留清楚間距');
   assert.equal(Number(closeArrow[1]), Number(closeArrow[3]), '同天調課應為垂直直線');
-  assert.match(closeExchangeOutput, /class="official-exchange-label"[^>]*>3⇄4</, '同天調課箭頭中點應標示節次去向');
+  assert.equal(Number(closeArrow[2]), 32.75, '調課箭頭起點應壓在第3節格子正中央');
+  assert.equal(Number(closeArrow[4]), 45.85, '調課箭頭終點應壓在第4節格子正中央');
+  assert.doesNotMatch(closeExchangeOutput, /official-exchange-label/, '不應再有節次文字牌');
   const exchangePreview = buildPrintPreview(Object.assign({}, fixtureContext, {
     selectedRecordIds: { value: exchange.records.map(record => record.id) },
     substitutionRecords: { value: exchange.records }
@@ -670,8 +672,7 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(triangleOutput, /英文/);
   assert.match(triangleOutput, /class="official-exchange-overlay"/);
   assert.equal((triangleOutput.match(/class="official-exchange-arrow-line"/g) || []).length, 3);
-  assert.equal((triangleOutput.match(/class="official-exchange-label"/g) || []).length, 3, '三角調每條箭頭都應有節次牌');
-  assert.match(triangleOutput, /class="official-exchange-label"[^>]*>[^<]*→[^<]*</, '三角調節次牌應標示去向');
+  assert.doesNotMatch(triangleOutput, /official-exchange-label/, '三角調不應再有節次文字牌');
   assert.match(triangleOutput, /orient="auto-start-reverse"/);
   assert.match(triangleOutput, /fill="none" stroke="#111827" stroke-width="\.25"/);
   assert.equal(getPrintAudienceLabels(triangleGroups[0], fixtureContext).slice(1, 3).join('\n'), '三角調教師：王小明、林小美、陳小華\n實際授課教師：陳小華、王小明、林小美');
