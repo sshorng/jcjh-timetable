@@ -701,12 +701,15 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
       assert.ok(diff < 0.01 || Math.abs(diff - 2.5) < 0.01, `${p} 端點應在中點或避開 2.5mm`);
     });
   });
-  // 同側共用第七節時兩端點必須真的分開，不能疊在一起。
-  const cellSeven = sameDayArrows.flatMap(a => [a[1], a[3]]).filter(y => Math.abs(y - midOf(7)) < 3);
-  assert.equal(new Set(cellSeven).size, cellSeven.length, '共用節次的端點不可重疊');
+  // 端點座標不得完全重合（同側共用節次會沿格線挪開，異側則 x 本就不同）。
+  const points = sameDayArrows.flatMap(a => [a[0] + ',' + a[1], a[2] + ',' + a[3]]);
+  assert.equal(new Set(points).size, points.length, '端點座標不可完全重合');
   // 方向：2→5、5→7 朝下，7→2 朝上。
   assert.ok(sameDayArrows[0][3] > sameDayArrows[0][1], '2→5 應朝下');
   assert.ok(sameDayArrows[1][3] > sameDayArrows[1][1], '5→7 應朝下');
+  // 同方向的線走同一側：兩條朝下的同側，朝上的另一側，箭頭才不會對撞。
+  assert.equal(sameDayArrows[0][0], sameDayArrows[1][0], '同方向的線應在同一側');
+  assert.notEqual(sameDayArrows[2][0], sameDayArrows[0][0], '反方向的線應在另一側');
   assert.ok(sameDayArrows[2][3] < sameDayArrows[2][1], '7→2 應朝上');
 
   const triangleLeaveRecords = triangleRecords.map(record => Object.assign({}, record, { reason: '公假' }));

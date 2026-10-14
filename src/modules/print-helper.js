@@ -527,19 +527,10 @@ function getTriangleArrowSvg(group, rows, weekDates) {
     (leg.tPeriod - 1) * OFFICIAL_GRID_PERIOD_MM - (leg.sPeriod - 1) * OFFICIAL_GRID_PERIOD_MM
   );
   const sameDay = legs.filter(leg => Math.abs(leg.target.x - leg.source.x) < 1e-9);
-  const bySpan = sameDay.slice().sort((a, b) => spanOf(b) - spanOf(a));
+  // 同方向的線走同一側：向下的一組在左、向上的一組在右，箭頭同向就不會互相對撞。
   const lanes = { L: [], R: [] };
-  // 先依跨距大→小挑「與既有線重疊最少」的一側，長線自然被推到外圈、彼此不打架。
-  bySpan.forEach((leg) => {
-    const lo = Math.min(leg.sPeriod, leg.tPeriod);
-    const hi = Math.max(leg.sPeriod, leg.tPeriod);
-    const overlapCount = side => lanes[side].filter(other => {
-      const oLo = Math.min(other.sPeriod, other.tPeriod);
-      const oHi = Math.max(other.sPeriod, other.tPeriod);
-      return lo <= oHi && oLo <= hi;
-    }).length;
-    const side = overlapCount('L') <= overlapCount('R') ? 'L' : 'R';
-    lanes[side].push(leg);
+  sameDay.forEach((leg) => {
+    lanes[leg.tPeriod > leg.sPeriod ? 'L' : 'R'].push(leg);
   });
   const laneOf = new Map();
   const usedPoint = new Set();
