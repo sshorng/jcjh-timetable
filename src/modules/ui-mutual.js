@@ -434,7 +434,7 @@ const UiMutualPanelState = (() => {
       // 本活動帳本已發：逐人加總 earn（事件ID優先、事件名稱備援），本次只補差額
       loading.value = true;
       loadingMessage.value = '讀取額度帳本已發紀錄…';
-      var earnedByEmail = {};
+      var earnedByName = {};
       var ledgerFailed = false;
       try {
         if (typeof fetchMutualQuotaLedger === 'function') {
@@ -453,9 +453,9 @@ const UiMutualPanelState = (() => {
               else return;
               var d = parseFloat(row.delta != null ? row.delta : (row.released != null ? row.released : row['異動']));
               if (isNaN(d) || d <= 0) return;
-              var em = String(row.email || row.loginEmail || row.teacherEmail || row['教師Email'] || '').toLowerCase().trim();
-              if (!em) return;
-              earnedByEmail[em] = Math.round(((earnedByEmail[em] || 0) + d) * 1000) / 1000;
+              var nm = String(row.name != null ? row.name : (row['教師姓名'] || '')).trim();
+              if (!nm) return;
+              earnedByName[nm] = Math.round(((earnedByName[nm] || 0) + d) * 1000) / 1000;
             });
           } else {
             ledgerFailed = true;
@@ -470,11 +470,7 @@ const UiMutualPanelState = (() => {
       }
       changed.forEach(function (r) {
         var total = parseFloat(r.released) || 0;
-        var already = 0;
-        [(r.loginEmail || r.email), r.email].forEach(function (e) {
-          var k = String(e || '').toLowerCase().trim();
-          if (k && earnedByEmail[k]) already = Math.max(already, earnedByEmail[k]);
-        });
+        var already = earnedByName[String(r.name || '').trim()] || 0;
         already = Math.round(already * 1000) / 1000;
         var topUp = ledgerFailed ? total : Math.round(Math.max(0, total - already) * 1000) / 1000;
         r.alreadyEarned = already;
@@ -494,9 +490,6 @@ const UiMutualPanelState = (() => {
         var x = Math.round((parseFloat(n) || 0) * 1000) / 1000;
         return (x % 1 === 0) ? String(x) : String(x);
       };
-      var totalSlots = sorted.reduce(function (sum, r) {
-        return sum + (parseInt(r.releasedSlots, 10) || 0);
-      }, 0);
       var totalEarned = sorted.reduce(function (sum, r) {
         return sum + (parseFloat(r.alreadyEarned) || 0);
       }, 0);
@@ -512,17 +505,14 @@ const UiMutualPanelState = (() => {
       }
       var listLines = sorted.map(function (r, i) {
         var nm = r.name || r.email || '（無名）';
-        var rel = parseFloat(r.released) || 0;
-        var slots = parseInt(r.releasedSlots, 10) || 0;
         var prev = parseFloat(r.prevQuota) || 0;
         var already = parseFloat(r.alreadyEarned) || 0;
         var top = parseFloat(r.topUp) || 0;
         var next = (typeof r.nextQuota === 'number') ? r.nextQuota : (prev + top);
         var tail = top > 0
-          ? '　已發＋' + fmtQ(already) + '　本次補發＋' + fmtQ(top)
-          : '　已發＋' + fmtQ(already) + '　已足額略過';
-        return (i + 1) + '. ' + nm + '　釋出 ' + slots + ' 節（應發＋' + fmtQ(rel) + '）'
-          + tail + '　（餘額 ' + fmtQ(prev) + '→' + fmtQ(next) + '）';
+          ? '補＋' + fmtQ(top) + '（已發' + fmtQ(already) + '／應發' + fmtQ(parseFloat(r.released) || 0) + '，餘額' + fmtQ(prev) + '→' + fmtQ(next) + '）'
+          : '已足額（' + fmtQ(already) + '）';
+        return (i + 1) + '. ' + nm + '　' + tail;
       }).join('\n');
       var skipTip = skippedLeaders.length
         ? '\n已排除帶隊 ' + skippedLeaders.length + ' 人：'
@@ -530,32 +520,19 @@ const UiMutualPanelState = (() => {
         : '';
       var ledgerTip = ledgerFailed ? '\n（讀不到帳本已發紀錄，本次以全額顯示；後端仍會略過已發者）' : '';
       var ok = await showConfirm(
-        '將寫入「額度帳本」並更新教師名單餘額（只補差額，不重複）\n'
-        + '規則：早自習／1～7／午休未上 1 節＝發 1；小鐘點不發額度（未授課另扣）；扣額度須滿 1 才扣 1\n'
-         + '空堂事件：' + eventName + '\n'
-         + '期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + ' · '
-         + (mutualActivityPeriodMode.value === 'daily'
-           ? (DomainClassAway && DomainClassAway.periodLabel
-             ? '每日' + DomainClassAway.periodLabel(mutualActivityPeriods.value) : '每日指定')
-           : (DomainClassAway && DomainClassAway.periodRangeLabel
-             ? '連續' + DomainClassAway.periodRangeLabel(mutualActivityStartPeriod.value, mutualActivityEndPeriod.value) : '全部節次')) + '\n'
-        + '外出班：' + mutualAwayClasses.value.length + ' 班\n'
-        + '發放 ' + sorted.length + ' 位教師（本次補發 ' + topUpCount + ' 位）　·　應發 ＋' + fmtQ(totalReleased)
-        + '　·　已發 ＋' + fmtQ(totalEarned) + '　·　本次補發 ＋' + fmtQ(totalTopUp)
+        '發放折抵額度（只補差額）\n'
+        + '事件：' + eventName + '　期間：' + mutualActivityStart.value + '～' + mutualActivityEnd.value + '\n'
+        + '本次補發 ' + topUpCount + ' 位 ＋' + fmtQ(totalTopUp) + '（已發 ＋' + fmtQ(totalEarned) + '／應發 ＋' + fmtQ(totalReleased) + '）'
         + skipTip + ledgerTip + '\n\n'
-        + '── 全名單 ──\n'
         + listLines + '\n\n'
-        + '合計：' + sorted.length + ' 人／' + totalSlots + ' 節／應發 ＋' + fmtQ(totalReleased)
-        + '／已發 ＋' + fmtQ(totalEarned) + '／補發 ＋' + fmtQ(totalTopUp) + '\n\n'
-        + '確定發放？\n（已發足額者自動略過，只補差額）',
+        + '確定發放？',
         '發放折抵額度'
       );
       if (!ok) return;
       loading.value = true;
       loadingMessage.value = '計算釋出節數並批次寫入額度帳本（約數秒）…';
       try {
-        // 只送有釋出者，減輕 payload
-        // 只送需補發者，減輕 payload；帳本可讀時帶 forceAdd 寫差額列，讀不到時走後端去重
+        // 只送需補發者；帳本可讀時帶 forceAdd 寫差額列，讀不到時走後端去重
         var payloadList = sorted.filter(function (r) { return (parseFloat(r.topUp) || 0) > 0; }).map(function (r) {
           return { email: r.loginEmail || r.email, name: r.name || '', released: r.topUp };
         });
