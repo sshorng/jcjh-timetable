@@ -428,27 +428,6 @@ function getOfficialGridLayout() {
   });
   const start = toPoint(points[0]);
   const end = toPoint(points[1]);
-  const edgeDistanceFor = (from, to) => {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const scaleX = dx ? from.halfWidth / Math.abs(dx) : Infinity;
-    const scaleY = dy ? from.halfHeight / Math.abs(dy) : Infinity;
-    const length = Math.hypot(dx, dy) || 1;
-    return {
-      dx,
-      dy,
-      length,
-      edgeDistance: Math.min(scaleX, scaleY) * length
-    };
-  };
-  const edgePoint = (from, to, inset) => {
-    const vector = edgeDistanceFor(from, to);
-    const distance = Math.max(0, vector.edgeDistance - inset);
-    return {
-      x: from.x + (vector.dx / vector.length) * distance,
-      y: from.y + (vector.dy / vector.length) * distance
-    };
-  };
   // 雙箭頭兩端壓在格子正中央（同天另平移半格避開置中文字），一眼看出是哪兩格互調。
   const isSameDay = points[0].dayIndex === points[1].dayIndex;
   let sx1 = start.x;
