@@ -533,17 +533,15 @@ function getTriangleArrowSvg(group, rows, weekDates) {
   const lines = legs.map(leg => {
     const source = leg.source;
     const target = leg.target;
-    const centerDistance = Math.hypot(target.x - source.x, target.y - source.y) || 1;
-    const sourceBoundary = edgeDistanceFor(source, target).edgeDistance;
-    const targetBoundary = edgeDistanceFor(target, source).edgeDistance;
-    const boundaryGap = Math.max(0, centerDistance - sourceBoundary - targetBoundary);
-    const inset = 0.35 + Math.max(0, (5.6 - boundaryGap) / 2);
+    const sameDay = Math.abs(target.x - source.x) < 1e-9;
+    // 同天分道後各端點已錯開，可讓箭頭起訖貼齊格線；跨天維持原內縮避免箭頭重疊。
+    const inset = sameDay ? 0 : (0.35 + Math.max(0, (5.6 - Math.max(0, (Math.hypot(target.x - source.x, target.y - source.y) || 1) - edgeDistanceFor(source, target).edgeDistance - edgeDistanceFor(target, source).edgeDistance)) / 2));
     const start = edgePoint(source, target, inset);
     const end = edgePoint(target, source, inset);
     // 直線：同天垂直線左右分道（短腿右、長腿左），跨天維持原直線。
     let x1 = start.x;
     let x2 = end.x;
-    if (Math.abs(target.x - source.x) < 1e-9) {
+    if (sameDay) {
       const avgHalfWidth = (source.halfWidth + target.halfWidth) / 2;
       const laneOff = Math.min(avgHalfWidth * 0.55, 3.5);
       const off = sameDayLegs.length >= 2 ? (leg === longLeg ? -laneOff : laneOff) : laneOff;
