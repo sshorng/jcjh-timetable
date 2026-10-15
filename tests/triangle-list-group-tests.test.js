@@ -86,3 +86,10 @@ test('缺腳次資料的三角列排在最後，不會插隊', () => {
   expect(UiListHelpers.triangleLegLabel(group.items[0])).toBe('第2筆');
   expect(UiListHelpers.triangleLegLabel(group.items[1])).toBe('整組');
 });
+
+test('三角子列只顯示「第 N 筆」徽章，且不會多印「代課」', () => {
+  expect(appSource).not.toMatch(/triangleLegLabel\([^)]*\) \/ 共 3 筆/);
+  expect(appSource).not.toMatch(/共 3 筆<\/span>/);
+  expect((appSource.match(/\{\{ triangleLegLabel\((row|req)\) \}\}/g) || []).length).toBe(4);
+  expect(appSource).toMatch(/v-if="row\.type !== 'triangle' && row\.type !== 'exchange'">代課/);
+});

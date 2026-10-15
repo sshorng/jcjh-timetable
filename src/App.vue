@@ -1002,9 +1002,9 @@
                       <td>
                         <div class="flex-wrap-gap">
                             <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
-                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" :title="'三角調整組，共 3 筆輪替（每一位教師各一筆）'">{{ triangleLegLabel(row) }}／共 3 筆</span>
+                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替（每一位教師各一筆）">{{ triangleLegLabel(row) }}</span>
                             <span class="status-badge tag-blue" v-if="row.type === 'exchange'">調課</span>
-                            <span class="status-badge tag-red" v-else>代課</span>
+                            <span class="status-badge tag-red" v-if="row.type !== 'triangle' && row.type !== 'exchange'">代課</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag" :class="'risk-'+tag.key">{{ tag.label }}</span>
                           <span
                              v-for="rf in getApproveRiskFlags(row).filter(f => (f.level === 'warn' || f.level === 'danger') && f.key !== 'chain')"
@@ -1133,7 +1133,7 @@
                          <span class="status-badge tag-blue" v-else-if="req.type === 'exchange'">調課</span>
                          <span class="status-badge tag-red" v-else>代課</span>
                          <span v-if="req.batchId && req.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次可全部同意">批次</span>
-                         <span v-if="req.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(req) }}／共 3 筆</span>
+                         <span v-if="req.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(req) }}</span>
                         <span v-for="tag in getRequestTypeTags(req)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
                       </div>
                     </td>
@@ -1248,7 +1248,7 @@
                             <span class="status-badge tag-blue" v-else-if="row.type === 'exchange'">調課</span>
                             <span class="status-badge tag-red" v-else>代課</span>
                             <span v-if="row.batchId && row.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次">批次</span>
-                            <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(row) }}／共 3 筆</span>
+                            <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(row) }}</span>
                           <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
                         </div>
                       </td>
@@ -1492,7 +1492,7 @@
                           <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
                           <span class="status-badge tag-blue" v-else-if="isHistoryExchangeType(row)">調課</span>
                           <span class="status-badge tag-red" v-else>代課</span>
-                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替">{{ triangleLegLabel(row) }}／共 3 筆</span>
+                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替">{{ triangleLegLabel(row) }}</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag risk-tag-xs" :class="'risk-'+tag.key">{{ tag.label }}</span>
                         </div>
                       </td>
