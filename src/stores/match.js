@@ -186,6 +186,107 @@ const getMatchApi = () => {
       }
       return '';
     };
+    // 互代模式：找人代課清單顯示「該空堂事件」額度（而非總額度），與送出扣包一致。
+    const eventQuotaByName = ref({});
+    const eventQuotaEventId = ref('');
+    const eventQuotaLoading = ref(false);
+    let _eventQuotaSig = '';
+    let _eventQuotaReq = 0;
+    const refreshMutualEventQuotas = async () => {
+      const myReq = ++_eventQuotaReq;
+      const tourRefs = storeToRefs(useTourStore());
+      const mutualRefs = storeToRefs(useMutualStore());
+      const sessionRefs = storeToRefs(useSessionStore());
+      try {
+        const isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
+        const eventId = (isMutual && mutualRefs.mutualImportEventId)
+          ? String(mutualRefs.mutualImportEventId.value || '').trim()
+          : '';
+        const list = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
+        if (!isMutual || !eventId) {
+          _eventQuotaSig = '';
+          if (eventQuotaEventId.value || Object.keys(eventQuotaByName.value).length) {
+            eventQuotaEventId.value = '';
+            eventQuotaByName.value = {};
+          }
+          let stripped = false;
+          const cleaned = list.map((t) => {
+            if (t && (typeof t.eventQuotaRemaining !== 'undefined' || typeof t.eventQuotaPackageId !== 'undefined')) {
+              stripped = true;
+              const c = Object.assign({}, t);
+              delete c.eventQuotaRemaining;
+              delete c.eventQuotaPackageId;
+              return c;
+            }
+            return t;
+          });
+          if (stripped) tourRefs.recommendedTeachers.value = cleaned;
+          return;
+        }
+        const names = [];
+        const seen = {};
+        list.forEach((t) => {
+          const nm = String((t && (t.name || t.teacherName)) || '').trim();
+          if (nm && !seen[nm]) { seen[nm] = true; names.push(nm); }
+        });
+        if (!names.length) return;
+        const sig = eventId + '|' + names.slice(0, 60).join(',');
+        if (sig === _eventQuotaSig) return;
+        _eventQuotaSig = sig;
+        eventQuotaLoading.value = true;
+        let preview = [];
+        try {
+          const res = await useGasStore().fetchQuotaSpendPreview({ names: names.slice(0, 60) });
+          preview = (res && res.preview) || [];
+        } catch (ePrev) { preview = []; }
+        if (myReq !== _eventQuotaReq) return;
+        let eventName = '';
+        try {
+          const evs = (sessionRefs.classAwayEvents && sessionRefs.classAwayEvents.value) || [];
+          for (let i = 0; i < evs.length; i++) {
+            if (String((evs[i] && evs[i].id) || '') === eventId) { eventName = String(evs[i].name || '').trim(); break; }
+          }
+        } catch (eEv) { /* ignore */ }
+        const byName = {};
+        (preview || []).forEach((p) => { if (p && p.name) byName[String(p.name)] = p; });
+        const quotaDeductFee = useTourStore().QUOTA_DEDUCT_FEE;
+        const activityPublicFee = useTourStore().ACTIVITY_PUBLIC_FEE;
+        const map = {};
+        names.forEach((nm) => {
+          const pv = byName[nm] || null;
+          const packs = (pv && pv.packs) || [];
+          let hit = null;
+          for (let k = 0; k < packs.length; k++) {
+            if (String(packs[k].eventId || '') === eventId) { hit = packs[k]; break; }
+          }
+          if (!hit && eventName) {
+            for (let k = 0; k < packs.length; k++) {
+              if (String(packs[k].eventName || '') === eventName) { hit = packs[k]; break; }
+            }
+          }
+          map[nm] = hit
+            ? { remaining: Math.max(0, Math.round((parseFloat(hit.remaining) || 0) * 1000) / 1000), packageId: hit.packageId || '' }
+            : { remaining: 0, packageId: '' };
+        });
+        eventQuotaEventId.value = eventId;
+        eventQuotaByName.value = map;
+        const cur = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
+        const patched = cur.map((t) => {
+          const nm = String((t && (t.name || t.teacherName)) || '').trim();
+          const hit = (nm && map[nm]) || null;
+          if (!hit) return t;
+          const pending = parseFloat(t.pendingDraft) || 0;
+          const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
+          if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
+          const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
+          if (!c.isPeriod8) c.suggestedFee = net >= 1 ? quotaDeductFee : activityPublicFee;
+          return c;
+        });
+        tourRefs.recommendedTeachers.value = patched;
+      } finally {
+        if (myReq === _eventQuotaReq) eventQuotaLoading.value = false;
+      }
+    };
     function initImmediateMatch1() {
     watch(storeToRefs(useMutualStore()).pendingRequestData, (pending) => {
       if (pending && pending.mode === 'exchange') {
@@ -206,6 +307,13 @@ const getMatchApi = () => {
       }
       if (pending && pending.isBatch) storeToRefs(useDataStore()).batchCompareWeekIndex.value = 0;
     });
+    const _tourRefs = storeToRefs(useTourStore());
+    const _mutualRefs = storeToRefs(useMutualStore());
+    watch(() => [
+      _tourRefs.recommendedTeachers.value,
+      _tourRefs.isMutualCover.value,
+      _mutualRefs.mutualImportEventId.value
+    ], () => { refreshMutualEventQuotas(); });
     }
-  return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
+  return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, eventQuotaByName, eventQuotaEventId, eventQuotaLoading, refreshMutualEventQuotas, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
 });

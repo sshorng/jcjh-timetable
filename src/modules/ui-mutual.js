@@ -640,6 +640,12 @@ const UiMutualPanelState = (() => {
 
     function assignMutualDraftFromMatch(subEmail) {
       if (!isMutualCover.value || !subEmail) return;
+      try {
+        if (typeof getMutualImportEventId === 'function' && !String(getMutualImportEventId() || '').trim()) {
+          showToast('請先選擇一個空堂事件，才能暫定', 'warning');
+          return;
+        }
+      } catch (eEv) { /* ignore */ }
       var leaveEmail = activeCell.value && activeCell.value.teacherEmail;
       if (!leaveEmail) {
         showToast('請先點選帶隊老師的課格', 'info');
@@ -660,6 +666,10 @@ const UiMutualPanelState = (() => {
       if (!cand && dac) {
         var bal = dac.getTeacherReleaseBalance(subEmail, activityBalanceCtx());
         cand = { email: subEmail, remainingReleased: bal.remaining };
+      }
+      // 已選空堂事件時，暫定經費以「該事件額度」判斷（與清單顯示、送出扣包一致）
+      if (cand && typeof cand.eventQuotaRemaining === 'number') {
+        cand = Object.assign({}, cand, { remainingReleased: cand.eventQuotaRemaining });
       }
       var fee = dac
         ? dac.feeFromCandidate(cand, true, period)
@@ -750,9 +760,10 @@ const UiMutualSubmit = (() => {
     var deductMutualQuotaForRows = deps.deductMutualQuotaForRows;
     var softRefreshInBackground = deps.softRefreshInBackground;
     var persistMutualPanelDraft = deps.persistMutualPanelDraft;
+    var getMutualImportEventId = deps.getMutualImportEventId;
     var activityBalanceCtx = deps.activityBalanceCtx;
-
-
+    var classAwayEventsRef = deps.classAwayEvents;
+    var fetchQuotaSpendPreview = deps.fetchQuotaSpendPreview;
     var PERIOD8_FEE = deps.PERIOD8_FEE;
     var ACTIVITY_PUBLIC_FEE = deps.ACTIVITY_PUBLIC_FEE;
     var successModalTitle = deps.successModalTitle;
@@ -764,6 +775,30 @@ const UiMutualSubmit = (() => {
     var buildLineBatchInviteText = deps.buildLineBatchInviteText;
     var DAC = deps.DAC || function () { return DomainActivityCover; };
     var isSubmitting = deps.isSubmitting;
+    // 活動互代強制綁定空堂事件：未選事件不可送出（日期／節次由事件帶入）
+    var spendEventId = '';
+    try {
+      if (typeof getMutualImportEventId === 'function') spendEventId = String(getMutualImportEventId() || '').trim();
+      else if (getMutualImportEventId && getMutualImportEventId.value) spendEventId = String(getMutualImportEventId.value || '').trim();
+    } catch (eEid) { spendEventId = ''; }
+    if (!spendEventId) {
+      showToast('請先選擇一個空堂事件，才能送出', 'warning');
+      return;
+    }
+    var spendEventName = '';
+    try {
+      var __evList = [];
+      if (classAwayEventsRef) {
+        if (Array.isArray(classAwayEventsRef)) __evList = classAwayEventsRef;
+        else if (Array.isArray(classAwayEventsRef.value)) __evList = classAwayEventsRef.value;
+      }
+      for (var __ei = 0; __ei < __evList.length; __ei++) {
+        if (String(__evList[__ei] && __evList[__ei].id || '') === spendEventId) {
+          spendEventName = String(__evList[__ei].name || '').trim();
+          break;
+        }
+      }
+    } catch (eEvName) { /* ignore */ }
 
     if (deps.paperMode && deps.paperMode.value && isMutualCover.value && !(isAdmin && isAdmin.value)) {
       hasLineTemplate.value = false;
@@ -820,12 +855,22 @@ const UiMutualSubmit = (() => {
         '一次送出暫定'
       );
       if (!ok) return;
-      loadingMessage.value = '正在送出 ' + total + ' 節暫定…';
-      for (var g = 0; g < leaveGroups.length; g++) {
-        var group = leaveGroups[g];
-        for (var offset = 0; offset < group.length; offset += 20) {
-          var chunk = group.slice(offset, offset + 20);
-          var workSlots = chunk.map(function (d) {
+      // 先規劃全部列（算出最終經費），再鎖定「該空堂事件」的包；不足就整批擋下，不跳到別的包
+      var __isDeductFee = function (f) {
+        try {
+          var __dd = DAC();
+          if (__dd && __dd.isQuotaDeductFee) return __dd.isQuotaDeductFee(f);
+        } catch (eD) {}
+        var __fs = String(f || '');
+        return __fs === '扣額度' || __fs === '互代不結';
+      };
+      loadingMessage.value = '正在規劃 ' + total + ' 節暫定…';
+      var __planned = [];
+      for (var __g = 0; __g < leaveGroups.length; __g++) {
+        var __group = leaveGroups[__g];
+        for (var __off = 0; __off < __group.length; __off += 20) {
+          var __chunk = __group.slice(__off, __off + 20);
+          var __workSlots = __chunk.map(function (d) {
             return {
               teacherEmail: d.leaveEmail,
               dateStr: d.dateStr,
@@ -838,28 +883,27 @@ const UiMutualSubmit = (() => {
               fee: d.fee
             };
           });
-          var feeAssigns = null;
-          var dac = DAC();
-          if (dac && dac.assignFeesForBatchSlots) {
-            feeAssigns = dac.assignFeesForBatchSlots(
-              workSlots,
+          var __feeAssigns = null;
+          var __dac = DAC();
+          if (__dac && __dac.assignFeesForBatchSlots) {
+            __feeAssigns = __dac.assignFeesForBatchSlots(
+              __workSlots,
               activityBalanceCtx({ pendingDrafts: [] })
             );
           }
-          var batchId = 'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-          var leaveName = chunk[0].leaveName;
-          var stamp = Date.now();
-          var serialRoot = 'SUB' + (1000 + Math.floor(Math.random() * 9000));
-          var rows = workSlots.map(function (s, i) {
-            var base = String(note || '').trim();
-           var noteOut = base;
+          var __batchId = 'bat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+          var __leaveName = __chunk[0].leaveName;
+          var __stamp = Date.now();
+          var __serialRoot = 'SUB' + (1000 + Math.floor(Math.random() * 9000));
+          var __rows = __workSlots.map(function (s, i) {
+            var __base = String(note || '').trim();
             return {
               "學期代號": currentSemester.value,
-              "申請單ID": 'req_' + stamp + '_' + i + '_' + Math.random().toString(36).substr(2, 5),
-              "單號": serialRoot + '-' + (offset + i + 1),
-              "批次ID": batchId,
+              "申請單ID": 'req_' + __stamp + '_' + i + '_' + Math.random().toString(36).substr(2, 5),
+              "單號": __serialRoot + '-' + (__off + i + 1),
+              "批次ID": __batchId,
               "異動類型": 'substitution',
-              "申請人姓名": leaveName,
+              "申請人姓名": __leaveName,
               "受邀人姓名": s.subTeacherName,
               "異動日期": s.dateStr,
               "異動節次": s.period,
@@ -867,32 +911,111 @@ const UiMutualSubmit = (() => {
               "班級": s.className,
               "科目": s.subject,
               "請假事由": reason,
-              "經費來源": (feeAssigns && feeAssigns[i])
-                ? feeAssigns[i].fee
+              "經費來源": (__feeAssigns && __feeAssigns[i])
+                ? __feeAssigns[i].fee
                 : (s.fee || (parseInt(s.period, 10) === 8 ? PERIOD8_FEE : ACTIVITY_PUBLIC_FEE)),
-               "備註": noteOut,
-               "狀態": (isAdmin.value && directApproveMode.value) ? 'approved' : 'pending_teacher',
-               "直接核准": (isAdmin.value && directApproveMode.value) ? '是' : '',
-               "是否已印": false,
+              "備註": __base,
+              "狀態": (isAdmin.value && directApproveMode.value) ? 'approved' : 'pending_teacher',
+              "直接核准": (isAdmin.value && directApproveMode.value) ? '是' : '',
+              "是否已印": false,
               "建立時間": '',
               directApprove: !!(isAdmin.value && directApproveMode.value)
             };
           });
-          await callGasApi('submitRequestBatch', {
-            batchId: batchId,
-            directApprove: !!(isAdmin.value && directApproveMode.value),
-            skipNotify: !!(
-              mutualSkipNotify.value
-              || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && isAdmin.value)
-            ),
-            requests: rows
-          });
-          rows.forEach(function (r) {
-            optimisticUpsertRequest(sheetRequestToFront(r));
-          });
-          await deductMutualQuotaForRows(rows);
-          for (var ri = 0; ri < rows.length; ri++) allRows.push(rows[ri]);
+          __planned.push({ batchId: __batchId, rows: __rows });
         }
+      }
+      var __needByName = {};
+      __planned.forEach(function (p) {
+        (p.rows || []).forEach(function (r) {
+          if (!__isDeductFee(r['經費來源'])) return;
+          var __nm = String(r['受邀人姓名'] || '').trim();
+          if (!__nm) return;
+          __needByName[__nm] = (__needByName[__nm] || 0) + 1;
+        });
+      });
+      var __packByName = {};
+      var __needNames = Object.keys(__needByName);
+      if (__needNames.length) {
+        loadingMessage.value = '正在鎖定「' + (spendEventName || spendEventId) + '」額度包…';
+        var __preview = [];
+        try {
+          if (typeof fetchQuotaSpendPreview === 'function') {
+            var __res = await fetchQuotaSpendPreview({ names: __needNames });
+            __preview = (__res && __res.preview) || [];
+          } else {
+            var __res2 = await callGasApi('getQuotaSpendPreview', { names: __needNames });
+            __preview = (__res2 && __res2.preview) || [];
+          }
+        } catch (ePrev) {
+          throw new Error('讀取額度包失敗：' + (ePrev && ePrev.message ? ePrev.message : String(ePrev)));
+        }
+        var __previewByName = {};
+        (__preview || []).forEach(function (p) {
+          if (p && p.name) __previewByName[String(p.name)] = p;
+        });
+        var __blocked = [];
+        __needNames.forEach(function (__nm2) {
+          var __pv = __previewByName[__nm2] || null;
+          var __packs = (__pv && __pv.packs) || [];
+          var __hit = null;
+          var __k;
+          for (__k = 0; __k < __packs.length; __k++) {
+            if (spendEventId && String(__packs[__k].eventId || '') === spendEventId) { __hit = __packs[__k]; break; }
+          }
+          if (!__hit && spendEventName) {
+            for (__k = 0; __k < __packs.length; __k++) {
+              if (String(__packs[__k].eventName || '') === spendEventName) { __hit = __packs[__k]; break; }
+            }
+          }
+          var __need = __needByName[__nm2] || 0;
+          if (!__hit) {
+            __blocked.push(__nm2 + '在此事件無額度包（需' + __need + '節）');
+            return;
+          }
+          if (Math.floor(parseFloat(__hit.remaining) || 0) < __need) {
+            __blocked.push(__nm2 + '在此事件僅剩' + (__hit.remaining || 0) + '（需' + __need + '節）');
+            return;
+          }
+          __packByName[__nm2] = __hit;
+        });
+        if (__blocked.length) {
+          showToast('以下老師在「' + (spendEventName || spendEventId) + '」額度不足，已整批擋下（不會扣到別的事件）：\n' + __blocked.join('\n'), 'error');
+          throw new Error('event_pack_blocked:' + __blocked.join('、'));
+        }
+        __planned.forEach(function (p) {
+          (p.rows || []).forEach(function (r) {
+            if (!__isDeductFee(r['經費來源'])) return;
+            var __nm3 = String(r['受邀人姓名'] || '').trim();
+            var __hit3 = __packByName[__nm3] || null;
+            if (!__hit3) return;
+            r.quotaPackageId = __hit3.packageId;
+            r['指定包ID'] = __hit3.packageId;
+            r.quotaEventId = spendEventId;
+            r['指定事件ID'] = spendEventId;
+            r.quotaEventName = spendEventName;
+            r['指定事件名稱'] = spendEventName;
+          });
+        });
+      }
+      loadingMessage.value = '正在送出 ' + total + ' 節暫定…';
+      for (var g = 0; g < __planned.length; g++) {
+        var rows = __planned[g].rows;
+        var batchId = __planned[g].batchId;
+        await callGasApi('submitRequestBatch', {
+          batchId: batchId,
+          directApprove: !!(isAdmin.value && directApproveMode.value),
+          skipNotify: !!(
+            mutualSkipNotify.value
+            || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && isAdmin.value)
+          ),
+          requests: rows
+        });
+        rows.forEach(function (r) {
+          optimisticUpsertRequest(sheetRequestToFront(r));
+        });
+        await deductMutualQuotaForRows(rows);
+        for (var ri = 0; ri < rows.length; ri++) allRows.push(rows[ri]);
       }
       softRefreshInBackground({ delay: 2000 });
       mutualDrafts.value = [];
@@ -956,7 +1079,7 @@ const UiMutualSubmit = (() => {
       showSuccessModal.value = true;
     } catch (err) {
       console.error(err);
-      showToast('送出暫定失敗：' + (err && err.message ? err.message : String(err)), 'error');
+      if (!err || String((err && err.message) || err).indexOf('event_pack_blocked:') !== 0) showToast('送出暫定失敗：' + (err && err.message ? err.message : String(err)), 'error');
     } finally {
       loading.value = false;
       if (isSubmitting) isSubmitting.value = false;

@@ -356,7 +356,7 @@
                </div>
               <div v-if="isAdmin && isMutualCover" class="batch-hint-bar mutual-away-panel">
                 <div class="mutual-panel-head">
-                   <div class="mutual-panel-title">🔁 活動互代：設日期／節次 → 選外出班 → 媒合優先「釋出空堂」</div>
+                   <div class="mutual-panel-title">🔁 活動互代：選空堂事件 → 選外出班 → 媒合優先「釋出空堂」</div>
                   <button type="button" class="btn btn-secondary mutual-btn-clear" @click="clearMutualPanel" title="清空外出班、帶隊、暫定、備註；期間改回本週">
                     🗑️ 一鍵清空
                   </button>
@@ -364,61 +364,29 @@
                 <div class="mutual-panel-lead">
                   釋出空堂去代 → <strong>扣額度</strong>；本來就空堂去代 → <strong>活動公費</strong>（可領費）；請假老師<strong>一律不扣</strong>鐘點。
                 </div>
-                <div class="flex-wrap-gap-8-mb">
-                  <label class="label-inline-date">
-                    起日
-                    <input type="date" class="form-control form-date-xs" v-model="mutualActivityStart">
-                  </label>
-                  <label class="label-inline-date">
-                    迄日
-                    <input type="date" class="form-control form-date-xs" v-model="mutualActivityEnd">
-                  </label>
-                  <label class="label-inline-date">
-                    節次模式
-                    <select class="form-select" style="min-width:104px;padding:4px 7px;" v-model="mutualActivityPeriodMode" @change="setMutualActivityPeriodMode(mutualActivityPeriodMode)">
-                      <option value="daily">每日指定</option>
-                      <option value="range">連續起迄</option>
-                    </select>
-                  </label>
-                  <template v-if="mutualActivityPeriodMode === 'daily'">
-                    <span style="font-size:0.75rem;color:var(--text-secondary);">每天適用：</span>
-                    <button type="button" class="btn btn-secondary btn-xs" :class="{ 'btn-success': isMutualActivityPeriodSelected('all') }" @click="toggleMutualActivityPeriod('all')">全部</button>
-                    <button v-for="option in classAwayPeriodOptions" :key="'mutual-daily-'+option.value" type="button" class="btn btn-secondary btn-xs" :class="{ 'btn-success': isMutualActivityPeriodSelected(option.value) }" @click="toggleMutualActivityPeriod(option.value)">{{ option.label }}</button>
-                  </template>
-                  <template v-else>
-                  <label class="label-inline-date">
-                    起點節次
-                    <select class="form-select" style="min-width:104px;padding:4px 7px;" v-model="mutualActivityStartPeriod" @change="setMutualActivityPeriodBoundary('start', mutualActivityStartPeriod)">
-                      <option v-for="option in classAwayPeriodOptions" :key="'mutual-start-'+option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
-                  </label>
-                  <label class="label-inline-date">
-                    終點節次
-                    <select class="form-select" style="min-width:104px;padding:4px 7px;" v-model="mutualActivityEndPeriod" @change="setMutualActivityPeriodBoundary('end', mutualActivityEndPeriod)">
-                      <option v-for="option in classAwayPeriodOptions" :key="'mutual-end-'+option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
-                  </label>
-                  </template>
-                  <button type="button" class="btn btn-secondary btn-xs" @click="setMutualActivityThisWeek">本週</button>
-                   <span class="text-mutual-hint">期間：{{ mutualCoverStats.rangeLabel || '未設定' }}（{{ mutualCoverStats.rangeDays || 0 }} 天）</span>
-                </div>
-                <div v-if="mutualImportableEvents.length" class="mutual-import-row">
+                <div class="mutual-import-row">
                   <label class="mutual-import-label">
-                    <span class="mutual-import-label-text">空堂事件</span>
+                    <span class="mutual-import-label-text">空堂事件（必填）</span>
                     <select
                       class="form-select mutual-import-select"
                       :value="mutualImportEventId"
                       @change="applyClassAwayEventById($event.target.value)"
                     >
-                       <option value="">請選擇事件，自動帶入日期與班級</option>
+                       <option value="">請先選擇一個空堂事件（必填）</option>
                       <option v-for="ev in mutualImportableEvents" :key="'imp-'+ev.id" :value="ev.id">
                          {{ ev.name }}（{{ ev.startDate }}～{{ ev.endDate || '學期結束' }} · {{ classAwayPeriodLabel(ev) }} · {{ (ev.classes || []).length }} 班）
                       </option>
                     </select>
                   </label>
                 </div>
-                <div v-else class="mutual-hint-soft">
+                <div v-if="!mutualImportableEvents.length" class="mutual-hint-soft">
                   尚無可進互代的空堂事件（後台「空堂事件」請勾可進互代）
+                </div>
+                <div v-else-if="!mutualImportEventId" class="mutual-hint-soft" style="color:#b91c1c;">
+                  請先選擇一個空堂事件，才能暫定與送出；日期與節次由事件帶入，不可自選。
+                </div>
+                <div v-else class="flex-wrap-gap-8-mb">
+                   <span class="text-mutual-hint">期間：{{ mutualCoverStats.rangeLabel || '未設定' }}（{{ mutualCoverStats.rangeDays || 0 }} 天）· 由空堂事件帶入，不可自選</span>
                 </div>
                 <div class="form-group mb-8">
                   <label class="form-label mutual-note-label">統一備註（寫入本批每筆申請）</label>
@@ -523,7 +491,7 @@
                   <div v-if="mutualDrafts.length" class="mutual-drafts-block">
                     <div class="mutual-drafts-head">
                       <strong class="text-violet-deep">暫定安排 {{ mutualDrafts.length }} 節</strong>
-                        <button v-if="!paperMode || isAdmin" type="button" class="btn btn-success mutual-btn-submit" :disabled="isSubmitting || loading" @click="submitAllMutualDrafts">
+                        <button v-if="!paperMode || isAdmin" type="button" class="btn btn-success mutual-btn-submit" :disabled="isSubmitting || loading || !mutualImportEventId" :title="!mutualImportEventId ? '請先選擇一個空堂事件' : ''" @click="submitAllMutualDrafts">
                          {{ (isSubmitting || loading) ? '送出中…' : '🚀 一次送出全部暫定' }}
                        </button>
                        <button v-else type="button" class="btn btn-primary mutual-btn-submit" :disabled="isSubmitting || loading" @click="openPaperPrintMutualDrafts">🖨️ 列印紙本單</button>

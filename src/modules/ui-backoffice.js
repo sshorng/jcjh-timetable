@@ -84,6 +84,10 @@ const UiBackoffice = (() => {
     var successFlowMode = deps.successFlowMode;
     var notificationsSuppressed = deps.notificationsSuppressed;
     var openPaperPrintMutualDrafts = deps.openPaperPrintMutualDrafts;
+    var getMutualImportEventIdFn = deps.getMutualImportEventId;
+    var mutualImportEventIdRef = deps.mutualImportEventId;
+    var classAwayEventsRef = deps.classAwayEvents;
+    var fetchQuotaSpendPreviewFn = deps.fetchQuotaSpendPreview;
     var getMutualPanelApi = deps.getMutualPanelApi;
     var userRole = deps.userRole;
     var allSchedules = deps.allSchedules;
@@ -457,7 +461,16 @@ const submitAllMutualDrafts = async () => {
     PERIOD8_FEE, ACTIVITY_PUBLIC_FEE, successModalTitle, successModalMessage,
      hasLineTemplate, lineBatchParts, lineCopyText, showSuccessModal, buildLineBatchInviteText, DAC,
       successFlowMode, paperMode, notificationsSuppressed,
-     openPaperPrintMutualDrafts: function () { return openPaperPrintMutualDrafts(); }
+     openPaperPrintMutualDrafts: function () { return openPaperPrintMutualDrafts(); },
+     getMutualImportEventId: function () {
+       try {
+         if (typeof getMutualImportEventIdFn === 'function') return getMutualImportEventIdFn();
+         if (mutualImportEventIdRef && mutualImportEventIdRef.value) return mutualImportEventIdRef.value;
+       } catch (e) {}
+       return '';
+     },
+     classAwayEvents: classAwayEventsRef,
+     fetchQuotaSpendPreview: fetchQuotaSpendPreviewFn
    });
 };
 

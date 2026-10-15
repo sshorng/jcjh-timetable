@@ -201,11 +201,14 @@ const filteredRecommendedTeachers = computed(() => {
   if (q) {
     list = list.filter(t => t.name.toLowerCase().includes(q) || (t.subject || '').toLowerCase().includes(q));
   }
-  // 活動互代：額度多／有釋出優先（搜尋後仍維持）
+  // 活動互代：額度多／有釋出優先（搜尋後仍維持；已選空堂事件時以該事件額度排序）
   if (isMutualCover.value) {
+    const quotaOf = (t) => (t && typeof t.eventQuotaRemaining === 'number')
+      ? t.eventQuotaRemaining
+      : (typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0));
     list.sort((a, b) => {
-      const qa = typeof a.remainingReleased === 'number' ? a.remainingReleased : (a.mutualQuota || 0);
-      const qb = typeof b.remainingReleased === 'number' ? b.remainingReleased : (b.mutualQuota || 0);
+      const qa = quotaOf(a);
+      const qb = quotaOf(b);
       if (qb !== qa) return qb - qa;
       const ra = a.isReleasedByAway ? 1 : 0;
       const rb = b.isReleasedByAway ? 1 : 0;
