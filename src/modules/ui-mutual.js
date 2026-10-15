@@ -847,9 +847,11 @@ const UiMutualSubmit = (() => {
     var total = mutualDrafts.value.length;
     var allRows = [];
     try {
+      var __p8DraftCount = mutualDrafts.value.filter(function (d) { return parseInt(d.period, 10) === 8; }).length;
       var ok = await showConfirm(
         '將一次送出 ' + total + ' 節暫定安排（' + leaveGroups.length + ' 位帶隊老師）\n'
         + (note ? '統一備註：' + note + '\n' : '')
+        + (__p8DraftCount ? '其中第8節 ' + __p8DraftCount + ' 節將送待核准（不直接核准）。\n' : '')
         + (mutualSkipNotify.value ? '不會寄系統信，請稍後用 LINE 手動通知。\n' : '')
         + '確定送出？',
         '一次送出暫定'
@@ -897,6 +899,9 @@ const UiMutualSubmit = (() => {
           var __serialRoot = 'SUB' + (1000 + Math.floor(Math.random() * 9000));
           var __rows = __workSlots.map(function (s, i) {
             var __base = String(note || '').trim();
+            // 第8節不直接核准：先送待核准區；1～7節維持直接核准
+            var __isP8Row = parseInt(s.period, 10) === 8;
+            var __canDirectRow = !!(isAdmin.value && directApproveMode.value) && !__isP8Row;
             return {
               "學期代號": currentSemester.value,
               "申請單ID": 'req_' + __stamp + '_' + i + '_' + Math.random().toString(36).substr(2, 5),
@@ -915,14 +920,24 @@ const UiMutualSubmit = (() => {
                 ? __feeAssigns[i].fee
                 : (s.fee || (parseInt(s.period, 10) === 8 ? PERIOD8_FEE : ACTIVITY_PUBLIC_FEE)),
               "備註": __base,
-              "狀態": (isAdmin.value && directApproveMode.value) ? 'approved' : 'pending_teacher',
-              "直接核准": (isAdmin.value && directApproveMode.value) ? '是' : '',
+              "狀態": __canDirectRow ? 'approved' : 'pending_teacher',
+              "直接核准": __canDirectRow ? '是' : '',
               "是否已印": false,
               "建立時間": '',
-              directApprove: !!(isAdmin.value && directApproveMode.value)
+              directApprove: __canDirectRow
             };
           });
-          __planned.push({ batchId: __batchId, rows: __rows });
+          // 直接核准與待核准不可同批次（後端以整批 directApprove 裁定狀態）：第8節獨立成批
+          var __directRows = __rows.filter(function (r) { return !!r.directApprove; });
+          var __pendingRows = __rows.filter(function (r) { return !r.directApprove; });
+          if (__directRows.length && __pendingRows.length) {
+            var __p8BatchId = __batchId + '_p8';
+            __pendingRows.forEach(function (r) { r['批次ID'] = __p8BatchId; });
+            __planned.push({ batchId: __batchId, rows: __directRows });
+            __planned.push({ batchId: __p8BatchId, rows: __pendingRows });
+          } else {
+            __planned.push({ batchId: __batchId, rows: __rows });
+          }
         }
       }
       var __needByName = {};
@@ -1004,7 +1019,8 @@ const UiMutualSubmit = (() => {
         var batchId = __planned[g].batchId;
         await callGasApi('submitRequestBatch', {
           batchId: batchId,
-          directApprove: !!(isAdmin.value && directApproveMode.value),
+          // 依本批實際內容決定：含第8節的批一律走待核准（後端亦以此旗標逐列裁定）
+          directApprove: rows.length > 0 && rows.every(function (r) { return !!r.directApprove; }),
           skipNotify: !!(
             mutualSkipNotify.value
             || (deps.notificationsSuppressed && deps.notificationsSuppressed.value && isAdmin.value)
@@ -1030,10 +1046,12 @@ const UiMutualSubmit = (() => {
         return f + ' ' + feeKinds[f] + '節';
       }).join('、');
       successModalTitle.value = '🎉 暫定已全部送出';
+      var __pendingCount = allRows.filter(function (r) { return !r.directApprove; }).length;
       successModalMessage.value = '共 ' + allRows.length + ' 節已寫入（' + feeTip + '）。'
+        + (__pendingCount ? ' 其中第8節 ' + __pendingCount + ' 節已送待核准，請至待核准區處理。' : '')
         + (mutualSkipNotify.value ? ' 尚未寄系統信，請用下方 LINE 手動通知。' : '');
       if (deps.successFlowMode) {
-        deps.successFlowMode.value = (isAdmin.value && directApproveMode.value) ? 'direct' : 'normal';
+        deps.successFlowMode.value = (__pendingCount ? 'normal' : ((isAdmin.value && directApproveMode.value) ? 'direct' : 'normal'));
       }
       hasLineTemplate.value = !!mutualSkipNotify.value;
       if (hasLineTemplate.value) {

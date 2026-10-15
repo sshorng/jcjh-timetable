@@ -349,6 +349,8 @@ const ExportActivityCover = (() => {
       var groups = [];
       uniqueRequests(opts.requests).forEach(function (request) {
         if (!requestMatchesMatrix(request, collectOpts, dateSet)) return;
+        // 第8節不列入輪值通知單：不為其建頁，避免第八節教師列入發放名單
+        if (requestPeriod(request) === 8) return;
         var values = pageIdentityValues(request, role);
         if (!values.length) return;
         var rosterTeacher = (opts.teachers || []).find(function (teacher) {
@@ -572,10 +574,6 @@ const ExportActivityCover = (() => {
     }).filter(Boolean);
   }
 
-  /** 第8節不列入輪值通知單（另以代課單處理）：一律不顯示附註。 */
-  function formatPeriod8Note(lines) {
-    return '';
-  }
 
   function getJSZip() {
     if (window.JSZip) return window.JSZip;
