@@ -20,7 +20,11 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const RAW_LIMIT_KIB = 720;
+// 2026-10-15 再 re-baseline 為 724 KiB：296e43a「活動互代綁定空堂事件」
+// 新增 ui-mutual／stores-match 約 300 行（實測 717.13 → 720.64 KiB，gzip 210.61 → 212.42 KiB），
+// 屬功能成長而非閘門退化（無新增靜態 import、modal 未改回靜態、CSS 未搬回 public/），
+// 故上調 4 KiB 並在此明文記錄，不假裝是「瘦身」成果。
+const RAW_LIMIT_KIB = 724;
 const GZIP_LIMIT_KIB = 220;
 const DIST = path.resolve(__dirname, '..', 'dist', 'assets');
 
