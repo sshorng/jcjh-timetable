@@ -58,7 +58,8 @@ test('print form contract tests（v1 移植）', () => {
   const submittedBuilderContext = {
     teachersList: { value: [
       { loginEmail: 'owner@school.example', email: 'owner@school.example', name: '陳小華', teacherName: '陳小華' },
-      { loginEmail: 'invitee@school.example', email: 'invitee@school.example', name: '王小明', teacherName: '王小明' }
+      { loginEmail: 'invitee@school.example', email: 'invitee@school.example', name: '王小明', teacherName: '王小明' },
+      { loginEmail: 'third@school.example', email: 'third@school.example', name: '林小美', teacherName: '林小美' }
     ] },
     isCourseAdjustmentOnlyRequest: () => false,
     isCombinedReturnRequest: () => false,
@@ -66,7 +67,8 @@ test('print form contract tests（v1 移植）', () => {
     findBaseScheduleSlot: () => null,
     getTeacherNameByEmail: email => ({
       'owner@school.example': '陳小華',
-      'invitee@school.example': '王小明'
+      'invitee@school.example': '王小明',
+      'third@school.example': '林小美'
     })[String(email || '').toLowerCase()] || String(email || ''),
     Date,
     Number,
@@ -741,6 +743,42 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(triangleDefaultOutput, /假別：請假/);
   assert.doesNotMatch(triangleDefaultOutput, /■僅課務申請\(非請假\)/);
 
+
+  // 批次列印三角調：核准當下拍下的三腿申請單，即使按下「印」時明細尚未刷新齊，
+  // 也必須印出三位教師各一張、課程三節完整（實測回歸：只回頭讀 store 會少一位教師）。
+  const capturedTriangleRows = [
+    { id: 'TRI-CAP_1', serial: 'TRI-CAP-1', batchId: 'TRI-CAP', type: 'triangle', requesterName: '陳小華', requesterEmail: 'owner@school.example', targetTeacherName: '王小明', targetTeacherEmail: 'invitee@school.example', className: '806', subject: '資訊科技', date: '2026-10-29', period: 6, targetDate: '2026-10-29', targetPeriod: 3, targetClassName: '805', targetSubject: '數學', triangleId: 'TRI-CAP', triangleLegIndex: 1, reason: '課務調整' },
+    { id: 'TRI-CAP_2', serial: 'TRI-CAP-2', batchId: 'TRI-CAP', type: 'triangle', requesterName: '王小明', requesterEmail: 'invitee@school.example', targetTeacherName: '林小美', targetTeacherEmail: 'third@school.example', className: '805', subject: '數學', date: '2026-10-30', period: 3, targetDate: '2026-10-30', targetPeriod: 4, targetClassName: '807', targetSubject: '國文', triangleId: 'TRI-CAP', triangleLegIndex: 2, reason: '課務調整' },
+    { id: 'TRI-CAP_3', serial: 'TRI-CAP-3', batchId: 'TRI-CAP', type: 'triangle', requesterName: '林小美', requesterEmail: 'third@school.example', targetTeacherName: '陳小華', targetTeacherEmail: 'owner@school.example', className: '807', subject: '國文', date: '2026-10-30', period: 4, targetDate: '2026-10-29', targetPeriod: 6, targetClassName: '806', targetSubject: '資訊科技', triangleId: 'TRI-CAP', triangleLegIndex: 3, reason: '課務調整' }
+  ];
+  const staleHistoryRecords = capturedTriangleRows.slice(0, 2).map(row => ({
+    id: row.id, serial: row.serial, requestId: row.id, batchId: row.batchId, type: 'triangle',
+    triangleId: row.triangleId, triangleLegIndex: row.triangleLegIndex,
+    originalTeacherEmail: row.targetTeacherEmail, originalTeacherName: row.targetTeacherName,
+    actualTeacherEmail: row.requesterEmail, actualTeacherName: row.requesterName,
+    triangleSourceDate: row.date, triangleSourcePeriod: row.period,
+    triangleTargetDate: row.targetDate, triangleTargetPeriod: row.targetPeriod,
+    date: row.date, period: row.period, className: row.className, subject: row.subject, reason: '課務調整'
+  }));
+  // 明細只有兩腿、申請單清單已被刷新清空：舊作法只能撈到兩腿。
+  const staleBatchRecords = buildHistoryPrintRecords(
+    capturedTriangleRows.map(row => row.id), staleHistoryRecords, [], submittedPaperRecordBuilder);
+  assert.equal(staleBatchRecords.length, 2, '回頭讀 store 時資料可能不齊（此斷言固定重現情境）');
+  // 核准當下拍下的三腿：即使明細缺一腿，仍要三位教師各一張、課程三節齊全。
+  const capturedBatchRecords = submittedPaperRecordBuilder(capturedTriangleRows);
+  assert.equal(capturedBatchRecords.length, 3);
+  const capturedBatchPreview = buildPrintPreview(fixtureContext, {
+    records: capturedBatchRecords,
+    allSubs: staleHistoryRecords.concat(capturedBatchRecords)
+  });
+  const capturedLabels = [...capturedBatchPreview.formsHtml.matchAll(/official-audience-label[^>]*>([^<]*)</g)].map(m => m[1].trim());
+  assert.equal(capturedBatchPreview.formCount, 5, '留存 1＋三位教師各 1＋班級聯 1');
+  ['陳小華', '王小明', '林小美'].forEach(name => {
+    assert.ok(capturedLabels.includes('調課教師：' + name), name + ' 應有自己的調課教師聯');
+  });
+  ['資訊科技', '數學', '國文'].forEach(subject => {
+    assert.match(capturedBatchPreview.formsHtml, new RegExp(subject), '課程應完整：' + subject);
+  });
   const merged = buildPrintGroups([
     substitution.records[0],
     Object.assign({}, substitution.records[0], { id: 'request-1-2', requestId: 'request-1', date: '2026-09-08', period: 2 })
