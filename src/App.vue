@@ -1002,7 +1002,7 @@
                             <strong>{{ row.items[0].serial || '批次申請' }}</strong>
                           </button>
                         </div>
-                        <div class="batch-group-inline-meta">批次申請 · {{ row.items.length }} 筆</div>
+                        <div class="batch-group-inline-meta">{{ row.isTriangle ? '三角調整組' : '批次申請' }} · {{ row.items.length }} 筆</div>
                       </td>
                       <td>{{ formatRequestApplicationDate(row.items[0]) }}</td>
                       <td>
@@ -1010,10 +1010,10 @@
                           <span class="status-badge tag-blue" v-if="row.items[0].type === 'triangle'">三角調</span>
                           <span class="status-badge tag-blue" v-else-if="row.items[0].type === 'exchange'">調課</span>
                           <span class="status-badge tag-red" v-else>代課</span>
-                          <span class="status-badge tag-gray fs-65">批次 {{ row.items.length }} 筆</span>
+                          <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
-                      <td>{{ row.items[0].requesterName }}</td>
+                      <td>{{ row.isTriangle ? getBatchGroupRequesterSummary(row) : row.items[0].requesterName }}</td>
                        <td>{{ getBatchGroupTeacherSummary(row) }}</td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatLeaveClassSlot) }}</span></td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatExchangeClassSlot) }}</span></td>
@@ -1034,7 +1034,8 @@
                       <td>
                         <div class="flex-wrap-gap">
                             <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
-                            <span class="status-badge tag-blue" v-else-if="row.type === 'exchange'">調課</span>
+                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" :title="'三角調整組，共 3 筆輪替（每一位教師各一筆）'">{{ triangleLegLabel(row) }}／共 3 筆</span>
+                            <span class="status-badge tag-blue" v-if="row.type === 'exchange'">調課</span>
                             <span class="status-badge tag-red" v-else>代課</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag" :class="'risk-'+tag.key">{{ tag.label }}</span>
                           <span
@@ -1164,7 +1165,7 @@
                          <span class="status-badge tag-blue" v-else-if="req.type === 'exchange'">調課</span>
                          <span class="status-badge tag-red" v-else>代課</span>
                          <span v-if="req.batchId && req.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次可全部同意">批次</span>
-                         <span v-if="req.type === 'triangle'" class="status-badge tag-gray fs-65" title="三位教師全部同意後才送行政">整組</span>
+                         <span v-if="req.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(req) }}／共 3 筆</span>
                         <span v-for="tag in getRequestTypeTags(req)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
                       </div>
                     </td>
@@ -1244,10 +1245,10 @@
                         <div class="batch-group-first-cell">
                           <button type="button" class="batch-group-expand" :aria-expanded="isBatchGroupExpanded('sent', row.batchId)" @click.stop="toggleBatchGroup('sent', row.batchId)">
                             <span class="batch-group-chevron" :class="{ 'is-open': isBatchGroupExpanded('sent', row.batchId) }" aria-hidden="true">›</span>
-                            <strong>{{ row.items[0].serial || '批次申請' }}</strong>
+                            <strong>{{ row.items[0].serial || (row.isTriangle ? '三角調整組' : '批次申請') }}</strong>
                           </button>
                         </div>
-                        <div class="batch-group-inline-meta">批次申請 · {{ row.items.length }} 筆</div>
+                        <div class="batch-group-inline-meta">{{ row.isTriangle ? '三角調整組' : '批次申請' }} · {{ row.items.length }} 筆</div>
                       </td>
                       <td>{{ formatRequestApplicationDate(row.items[0]) }}</td>
                       <td>
@@ -1255,10 +1256,10 @@
                           <span class="status-badge tag-blue" v-if="row.items[0].type === 'triangle'">三角調</span>
                           <span class="status-badge tag-blue" v-else-if="row.items[0].type === 'exchange'">調課</span>
                           <span class="status-badge tag-red" v-else>代課</span>
-                          <span class="status-badge tag-gray fs-65">批次 {{ row.items.length }} 筆</span>
+                          <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
-                      <td>{{ row.items[0].requesterName }}</td>
+                      <td>{{ row.isTriangle ? getBatchGroupRequesterSummary(row) : row.items[0].requesterName }}</td>
                        <td>{{ getBatchGroupTeacherSummary(row) }}</td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatLeaveClassSlot) }}</span></td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatExchangeClassSlot) }}</span></td>
@@ -1279,7 +1280,7 @@
                             <span class="status-badge tag-blue" v-else-if="row.type === 'exchange'">調課</span>
                             <span class="status-badge tag-red" v-else>代課</span>
                             <span v-if="row.batchId && row.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次">批次</span>
-                            <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三位教師全部同意後才送行政">整組</span>
+                            <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(row) }}／共 3 筆</span>
                           <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
                         </div>
                       </td>
@@ -1481,20 +1482,21 @@
                           >
                           <button type="button" class="batch-group-expand" :aria-expanded="isBatchGroupExpanded('history', row.batchId)" @click.stop="toggleBatchGroup('history', row.batchId)">
                             <span class="batch-group-chevron" :class="{ 'is-open': isBatchGroupExpanded('history', row.batchId) }" aria-hidden="true">›</span>
-                            <strong>{{ row.items[0].serial || '批次申請' }}</strong>
+                            <strong>{{ row.items[0].serial || (row.isTriangle ? '三角調整組' : '批次申請') }}</strong>
                           </button>
                         </div>
-                        <div class="batch-group-inline-meta">批次申請 · {{ row.items.length }} 筆</div>
+                        <div class="batch-group-inline-meta">{{ row.isTriangle ? '三角調整組' : '批次申請' }} · {{ row.items.length }} 筆</div>
                       </td>
                       <td>{{ row.items[0].createdDate }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="isHistoryExchangeType(row.items[0])">調課</span>
+                          <span class="status-badge tag-blue" v-if="row.isTriangle">三角調</span>
+                          <span class="status-badge tag-blue" v-else-if="isHistoryExchangeType(row.items[0])">調課</span>
                           <span class="status-badge tag-red" v-else>代課</span>
-                          <span class="status-badge tag-gray fs-65">批次 {{ row.items.length }} 筆</span>
+                          <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
-                      <td>{{ row.items[0].requesterName }}</td>
+                      <td>{{ row.isTriangle ? getBatchGroupRequesterSummary(row) : row.items[0].requesterName }}</td>
                        <td>{{ getBatchGroupTeacherSummary(row) }}</td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatHistoryLeaveSlot) }}</span></td>
                       <td><span class="hist-slot-inline">{{ getBatchGroupSlotSummary(row, formatHistoryExchangeSlot) }}</span></td>
@@ -1519,8 +1521,10 @@
                       <td>{{ row.createdDate }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="isHistoryExchangeType(row)">調課</span>
+                          <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
+                          <span class="status-badge tag-blue" v-else-if="isHistoryExchangeType(row)">調課</span>
                           <span class="status-badge tag-red" v-else>代課</span>
+                          <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替">{{ triangleLegLabel(row) }}／共 3 筆</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag risk-tag-xs" :class="'risk-'+tag.key">{{ tag.label }}</span>
                         </div>
                       </td>
@@ -2834,11 +2838,11 @@ const { assignHomeroomTeacher, deleteHomeroomRecord, getTeacherJobTitleByEmail, 
 const { applyClassAwayEventById, applyClassAwayToMutualPanel, assignMutualDraftFromMatch, clearMutualDrafts, clearMutualPanel, getMutualDraftAt, isMutualActivityPeriodSelected, isMutualLead, persistMutualPanelDraft, recalculateMutualQuotasFromActivity, removeMutualDraft, selectAwayGrade, setMutualActivityPeriodBoundary, setMutualActivityPeriodMode, setMutualActivityThisWeek, setMutualCover, toggleMutualActivityPeriod, toggleMutualAwayClass, toggleMutualLead } = mutualStore;
 const { copyEditedLineMessage, copyLineBatchPart, copyLineMessage, exchangeWeekdayOptions, getClassChangeTypeLabel, getOriginalRequestClass, getOriginalRequestSubject, getOriginalTargetClass, getOriginalTargetSubject, getTargetClassAndSubject, getTargetSubject, isExchangeLikeRequest, isHistoryExchangeType, onMutualLeadChipClick, openLineMessageEditor, sendEditedLineMessage, sendLineMessage, setExchangeWeekdayFilter } = mutualStore;
 const { askFirstLineDraft, askFirstLineText, classChangeSummary, classList, classReadonlyMode, classSubstitutionMap, classWeekNumber, combinedReturnCandidates, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, exchangePeriodId, exchangeTargetDate, exchangeTeacherClasses, exchangeTeacherEmail, exchangeWeekOffset, exchangeWeekdayFilter, hasLineTemplate, historyFilterDate, historyFilterMode, historyPage, historyPageSize, historySearchQuery, historyTypeFilter, isSubmitting, lineBatchParts, lineCopyText, lineMessageText, lineMessageTitle, matchDisplayCount, matchEmptyReasons, matchSearchQuery, matchShowNoTeacherWarning, mutualCoverStats, mutualImportEventId, mutualImportableEvents, paperPrintDraft, paperSignatureByTeacher, pendingRequestData, period8WeekDate, period8WeekDates, period8WeekNumber, printPreview, printPreviewImageBusy, selectedClass, selectedClassDate, selectedClassWeekDates, selectedRecordIds, showCompareModal, showDetailModal, showDevDropdown, showLineMessageModal, showPrintPreviewModal, showSuccessModal, showTriangleTimetablePreview, successActionRequests, successFlowMode, successModalMessage, successModalTitle } = storeToRefs(mutualStore);
-const { skipOnboarding, startOnboarding, tourDemoInviteRespond } = tourStore;
-const { ACTIVITY_PUBLIC_FEE, MUTUAL_COVER_FEE, PERIOD8_FEE, QUOTA_DEDUCT_FEE, TIMETABLE_ONLY_FEE, nextOnboardingStep, onboardingSteps, prevOnboardingStep } = tourStore;
 const { activeCell, adminPendingRequests, allPendingRequests, batchActiveSlotKey, batchAssignMode, batchFlowMode, batchNote, batchReason, batchSelectMode, batchSlots, batchSubFee, batchSubTeacher, directApproveSkipNotify, inputRequestDate, isMutualCover, matchMode, matchPreview, mutualActivityEnd, mutualActivityEndPeriod, mutualActivityPeriodMode, mutualActivityPeriods, mutualActivityStart, mutualActivityStartPeriod, mutualAwayClasses, mutualDrafts, mutualLeadEmails, mutualNote, mutualSkipNotify, myPendingRequests, mySentRequests, onboardingStep, recommendationLoading, recommendedTeachers, showBatchConfirmModal, showOnboarding, tourDemoInvite, triangleNote, trianglePickB, trianglePickC, triangleReason, triangleSubmitting } = storeToRefs(tourStore);
+const { ACTIVITY_PUBLIC_FEE, MUTUAL_COVER_FEE, PERIOD8_FEE, QUOTA_DEDUCT_FEE, TIMETABLE_ONLY_FEE, nextOnboardingStep, onboardingSteps, prevOnboardingStep } = tourStore;
+const { skipOnboarding, startOnboarding, tourDemoInviteRespond } = tourStore;
 const { formatLeaveClassSlot, formatTriangleSlot, getCellPlainStatus, getRequestRiskTags, getRequestTypeTags, getScheduleSpecialTags, hasScheduleSpecialTag, isTimetablePullout, isTimetableRestricted } = UiLineTemplate;
-const { formatRequestApplicationDate, getBatchGroupSlotSummary, getBatchGroupStatusClass, getBatchGroupStatusText, getBatchGroupTeacherSummary, getStatusText, isTriangleRequest } = UiListHelpers;
+const { formatRequestApplicationDate, getBatchGroupRequesterSummary, getBatchGroupSlotSummary, getBatchGroupStatusClass, getBatchGroupStatusText, getBatchGroupTeacherSummary, triangleLegLabel, getStatusText, isTriangleRequest } = UiListHelpers;
 sessionStore.initImmediateSession1();
 sessionStore.initImmediateSession2();
 sessionStore.initImmediateSession3();

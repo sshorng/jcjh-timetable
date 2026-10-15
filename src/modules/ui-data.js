@@ -54,7 +54,7 @@ const UiData = (() => {
     var mySentRequests = deps.mySentRequests;
     var myPendingRequests = deps.myPendingRequests;
     var adminPendingRequests = deps.adminPendingRequests;
-    var collapseTriangleRows = deps.collapseTriangleRows;
+    // collapseTriangleRows 已改由列表分組負責（整組列 + 展開），此處不再收合資料。
     var allPendingRequests = deps.allPendingRequests;
     var classAwayEvents = deps.classAwayEvents;
     var applySettings = deps.applySettings;
@@ -317,9 +317,10 @@ const applyInitialPayload = (res) => {
           const s = stOf(r);
           return s === 'pending_teacher' || s === 'pending_admin';
         });
-        adminPendingRequests.value = userRole.value === 'admin'
-          ? collapseTriangleRows(schoolPendingRows.filter(r => stOf(r) === 'pending_admin'))
-          : (userRole.value === 'staff' ? collapseTriangleRows(schoolPendingRows) : []);
+       // 三角調整組不再於資料層收成一筆，交由列表以「整組列 + 可展開」呈現，避免只看到其中一筆。
+       adminPendingRequests.value = userRole.value === 'admin'
+         ? schoolPendingRows.filter(r => stOf(r) === 'pending_admin')
+         : (userRole.value === 'staff' ? schoolPendingRows : []);
       allPendingRequests.value = sortedAll.filter(r => {
         const s = stOf(r);
         return s === 'pending_teacher' || s === 'pending_admin';
@@ -370,8 +371,8 @@ const recomputeRequestBuckets = () => {
     return s === 'pending_teacher' || s === 'pending_admin';
   });
   adminPendingRequests.value = userRole.value === 'admin'
-    ? collapseTriangleRows(schoolPendingRows.filter(r => stOf(r) === 'pending_admin'))
-    : (userRole.value === 'staff' ? collapseTriangleRows(schoolPendingRows) : []);
+    ? schoolPendingRows.filter(r => stOf(r) === 'pending_admin')
+    : (userRole.value === 'staff' ? schoolPendingRows : []);
   allPendingRequests.value = all.filter(r => {
     const s = stOf(r);
     return s === 'pending_teacher' || s === 'pending_admin';

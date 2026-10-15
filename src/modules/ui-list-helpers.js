@@ -217,8 +217,27 @@ const UiListHelpers = (() => {
   function isCollapsibleBatchRecord(record) {
     if (!record || !String(record.batchId || '').trim()) return false;
     const type = String(record.type || '').trim().toLowerCase();
-    // 三角調有自己的整組流程，不與一般批次代課混在一起。
+    // 三角調有自己的整組流程，不與一般批次代課混在一起（改用三角調整組分組）。
     return type !== 'triangle' && type !== '三角調' && !String(record.triangleId || '').trim();
+  }
+
+  // 三角調整組：三筆共用同一 triangleId，列表以「整組列」呈現並可展開。
+  function triangleGroupKeyOf(record) {
+    if (!isTriangleRequest(record)) return '';
+    return String(record.triangleId || record.batchId || '').trim();
+  }
+
+  function isTriangleGroup(group) {
+    return !!(group && group.isTriangle);
+  }
+
+  function triangleGroupLabel(group) {
+    return isTriangleGroup(group) ? '三角調整組' : '批次申請';
+  }
+
+  function triangleLegLabel(record) {
+    const index = record && record.triangleLegIndex;
+    return index == null || index === '' ? '整組' : '第' + index + '筆';
   }
 
   function makeBatchItemRow(record, displayKey, batchGroupKey) {
@@ -234,21 +253,25 @@ const UiListHelpers = (() => {
     const groups = new Map();
     (records || []).forEach((record, index) => {
       if (!record) return;
-      if (!isCollapsibleBatchRecord(record)) {
+      const triangleKey = triangleGroupKeyOf(record);
+      let lookupKey = '';
+      if (triangleKey) lookupKey = 'tri:' + triangleKey.toLowerCase();
+      else if (isCollapsibleBatchRecord(record)) lookupKey = 'batch:' + String(record.batchId).trim().toLowerCase();
+      if (!lookupKey) {
         entries.push(makeBatchItemRow(record, `${scope}:item:${record.id || index}`));
         return;
       }
-      const batchId = String(record.batchId).trim();
-      const groupLookupKey = batchId.toLowerCase();
-      let group = groups.get(groupLookupKey);
+      let group = groups.get(lookupKey);
       if (!group) {
         group = {
           displayKind: 'batch',
-          displayKey: `${scope}:batch:${groupLookupKey}`,
-          batchId,
+          displayKey: `${scope}:batch:${lookupKey}`,
+          batchId: lookupKey,
+          isTriangle: !!triangleKey,
+          triangleId: triangleKey,
           items: []
         };
-        groups.set(groupLookupKey, group);
+        groups.set(lookupKey, group);
         entries.push(group);
       }
       group.items.push(record);
@@ -263,6 +286,19 @@ const UiListHelpers = (() => {
     });
   }
 
+  function getBatchGroupRequesterSummary(group) {
+    const values = [];
+    const seen = new Set();
+    (group && group.items ? group.items : []).forEach(item => {
+      const value = String((item && (item.requesterName || item['申請人姓名'])) || '').trim();
+      const key = value.toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      values.push(value);
+    });
+    return values.length ? values.join('、') : '—';
+  }
+
   function getBatchGroupSlotSummary(group, formatter) {
     const values = [...new Set((group && group.items ? group.items : []).map(item => {
       try { return String(typeof formatter === 'function' ? formatter(item) : '').trim(); } catch (e) { return ''; }
@@ -274,12 +310,21 @@ const UiListHelpers = (() => {
 
   function getBatchGroupStatusText(group) {
     const statuses = getBatchGroupStatusValues(group);
-    if (!statuses.length) return '批次';
+    if (isTriangleGroup(group)) {
+      // 三角調整組：只要還有人在等簽核就顯示「待教師簽核」，不要寫「多種狀態」讓人誤解。
+      if (statuses.includes('pending_teacher')) return '待教師簽核';
+      if (statuses.includes('pending_admin')) return '待教學組核准';
+    }
+    if (!statuses.length) return isTriangleGroup(group) ? '整組' : '批次';
     return statuses.length === 1 ? getStatusText(statuses[0]) : '多種狀態';
   }
 
   function getBatchGroupStatusClass(group) {
     const statuses = getBatchGroupStatusValues(group);
+    if (isTriangleGroup(group)) {
+      if (statuses.includes('pending_teacher')) return 'status-pending-teacher';
+      if (statuses.includes('pending_admin')) return 'status-pending_admin';
+    }
     return statuses.length === 1 ? `status-${statuses[0]}` : 'tag-gray';
   }
 
@@ -359,6 +404,11 @@ const UiListHelpers = (() => {
     isTriangleRequest: isTriangleRequest,
     collapseTriangleRows: collapseTriangleRows,
     getBatchGroupTeacherSummary: getBatchGroupTeacherSummary,
+    getBatchGroupRequesterSummary: getBatchGroupRequesterSummary,
+    isTriangleGroup: isTriangleGroup,
+    triangleGroupKeyOf: triangleGroupKeyOf,
+    triangleGroupLabel: triangleGroupLabel,
+    triangleLegLabel: triangleLegLabel,
     getBatchGroupStatusValues: getBatchGroupStatusValues,
     getStatusText: getStatusText,
     isCollapsibleBatchRecord: isCollapsibleBatchRecord,
