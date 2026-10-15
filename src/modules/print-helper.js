@@ -1310,6 +1310,97 @@ function getSelectedPrintRecords(ctx) {
    }
    return base;
  }
+ function getLeaveMergeKey(group, ctx) {
+   const rows = getPrintSlotRows(group);
+   const seed = ((group && group.records) || [])[0] || rows[0] || {};
+   if (!seed || group.isExchange || group.isTriangle) return '';
+   const week = getPrintWeekKey((rows[0] && rows[0].date) || seed.date);
+   const type = getPrintRecordTypeKey(seed);
+   const original = getPrintMergeTeacherKey(seed, 'original', ctx);
+   const leaveMode = isPrintLeaveLikeReason(seed.reason || (group && group.reason)) ? 'leave' : 'course';
+   if (!week || !original) return '';
+   return `leave-merge:${JSON.stringify([week, type, original, leaveMode])}`;
+ }
+
+ function mergeLeaveBucketGroups(bundles) {
+   const base = {
+     isExchange: false, isTriangle: false, requestId: '', batchId: '',
+     serials: [], leaveEmails: [], subEmails: [], dates: [], reasons: [],
+     subFee: '', note: '', records: [], periods: [],
+     isReprint: false, isPaperDraft: false, signatureByTeacher: {}
+   };
+   const recordSeen = Object.create(null);
+   const periodSeen = Object.create(null);
+   const periodKey = function (row) {
+     return [
+       row && row.date || '',
+       row && (row.num != null ? row.num : row.period) || '',
+       row && (row.cls || row.className) || '',
+       row && (row.sub || row.subject) || '',
+       row && (row.actualTeacherEmail || row.actualTeacherName) || '',
+       row && (row.originalTeacherEmail || row.originalTeacherName) || ''
+     ].map(function (value) { return String(value); }).join('|');
+   };
+   (bundles || []).forEach(function (bundle) {
+     const g = (bundle && bundle.group) || {};
+     if (!base.requestId) base.requestId = g.requestId || '';
+     (g.records || []).forEach(function (record) {
+       const key = String(record && record.id || '') || JSON.stringify(record || {});
+       if (!recordSeen[key]) { recordSeen[key] = true; base.records.push(record); }
+     });
+     (g.periods || []).forEach(function (period) {
+       const key = periodKey(period);
+       if (!periodSeen[key]) { periodSeen[key] = true; base.periods.push(period); }
+     });
+     (g.serials || []).forEach(function (value) {
+       const text = String(value == null ? '' : value).trim();
+       if (text && base.serials.indexOf(text) === -1) base.serials.push(text);
+     });
+     (g.leaveEmails || []).forEach(function (value) {
+       const text = String(value == null ? '' : value).trim();
+       if (text && base.leaveEmails.indexOf(text) === -1) base.leaveEmails.push(text);
+     });
+     (g.subEmails || []).forEach(function (value) {
+       const text = String(value == null ? '' : value).trim();
+       if (text && base.subEmails.indexOf(text) === -1) base.subEmails.push(text);
+     });
+     (g.dates || []).forEach(function (value) {
+       const text = String(value == null ? '' : value).trim();
+       if (text && base.dates.indexOf(text) === -1) base.dates.push(text);
+     });
+     (g.reasons || []).forEach(function (value) {
+       const text = String(value == null ? '' : value).trim();
+       if (text && base.reasons.indexOf(text) === -1) base.reasons.push(text);
+     });
+     if (g.reason && base.reasons.indexOf(g.reason) === -1) base.reasons.push(g.reason);
+     if (!base.note && g.note) base.note = g.note;
+     if (!base.subFee && g.subFee) base.subFee = g.subFee;
+     if (g.isReprint) base.isReprint = true;
+     if (g.isPaperDraft) base.isPaperDraft = true;
+     base.signatureByTeacher = Object.assign({}, base.signatureByTeacher, g.signatureByTeacher || {});
+   });
+   base.records.sort(function (a, b) {
+     return String(a && a.date || '').localeCompare(String(b && b.date || ''))
+       || ((parseInt(a && a.period, 10) || 0) - (parseInt(b && b.period, 10) || 0));
+   });
+   base.periods.sort(function (a, b) {
+     return String(a && a.date || '').localeCompare(String(b && b.date || ''))
+       || ((parseInt(a && (a.num != null ? a.num : a.period), 10) || 0)
+         - (parseInt(b && (b.num != null ? b.num : b.period), 10) || 0))
+       || String(a && (a.cls || a.className) || '').localeCompare(String(b && (b.cls || b.className) || ''));
+   });
+   base.reasons = uniquePrintValues(base.reasons);
+   base.reason = base.reasons[0] || '請假';
+   base.leaveEmail = base.leaveEmails[0] || '';
+   base.subEmail = base.subEmails[0] || '';
+   base.subEmailAll = base.subEmails.slice();
+   base.serials = uniquePrintValues(base.serials);
+   base.compactSerials = compactSerials(base.serials);
+   const first = ((bundles || [])[0] && (bundles || [])[0].group) || {};
+   base.requesterEmail = first.requesterEmail || '';
+   base.requesterName = first.requesterName || '';
+   return base;
+ }
 
 function buildPrintForms(recordsToPrint, allSubs, ctx) {
   const groupList = buildPrintGroups(recordsToPrint, allSubs, ctx);
@@ -1326,6 +1417,7 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
   let staffFormCount = 0;
   let classCopyCount = 0;
 
+   const normalBundles = [];
    audienceBundles.forEach(function (bundle) {
      const staffForm = generateFormHtml(bundle.group, 'Official', ctx);
      if (!staffForm) return;
@@ -1355,13 +1447,79 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
        bundle.members.forEach(member => classGroups.push(member));
        return;
      }
-     forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
-     audienceLabelSets.push(staffLabels);
-     printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
-     printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
-     printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
+     if (bundle.group && bundle.group.isExchange) {
+       forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       audienceLabelSets.push(staffLabels);
+       printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
+       printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
+       staffFormCount += 1;
+       bundle.members.forEach(member => classGroups.push(member));
+       return;
+     }
+     normalBundles.push({ bundle, staffForm, staffTeacherForm, staffDisplayForm, staffLabels });
+   });
+
+   // 一般代課／補課：先按「請假教師」合併留存聯＋請假教師聯（跨代課教師、跨班、跨批次），
+   // 給 B、C 代課教師的聯仍按原 bundle 拆開。
+   const leaveOrder = [];
+   const leaveBuckets = Object.create(null);
+   normalBundles.forEach(function (item) {
+     const key = getLeaveMergeKey(item.bundle.group, ctx)
+       || `leave-single:${String(item.bundle.group.requestId || item.bundle.group.batchId || '')}:${leaveOrder.length}`;
+     if (!leaveBuckets[key]) { leaveBuckets[key] = []; leaveOrder.push(key); }
+     leaveBuckets[key].push(item);
+   });
+   leaveOrder.forEach(function (key) {
+     const bucket = leaveBuckets[key];
+     if (bucket.length <= 1) {
+       const item = bucket[0];
+       forms.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+       audienceLabelSets.push(item.staffLabels);
+       printCopies.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+       printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
+       printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
+       staffFormCount += 1;
+       item.bundle.members.forEach(member => classGroups.push(member));
+       return;
+     }
+     const merged = mergeLeaveBucketGroups(bucket.map(function (item) { return item.bundle; }));
+     const isAdminBucket = ctx && (ctx.isAdmin === true || (ctx.isAdmin && ctx.isAdmin.value === true));
+     const mergedRetain = generateFormHtml(merged, 'Official', ctx);
+     const mergedTeacher = generateFormHtml(merged, 'OfficialTeacher', ctx);
+     if (!mergedRetain && !mergedTeacher) {
+       bucket.forEach(function (item) {
+         forms.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+         audienceLabelSets.push(item.staffLabels);
+         printCopies.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+         printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
+         printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
+         staffFormCount += 1;
+         item.bundle.members.forEach(member => classGroups.push(member));
+       });
+       return;
+     }
+     const mergedDisplay = isAdminBucket ? (mergedTeacher || mergedRetain) : mergedRetain;
+     const mergedLabels = getPrintAudienceLabels(merged, ctx);
+     forms.push(withPrintAudienceLabel(mergedDisplay, mergedLabels[0]));
+     audienceLabelSets.push(mergedLabels);
+     printCopies.push(withPrintAudienceLabel(mergedDisplay, mergedLabels[0]));
      staffFormCount += 1;
-     bundle.members.forEach(member => classGroups.push(member));
+     forms.push(withPrintAudienceLabel(mergedTeacher || mergedRetain, mergedLabels[1]));
+     audienceLabelSets.push(mergedLabels);
+     printCopies.push(withPrintAudienceLabel(mergedTeacher || mergedRetain, mergedLabels[1]));
+     staffFormCount += 1;
+     bucket.forEach(function (item) {
+       const subLabels = getPrintAudienceLabels(item.bundle.group, ctx);
+       const subLabel = subLabels[2] || mergedLabels[2];
+       const subForm = generateFormHtml(item.bundle.group, 'OfficialTeacher', ctx)
+         || item.staffTeacherForm || item.staffForm;
+       forms.push(withPrintAudienceLabel(subForm, subLabel));
+       audienceLabelSets.push(subLabels);
+       printCopies.push(withPrintAudienceLabel(subForm, subLabel));
+       staffFormCount += 1;
+       item.bundle.members.forEach(member => classGroups.push(member));
+     });
    });
 
   const classBundles = mergePrintAudienceGroups(classGroups, ctx, 'class');

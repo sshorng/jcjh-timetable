@@ -591,14 +591,24 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
     sameClassDifferentSubRecords,
     fixtureContext
   );
-  assert.equal(sameClassDifferentSubForms.staffFormCount, 2, '不同代課教師仍應各自保留教師版');
-  assert.equal(sameClassDifferentSubForms.classCopyCount, 1, '同班同週不同代課教師應合併班級副本');
-  assert.equal(sameClassDifferentSubForms.length, 3, '兩份教師版加一份班級通知單');
+   assert.equal(sameClassDifferentSubForms.staffFormCount, 4, '留存＋請假教師合併版＋兩位代課教師各一張');
+   assert.equal(sameClassDifferentSubForms.classCopyCount, 1, '同班同週不同代課教師應合併班級副本');
+   assert.equal(sameClassDifferentSubForms.length, 5, '留存、請假教師合併版、兩張代課教師版、一份班級通知單');
   const sameClassMergedForm = sameClassDifferentSubForms.find(form => /班級：802/.test(form));
   assert.ok(sameClassMergedForm, '應產生合併後的班級通知單');
   const sameClassMergedSubjectRows = [...sameClassMergedForm.matchAll(/<tr class="official-subject-row">([\s\S]*?)<\/tr>/g)].map(match => match[1]);
   assert.match(sameClassMergedSubjectRows[0], /生活科技/);
   assert.match(sameClassMergedSubjectRows[1], /健康教育/);
+   const leaveMergedForm = sameClassDifferentSubForms.find(form => /請假教師：陳小華/.test(form));
+   assert.ok(leaveMergedForm, '請假教師應有一張合併版，列出全部代課節');
+   assert.match(leaveMergedForm, /生活科技/);
+   assert.match(leaveMergedForm, /健康教育/);
+   const subForms = sameClassDifferentSubForms.filter(form => /代課\/調課教師：/.test(form));
+   assert.equal(subForms.length, 2, '代課教師仍應一人一張拆開');
+   assert.ok(subForms.some(form => /代課\/調課教師：王小明/.test(form)), '王小明應有自己的一張');
+   assert.ok(subForms.some(form => /代課\/調課教師：林小美/.test(form)), '林小美應有自己的一張');
+   assert.equal(sameClassDifferentSubForms.copyCount, 5, '留存＋請假合併＋兩張代課＋班級共五聯');
+   assert.equal(sameClassDifferentSubForms.pageCount, 3, '五聯應排三頁');
 
   const batchDifferentTargetGroups = buildPrintGroups([
     batchRecords[0],
