@@ -8,7 +8,7 @@
  *
  * Eager 載入（setup 內委派，需先於 app.js）。create(deps) 注入 refs／回呼。
  */
-import { showToast } from '../ui/toast.js';
+ import { showToast, showConfirm } from '../ui/toast.js';
 import DateUtils from '../domain/date-utils.js';
 // 課表匯出已遷 ui-report 按需載入（export-lazy.js）；列印輔助維持靜態（預覽為同步路徑）
 import {
@@ -220,6 +220,22 @@ const closePrintPreview = (returnToSource = true) => {
   if (returnTo === 'compare') showCompareModal.value = true;
 };
 
+ const SIMPLEX_ACK_KEY = 'jcjh-print-simplex-ack-v1';
+ const readSimplexAck = () => {
+   try { return window.localStorage.getItem(SIMPLEX_ACK_KEY) === '1'; } catch (e) { return false; }
+ };
+ const writeSimplexAck = () => {
+   try { window.localStorage.setItem(SIMPLEX_ACK_KEY, '1'); } catch (e) { /* 隱私模式略過記憶 */ }
+ };
+ const ensureSimplexAck = async () => {
+   if (readSimplexAck()) return true;
+   const ok = await showConfirm(
+     '調代課單一頁有左右兩聯，必須使用【單面列印】，雙面會印到背面無法裁切。\n\n請在接下來的列印對話框確認已選「單面」，再按確定列印。（此提醒每台瀏覽器只會出現一次）',
+     '列印前確認'
+   );
+   if (ok) writeSimplexAck();
+   return !!ok;
+ };
 const confirmPrintPreview = async () => {
   const snapshot = printPreview.value;
   if (!snapshot) return;
@@ -227,12 +243,13 @@ const confirmPrintPreview = async () => {
     showToast('調代課申請尚未送出，送出申請後才能列印。', 'warning');
     return;
   }
-  if (snapshot.source === 'paperTour') {
-    showToast('這是紙本流程教學示範，實際操作請在送出成功後點選「確認列印」。', 'info');
-    return;
-  }
-  showPrintPreviewModal.value = false;
-  printPreview.value = null;
+   if (snapshot.source === 'paperTour') {
+     showToast('這是紙本流程教學示範，實際操作請在送出成功後點選「確認列印」。', 'info');
+     return;
+   }
+   if (!(await ensureSimplexAck())) return;
+   showPrintPreviewModal.value = false;
+   printPreview.value = null;
   printPreviewImageBusy.value = false;
 
   if (snapshot.source === 'paperDraft') {

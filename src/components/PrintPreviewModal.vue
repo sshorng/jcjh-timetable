@@ -7,6 +7,7 @@
               <div v-if="printPreview" class="print-preview-meta">
                  共 {{ printPreview.recordCount }} 筆；教學組／教師合併為 {{ printPreview.staffFormCount }} 組，班級分送 {{ printPreview.classCopyCount }} 張；正式列印 {{ printPreview.pageCount }} 頁，共 {{ printPreview.copyCount }} 張分送單據。
               </div>
+               <div class="print-preview-simplex-hint" style="margin-top:4px;font-size:0.74rem;color:#92400e;">🖨️ 列印時請在對話框選擇【單面列印】，雙面會印到背面無法裁切（瀏覽器會記住上次的雙面設定）。</div>
             </div>
             <button class="btn-close" @click="closePrintPreview(true)">&times;</button>
           </div>
