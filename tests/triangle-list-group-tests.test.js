@@ -63,3 +63,26 @@ test('列表樣板標示「三角調整組／整組 N 筆」與「第 N 筆／�
   expect((appSource.match(/triangleLegLabel\(/g) || []).length).toBeGreaterThanOrEqual(3);
   expect((appSource.match(/getBatchGroupRequesterSummary\(row\)/g) || []).length).toBe(3);
 });
+
+test('整組內教師與課堂依「第幾筆」排序，不受列表時間排序影響', () => {
+  const shuffled = [
+    triangleLegs('tri_9')[2],
+    triangleLegs('tri_9')[0],
+    triangleLegs('tri_9')[1]
+  ];
+  const group = UiListHelpers.buildBatchDisplayGroups(shuffled, 'admin')[0];
+  expect(group.items.map(item => item.triangleLegIndex)).toEqual([1, 2, 3]);
+  expect(UiListHelpers.getBatchGroupRequesterSummary(group)).toBe('林志鴻、施伯旻、劉佳忠');
+  expect(UiListHelpers.getBatchGroupTeacherSummary(group)).toBe('施伯旻、劉佳忠、林志鴻');
+});
+
+test('缺腳次資料的三角列排在最後，不會插隊', () => {
+  const rows = [
+    { id: 'a', type: 'triangle', triangleId: 'tri_8', requesterName: '甲', targetTeacherName: '乙' },
+    { id: 'b', type: 'triangle', triangleId: 'tri_8', triangleLegIndex: 2, requesterName: '乙', targetTeacherName: '丙' }
+  ];
+  const group = UiListHelpers.buildBatchDisplayGroups(rows, 'admin')[0];
+  expect(group.items.map(item => item.id)).toEqual(['b', 'a']);
+  expect(UiListHelpers.triangleLegLabel(group.items[0])).toBe('第2筆');
+  expect(UiListHelpers.triangleLegLabel(group.items[1])).toBe('整組');
+});

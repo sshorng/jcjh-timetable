@@ -240,6 +240,12 @@ const UiListHelpers = (() => {
     return index == null || index === '' ? '整組' : '第' + index + '筆';
   }
 
+  function triangleLegIndexOf(record) {
+    const raw = record && (record.triangleLegIndex != null ? record.triangleLegIndex : record['三角腳次']);
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  }
+
   function makeBatchItemRow(record, displayKey, batchGroupKey) {
     return Object.assign({}, record || {}, {
       displayKind: 'item',
@@ -275,6 +281,11 @@ const UiListHelpers = (() => {
         entries.push(group);
       }
       group.items.push(record);
+    });
+    // 三角調整組：教師與課堂一律依「第幾筆」排序，不受列表時間排序影響。
+    groups.forEach(group => {
+      if (!group.isTriangle) return;
+      group.items.sort((a, b) => triangleLegIndexOf(a) - triangleLegIndexOf(b));
     });
     // 篩選後只剩一筆時，直接維持單筆列，避免製造空洞的批次標題。
     return entries.map(entry => {
