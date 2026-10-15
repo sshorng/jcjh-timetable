@@ -3079,6 +3079,152 @@ body {
   border: 1px solid #e2e8f0 !important;
 }
 
+/* 三角調整組：詳情彈窗內的整組卡片（自成一列，不擠在雙欄格中） */
+.tri-box {
+  grid-column: 1 / -1;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.tri-box-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-bottom: 10px;
+}
+
+.tri-box-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #1d4ed8;
+  white-space: nowrap;
+}
+
+.tri-box-id {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #1e40af;
+  background: #dbeafe;
+  border-radius: 6px;
+  padding: 3px 8px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.tri-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tri-leg {
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.tri-leg-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.tri-leg-no {
+  flex: none;
+  font-weight: 700;
+  font-size: 0.72rem;
+  color: #fff;
+  background: #2563eb;
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.tri-leg-flow {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+}
+
+.tri-teacher {
+  overflow-wrap: anywhere;
+}
+
+.tri-leg-status {
+  flex: none;
+  margin-left: auto;
+}
+
+.tri-arrow {
+  flex: none;
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.tri-slot {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dbeafe;
+  color: var(--text-secondary, #475569);
+  font-size: 0.78rem;
+}
+
+.tri-slot-cell {
+  flex: 1 1 130px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 5px 8px;
+  overflow-wrap: anywhere;
+}
+
+.tri-slot-label {
+  flex: none;
+  font-weight: 700;
+  font-size: 0.68rem;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.tri-note {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed #bfdbfe;
+  color: #1e3a8a;
+  font-size: 0.76rem;
+}
+
+@media (max-width: 420px) {
+  .tri-leg-status { margin-left: 0; }
+  .tri-slot-cell { flex: 1 1 100%; }
+}
+
 /* 空狀態統一 */
 .empty-state,
 .table-empty,

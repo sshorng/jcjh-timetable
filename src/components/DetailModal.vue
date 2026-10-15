@@ -42,17 +42,37 @@
                   <strong class="text-success">{{ detailRequest.specialFlow === 'combined_return' ? ('併班教師不支領；被代教師依假別扣減（' + (detailRequest.subFee || '待判定') + '）') : (detailRequest.subFee || '自費代課') }}</strong>
                </div>
 
-                  <div v-if="detailRequest && detailRequest.type === 'triangle'" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:0.8rem;line-height:1.5;">
-                  <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px;">三角調整組 {{ detailRequest.triangleId || detailRequest.batchId || '未提供' }}</div>
-                  <div v-for="row in getTriangleGroupRequests(detailRequest)" :key="'detail-tri-' + row.id" style="padding:8px 0;border-top:1px solid #dbeafe;">
-                   <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                     <strong>第{{ row.triangleLegIndex || '未提供' }}腳：{{ row.requesterName }} → {{ row.targetTeacherName }}</strong>
-                      <span class="status-badge tag-gray">{{ row.triangleConsentStatus === 'paper_agreed' ? '紙本已確認' : (row.triangleConsentStatus === 'paper_pending' ? '待紙本簽名' : (row.triangleConsentStatus === 'agree' ? '已同意' : (row.triangleConsentStatus === 'decline' ? '已拒絕' : '待同意'))) }}</span>
+                 <div v-if="detailRequest && detailRequest.type === 'triangle'" class="tri-box">
+                   <div class="tri-box-head">
+                     <span class="tri-box-title">三角調整組</span>
+                     <code class="tri-box-id">{{ detailRequest.triangleId || detailRequest.batchId || '未提供' }}</code>
                    </div>
-                   <div style="color:var(--text-secondary);margin-top:3px;">{{ formatLeaveClassSlot(row) }} → {{ formatExchangeClassSlot(row) }}</div>
+                   <ul class="tri-list">
+                     <li v-for="row in getTriangleGroupRequests(detailRequest)" :key="'detail-tri-' + row.id" class="tri-leg">
+                       <div class="tri-leg-head">
+                         <span class="tri-leg-no">第{{ row.triangleLegIndex || '?' }}腳</span>
+                         <span class="tri-leg-flow">
+                           <span class="tri-teacher">{{ row.requesterName }}</span>
+                           <span class="tri-arrow" aria-hidden="true">→</span>
+                           <span class="tri-teacher">{{ row.targetTeacherName }}</span>
+                         </span>
+                         <span class="status-badge tag-gray tri-leg-status">{{ row.triangleConsentStatus === 'paper_agreed' ? '紙本已確認' : (row.triangleConsentStatus === 'paper_pending' ? '待紙本簽名' : (row.triangleConsentStatus === 'agree' ? '已同意' : (row.triangleConsentStatus === 'decline' ? '已拒絕' : '待同意'))) }}</span>
+                       </div>
+                       <div class="tri-slot">
+                         <span class="tri-slot-cell">
+                           <span class="tri-slot-label">原</span>
+                           <span>{{ formatLeaveClassSlot(row) }}</span>
+                         </span>
+                         <span class="tri-arrow" aria-hidden="true">→</span>
+                         <span class="tri-slot-cell">
+                           <span class="tri-slot-label">換</span>
+                           <span>{{ formatExchangeClassSlot(row) }}</span>
+                         </span>
+                       </div>
+                     </li>
+                   </ul>
+                   <p class="tri-note">{{ isPaperFlowRequest(detailRequest) ? '紙本模式：請確認三位教師都已在調課單簽名，再由教學組核審；系統不進行線上簽核。' : '線上模式：三方全部同意後才會送教學組核准；任一人拒絕或撤回，整組不生效。' }}</p>
                  </div>
-                   <div style="margin-top:8px;color:#1e3a8a;">{{ isPaperFlowRequest(detailRequest) ? '紙本模式：請確認三位教師都已在調課單簽名，再由教學組核審；系統不進行線上簽核。' : '線上模式：三方全部同意後才會送教學組核准；任一人拒絕或撤回，整組不生效。' }}</div>
-               </div>
                 <div>
                   <span class="text-muted-block">假別事由</span>
                   <strong>{{ detailRequest.reason || '請假' }}</strong>
