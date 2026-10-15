@@ -1023,19 +1023,18 @@ function getPrintAudienceMergeKey(group, ctx) {
     return `audience-special:${group.isExchange ? 'exchange' : 'triangle'}:${group.requestId || resolvePrintSerial(seed)}`;
   }
 
-  const week = getPrintWeekKey((rows[0] && rows[0].date) || seed.date);
-  const type = getPrintRecordTypeKey(seed);
-  const batchId = getPrintBatchId(seed);
-  const combinedReturn = records.some(isPrintCombinedReturnRecord);
-  const actualTeacher = getPrintMergeTeacherKey(seed, 'actual', ctx) || (combinedReturn ? 'combined-return' : '');
-  const originalTeacher = getPrintMergeTeacherKey(seed, 'original', ctx);
-  const leaveMode = isPrintLeaveLikeReason(seed.reason || (group && group.reason)) ? 'leave' : 'course';
-  if (!week || !actualTeacher || !originalTeacher) {
-    return `audience-single:${group && (group.requestId || group.batchId) || resolvePrintSerial(seed) || seed.id || ''}`;
-  }
-
-  // 教學組與教師收到的內容可跨班合併；班級副本另依班級與週次合併。
-  return `audience-merge:${JSON.stringify([batchId, week, type, actualTeacher, originalTeacher, leaveMode])}`;
+   const week = getPrintWeekKey((rows[0] && rows[0].date) || seed.date);
+   const type = getPrintRecordTypeKey(seed);
+   const combinedReturn = records.some(isPrintCombinedReturnRecord);
+   const actualTeacher = getPrintMergeTeacherKey(seed, 'actual', ctx) || (combinedReturn ? 'combined-return' : '');
+   const originalTeacher = getPrintMergeTeacherKey(seed, 'original', ctx);
+   const leaveMode = isPrintLeaveLikeReason(seed.reason || (group && group.reason)) ? 'leave' : 'course';
+   if (!week || !actualTeacher || !originalTeacher) {
+     return `audience-single:${group && (group.requestId || group.batchId) || resolvePrintSerial(seed) || seed.id || ''}`;
+   }
+   // 教學組與教師收到的內容可跨班、跨批次合併（同週＋同教師對＋同處理方式＋同請假模式）；
+   // 班級副本另依班級與週次合併。
+   return `audience-merge:${JSON.stringify([week, type, actualTeacher, originalTeacher, leaveMode])}`;
 }
 
 function getPrintClassAudienceMergeKey(group, ctx) {
