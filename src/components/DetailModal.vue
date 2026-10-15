@@ -50,7 +50,7 @@
                    <ul class="tri-list">
                      <li v-for="row in getTriangleGroupRequests(detailRequest)" :key="'detail-tri-' + row.id" class="tri-leg">
                        <div class="tri-leg-head">
-                         <span class="tri-leg-no">第{{ row.triangleLegIndex || '?' }}腳</span>
+                         <span class="tri-leg-no">第{{ row.triangleLegIndex || '?' }}筆</span>
                          <span class="tri-leg-flow">
                            <span class="tri-teacher">{{ row.requesterName }}</span>
                            <span class="tri-arrow" aria-hidden="true">→</span>
