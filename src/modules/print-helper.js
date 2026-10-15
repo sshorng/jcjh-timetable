@@ -801,6 +801,24 @@ function normalizePrintMergeKey(value) {
 function getPrintBatchId(record) {
   return normalizePrintMergeKey(record && (record.batchId || record['批次ID']));
 }
+ function getPrintTriangleGroupId(record) {
+   if (!record) return '';
+   const tid = String(record.triangleId || '').trim();
+   if (tid) return tid;
+   const bid = String(record.batchId || record['批次ID'] || '').trim();
+   if (bid) return bid;
+   // 舊資料可能沒有 triangleId/batchId，用單號或 ID 的共用字根（TRI1232-2 → TRI1232）合併三腿。
+   const serial = String(record.serial || record['單號'] || '').trim();
+   const serialRoot = serial.replace(/[_-]\d+$/, '');
+   if (serialRoot && serialRoot !== serial) return 'serial:' + serialRoot;
+   const rid = String(record.requestId || '').trim();
+   const ridRoot = rid.replace(/[_-]\d+$/, '');
+   if (ridRoot && ridRoot !== rid) return 'req:' + ridRoot;
+   const id = String(record.id || '').trim();
+   const idRoot = id.replace(/[_-]\d+$/, '');
+   if (idRoot && idRoot !== id) return 'id:' + idRoot;
+   return '';
+ }
 
 function getPrintRecordTypeKey(record) {
   if (isPrintTriangleRec(record)) return 'triangle';
@@ -816,7 +834,7 @@ function getPrintMergeKey(record, ctx) {
   const requestId = resolvePrintRequestId(record);
   const rowId = String(record && record.id || '').trim();
   if (type === 'exchange') return `exchange:${requestId || rowId}`;
-  if (type === 'triangle') return `triangle:${requestId || rowId}`;
+   if (type === 'triangle') return `triangle:${getPrintTriangleGroupId(record) || requestId || rowId}`;
 
   const week = getPrintWeekKey(record && record.date);
   const batchId = getPrintBatchId(record);
@@ -863,16 +881,18 @@ function buildPrintGroups(recordsToPrint, allSubs, ctx) {
     Object.assign(group.signatureByTeacher, record.signatureByTeacher || {});
   };
 
-  records.forEach(function (record) {
-    const exchange = isPrintExchangeRec(record);
-    const triangle = isPrintTriangleRec(record);
-    const requestId = resolvePrintRequestId(record);
-    const key = getPrintMergeKey(record, ctx);
-    if (!groups[key]) {
-      groups[key] = {
-        isExchange: exchange,
-        isTriangle: triangle,
-        requestId: requestId || record.id,
+   records.forEach(function (record) {
+     const exchange = isPrintExchangeRec(record);
+     const triangle = isPrintTriangleRec(record);
+     const requestId = triangle
+       ? (getPrintTriangleGroupId(record) || resolvePrintRequestId(record))
+       : resolvePrintRequestId(record);
+     const key = getPrintMergeKey(record, ctx);
+     if (!groups[key]) {
+       groups[key] = {
+         isExchange: exchange,
+         isTriangle: triangle,
+         requestId: requestId || record.id,
         batchId: getPrintBatchId(record),
         serials: [],
         leaveEmails: [],
@@ -891,12 +911,13 @@ function buildPrintGroups(recordsToPrint, allSubs, ctx) {
     addRecord(groups[key], record);
   });
 
-  const groupList = Object.values(groups);
-  groupList.forEach(function (group) {
+   const groupList = Object.values(groups);
+   groupList.forEach(function (group) {
      if (group.isTriangle) {
        const triangleId = String(group.requestId || '');
        (allSubs || []).filter(function (candidate) {
-         if (!candidate || !triangleId) return false;
+         if (!candidate || !triangleId || !isPrintTriangleRec(candidate)) return false;
+         if (getPrintTriangleGroupId(candidate) === triangleId) return true;
          if (resolvePrintRequestId(candidate) === triangleId) return true;
          const tid = String(candidate.triangleId || candidate.batchId || '').trim();
          return !!(tid && tid === triangleId);
@@ -1254,14 +1275,14 @@ function getSelectedPrintRecords(ctx) {
      if (!request) return;
      const rid = String(request.id || request.requestId || '').trim();
      if (rid && requestIds.has(rid) && isPrintTriangleRec(request)) {
-       const tid = String(request.triangleId || request.batchId || '').trim();
+       const tid = getPrintTriangleGroupId(request);
        if (tid) selectedTriangleIds.add(tid);
      }
    });
    ids.forEach(id => {
      const record = historyById.get(id);
      if (record && isPrintTriangleRec(record)) {
-       const tid = String(record.triangleId || record.batchId || '').trim() || String(record.requestId || '').trim();
+       const tid = getPrintTriangleGroupId(record) || String(record.requestId || '').trim();
        if (tid) selectedTriangleIds.add(tid);
      }
    });
@@ -1269,7 +1290,7 @@ function getSelectedPrintRecords(ctx) {
      if (!request) return false;
      const rid = String(request.id || request.requestId || '').trim();
      if (rid && requestIds.has(rid)) return true;
-     const tid = String(request.triangleId || request.batchId || '').trim();
+     const tid = getPrintTriangleGroupId(request);
      return !!(tid && selectedTriangleIds.has(tid));
    });
    const generated = typeof buildRecords === 'function' ? buildRecords(requests) : [];
@@ -1281,7 +1302,7 @@ function getSelectedPrintRecords(ctx) {
    if (selectedTriangleIds.size) {
      const seen = new Set(base.map(record => String(record && record.id)));
      (generated || []).forEach(record => {
-       const tid = String((record && (record.triangleId || record.batchId)) || '').trim();
+       const tid = getPrintTriangleGroupId(record);
        if (tid && selectedTriangleIds.has(tid) && !seen.has(String(record.id))) {
          seen.add(String(record.id));
          base.push(record);
@@ -1748,6 +1769,5 @@ async function printSelectedForms(formType, ctx) {
     if (ctx.loading) ctx.loading.value = false;
   }
 }
+ export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
 
-
- export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
