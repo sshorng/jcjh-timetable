@@ -108,16 +108,16 @@ function getPrintAudienceLabels(group, ctx) {
       return cleanPrintTeacherName(raw || getName(key) || key);
     }));
   };
-  const classes = uniquePrintValues((rows || []).map(row => row.cls || row.className));
-  if (group && group.isTriangle) {
-    return [
-      '教學組留存',
-      '三角調教師：' + names('original').join('、'),
-      '實際授課教師：' + names('actual').join('、'),
-      '班級：' + classes.join('、')
-    ];
-  }
-  if (group && group.isExchange) {
+   const classes = uniquePrintValues((rows || []).map(row => row.cls || row.className));
+   if (group && group.isTriangle) {
+     return [
+       '教學組留存',
+       '三角調教師：' + names('original').join('、'),
+       '實際授課教師：' + names('actual').join('、'),
+       '班級：' + classes.join('、')
+     ];
+   }
+   if (group && group.isExchange) {
     const requesterKey = String(group.requesterEmail || '').trim().toLowerCase();
     const requesterRecord = (rows || []).find(row => /_2$/.test(String(row && row.id || ''))) || rows[0] || {};
     const targetRecord = (rows || []).find(row => /_1$/.test(String(row && row.id || '')))
@@ -152,6 +152,27 @@ function getPrintAudienceLabels(group, ctx) {
     '班級：' + classes.join('、')
   ];
 }
+ function getTriangleTeacherEntries(group, ctx) {
+   const rows = getPrintSlotRows(group);
+   const getName = ctx && typeof ctx.getTeacherNameByEmail === 'function'
+     ? ctx.getTeacherNameByEmail
+     : function (value) { return String(value || ''); };
+   const entries = [];
+   const seen = new Set();
+   ['actual', 'original'].forEach(function (side) {
+     (rows || []).forEach(function (row) {
+       const emailKey = String(getPrintTeacherKey(row, side) || '').trim();
+       const raw = side === 'actual' ? row.actualTeacherName : row.originalTeacherName;
+       const name = cleanPrintTeacherName(raw || getName(emailKey) || emailKey);
+       if (!name) return;
+       const identity = (emailKey || name).toLowerCase();
+       if (!identity || seen.has(identity)) return;
+       seen.add(identity);
+       entries.push({ key: emailKey || name, email: /@/.test(emailKey) ? emailKey : '', name });
+     });
+   });
+   return entries.slice(0, 3);
+ }
 
 function withPrintAudienceLabel(form, label) {
   const source = String(form || '').replace(/<div class="[^"]*\bofficial-audience-label\b[^"]*">[\s\S]*?<\/div>\s*/g, '');
@@ -872,13 +893,16 @@ function buildPrintGroups(recordsToPrint, allSubs, ctx) {
 
   const groupList = Object.values(groups);
   groupList.forEach(function (group) {
-    if (group.isTriangle) {
-      const triangleId = String(group.requestId || '');
-      (allSubs || []).filter(function (candidate) {
-        return candidate && resolvePrintRequestId(candidate) === triangleId;
-      }).forEach(function (candidate) {
-        addRecord(group, candidate);
-      });
+     if (group.isTriangle) {
+       const triangleId = String(group.requestId || '');
+       (allSubs || []).filter(function (candidate) {
+         if (!candidate || !triangleId) return false;
+         if (resolvePrintRequestId(candidate) === triangleId) return true;
+         const tid = String(candidate.triangleId || candidate.batchId || '').trim();
+         return !!(tid && tid === triangleId);
+       }).forEach(function (candidate) {
+         addRecord(group, candidate);
+       });
     } else if (group.isExchange && group.records.length === 1) {
       const current = group.records[0];
       const requestId = String(group.requestId || '');
@@ -1213,28 +1237,59 @@ function getSelectedPrintRecords(ctx) {
 }
 
 /** 歷史列印改用原始申請資料組單，與待辦批核預覽採用相同的資料轉換。 */
-function buildHistoryPrintRecords(selectedIds, historyRecords, requestRecords, buildRecords) {
-  const ids = uniquePrintValues((selectedIds || []).map(value => String(value == null ? '' : value)));
-  const historyById = new Map();
-  (historyRecords || []).forEach(record => {
-    if (record && record.id != null) historyById.set(String(record.id), record);
-  });
-
-  const requestIds = new Set(ids.map(id => {
-    const record = historyById.get(id);
-    return String((record && record.requestId) || id.replace(/_[12]$/, '')).trim();
-  }).filter(Boolean));
-  const requests = (requestRecords || []).filter(request =>
-    request && requestIds.has(String(request.id || request.requestId || '').trim())
-  );
-  const generated = typeof buildRecords === 'function' ? buildRecords(requests) : [];
-  const generatedById = new Map();
-  (generated || []).forEach(record => {
-    if (record && record.id != null) generatedById.set(String(record.id), record);
-  });
-
-  return ids.map(id => generatedById.get(id) || historyById.get(id)).filter(Boolean);
-}
+ /** 歷史列印改用原始申請資料組單，與待辦批核預覽採用相同的資料轉換。 */
+ function buildHistoryPrintRecords(selectedIds, historyRecords, requestRecords, buildRecords) {
+   const ids = uniquePrintValues((selectedIds || []).map(value => String(value == null ? '' : value)));
+   const historyById = new Map();
+   (historyRecords || []).forEach(record => {
+     if (record && record.id != null) historyById.set(String(record.id), record);
+   });
+   const requestIds = new Set(ids.map(id => {
+     const record = historyById.get(id);
+     return String((record && record.requestId) || id.replace(/_[12]$/, '')).trim();
+   }).filter(Boolean));
+   // 三角調在歷史清單只顯示一列時，仍要把同 triangleId 的三條 leg 一併取回，否則只印出一節。
+   const selectedTriangleIds = new Set();
+   (requestRecords || []).forEach(request => {
+     if (!request) return;
+     const rid = String(request.id || request.requestId || '').trim();
+     if (rid && requestIds.has(rid) && isPrintTriangleRec(request)) {
+       const tid = String(request.triangleId || request.batchId || '').trim();
+       if (tid) selectedTriangleIds.add(tid);
+     }
+   });
+   ids.forEach(id => {
+     const record = historyById.get(id);
+     if (record && isPrintTriangleRec(record)) {
+       const tid = String(record.triangleId || record.batchId || '').trim() || String(record.requestId || '').trim();
+       if (tid) selectedTriangleIds.add(tid);
+     }
+   });
+   const requests = (requestRecords || []).filter(request => {
+     if (!request) return false;
+     const rid = String(request.id || request.requestId || '').trim();
+     if (rid && requestIds.has(rid)) return true;
+     const tid = String(request.triangleId || request.batchId || '').trim();
+     return !!(tid && selectedTriangleIds.has(tid));
+   });
+   const generated = typeof buildRecords === 'function' ? buildRecords(requests) : [];
+   const generatedById = new Map();
+   (generated || []).forEach(record => {
+     if (record && record.id != null) generatedById.set(String(record.id), record);
+   });
+   const base = ids.map(id => generatedById.get(id) || historyById.get(id)).filter(Boolean);
+   if (selectedTriangleIds.size) {
+     const seen = new Set(base.map(record => String(record && record.id)));
+     (generated || []).forEach(record => {
+       const tid = String((record && (record.triangleId || record.batchId)) || '').trim();
+       if (tid && selectedTriangleIds.has(tid) && !seen.has(String(record.id))) {
+         seen.add(String(record.id));
+         base.push(record);
+       }
+     });
+   }
+   return base;
+ }
 
 function buildPrintForms(recordsToPrint, allSubs, ctx) {
   const groupList = buildPrintGroups(recordsToPrint, allSubs, ctx);
@@ -1251,22 +1306,43 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
   let staffFormCount = 0;
   let classCopyCount = 0;
 
-  audienceBundles.forEach(function (bundle) {
-    const staffForm = generateFormHtml(bundle.group, 'Official', ctx);
-    if (!staffForm) return;
-    const staffTeacherForm = generateFormHtml(bundle.group, 'OfficialTeacher', ctx);
-    const isAdmin = ctx && (ctx.isAdmin === true || (ctx.isAdmin && ctx.isAdmin.value === true));
-    const staffDisplayForm = isAdmin ? (staffTeacherForm || staffForm) : staffForm;
-    const staffLabels = getPrintAudienceLabels(bundle.group, ctx);
-    forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
-    audienceLabelSets.push(staffLabels);
-    printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
-    printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
-    printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
-    staffFormCount += 1;
-
-    bundle.members.forEach(member => classGroups.push(member));
-  });
+   audienceBundles.forEach(function (bundle) {
+     const staffForm = generateFormHtml(bundle.group, 'Official', ctx);
+     if (!staffForm) return;
+     const staffTeacherForm = generateFormHtml(bundle.group, 'OfficialTeacher', ctx);
+     const isAdmin = ctx && (ctx.isAdmin === true || (ctx.isAdmin && ctx.isAdmin.value === true));
+     const staffDisplayForm = isAdmin ? (staffTeacherForm || staffForm) : staffForm;
+     const staffLabels = getPrintAudienceLabels(bundle.group, ctx);
+     if (bundle.group && bundle.group.isTriangle) {
+       // 三角調：留存 1 張＋三位教師一人一張（各自姓名），共用完整三節路線。
+       const entries = getTriangleTeacherEntries(bundle.group, ctx);
+       forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       audienceLabelSets.push(staffLabels);
+       printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       staffFormCount += 1;
+       entries.forEach(function (entry) {
+         const perGroup = Object.assign({}, bundle.group, {
+           requesterEmail: entry.email || entry.key,
+           requesterName: entry.name
+         });
+         const teacherForm = generateFormHtml(perGroup, 'OfficialTeacher', ctx) || staffTeacherForm || staffForm;
+         const label = '三角調教師：' + entry.name;
+         forms.push(withPrintAudienceLabel(teacherForm, label));
+         audienceLabelSets.push([staffLabels[0], label, label, staffLabels[3]]);
+         printCopies.push(withPrintAudienceLabel(teacherForm, label));
+         staffFormCount += 1;
+       });
+       bundle.members.forEach(member => classGroups.push(member));
+       return;
+     }
+     forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+     audienceLabelSets.push(staffLabels);
+     printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+     printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
+     printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
+     staffFormCount += 1;
+     bundle.members.forEach(member => classGroups.push(member));
+   });
 
   const classBundles = mergePrintAudienceGroups(classGroups, ctx, 'class');
   classBundles.forEach(function (bundle) {
@@ -1674,4 +1750,4 @@ async function printSelectedForms(formType, ctx) {
 }
 
 
-export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
+ export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
