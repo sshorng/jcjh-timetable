@@ -681,9 +681,10 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   assert.match(triangleOutput, /class="official-exchange-overlay"/);
   assert.equal((triangleOutput.match(/class="official-exchange-arrow-line"/g) || []).length, 3);
   assert.doesNotMatch(triangleOutput, /official-exchange-label/, '三角調不應再有節次文字牌');
+   assert.doesNotMatch(triangleOutput, /三角調/, '列印單不應出現三角調字眼，一律用調課');
   assert.match(triangleOutput, /orient="auto-start-reverse"/);
   assert.match(triangleOutput, /fill="none" stroke="#111827" stroke-width="\.25"/);
-  assert.equal(getPrintAudienceLabels(triangleGroups[0], fixtureContext).slice(1, 3).join('\n'), '三角調教師：王小明、林小美、陳小華\n實際授課教師：陳小華、王小明、林小美');
+   assert.equal(getPrintAudienceLabels(triangleGroups[0], fixtureContext).slice(1, 3).join('\n'), '調課教師：王小明、林小美、陳小華\n實際授課教師：陳小華、王小明、林小美');
   const sameDayTriangleRecords = [2, 5, 7].map((period, i) => ({
     id: 'TRI-SAME-' + (i + 1), triangleId: 'TRI-SAME', triangleLegIndex: i + 1, type: 'triangle', serial: 'TRI-SAME',
     originalTeacherEmail: ['b', 'c', 'a'][i] + '@school.example', originalTeacherName: ['B', 'C', 'A'][i],

@@ -6,6 +6,7 @@ import DateUtils from '../domain/date-utils.js';
 import FeeUtils from '../domain/fee-utils.js';
 import FieldMap from '../domain/field-map.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
+ import { buildHistoryPrintRecords } from './print-helper.js';
 
 /**
  * ui-approval.js — 簽核／行政核准／撤回撤銷（方案甲殼瘦身 A）
@@ -872,10 +873,28 @@ const UiApproval = (() => {
          });
        });
        selectedRecordIds.value = expandedPrintIds;
-      showBatchPrintPrompt.value = false;
-      activeTab.value = 'records';
-      await openPrintPreview('Notice');
-    }
+       showBatchPrintPrompt.value = false;
+       activeTab.value = 'records';
+       // 一鍵列印改走申請單來源組單：核准當下申請單一定齊全，
+       // 不依賴課表明細是否已重載回來；三角調三腿由共用 ID 展開補齊。
+       try {
+         var batchBuildRecords = deps.buildPaperRecordsForSubmittedRequests;
+         if (typeof batchBuildRecords === 'function' && typeof buildHistoryPrintRecords === 'function') {
+           var batchHistRecords = (substitutionRecords2.value || []);
+           var batchReqList = (requestsList.value || []);
+           var batchPrintRecords = buildHistoryPrintRecords(expandedPrintIds, batchHistRecords, batchReqList, batchBuildRecords);
+           if (batchPrintRecords && batchPrintRecords.length) {
+             await openPrintPreview('Notice', {
+               records: batchPrintRecords,
+               allSubs: batchHistRecords.concat(batchPrintRecords),
+               source: 'batch'
+             });
+             return;
+           }
+         }
+       } catch (eBatchPrint) { console.warn('批次列印申請單組單失敗，改用明細列印：', eBatchPrint); }
+       await openPrintPreview('Notice');
+     }
 
     function dismissBatchPrintPrompt() {
       showBatchPrintPrompt.value = false;

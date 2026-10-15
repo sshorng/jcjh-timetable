@@ -110,8 +110,9 @@ const getApprovalApi = () => {
         triangleParticipants: storeToRefs(useOutputStore()).triangleParticipants, triangleNote: storeToRefs(useTourStore()).triangleNote, sheetRequestToFront: FieldMap.mapRequest, currentSemester: storeToRefs(useSessionStore()).currentSemester,
         optimisticUpsertRequest: useDataStore().optimisticUpsertRequest, successActionRequests: storeToRefs(useMutualStore()).successActionRequests, showMatchModal: storeToRefs(useSessionStore()).showMatchModal, hasLineTemplate: storeToRefs(useMutualStore()).hasLineTemplate,
         lineCopyText: storeToRefs(useMutualStore()).lineCopyText, lineBatchParts: storeToRefs(useMutualStore()).lineBatchParts, showSuccessModal: storeToRefs(useMutualStore()).showSuccessModal, resetTriangleDraft: useTimetableStore().resetTriangleDraft,
-        openPaperPrintDraftForSubmittedRequests: useOutputStore().openPaperPrintDraftForSubmittedRequests, successModalTitle: storeToRefs(useMutualStore()).successModalTitle, successModalMessage: storeToRefs(useMutualStore()).successModalMessage,
-        successFlowMode: storeToRefs(useMutualStore()).successFlowMode, softRefreshInBackground: useDataStore().softRefreshInBackground,
+         openPaperPrintDraftForSubmittedRequests: useOutputStore().openPaperPrintDraftForSubmittedRequests, buildPaperRecordsForSubmittedRequests: useOutputStore().buildPaperRecordsForSubmittedRequests,
+         successModalTitle: storeToRefs(useMutualStore()).successModalTitle, successModalMessage: storeToRefs(useMutualStore()).successModalMessage,
+         successFlowMode: storeToRefs(useMutualStore()).successFlowMode, softRefreshInBackground: useDataStore().softRefreshInBackground,
       });
       return _approvalApi;
     };

@@ -112,7 +112,7 @@ function getPrintAudienceLabels(group, ctx) {
    if (group && group.isTriangle) {
      return [
        '教學組留存',
-       '三角調教師：' + names('original').join('、'),
+       '調課教師：' + names('original').join('、'),
        '實際授課教師：' + names('actual').join('、'),
        '班級：' + classes.join('、')
      ];
@@ -636,8 +636,8 @@ function generateFormHtml(g, currentType, ctx) {
       : sourceRecords[0]);
   const applicantKey = String((g && g.requesterEmail) || getPrintTeacherKey(applicantRecord, 'original') || '').trim();
   const rawApplicantName = String((g && g.requesterName) || '').trim();
-  const applicantName = isTriangle
-    ? cleanPrintTeacherName(rawApplicantName || getName(applicantKey) || applicantKey || '三角調課')
+   const applicantName = isTriangle
+     ? cleanPrintTeacherName(rawApplicantName || getName(applicantKey) || applicantKey || '調課')
     : cleanPrintTeacherName(
       rawApplicantName && !/@/.test(rawApplicantName) ? rawApplicantName : getName(applicantKey)
     );
@@ -1480,7 +1480,7 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
            requesterName: entry.name
          });
          const teacherForm = generateFormHtml(perGroup, 'OfficialTeacher', ctx) || staffTeacherForm || staffForm;
-         const label = '三角調教師：' + entry.name;
+          const label = '調課教師：' + entry.name;
          forms.push(withPrintAudienceLabel(teacherForm, label));
          audienceLabelSets.push([staffLabels[0], label, label, staffLabels[3]]);
          printCopies.push(withPrintAudienceLabel(teacherForm, label));
