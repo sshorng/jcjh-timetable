@@ -657,14 +657,36 @@ const UiApproval = (() => {
          if (!silent) showToast('核准成功，異動已寫入課表！', 'success');
          if (isTriangle) optimisticPatchTriangleGroup(req, 'approved');
          else optimisticPatchRequestStatus(id, 'approved');
-        if (opts.collectPrintIds) {
-          if (isExchange) {
-            opts.collectPrintIds.push(id + '_1');
-            opts.collectPrintIds.push(id + '_2');
-          } else {
-            opts.collectPrintIds.push(id);
-          }
-        }
+         if (opts.collectPrintIds) {
+           if (isExchange) {
+             opts.collectPrintIds.push(id + '_1');
+             opts.collectPrintIds.push(id + '_2');
+           } else if (isTriangle) {
+             // 三角調收三條腿的明細 ID（批次列印用腿 ID 對明細，組 ID 對不到會只剩一節）。
+             var triGroupKey = String(req.triangleId || req.batchId || id);
+             var triLegs = (requestsList.value || []).filter(function (r) {
+               return r && (String(r.triangleId || '') === triGroupKey || String(r.batchId || '') === triGroupKey);
+             });
+             if (!triLegs.length) {
+               var triRoot = triGroupKey.replace(/[_-]\d+$/, '');
+               if (triRoot && triRoot !== triGroupKey) {
+                 triLegs = (requestsList.value || []).filter(function (r) {
+                   if (!r || !isTriangleRequest(r)) return false;
+                   if (String(r.triangleId || '').trim() || String(r.batchId || '').trim()) return false;
+                   return String(r.id || '').replace(/[_-]\d+$/, '') === triRoot
+                     || String(r.requestId || '').replace(/[_-]\d+$/, '') === triRoot;
+                 });
+               }
+             }
+             if (triLegs.length) {
+               triLegs.forEach(function (leg) { opts.collectPrintIds.push(leg.id); });
+             } else {
+               opts.collectPrintIds.push(id);
+             }
+           } else {
+             opts.collectPrintIds.push(id);
+           }
+         }
         // 批次核准：只在 batch 結束打一次；單筆延後對齊
         // 核准後課表異動：用 requestsOnly（含已核准列），勿只拉 pending
         if (!opts.skipSoftRefresh) softRefreshInBackground({ delay: 2800, requestsOnly: true });
@@ -828,7 +850,28 @@ const UiApproval = (() => {
         showToast('沒有可列印的批次紀錄', 'warning');
         return;
       }
-      selectedRecordIds.value = lastBatchPrintIds.value.slice();
+       // 三角調組 ID 展開成三條腿的明細 ID（舊收集資料可能只剩組 ID，直接印會只剩一節）。
+       var expandedPrintIds = [];
+       lastBatchPrintIds.value.forEach(function (pid) {
+         if (expandedPrintIds.indexOf(pid) === -1) expandedPrintIds.push(pid);
+         var triLegs = (requestsList.value || []).filter(function (r) {
+           if (!r || !isTriangleRequest(r)) return false;
+           if (String(r.id) === String(pid) || String(r.requestId) === String(pid)) return false;
+           var g = String(r.triangleId || r.batchId || '');
+           if (g && g === String(pid)) return true;
+           var root = String(pid).replace(/[_-]\d+$/, '');
+           if (root && root !== String(pid)) {
+             if (String(r.triangleId || '').trim() || String(r.batchId || '').trim()) return false;
+             return String(r.id || '').replace(/[_-]\d+$/, '') === root
+               || String(r.requestId || '').replace(/[_-]\d+$/, '') === root;
+           }
+           return false;
+         });
+         triLegs.forEach(function (leg) {
+           if (expandedPrintIds.indexOf(leg.id) === -1) expandedPrintIds.push(leg.id);
+         });
+       });
+       selectedRecordIds.value = expandedPrintIds;
       showBatchPrintPrompt.value = false;
       activeTab.value = 'records';
       await openPrintPreview('Notice');

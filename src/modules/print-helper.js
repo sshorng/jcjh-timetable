@@ -808,16 +808,45 @@ function getPrintBatchId(record) {
    const bid = String(record.batchId || record['批次ID'] || '').trim();
    if (bid) return bid;
    // 舊資料可能沒有 triangleId/batchId，用單號或 ID 的共用字根（TRI1232-2 → TRI1232）合併三腿。
+   // 字根不加前綴，讓「有正規 ID 的腿」與「只剩單號的腿」算出同一個分組鍵。
    const serial = String(record.serial || record['單號'] || '').trim();
    const serialRoot = serial.replace(/[_-]\d+$/, '');
-   if (serialRoot && serialRoot !== serial) return 'serial:' + serialRoot;
+   if (serialRoot && serialRoot !== serial) return serialRoot;
    const rid = String(record.requestId || '').trim();
    const ridRoot = rid.replace(/[_-]\d+$/, '');
-   if (ridRoot && ridRoot !== rid) return 'req:' + ridRoot;
+   if (ridRoot && ridRoot !== rid) return ridRoot;
    const id = String(record.id || '').trim();
    const idRoot = id.replace(/[_-]\d+$/, '');
-   if (idRoot && idRoot !== id) return 'id:' + idRoot;
+   if (idRoot && idRoot !== id) return idRoot;
    return '';
+ }
+
+ function getPrintTriangleIdSet(record) {
+   const set = new Set();
+   if (!record) return set;
+   ['triangleId', 'batchId'].forEach(function (field) {
+     const value = String(record[field] || '').trim();
+     if (value) set.add(value);
+   });
+   const batchAlias = String(record['批次ID'] || '').trim();
+   if (batchAlias) set.add(batchAlias);
+   ['serial', 'requestId', 'id'].forEach(function (field) {
+     const value = String(record[field] || record[field === 'serial' ? '單號' : field] || '').trim();
+     if (!value) return;
+     set.add(value);
+     const root = value.replace(/[_-]\d+$/, '');
+     if (root && root !== value) set.add(root);
+   });
+   return set;
+ }
+
+ function printTriangleSameGroup(a, b) {
+   const setA = getPrintTriangleIdSet(a);
+   if (!setA.size) return false;
+   const setB = getPrintTriangleIdSet(b);
+   if (!setB.size) return false;
+   for (const value of setA) { if (setB.has(value)) return true; }
+   return false;
  }
 
 function getPrintRecordTypeKey(record) {
@@ -915,12 +944,15 @@ function buildPrintGroups(recordsToPrint, allSubs, ctx) {
    groupList.forEach(function (group) {
      if (group.isTriangle) {
        const triangleId = String(group.requestId || '');
+       const groupSeed = (group.records || [])[0] || null;
        (allSubs || []).filter(function (candidate) {
-         if (!candidate || !triangleId || !isPrintTriangleRec(candidate)) return false;
-         if (getPrintTriangleGroupId(candidate) === triangleId) return true;
-         if (resolvePrintRequestId(candidate) === triangleId) return true;
+         if (!candidate || !isPrintTriangleRec(candidate)) return false;
+         if (triangleId && getPrintTriangleGroupId(candidate) === triangleId) return true;
+         if (triangleId && resolvePrintRequestId(candidate) === triangleId) return true;
          const tid = String(candidate.triangleId || candidate.batchId || '').trim();
-         return !!(tid && tid === triangleId);
+         if (triangleId && tid && tid === triangleId) return true;
+         // 舊資料三腿 ID 零散時，用共用字根交叉比對（單號／申請單／明細 ID 互相比）。
+         return !!(groupSeed && printTriangleSameGroup(groupSeed, candidate));
        }).forEach(function (candidate) {
          addRecord(group, candidate);
        });
@@ -1268,12 +1300,14 @@ function getSelectedPrintRecords(ctx) {
      const record = historyById.get(id);
      return String((record && record.requestId) || id.replace(/_[12]$/, '')).trim();
    }).filter(Boolean));
-   // 三角調在歷史清單只顯示一列時，仍要把同 triangleId 的三條 leg 一併取回，否則只印出一節。
+   // 三角調在歷史清單只顯示一列時，仍要把同組的三條 leg 一併取回，否則只印出一節。
+   const selectedTriangleSeeds = [];
    const selectedTriangleIds = new Set();
    (requestRecords || []).forEach(request => {
      if (!request) return;
      const rid = String(request.id || request.requestId || '').trim();
      if (rid && requestIds.has(rid) && isPrintTriangleRec(request)) {
+       selectedTriangleSeeds.push(request);
        const tid = getPrintTriangleGroupId(request);
        if (tid) selectedTriangleIds.add(tid);
      }
@@ -1281,16 +1315,22 @@ function getSelectedPrintRecords(ctx) {
    ids.forEach(id => {
      const record = historyById.get(id);
      if (record && isPrintTriangleRec(record)) {
+       selectedTriangleSeeds.push(record);
        const tid = getPrintTriangleGroupId(record) || String(record.requestId || '').trim();
        if (tid) selectedTriangleIds.add(tid);
      }
    });
+   const inSelectedTriangle = function (candidate) {
+     if (!candidate || !isPrintTriangleRec(candidate)) return false;
+     const tid = getPrintTriangleGroupId(candidate);
+     if (tid && selectedTriangleIds.has(tid)) return true;
+     return selectedTriangleSeeds.some(function (seed) { return printTriangleSameGroup(seed, candidate); });
+   };
    const requests = (requestRecords || []).filter(request => {
      if (!request) return false;
      const rid = String(request.id || request.requestId || '').trim();
      if (rid && requestIds.has(rid)) return true;
-     const tid = getPrintTriangleGroupId(request);
-     return !!(tid && selectedTriangleIds.has(tid));
+     return inSelectedTriangle(request);
    });
    const generated = typeof buildRecords === 'function' ? buildRecords(requests) : [];
    const generatedById = new Map();
@@ -1298,15 +1338,17 @@ function getSelectedPrintRecords(ctx) {
      if (record && record.id != null) generatedById.set(String(record.id), record);
    });
    const base = ids.map(id => generatedById.get(id) || historyById.get(id)).filter(Boolean);
-   if (selectedTriangleIds.size) {
+   if (selectedTriangleSeeds.length) {
      const seen = new Set(base.map(record => String(record && record.id)));
-     (generated || []).forEach(record => {
-       const tid = getPrintTriangleGroupId(record);
-       if (tid && selectedTriangleIds.has(tid) && !seen.has(String(record.id))) {
-         seen.add(String(record.id));
-         base.push(record);
-       }
-     });
+     const pull = function (record) {
+       if (!record || seen.has(String(record.id))) return;
+       if (!inSelectedTriangle(record)) return;
+       seen.add(String(record.id));
+       base.push(record);
+     };
+     // 申請單轉換結果優先；明細（已含完整三腿時）作為備援，避免只印出一節。
+     (generated || []).forEach(pull);
+     (historyRecords || []).forEach(pull);
    }
    return base;
  }
@@ -1926,5 +1968,5 @@ async function printSelectedForms(formType, ctx) {
     if (ctx.loading) ctx.loading.value = false;
   }
 }
- export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
+ export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, getPrintTriangleIdSet, printTriangleSameGroup, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
 
