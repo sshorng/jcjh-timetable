@@ -11,7 +11,7 @@ import { TemplateBuffer } from './template-buffer.js';
 /**
  * 活動教師代理遺留課務 輪值通知單（套版 .docx）
  * 模板：templates/activity-cover-template.docx（保留原檔字型／欄寬／列高）
- * 規則：第 1～7 節入表；第 8 節改附註；只匯已送出（非取消／退回／撤回）；特殊分組列不處理
+ * 規則：第 1～7 節入表；第 8 節不列入（另以代課單處理）；只匯已送出（非取消／退回／撤回）；特殊分組列不處理
  */
 const ExportActivityCover = (() => {
   var TEMPLATE_URL = 'templates/activity-cover-template.docx';
@@ -419,7 +419,7 @@ const ExportActivityCover = (() => {
    * - demand(OO)＝事件第一天開始時的剩餘未執行堂數（含早自習／午休）
    * - arranged(XX)＝早自習／1～7／午休已排且「扣額度」節數
    * - remaining＝OO−XX
-   * 表內仍列活動互代（扣額度／活動公費）；表格僅列第 1～7 節，早自習／午休計入 XX 但不另列表格；第 8 節僅附註、不入 OO／XX
+   * 表內仍列活動互代（扣額度／活動公費）；表格僅列第 1～7 節，早自習／午休計入 XX 但不另列表格；第 8 節不列入、不入 OO／XX
    */
   function buildMatrix(opts) {
     opts = opts || {};
@@ -482,14 +482,7 @@ const ExportActivityCover = (() => {
       };
 
       if (period === 8) {
-        // 第8節：只進附註，不計 OO／XX
-        period8Lines.push({
-          date: rd,
-          className: className,
-          leaveName: leaveName,
-          subName: subName,
-          subject: subject
-        });
+        // 第8節不列入輪值通知單（另以代課單處理），直接跳過、不附註、不計 OO／XX
         return;
       }
       // 早自習0／午休45：計入 XX 但不入 1–7 表格（模板無此欄）
@@ -579,30 +572,9 @@ const ExportActivityCover = (() => {
     }).filter(Boolean);
   }
 
-  /**
-   * 第8節附註：單行、靠左小字；含班級
-   * 例：【第八節】10/16 803羽球 黃筱卉→陳禹廷；10/17 7書法 張珍禎→蔡金祝（計畫經費）
-   */
+  /** 第8節不列入輪值通知單（另以代課單處理）：一律不顯示附註。 */
   function formatPeriod8Note(lines) {
-    if (!lines || !lines.length) return '';
-    var items = (lines || []).map(function (it) {
-      var md = formatMd(it.date);
-      var subj = String(it.subject || '').trim();
-      var cn = String(it.className || '').trim();
-      var leave = String(it.leaveName || '').trim();
-      var sub = String(it.subName || '').trim();
-      // 班＋科（無空白）：803羽球；僅科時 8羽球；僅班時班級
-      var head = '';
-      if (cn && subj) head = cn + subj;
-      else if (cn) head = cn;
-      else if (subj) head = '8' + subj;
-      else head = '8';
-      var pair = leave + (sub ? '→' + sub : '');
-      var body = pair ? (head + ' ' + pair) : head;
-      return md + ' ' + body;
-    }).filter(Boolean);
-    if (!items.length) return '';
-    return '【第八節】' + items.join('；') + '（計畫經費）';
+    return '';
   }
 
   function getJSZip() {
@@ -752,9 +724,15 @@ const ExportActivityCover = (() => {
     return documentXml.replace(statsParagraphRe, '');
   }
 
+  function removePeriod8NoteParagraph(documentXml) {
+    var noteParagraphRe = /<w:p\b(?:(?!<\/w:p>)[\s\S])*?\{\{NOTE_P8\}\}(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g;
+    return String(documentXml || '').replace(noteParagraphRe, '');
+  }
+
   function renderPageXml(templateXml, matrix, map, titleLine) {
     var xml = injectDataRows(templateXml, matrix);
     if (map.HIDE_STATS) xml = removeStatisticsParagraphs(xml);
+    xml = removePeriod8NoteParagraph(xml);
     var title = titleLine || map.TITLE_LINE || '';
     xml = xml.split('{{GRADE}}年級{{ACTIVITY}} 教師代理遺留課務 輪值通知單').join(xmlEsc(title));
     xml = xml.split('{{GRADE}}年級課務').join(xmlEsc(map.STATS_GRADE || '　') + '年級課務');
@@ -855,7 +833,7 @@ const ExportActivityCover = (() => {
         ARRANGED: String(pageMatrix.arranged),
         REMAINING: String(pageMatrix.remaining),
         EXPORT_DATE: formatExportDate(opts.exportDate),
-        NOTE_P8: formatPeriod8Note(pageMatrix.period8Lines),
+        NOTE_P8: '',
         STATS_GRADE: gradeInStats || '　',
         HIDE_STATS: page.role === 'covered' ? '1' : ''
       };
@@ -906,9 +884,7 @@ const ExportActivityCover = (() => {
       arranged: arranged,
       demand: demand,
       remaining: remaining,
-      period8Count: summaryPages.reduce(function (sum, page) {
-        return sum + (page.matrix.period8Lines || []).length;
-      }, 0),
+      period8Count: 0,
       warning: hasTeacherPages ? '' : '期間內沒有已送出的代理課務，已匯出空白表'
     };
   }
