@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { UiExport } from '../src/modules/ui-export.js';
-import { generateFormHtml, packPrintForms, buildPrintPreview, buildPrintForms, getPrintPreviewCss, getPrintAudienceLabels, buildPrintGroups, buildHistoryPrintRecords, splitPrintGroupByWeek, printSelectedForms, buildPrintPreviewImageSvg } from '../src/modules/print-helper.js';
+import { generateFormHtml, packPrintForms, buildPrintPreview, buildPrintForms, getPrintPreviewCss, getPrintAudienceLabels, buildPrintGroups, buildHistoryPrintRecords, expandPrintRequestsForBatch, splitPrintGroupByWeek, printSelectedForms, buildPrintPreviewImageSvg } from '../src/modules/print-helper.js';
 import { UiTimetable } from '../src/modules/ui-timetable.js';
 
 
@@ -773,6 +773,17 @@ const dataStoreSource = fs.readFileSync(path.join(here, '..', 'src', 'stores', '
   });
   const capturedLabels = [...capturedBatchPreview.formsHtml.matchAll(/official-audience-label[^>]*>([^<]*)</g)].map(m => m[1].trim());
   assert.equal(capturedBatchPreview.formCount, 5, '留存 1＋三位教師各 1＋班級聯 1');
+
+  // 共用展開函式：只勾到三角調整組其中一腿，也要帶出整組三腿（批次列印統一入口）。
+  const expandedFromOneLeg = expandPrintRequestsForBatch(['TRI-CAP_2'], capturedTriangleRows);
+  assert.equal(expandedFromOneLeg.length, 3, '只勾一腿也應展開成三腿');
+  assert.deepEqual(expandedFromOneLeg.map(row => String(row.id)).sort(), ['TRI-CAP_1', 'TRI-CAP_2', 'TRI-CAP_3']);
+  assert.equal(expandedFromOneLeg[0].triangleLegIndex, 1, '展開後應依腳次排序');
+  // 一般申請單不做展開，只原樣回傳
+  const plainRequest = { id: 'REQ-9', type: 'substitution', batchId: '' };
+  assert.deepEqual(expandPrintRequestsForBatch(['REQ-9'], [plainRequest]).map(row => row.id), ['REQ-9']);
+  // 同一組重複勾選要去重
+  assert.equal(expandPrintRequestsForBatch(['TRI-CAP_1', 'TRI-CAP_3'], capturedTriangleRows).length, 3);
   ['陳小華', '王小明', '林小美'].forEach(name => {
     assert.ok(capturedLabels.includes('調課教師：' + name), name + ' 應有自己的調課教師聯');
   });

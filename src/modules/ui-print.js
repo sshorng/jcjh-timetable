@@ -16,7 +16,8 @@ import {
   printSelectedForms as runPrintSelectedForms,
   buildPrintPreview,
   buildPrintPreviewImageSvg,
-  buildHistoryPrintRecords
+  buildHistoryPrintRecords,
+  expandPrintRequestsForBatch
 } from './print-helper.js';
 const UiPrint = (() => {
   function create(deps) {
@@ -197,17 +198,53 @@ const openHistoryPrintPreview = async () => {
       signatureByTeacher: Object.assign({}, record.signatureByTeacher || {}, signatureByTeacher)
     }));
 
-    return await openPrintPreview('Notice', {
-      records: printRecords,
-      allSubs: (substitutionRecords.value || []).concat(printRecords),
-      source: 'history',
-      skipMarkPrinted: false
-    });
+    return await openPrintPreviewForRecords(printRecords, { source: 'history', skipMarkPrinted: false });
   } catch (error) {
     console.error('歷史紀錄列印預覽失敗：', error);
     showToast('產生列印預覽失敗：' + (error && error.message ? error.message : error), 'error');
     return false;
   }
+};
+
+/**
+ * 列印預覽共用尾端：所有「批次列印」入口（待核准發放、核准後一鍵列印本批、
+ * 歷史紀錄預覽列印）組完單後都走這裡，行為完全一致。
+ * 入口之間唯一的差別寫在 options：來源標記與是否標記已印。
+ */
+const openPrintPreviewForRecords = async (records, options = {}) => {
+  const opts = options || {};
+  const list = (records || []).filter(Boolean);
+  if (!list.length) {
+    showToast(opts.emptyHint || '請先勾選要列印的單據！', 'warning');
+    return false;
+  }
+  return openPrintPreview('Notice', {
+    records: list,
+    allSubs: (substitutionRecords.value || []).concat(list),
+    source: opts.source || 'selection',
+    skipMarkPrinted: opts.skipMarkPrinted === true
+  });
+};
+
+/**
+ * 批次列印共用流程：申請單 → 展開三角調整組三腿 → 轉成紙本紀錄 → 共用尾端。
+ * 呼叫端只負責決定「要印哪些申請單」。
+ */
+const openBatchRequestsPrintPreview = async (requests, options = {}) => {
+  const opts = options || {};
+  const seeds = (requests || []).filter(Boolean);
+  if (!seeds.length) {
+    showToast(opts.emptyHint || '請先勾選要預覽列印的申請單', 'warning');
+    return false;
+  }
+  if (typeof buildPaperRecordsForSubmittedRequests !== 'function') {
+    showToast('列印資料轉換模組尚未載入，請重新整理後再試', 'error');
+    return false;
+  }
+  // 三角調只勾到其中一腿時自動帶出整組三腿，避免少印教師與課程。
+  const expanded = expandPrintRequestsForBatch(seeds, opts.allRequests || (requestsList.value || []));
+  const records = buildPaperRecordsForSubmittedRequests(expanded.length ? expanded : seeds);
+  return openPrintPreviewForRecords(records, Object.assign({ source: 'batch', skipMarkPrinted: true }, opts));
 };
 
 const closePrintPreview = (returnToSource = true) => {
@@ -717,6 +754,7 @@ const markLocalPrinted = (ids) => {
       printSelectedForms: printSelectedForms,
       openPrintPreview: openPrintPreview,
       openHistoryPrintPreview: openHistoryPrintPreview,
+      openBatchRequestsPrintPreview: openBatchRequestsPrintPreview,
       closePrintPreview: closePrintPreview,
       confirmPrintPreview: confirmPrintPreview,
       getPrintPreviewPngBlob: getPrintPreviewPngBlob,
@@ -734,6 +772,7 @@ const markLocalPrinted = (ids) => {
       openSuccessPrintPreview: openSuccessPrintPreview,
       addSuccessToCalendar: addSuccessToCalendar,      printSingleRequest: printSingleRequest,
       markLocalPrinted: markLocalPrinted,
+      openPrintPreviewForRecords: openPrintPreviewForRecords,
 
     };
   }

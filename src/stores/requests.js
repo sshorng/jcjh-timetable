@@ -111,8 +111,8 @@ const getApprovalApi = () => {
         optimisticUpsertRequest: useDataStore().optimisticUpsertRequest, successActionRequests: storeToRefs(useMutualStore()).successActionRequests, showMatchModal: storeToRefs(useSessionStore()).showMatchModal, hasLineTemplate: storeToRefs(useMutualStore()).hasLineTemplate,
         lineCopyText: storeToRefs(useMutualStore()).lineCopyText, lineBatchParts: storeToRefs(useMutualStore()).lineBatchParts, showSuccessModal: storeToRefs(useMutualStore()).showSuccessModal, resetTriangleDraft: useTimetableStore().resetTriangleDraft,
          openPaperPrintDraftForSubmittedRequests: useOutputStore().openPaperPrintDraftForSubmittedRequests, buildPaperRecordsForSubmittedRequests: useOutputStore().buildPaperRecordsForSubmittedRequests,
+         successFlowMode: storeToRefs(useMutualStore()).successFlowMode, softRefreshInBackground: useDataStore().softRefreshInBackground, openBatchRequestsPrintPreview: useOutputStore().openBatchRequestsPrintPreview,
          successModalTitle: storeToRefs(useMutualStore()).successModalTitle, successModalMessage: storeToRefs(useMutualStore()).successModalMessage,
-         successFlowMode: storeToRefs(useMutualStore()).successFlowMode, softRefreshInBackground: useDataStore().softRefreshInBackground,
       });
       return _approvalApi;
     };

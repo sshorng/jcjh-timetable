@@ -4,6 +4,7 @@
  */
 import FieldMap from '../domain/field-map.js';
 import { UiMutualSubmit } from '../modules/ui-mutual.js';
+import { expandPrintRequestsForBatch } from './print-helper.js';
 
 /**
  * ui-backoffice.js — 後台操作（登入登出／歷史選取／額度調整／空堂排班／互代送出／dev 模擬）（從 app.js 抽出，2A）
@@ -119,7 +120,7 @@ const UiBackoffice = (() => {
     var recomputeRequestBuckets = deps.recomputeRequestBuckets;
     var loadWeeklyData = deps.loadWeeklyData;
     var selectedAdminPendingIds = deps.selectedAdminPendingIds;
-    var openPaperPrintDraftForSubmittedRequests = deps.openPaperPrintDraftForSubmittedRequests;
+    var openBatchRequestsPrintPreview = deps.openBatchRequestsPrintPreview;
     var paginatedAdminPending = deps.paginatedAdminPending;
     var isAdminPendingSelected = deps.isAdminPendingSelected;
     var _nextDataLoadSeq = deps._nextDataLoadSeq;
@@ -555,14 +556,11 @@ const openBatchPendingPrintPreview = () => {
     showToast('請先勾選要預覽列印的申請單', 'warning');
     return false;
   }
-  const requests = (adminPendingRequests.value || []).filter(request =>
-    request && ids.includes(String(request.id))
-  );
-  if (!requests.length) {
-    showToast('找不到已勾選的待核准申請單', 'warning');
-    return false;
-  }
-  return openPaperPrintDraftForSubmittedRequests(requests);
+  // 勾選的三角調整組只要勾到其中一腿，展開函式會自動帶出整組三腿。
+  const expanded = expandPrintRequestsForBatch(ids, (deps.requestsList && deps.requestsList.value) || adminPendingRequests.value || []);
+  const seeds = expanded.length ? expanded : ids.map(id =>
+    (adminPendingRequests.value || []).find(request => request && String(request.id) === id)).filter(Boolean);
+  return openBatchRequestsPrintPreview(seeds, { source: 'batchPending', emptyHint: '找不到已勾選的待核准申請單' });
 };
 
 const isAdminPendingPageFullySelected = () => {

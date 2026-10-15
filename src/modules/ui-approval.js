@@ -877,24 +877,17 @@ const UiApproval = (() => {
       }
       showBatchPrintPrompt.value = false;
       activeTab.value = 'records';
-      var batchHistRecords = (substitutionRecords2.value || []);
-      var batchBuildRecords = deps.buildPaperRecordsForSubmittedRequests;
+      var sharedBatchPrint = deps.openBatchRequestsPrintPreview;
 
       // 首選：核准當下拍下的申請單列。三角調三腿必定齊全，
       // 且不受「按核准後 store 已刷新、腿還沒回來」影響。
-      if (typeof batchBuildRecords === 'function' && lastBatchPrintRows.value.length) {
+      // 與「待核准發放」的批次列印共用同一條流程。
+      if (typeof sharedBatchPrint === 'function' && lastBatchPrintRows.value.length) {
+        selectedRecordIds.value = lastBatchPrintRows.value.map(function (r) { return String(r.id || ''); }).filter(Boolean);
         try {
-          var capturedRecords = batchBuildRecords(lastBatchPrintRows.value.slice());
-          if (capturedRecords && capturedRecords.length) {
-            selectedRecordIds.value = capturedRecords.map(function (r) { return String(r.id || ''); }).filter(Boolean);
-            await openPrintPreview('Notice', {
-              records: capturedRecords,
-              allSubs: batchHistRecords.concat(capturedRecords),
-              source: 'batch'
-            });
-            return;
-          }
-        } catch (eBatchPrint) { console.warn('批次列印申請單組單失敗，改用明細列印：', eBatchPrint); }
+          var done = await sharedBatchPrint(lastBatchPrintRows.value.slice(), { source: 'batchApproved' });
+          if (done !== false) return;
+        } catch (eBatchPrint) { console.warn('批次列印共用流程失敗，改用明細列印：', eBatchPrint); }
       }
 
       // 備援：回頭用列印 ID 到明細／申請單補齊（舊資料或核准當下未拍到列）。
@@ -921,12 +914,13 @@ const UiApproval = (() => {
        });
       selectedRecordIds.value = expandedPrintIds;
       try {
-        if (typeof batchBuildRecords === 'function' && typeof buildHistoryPrintRecords === 'function' && expandedPrintIds.length) {
-          var batchPrintRecords = buildHistoryPrintRecords(expandedPrintIds, batchHistRecords, (requestsList.value || []), batchBuildRecords);
+        if (typeof deps.buildPaperRecordsForSubmittedRequests === 'function'
+          && typeof buildHistoryPrintRecords === 'function' && expandedPrintIds.length) {
+          var batchPrintRecords = buildHistoryPrintRecords(expandedPrintIds, substitutionRecords2.value || [], (requestsList.value || []), deps.buildPaperRecordsForSubmittedRequests);
           if (batchPrintRecords && batchPrintRecords.length) {
             await openPrintPreview('Notice', {
               records: batchPrintRecords,
-              allSubs: batchHistRecords.concat(batchPrintRecords),
+              allSubs: (substitutionRecords2.value || []).concat(batchPrintRecords),
               source: 'batch'
             });
             return;

@@ -1352,6 +1352,43 @@ function getSelectedPrintRecords(ctx) {
    }
    return base;
  }
+/**
+ * 批次列印共用：把「勾選到的申請單」展開成要列印的完整集合。
+ * 三角調只勾到其中一腿時，必須自動帶出整組三腿，
+ * 否則批次列印只印到被勾到的腿，造成「老師少一張、課程沒顯示全」。
+ * 一般代課／調課則原樣保留。
+ */
+function expandPrintRequestsForBatch(seeds, allRequests) {
+  const rows = (allRequests || []).filter(Boolean);
+  const picked = [];
+  const seen = new Set();
+  const push = (row) => {
+    if (!row || row.id == null) return;
+    const key = String(row.id);
+    if (seen.has(key)) return;
+    seen.add(key);
+    picked.push(row);
+  };
+  (seeds || []).filter(Boolean).forEach((seed) => {
+    const row = (seed.id != null)
+      ? seed
+      : rows.find(candidate => candidate && String(candidate.id) === String(seed));
+    if (!row) return;
+    if (isPrintTriangleRec(row)) {
+      const groupKey = String(row.triangleId || row.batchId || '').trim();
+      const legs = groupKey
+        ? rows.filter(candidate => candidate && isPrintTriangleRec(candidate)
+          && String(candidate.triangleId || candidate.batchId || '').trim() === groupKey)
+        : [];
+      if (legs.length) {
+        legs.slice().sort((a, b) => (parseInt(a.triangleLegIndex, 10) || 0) - (parseInt(b.triangleLegIndex, 10) || 0)).forEach(push);
+        return;
+      }
+    }
+    push(row);
+  });
+  return picked;
+}
  function getLeaveMergeKey(group, ctx) {
    const rows = getPrintSlotRows(group);
    const seed = ((group && group.records) || [])[0] || rows[0] || {};
@@ -1968,5 +2005,5 @@ async function printSelectedForms(formType, ctx) {
     if (ctx.loading) ctx.loading.value = false;
   }
 }
- export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, getPrintTriangleIdSet, printTriangleSameGroup, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords };
+ export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, getPrintTriangleIdSet, printTriangleSameGroup, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords, expandPrintRequestsForBatch };
 
