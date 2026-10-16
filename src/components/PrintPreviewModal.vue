@@ -12,6 +12,25 @@
             <button class="btn-close" @click="closePrintPreview(true)">&times;</button>
           </div>
            <div class="modal-body print-preview-modal-body">
+             <div v-if="printPreview" class="print-preview-kind-bar">
+               <span class="print-preview-kind-label">要印的聯別</span>
+               <label v-for="option in printPreview.copyKindOptions || []" :key="option.kind" class="print-preview-kind-chip">
+                 <input
+                   type="checkbox"
+                   :value="option.kind"
+                   :checked="isPrintPreviewCopyKindSelected(option.kind)"
+                   :disabled="printPreview.canPrint === false"
+                   @change="onTogglePrintCopyKind(option.kind)"
+                 >
+                 <span>{{ option.label }}（{{ option.count }}）</span>
+               </label>
+               <button
+                 type="button"
+                 class="btn btn-secondary btn-sm-tight"
+                 :disabled="printPreview.canPrint === false"
+                 @click="onTogglePrintCopyKind('__all__')"
+               >全選</button>
+             </div>
              <iframe
               v-if="printPreview"
               class="print-preview-frame"
@@ -41,13 +60,40 @@
 
 <!-- 列印預覽 modal（自 App.vue 抽出，其餘 props 注入） -->
 <script setup>
-defineProps({
+import { computed } from 'vue';
+
+const props = defineProps({
   printPreview: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   printPreviewImageBusy: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   closePrintPreview: { type: Function, required: true },
   copyPrintPreviewImage: { type: Function, required: true },
   downloadPrintPreviewImage: { type: Function, required: true },
   confirmPrintPreview: { type: Function, required: true },
+  setPrintPreviewCopyKinds: { type: Function, required: true },
+  isPrintPreviewCopyKindSelected: { type: Function, default: () => true },
 });
 defineEmits(['close']);
+
+// 已勾選的聯別（空集合＝全印，與資料層 normalizePrintCopyKinds 語意一致）。
+const selectedKinds = computed(() => {
+  const list = props.printPreview && props.printPreview.copyKinds;
+  return Array.isArray(list) ? list.filter(Boolean) : [];
+});
+
+/** 切換單一聯；傳 '__all__' 為全選。至少要留一聯，避免印出空白。 */
+const onTogglePrintCopyKind = (kind) => {
+  const all = (props.printPreview.copyKindOptions || []).map(option => option.kind);
+  if (kind === '__all__') {
+    props.setPrintPreviewCopyKinds(all);
+    return;
+  }
+  const next = selectedKinds.value.includes(kind)
+    ? selectedKinds.value.filter(item => item !== kind)
+    : all.filter(item => item === kind || selectedKinds.value.includes(item));
+  if (!next.length) {
+    props.setPrintPreviewCopyKinds([kind]);
+    return;
+  }
+  props.setPrintPreviewCopyKinds(next);
+};
 </script>

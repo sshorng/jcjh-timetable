@@ -1370,8 +1370,32 @@
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyFilterMode === 'day' }" @click="setHistoryFilterMode('day')">本日</button>
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyFilterMode === 'week' }" @click="setHistoryFilterMode('week')">本週</button>
                 <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyFilterMode === 'month' }" @click="setHistoryFilterMode('month')">本月</button>
+                <button type="button" class="btn btn-secondary filter-chip" :class="{ 'btn-primary': historyFilterMode === 'range' }" @click="setHistoryFilterMode('range')" title="明確日期區間：自訂起日與迄日">區間</button>
               </div>
-              <input type="date" class="form-control filter-date" style="padding: 4px 8px; font-size: 0.75rem; max-width: 140px;" v-model="historyFilterDate">
+              <template v-if="historyFilterMode === 'range'">
+                <input
+                  type="date"
+                  class="form-control filter-date"
+                  style="padding: 4px 8px; font-size: 0.75rem; max-width: 140px;"
+                  v-model="historyRangeStart"
+                  aria-label="區間起日"
+                >
+                <span style="font-size: 0.75rem; color: var(--text-muted);">～</span>
+                <input
+                  type="date"
+                  class="form-control filter-date"
+                  style="padding: 4px 8px; font-size: 0.75rem; max-width: 140px;"
+                  v-model="historyRangeEnd"
+                  aria-label="區間迄日"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm-tight"
+                  @click="applyHistoryRangeFilter"
+                  title="套用日期區間並自動補載該區間涵蓋月份的紀錄"
+                >套用區間</button>
+              </template>
+              <input v-else type="date" class="form-control filter-date" style="padding: 4px 8px; font-size: 0.75rem; max-width: 140px;" v-model="historyFilterDate">
               <input type="search" class="form-control filter-search" style="padding: 4px 8px; font-size: 0.75rem; max-width: 220px;" v-model="historySearchQuery" placeholder="單號／教師／班級／科目／日期" @input="historyPage=1">
               <button
                 type="button"
@@ -2394,6 +2418,8 @@
       :copy-print-preview-image="copyPrintPreviewImage"
       :download-print-preview-image="downloadPrintPreviewImage"
       :confirm-print-preview="confirmPrintPreview"
+      :set-print-preview-copy-kinds="setPrintPreviewCopyKinds"
+      :is-print-preview-copy-kind-selected="isPrintPreviewCopyKindSelected"
       @close="closePrintPreview(true)"
     />
 
@@ -2788,8 +2814,13 @@ const { getLeaveTimeDefaults } = submitStore;
 const { batchActiveSlot, batchAllSlotsAssigned, batchAssignedCount, canStaffProxySubmit, compareWeekDatesA, compareWeekDatesB, isBatchExchangeFlow, isBatchMatchFlow, isBatchPerSlotMode, isProxySubmitActive, isProxySubmitGranted, notificationsSuppressed, paperFlow, paperMode } = storeToRefs(submitStore);
 const { adminApprove, adminReject, batchAdminApprove, batchAdminReject, cancelRequest, clearAdminPendingSelection, deleteSubstitutionRecord, dismissBatchPrintPrompt, executeEmptySlotAssign, formatApproveBatchRiskSummary, formatRequestSummary, getApproveRiskFlags, getRequestProgressSteps, isAdminBatchGroupSelected, isAdminPendingSelected, isPaperFlowRequest, printLastBatchNotices, respondToBatch, respondToRequest, sendSelectedBatchNotices, startCombinedReturn, submitTriangleRequest, toggleAdminBatchGroupSelection, toggleAdminPendingSelect, toggleSelectAllAdminPending } = requestsStore;
 const { lastBatchPrintIds, selectedAdminPendingIds, showBatchPrintPrompt } = storeToRefs(requestsStore);
-const { loadFullSemesterHistory, loadHistoryMonth, reloadWindowedHistory, setHistoryFilterMode, setHistoryTypeFilter } = historyStore;
+const { loadFullSemesterHistory, loadHistoryMonth, reloadWindowedHistory, setHistoryFilterMode, setHistoryTypeFilter, setHistoryRangeFilter } = historyStore;
 const { dashboardStats } = storeToRefs(historyStore);
+
+/** 套用歷史紀錄的明確日期區間（起日大於迄日時自動對調）。 */
+const applyHistoryRangeFilter = () => {
+  setHistoryRangeFilter(historyRangeStart.value, historyRangeEnd.value);
+};
 const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
 const { classAwayForm, classAwayModalMode, isSimulating, showClassAwayModal } = storeToRefs(backofficeStore);
@@ -2797,7 +2828,7 @@ const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadSche
 const { closeManualQuotaAdjust, closeQuotaLedger, getMappingLabel, getOvertimeExpenseSourceOptions, getScheduleAttrLabel, leaveReasonOptions, quotaTypeClass } = adminStore;
 const { dashboardScope, emptySlotQuotaZero, excelData, excelHeaders, importPreview, mappingFields, overtimePlanPeriodEnd, overtimePlanRows, overtimePlanTeacher, overtimePlanUsesFixedSlots, quotaAdjustForm, quotaAdjustPreview, quotaAdjustSaving, quotaLedgerLoading, quotaLedgerRows, quotaLedgerTeacher, scheduleForm, showExceptionComposer, showImportTeachersModal, showOvertimePlanModal, showQuotaAdjustModal, showQuotaLedgerModal, showScheduleEditModal, showTeacherExpenseAuditModal, showTeacherModal, teacherExcelData, teacherExcelHeaders, teacherExpenseAuditRows, teacherExpenseAuditSummary, teacherForm, teacherImportPreview, teacherMappingFields, teacherModalMode } = storeToRefs(adminStore);
 const { addSuccessToCalendar, calculateMonthlyReport, clearSchoolExportTeachers, closePrintPreview, confirmPrintPreview, copyPrintPreviewImage, downloadPrintPreviewImage, exportActivityCoverWord, exportInvigilationWorkbook, exportInvigilationClassWorkbook, exportPeriod8Accounting, exportReportToExcel, exportSchoolTimetableWord, exportSubFeeToExcel, isSchoolExportTeacherSelected, openHistoryPrintPreview, openPaperDraftPreview, openPaperPrintForRequest, openPaperPrintMutualDrafts, openPrintPreview, openSuccessPrintPreview, openTrianglePaperPreview, printPaperDraft, printSelectedForms, printSingleRequest, selectAllSchoolExportTeachers, setSchoolExportThisWeek, shiftReportPeriod, toggleSchoolExportTeacher } = outputStore;
-const { openPaperPrintDraftFromCompare } = outputStore;
+const { openPaperPrintDraftFromCompare, isPrintPreviewCopyKindSelected, setPrintPreviewCopyKinds } = outputStore;
 const { displayedTriangleBOptions, displayedTriangleCOptions, triangleCandidateB, triangleCandidateBOptions, triangleCandidateBReadyCount, triangleCandidateC, triangleCandidateCList, triangleCandidateCOptions, triangleCandidateCReadyCount, triangleCandidateDisplayCount, triangleCandidateOptions, triangleCandidateSearch, triangleCandidates, triangleLegs, triangleParticipants, trianglePreviewRows, trianglePreviewWeekDates, triangleReady, triangleTimetablePreview, triangleValidation, weekScheduleGrid } = storeToRefs(outputStore);
 const { copyClassReadonlyLink, getClassReadonlyLink, handleCellClick, handleClassCellClick, handlePeriod8CellClick, jumpToTeacherTimetable, loadTeacherClassesForExchange, showDetailForRecord, startSecondSub } = interactionStore;
 const { changeClassWeek, changePeriod8Week, goToClassThisWeek, goToPeriod8ThisWeek, isMatchHoverCell, isMatchHoverEntry, isMatchPreviewSelected, isMatchSourceCell, isMatchSourceEntry } = interactionStore;
@@ -2805,7 +2836,7 @@ const { canStartSecondSubFromDetail, classSchedules, classViewerReadonly, filter
 const { assignHomeroomTeacher, deleteHomeroomRecord, getTeacherJobTitleByEmail, isHomeroomTeacher, loadHomeroomRecords, onHomeroomInputSelect, onManualCoverTeacherInput, onManualHomeroomLeaveTeacherChange, openManualHomeroomModal, saveManualHomeroomRecord, switchQuotaDeductToSelfPay } = homeroomStore;
 const { applyClassAwayEventById, applyClassAwayToMutualPanel, assignMutualDraftFromMatch, clearMutualDrafts, clearMutualPanel, getMutualDraftAt, isMutualActivityPeriodSelected, isMutualLead, persistMutualPanelDraft, recalculateMutualQuotasFromActivity, removeMutualDraft, selectAwayGrade, setMutualActivityPeriodBoundary, setMutualActivityPeriodMode, setMutualActivityThisWeek, setMutualCover, toggleMutualActivityPeriod, toggleMutualAwayClass, toggleMutualLead } = mutualStore;
 const { copyEditedLineMessage, copyLineBatchPart, copyLineMessage, exchangeWeekdayOptions, getClassChangeTypeLabel, getOriginalRequestClass, getOriginalRequestSubject, getOriginalTargetClass, getOriginalTargetSubject, getTargetClassAndSubject, getTargetSubject, isExchangeLikeRequest, isHistoryExchangeType, onMutualLeadChipClick, openLineMessageEditor, sendEditedLineMessage, sendLineMessage, setExchangeWeekdayFilter } = mutualStore;
-const { askFirstLineDraft, askFirstLineText, classChangeSummary, classList, classReadonlyMode, classSubstitutionMap, classWeekNumber, combinedReturnCandidates, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, exchangePeriodId, exchangeTargetDate, exchangeTeacherClasses, exchangeTeacherEmail, exchangeWeekOffset, exchangeWeekdayFilter, hasLineTemplate, historyFilterDate, historyFilterMode, historyPage, historyPageSize, historySearchQuery, historyTypeFilter, isSubmitting, lineBatchParts, lineCopyText, lineMessageText, lineMessageTitle, matchDisplayCount, matchEmptyReasons, matchSearchQuery, matchShowNoTeacherWarning, mutualCoverStats, mutualImportEventId, mutualImportableEvents, paperPrintDraft, paperSignatureByTeacher, pendingRequestData, period8WeekDate, period8WeekDates, period8WeekNumber, printPreview, printPreviewImageBusy, selectedClass, selectedClassDate, selectedClassWeekDates, selectedRecordIds, showCompareModal, showDetailModal, showDevDropdown, showLineMessageModal, showPrintPreviewModal, showSuccessModal, showTriangleTimetablePreview, successActionRequests, successFlowMode, successModalMessage, successModalTitle } = storeToRefs(mutualStore);
+const { askFirstLineDraft, askFirstLineText, classChangeSummary, classList, classReadonlyMode, classSubstitutionMap, classWeekNumber, combinedReturnCandidates, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, exchangePeriodId, exchangeTargetDate, exchangeTeacherClasses, exchangeTeacherEmail, exchangeWeekOffset, exchangeWeekdayFilter, hasLineTemplate, historyFilterDate, historyFilterMode, historyRangeEnd, historyRangeStart, historyPage, historyPageSize, historySearchQuery, historyTypeFilter, isSubmitting, lineBatchParts, lineCopyText, lineMessageText, lineMessageTitle, matchDisplayCount, matchEmptyReasons, matchSearchQuery, matchShowNoTeacherWarning, mutualCoverStats, mutualImportEventId, mutualImportableEvents, paperPrintDraft, paperSignatureByTeacher, pendingRequestData, period8WeekDate, period8WeekDates, period8WeekNumber, printPreview, printPreviewImageBusy, selectedClass, selectedClassDate, selectedClassWeekDates, selectedRecordIds, showCompareModal, showDetailModal, showDevDropdown, showLineMessageModal, showPrintPreviewModal, showSuccessModal, showTriangleTimetablePreview, successActionRequests, successFlowMode, successModalMessage, successModalTitle } = storeToRefs(mutualStore);
 const { activeCell, adminPendingRequests, allPendingRequests, batchActiveSlotKey, batchAssignMode, batchFlowMode, batchNote, batchReason, batchSelectMode, batchSlots, batchSubFee, batchSubTeacher, directApproveSkipNotify, inputRequestDate, isMutualCover, matchMode, matchPreview, mutualActivityEnd, mutualActivityEndPeriod, mutualActivityPeriodMode, mutualActivityPeriods, mutualActivityStart, mutualActivityStartPeriod, mutualAwayClasses, mutualDrafts, mutualLeadEmails, mutualNote, mutualSkipNotify, myPendingRequests, mySentRequests, onboardingStep, recommendationLoading, recommendedTeachers, showBatchConfirmModal, showOnboarding, tourDemoInvite, triangleNote, trianglePickB, trianglePickC, triangleReason, triangleSubmitting } = storeToRefs(tourStore);
 const { ACTIVITY_PUBLIC_FEE, MUTUAL_COVER_FEE, PERIOD8_FEE, QUOTA_DEDUCT_FEE, TIMETABLE_ONLY_FEE, nextOnboardingStep, onboardingSteps, prevOnboardingStep } = tourStore;
 const { skipOnboarding, startOnboarding, tourDemoInviteRespond } = tourStore;

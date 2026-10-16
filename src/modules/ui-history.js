@@ -48,6 +48,8 @@ const UiHistory = (() => {
     var historySearchQuery = deps.historySearchQuery;
     var historyFilterMode = deps.historyFilterMode;
     var historyFilterDate = deps.historyFilterDate;
+    var historyRangeStart = deps.historyRangeStart || { value: '' };
+    var historyRangeEnd = deps.historyRangeEnd || { value: '' };
     var isHistoryExchangeType = deps.isHistoryExchangeType || function () { return false; };
     var historyPageSize = deps.historyPageSize;
     var historyPage = deps.historyPage;
@@ -273,6 +275,38 @@ const UiHistory = (() => {
     };
     const getMonthStart = (dateStr) => dateStr.slice(0, 7);
 
+    // 日期區間：起訖任一為空視為不設限；起日大於迄日時自動對調，避免查不到資料。
+    const normalizeHistoryRange = () => {
+      const start = String(historyRangeStart.value || '').slice(0, 10);
+      const end = String(historyRangeEnd.value || '').slice(0, 10);
+      if (start && end && start > end) return { start: end, end: start };
+      return { start, end };
+    };
+    const inHistoryRange = (dateStr) => {
+      const range = normalizeHistoryRange();
+      const value = String(dateStr || '').slice(0, 10);
+      if (!value) return false;
+      if (range.start && value < range.start) return false;
+      if (range.end && value > range.end) return false;
+      return true;
+    };
+    /** 區間涵蓋的月份（YYYY-MM），供補載資料使用。 */
+    const getHistoryRangeMonths = () => {
+      const range = normalizeHistoryRange();
+      const start = range.start || range.end;
+      const end = range.end || range.start;
+      if (!start || !end) return [];
+      const months = [];
+      const cursor = new Date(start.slice(0, 4), parseInt(start.slice(5, 7), 10) - 1, 1);
+      const last = new Date(end.slice(0, 4), parseInt(end.slice(5, 7), 10) - 1, 1);
+      // 上限 24 個月，避免跨學年時一次打太多請求。
+      while (cursor <= last && months.length < 24) {
+        months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      return months;
+    };
+
     const dateFilteredHistoryRecords = computed(() => {
       let records = filteredHistoryRecords.value;
 
@@ -298,6 +332,11 @@ const UiHistory = (() => {
         });
       }
 
+      // 區間模式有自己的起訖欄位，不受單一日期欄位空值影響。
+      if (historyFilterMode.value === 'range') {
+        return records.filter(r =>
+          [r.date, r.requestDate, r.targetDate].filter(Boolean).map(String).some(x => inHistoryRange(x)));
+      }
       if (historyFilterMode.value === 'all' || !historyFilterDate.value) return records;
 
       return records.filter(r => {
@@ -741,6 +780,31 @@ const setHistoryFilterMode = (mode) => {
   if (mode === 'month') {
     ensureHistoryMonthLoaded(String(historyFilterDate.value || '').slice(0, 7));
   }
+  if (mode === 'range') {
+    // 預設帶出本月至今，第一次點區間篩選就能直接看到結果。
+    if (!historyRangeStart.value && !historyRangeEnd.value) {
+      const today = toLocalDateStr(new Date());
+      historyRangeEnd.value = today;
+      historyRangeStart.value = today.slice(0, 8) + '01';
+    }
+  }
+};
+
+/** 套用明確日期區間：起訖互換自動對調，並補載區間涵蓋月份的資料。 */
+const setHistoryRangeFilter = (start, end) => {
+  historyRangeStart.value = String(start || '').slice(0, 10);
+  historyRangeEnd.value = String(end || '').slice(0, 10);
+  const normalized = normalizeHistoryRange();
+  historyRangeStart.value = normalized.start;
+  historyRangeEnd.value = normalized.end;
+  historyFilterMode.value = 'range';
+  historyPage.value = 1;
+  if (!normalized.start && !normalized.end) {
+    showToast('請至少填寫區間的起日或迄日', 'warning');
+    return false;
+  }
+  getHistoryRangeMonths().forEach(month => ensureHistoryMonthLoaded(month));
+  return true;
 };
 
 const setHistoryTypeFilter = (type) => {
@@ -787,6 +851,9 @@ const reloadWindowedHistory = async () => {
       filteredHistoryRecords: filteredHistoryRecords,
       getWeekStart: getWeekStart,
       getMonthStart: getMonthStart,
+      normalizeHistoryRange: normalizeHistoryRange,
+      getHistoryRangeMonths: getHistoryRangeMonths,
+      setHistoryRangeFilter: setHistoryRangeFilter,
       dateFilteredHistoryRecords: dateFilteredHistoryRecords,
       historyBatchGroups: historyBatchGroups,
       historyTotalPages: historyTotalPages,

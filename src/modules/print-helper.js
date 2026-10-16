@@ -1211,9 +1211,52 @@ function mergePrintAudienceGroups(groups, ctx, audience) {
   });
 }
 
-function packPrintForms(forms) {
+/** 分送單據的四種聯別（可單獨勾選只印其中一聯）。 */
+const PRINT_COPY_KINDS = Object.freeze(['retain', 'leave', 'substitute', 'class']);
+const PRINT_COPY_KIND_LABELS = Object.freeze({
+  retain: '教學組留存',
+  leave: '請假教師',
+  substitute: '代課/調課教師',
+  class: '班級通知單'
+});
+
+/** 正規化聯別選擇；空值代表「全部都要印」。 */
+function normalizePrintCopyKinds(kinds) {
+  const list = Array.isArray(kinds) ? kinds : (kinds == null || kinds === '' ? [] : [kinds]);
+  const picked = list.map(kind => String(kind == null ? '' : kind).trim())
+    .filter(kind => PRINT_COPY_KIND_LABELS[kind]);
+  return PRINT_COPY_KINDS.filter(kind => picked.indexOf(kind) >= 0);
+}
+
+/** 依聯別取出實際要列印的分送單據（回傳 [{ kind, html }]）。 */
+function selectPrintCopies(forms, kinds) {
+  const list = forms || [];
+  const copies = Array.isArray(list.printCopies) ? list.printCopies : [];
+  const kindList = Array.isArray(list.printCopyKinds) ? list.printCopyKinds : [];
+  const wanted = normalizePrintCopyKinds(kinds);
+  const picked = [];
+  copies.forEach((html, index) => {
+    const kind = kindList[index] || 'retain';
+    if (!wanted.length || wanted.indexOf(kind) >= 0) picked.push({ kind, html });
+  });
+  return picked;
+}
+
+/** 各聯別可印張數（供畫面勾選時顯示）。 */
+function getPrintCopyKindCounts(forms) {
+  const counts = {};
+  PRINT_COPY_KINDS.forEach(kind => { counts[kind] = 0; });
+  selectPrintCopies(forms).forEach(copy => { counts[copy.kind] += 1; });
+  return counts;
+}
+
+function packPrintForms(forms, options) {
   const list = Array.isArray(forms) ? forms : [];
-  const recipientCopies = Array.isArray(list.printCopies) ? list.printCopies : null;
+  const opts = options || {};
+  const wanted = normalizePrintCopyKinds(opts.copyKinds);
+  const recipientCopies = Array.isArray(list.printCopies)
+    ? selectPrintCopies(list, wanted).map(copy => copy.html)
+    : null;
   if (recipientCopies) {
     const emptyCopy = '<div class="substitute-form official-form-empty" aria-hidden="true"></div>';
     const pages = [];
@@ -1492,9 +1535,15 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
   const forms = [];
   const audienceLabelSets = [];
   const printCopies = [];
+  const printCopyKinds = [];
   const classGroups = [];
   let staffFormCount = 0;
   let classCopyCount = 0;
+  // 每張分送單據都記錄聯別，讓畫面可只勾選單一聯（教學組留存／請假教師／代課教師／班級）。
+  const pushCopy = (kind, html) => {
+    printCopies.push(html);
+    printCopyKinds.push(kind);
+  };
 
    const normalBundles = [];
    audienceBundles.forEach(function (bundle) {
@@ -1509,7 +1558,7 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
        const entries = getTriangleTeacherEntries(bundle.group, ctx);
        forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
        audienceLabelSets.push(staffLabels);
-       printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       pushCopy('retain', withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
        staffFormCount += 1;
        entries.forEach(function (entry) {
          const perGroup = Object.assign({}, bundle.group, {
@@ -1520,7 +1569,7 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
           const label = '調課教師：' + entry.name;
          forms.push(withPrintAudienceLabel(teacherForm, label));
          audienceLabelSets.push([staffLabels[0], label, label, staffLabels[3]]);
-         printCopies.push(withPrintAudienceLabel(teacherForm, label));
+         pushCopy('substitute', withPrintAudienceLabel(teacherForm, label));
          staffFormCount += 1;
        });
        bundle.members.forEach(member => classGroups.push(member));
@@ -1529,9 +1578,9 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
      if (bundle.group && bundle.group.isExchange) {
        forms.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
        audienceLabelSets.push(staffLabels);
-       printCopies.push(withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
-       printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
-       printCopies.push(withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
+       pushCopy('retain', withPrintAudienceLabel(staffDisplayForm, staffLabels[0]));
+       pushCopy('leave', withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[1]));
+       pushCopy('substitute', withPrintAudienceLabel(staffTeacherForm || staffForm, staffLabels[2]));
        staffFormCount += 1;
        bundle.members.forEach(member => classGroups.push(member));
        return;
@@ -1555,9 +1604,9 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
        const item = bucket[0];
        forms.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
        audienceLabelSets.push(item.staffLabels);
-       printCopies.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
-       printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
-       printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
+       pushCopy('retain', withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+       pushCopy('leave', withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
+       pushCopy('substitute', withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
        staffFormCount += 1;
        item.bundle.members.forEach(member => classGroups.push(member));
        return;
@@ -1570,9 +1619,9 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
        bucket.forEach(function (item) {
          forms.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
          audienceLabelSets.push(item.staffLabels);
-         printCopies.push(withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
-         printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
-         printCopies.push(withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
+         pushCopy('retain', withPrintAudienceLabel(item.staffDisplayForm, item.staffLabels[0]));
+         pushCopy('leave', withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[1]));
+         pushCopy('substitute', withPrintAudienceLabel(item.staffTeacherForm || item.staffForm, item.staffLabels[2]));
          staffFormCount += 1;
          item.bundle.members.forEach(member => classGroups.push(member));
        });
@@ -1582,11 +1631,11 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
      const mergedLabels = getPrintAudienceLabels(merged, ctx);
      forms.push(withPrintAudienceLabel(mergedDisplay, mergedLabels[0]));
      audienceLabelSets.push(mergedLabels);
-     printCopies.push(withPrintAudienceLabel(mergedDisplay, mergedLabels[0]));
+     pushCopy('retain', withPrintAudienceLabel(mergedDisplay, mergedLabels[0]));
      staffFormCount += 1;
      forms.push(withPrintAudienceLabel(mergedTeacher || mergedRetain, mergedLabels[1]));
      audienceLabelSets.push(mergedLabels);
-     printCopies.push(withPrintAudienceLabel(mergedTeacher || mergedRetain, mergedLabels[1]));
+     pushCopy('leave', withPrintAudienceLabel(mergedTeacher || mergedRetain, mergedLabels[1]));
      staffFormCount += 1;
      bucket.forEach(function (item) {
        const subLabels = getPrintAudienceLabels(item.bundle.group, ctx);
@@ -1595,7 +1644,7 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
          || item.staffTeacherForm || item.staffForm;
        forms.push(withPrintAudienceLabel(subForm, subLabel));
        audienceLabelSets.push(subLabels);
-       printCopies.push(withPrintAudienceLabel(subForm, subLabel));
+       pushCopy('substitute', withPrintAudienceLabel(subForm, subLabel));
        staffFormCount += 1;
        item.bundle.members.forEach(member => classGroups.push(member));
      });
@@ -1609,12 +1658,13 @@ function buildPrintForms(recordsToPrint, allSubs, ctx) {
     const classLabel = classLabels[3] || '班級：';
     forms.push(withPrintAudienceLabel(classForm, classLabel));
     audienceLabelSets.push(classLabels);
-    printCopies.push(withPrintAudienceLabel(classForm, classLabel));
+    pushCopy('class', withPrintAudienceLabel(classForm, classLabel));
     classCopyCount += 1;
   });
 
   forms.audienceLabelSets = audienceLabelSets;
   forms.printCopies = printCopies;
+  forms.printCopyKinds = printCopyKinds;
   forms.staffFormCount = staffFormCount;
   forms.classCopyCount = classCopyCount;
   forms.copyCount = printCopies.length;
@@ -1689,20 +1739,33 @@ function buildPrintPreview(ctx, options) {
     : ((ctx.substitutionRecords && Array.isArray(ctx.substitutionRecords.value)) ? ctx.substitutionRecords.value : recordsToPrint);
   const forms = buildPrintForms(recordsToPrint, allSubs, ctx);
   if (!forms.length) return null;
-  const copyCount = forms.copyCount != null ? forms.copyCount : forms.length * 4;
+  // 預覽以「實際要印的分送單據」為準；勾選單一聯時只顯示該聯。
+  const copyKinds = normalizePrintCopyKinds(opts.copyKinds);
+  const hasCopies = Array.isArray(forms.printCopies);
+  const previewCopies = hasCopies
+    ? selectPrintCopies(forms, copyKinds).map(copy => copy.html)
+    : forms.slice();
+  const copyCount = previewCopies.length || (forms.copyCount != null ? forms.copyCount : forms.length * 4);
   return {
     recordCount: recordsToPrint.length,
     formCount: forms.length,
     staffFormCount: forms.staffFormCount != null ? forms.staffFormCount : forms.length,
     classCopyCount: forms.classCopyCount != null ? forms.classCopyCount : forms.length,
-    pageCount: forms.pageCount != null ? forms.pageCount : Math.ceil(copyCount / 2),
+    pageCount: Math.ceil(copyCount / 2),
     copyCount,
+    // 聯別資訊：畫面可勾選只印其中一聯。
+    copyKinds,
+    copyKindOptions: PRINT_COPY_KINDS.map(kind => ({
+      kind,
+      label: PRINT_COPY_KIND_LABELS[kind],
+      count: getPrintCopyKindCounts(forms)[kind]
+    })),
     records: recordsToPrint.slice(),
     recordIds: recordsToPrint.map(record => record && record.id != null ? String(record.id) : '').filter(Boolean),
     // 圖片複製／下載只提供第一張表單，方便與他人確認；正式列印仍使用完整 forms。
     confirmationFormHtml: forms[0],
     formsHtml: forms.join(''),
-    documentHtml: buildPrintPreviewDocument(forms)
+    documentHtml: buildPrintPreviewDocument(previewCopies)
   };
 }
 
@@ -1785,7 +1848,14 @@ async function printSelectedForms(formType, ctx) {
       return;
     }
 
-    const htmlContent = packPrintForms(forms);
+    // copyKinds：只印指定聯（未指定＝四種聯全印）。
+    const copyKinds = normalizePrintCopyKinds(ctx.copyKinds);
+    if (Array.isArray(forms.printCopies) && !selectPrintCopies(forms, copyKinds).length) {
+      ctx.showToast('請至少勾選一種要列印的單據（聯別）', 'warning');
+      if (ctx.loading) ctx.loading.value = false;
+      return;
+    }
+    const htmlContent = packPrintForms(forms, { copyKinds });
 
     let printWin = ctx.printWin || ctx.targetWin || null;
     let targetDoc = null;
@@ -2005,5 +2075,5 @@ async function printSelectedForms(formType, ctx) {
     if (ctx.loading) ctx.loading.value = false;
   }
 }
- export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, getPrintTriangleIdSet, printTriangleSameGroup, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords, expandPrintRequestsForBatch };
+ export { generateFormHtml, printSelectedForms, buildExchangeRouteHtml, getPrintAudienceLabels, getTriangleTeacherEntries, getPrintTriangleGroupId, getPrintTriangleIdSet, printTriangleSameGroup, buildPrintGroups, buildPrintForms, splitPrintGroupByWeek, packPrintForms, getPrintPreviewCss, buildPrintPreview, buildPrintPreviewImageSvg, buildHistoryPrintRecords, expandPrintRequestsForBatch, PRINT_COPY_KINDS, PRINT_COPY_KIND_LABELS, normalizePrintCopyKinds, selectPrintCopies, getPrintCopyKindCounts };
 

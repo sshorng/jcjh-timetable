@@ -17,7 +17,8 @@ import {
   buildPrintPreview,
   buildPrintPreviewImageSvg,
   buildHistoryPrintRecords,
-  expandPrintRequestsForBatch
+  expandPrintRequestsForBatch,
+  normalizePrintCopyKinds
 } from './print-helper.js';
 const UiPrint = (() => {
   function create(deps) {
@@ -100,7 +101,9 @@ const createPrintContext = (printWin = null, printOptions = {}) => ({
   getScheduleForDate,
   printWin,
   printRecords: Array.isArray(printOptions.records) ? printOptions.records : null,
-  skipMarkPrinted: !!printOptions.skipMarkPrinted
+  skipMarkPrinted: !!printOptions.skipMarkPrinted,
+  // 只印指定聯（未指定＝四種聯全印）
+  copyKinds: Array.isArray(printOptions.copyKinds) ? printOptions.copyKinds.slice() : null
 });
 
 const ensureExportReady = async () => {
@@ -132,10 +135,11 @@ const openPrintPreview = async (formType = 'Notice', options = {}) => {
   loadingMessage.value = '正在產生列印預覽…';
   try {
     const preview = buildPrintPreview(
-      createPrintContext(null, { skipMarkPrinted: !!opts.skipMarkPrinted }),
+      createPrintContext(null, { skipMarkPrinted: !!opts.skipMarkPrinted, copyKinds: opts.copyKinds }),
       {
         records: Array.isArray(opts.records) ? opts.records : undefined,
-        allSubs: Array.isArray(opts.allSubs) ? opts.allSubs : undefined
+        allSubs: Array.isArray(opts.allSubs) ? opts.allSubs : undefined,
+        copyKinds: opts.copyKinds
       }
     );
     if (!preview || !preview.records || !preview.records.length) {
@@ -149,6 +153,9 @@ const openPrintPreview = async (formType = 'Notice', options = {}) => {
       canPrint: opts.canPrint !== false,
       returnTo: opts.returnTo || '',
       skipMarkPrinted: !!opts.skipMarkPrinted,
+      // 保留組單用的紀錄與聯別，讓預覽可切換「只印某一聯」後即時重算。
+      allSubs: Array.isArray(opts.allSubs) ? opts.allSubs : undefined,
+      copyKinds: preview.copyKinds || [],
       recordIds: (preview.recordIds || preview.records.map(r => String(r.id || ''))).filter(Boolean)
     });
     showPrintPreviewModal.value = true;
@@ -297,8 +304,48 @@ const confirmPrintPreview = async () => {
   selectedRecordIds.value = (snapshot.recordIds || []).slice();
   await printSelectedForms(snapshot.formType || 'Notice', null, {
     skipMarkPrinted: !!snapshot.skipMarkPrinted,
-    records: snapshot.records || []
+    records: snapshot.records || [],
+    copyKinds: snapshot.copyKinds || []
   });
+};
+
+/**
+ * 預覽中的「只印某一聯」：重新組單並重算預覽（不重打 API、不影響來源資料）。
+ * 空陣列＝四種聯全印；['class']＝只印班級通知單。
+ */
+const setPrintPreviewCopyKinds = (kinds) => {
+  const snapshot = printPreview.value;
+  if (!snapshot || !snapshot.records || !snapshot.records.length) return false;
+  const next = normalizePrintCopyKinds(kinds);
+  const allSubs = snapshot.allSubs
+    || (substitutionRecords.value || []).concat(snapshot.records);
+  try {
+    const preview = buildPrintPreview(
+      createPrintContext(null, { skipMarkPrinted: !!snapshot.skipMarkPrinted, copyKinds: next }),
+      { records: snapshot.records, allSubs, copyKinds: next }
+    );
+    if (!preview) {
+      showToast('沒有可預覽的列印內容', 'warning');
+      return false;
+    }
+    printPreview.value = Object.assign({}, snapshot, preview, {
+      allSubs,
+      copyKinds: next,
+      recordIds: (preview.recordIds || snapshot.recordIds || []).filter(Boolean)
+    });
+    return true;
+  } catch (e) {
+    console.error('切換列印聯別失敗：', e);
+    showToast('切換列印聯別失敗：' + (e && e.message ? e.message : e), 'error');
+    return false;
+  }
+};
+
+/** 該聯是否在目前勾選中（畫面勾選框用）。 */
+const isPrintPreviewCopyKindSelected = (kind) => {
+  const list = printPreview.value && printPreview.value.copyKinds;
+  if (!Array.isArray(list) || !list.length) return true;
+  return list.indexOf(String(kind || '')) >= 0;
 };
 
 const getPrintPreviewPngBlob = async () => {
@@ -757,6 +804,8 @@ const markLocalPrinted = (ids) => {
       openBatchRequestsPrintPreview: openBatchRequestsPrintPreview,
       closePrintPreview: closePrintPreview,
       confirmPrintPreview: confirmPrintPreview,
+      setPrintPreviewCopyKinds: setPrintPreviewCopyKinds,
+      isPrintPreviewCopyKindSelected: isPrintPreviewCopyKindSelected,
       getPrintPreviewPngBlob: getPrintPreviewPngBlob,
       getPrintPreviewFileName: getPrintPreviewFileName,
       downloadPrintPreviewImage: downloadPrintPreviewImage,

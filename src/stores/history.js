@@ -42,7 +42,7 @@ const getHistoryApi = () => {
         watch,
         user: storeToRefs(useSessionStore()).user, allSchedules: storeToRefs(useSessionStore()).allSchedules, schoolSwaps: storeToRefs(useSessionStore()).schoolSwaps, isSingleWeek: useSessionStore().isSingleWeek, substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords, isAdmin: storeToRefs(useSessionStore()).isAdmin, isStaff: storeToRefs(useSessionStore()).isStaff, getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, requestsList: storeToRefs(useSessionStore()).requestsList,
         isProxySubmitRequest: useRequestsStore().isProxySubmitRequest, historyTypeFilter: storeToRefs(useMutualStore()).historyTypeFilter, historySearchQuery: storeToRefs(useMutualStore()).historySearchQuery, historyFilterMode: storeToRefs(useMutualStore()).historyFilterMode,
-        historyFilterDate: storeToRefs(useMutualStore()).historyFilterDate, isHistoryExchangeType: useMutualStore().isHistoryExchangeType, historyPageSize: storeToRefs(useMutualStore()).historyPageSize, historyPage: storeToRefs(useMutualStore()).historyPage,
+        historyFilterDate: storeToRefs(useMutualStore()).historyFilterDate, historyRangeStart: storeToRefs(useMutualStore()).historyRangeStart, historyRangeEnd: storeToRefs(useMutualStore()).historyRangeEnd, isHistoryExchangeType: useMutualStore().isHistoryExchangeType, historyPageSize: storeToRefs(useMutualStore()).historyPageSize, historyPage: storeToRefs(useMutualStore()).historyPage,
         flattenBatchDisplayGroups: useHomeroomStore().flattenBatchDisplayGroups,
         pendingSearchQuery: storeToRefs(useTimetableStore()).pendingSearchQuery, myPendingRequests: storeToRefs(useTourStore()).myPendingRequests, mySentRequests: storeToRefs(useTourStore()).mySentRequests, adminPendingRequests: storeToRefs(useTourStore()).adminPendingRequests,
         pendingMyPendingPage: storeToRefs(useTimetableStore()).pendingMyPendingPage, pendingMySentPage: storeToRefs(useTimetableStore()).pendingMySentPage, pendingAdminPage: storeToRefs(useTimetableStore()).pendingAdminPage, pendingPageSize: useDataStore().pendingPageSize,
@@ -69,6 +69,11 @@ const getHistoryApi = () => {
       const a = getHistoryApi();
       return a ? a.setHistoryTypeFilter(...args) : undefined;
     };
+    const setHistoryRangeFilter = async (...args) => {
+      await ensureHistoryModule();
+      const a = getHistoryApi();
+      return a ? a.setHistoryRangeFilter(...args) : undefined;
+    };
     const loadFullSemesterHistory = async (...args) => {
       await ensureHistoryModule();
       const a = getHistoryApi();
@@ -94,5 +99,5 @@ const getHistoryApi = () => {
       const a = getHistoryApi();
       return a ? a.matchPendingSearch(...args) : true;
     };
-  return { dashboardStats, getHistoryApi, ensureHistoryModule, loadHistoryMonth, setHistoryFilterMode, setHistoryTypeFilter, loadFullSemesterHistory, reloadWindowedHistory, getWeekStart, getMonthStart, matchPendingSearch };
+  return { dashboardStats, getHistoryApi, ensureHistoryModule, loadHistoryMonth, setHistoryFilterMode, setHistoryTypeFilter, setHistoryRangeFilter, loadFullSemesterHistory, reloadWindowedHistory, getWeekStart, getMonthStart, matchPendingSearch };
 });
