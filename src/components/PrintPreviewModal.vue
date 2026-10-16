@@ -74,26 +74,30 @@ const props = defineProps({
 });
 defineEmits(['close']);
 
-// 已勾選的聯別（空集合＝全印，與資料層 normalizePrintCopyKinds 語意一致）。
+const allKinds = computed(() => (props.printPreview && props.printPreview.copyKindOptions || [])
+  .map(option => option.kind));
+
+// 目前勾選的聯別。copyKinds 為空陣列在資料層代表「四種聯全印」，
+// 這裡必須展開成完整清單，否則取消勾選會被誤判成「加入」而把狀態倒轉。
 const selectedKinds = computed(() => {
   const list = props.printPreview && props.printPreview.copyKinds;
-  return Array.isArray(list) ? list.filter(Boolean) : [];
+  if (!Array.isArray(list) || !list.filter(Boolean).length) return allKinds.value;
+  return list.filter(Boolean);
 });
 
 /** 切換單一聯；傳 '__all__' 為全選。至少要留一聯，避免印出空白。 */
 const onTogglePrintCopyKind = (kind) => {
-  const all = (props.printPreview.copyKindOptions || []).map(option => option.kind);
+  const all = allKinds.value;
+  if (!all.length) return;
   if (kind === '__all__') {
     props.setPrintPreviewCopyKinds(all);
     return;
   }
-  const next = selectedKinds.value.includes(kind)
-    ? selectedKinds.value.filter(item => item !== kind)
-    : all.filter(item => item === kind || selectedKinds.value.includes(item));
-  if (!next.length) {
-    props.setPrintPreviewCopyKinds([kind]);
-    return;
-  }
-  props.setPrintPreviewCopyKinds(next);
+  const current = selectedKinds.value;
+  const next = current.includes(kind)
+    ? current.filter(item => item !== kind)
+    : all.filter(item => item === kind || current.includes(item));
+  // 最後一聯不可取消，否則會印出空白。
+  props.setPrintPreviewCopyKinds(next.length ? next : [kind]);
 };
 </script>

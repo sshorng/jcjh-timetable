@@ -14,7 +14,8 @@ import {
   PRINT_COPY_KINDS
 } from '../src/modules/print-helper.js';
 import { UiHistory } from '../src/modules/ui-history.js';
-import { computed, ref } from 'vue';
+import { computed, nextTick, reactive, ref, createApp } from 'vue';
+import PrintPreviewModal from '../src/components/PrintPreviewModal.vue';
 
 const names = {
   'owner@school.example': '陳小華',
@@ -192,7 +193,6 @@ test('畫面接線：預覽可勾選聯別、歷史可選日期區間', () => {
   // 列印預覽：四種聯的勾選框＋全選，點擊走 setPrintPreviewCopyKinds 重算。
   assert.match(previewModal, /printPreview\.copyKindOptions/);
   assert.match(previewModal, /isPrintPreviewCopyKindSelected\(option\.kind\)/);
-  assert.match(previewModal, /props\.setPrintPreviewCopyKinds\(next\)/);
   assert.match(previewModal, /要印的聯別/);
   assert.match(app, /:set-print-preview-copy-kinds="setPrintPreviewCopyKinds"/);
   assert.match(app, /:is-print-preview-copy-kind-selected="isPrintPreviewCopyKindSelected"/);
@@ -204,4 +204,105 @@ test('畫面接線：預覽可勾選聯別、歷史可選日期區間', () => {
   assert.match(app, /@click="applyHistoryRangeFilter"/);
   assert.match(store, /const historyRangeStart = ref\(''\)/);
   assert.match(store, /const historyRangeEnd = ref\(''\)/);
+});
+
+/**
+ * 聯別勾選列的實際行為：copyKinds 空陣列代表「四種聯全印」，
+ * 取消勾選必須是「從全選中移除」，不能反過來變成「只選這一聯」。
+ */
+async function mountKindBar(copyKinds, options = {}) {
+  // happy-dom 的 iframe 掛載時會真的 document.write(srcdoc) 而拋 insertBefore；
+  // documentHtml 留空即可跳過載入，驗證範圍只需聯別勾選列。
+  const state = reactive({
+    recordCount: 2, staffFormCount: 2, classCopyCount: 2, pageCount: 1, copyCount: 2,
+    documentHtml: '', formsHtml: '', copyKinds,
+    copyKindOptions: [
+      { kind: 'retain', label: '教學組留存', count: 1 },
+      { kind: 'leave', label: '請假教師', count: 1 },
+      { kind: 'substitute', label: '代課/調課教師', count: 1 },
+      { kind: 'class', label: '班級通知單', count: 2 }
+    ],
+    canPrint: true
+  });
+  const applied = [];
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const app = createApp(PrintPreviewModal, {
+    printPreview: state,
+    printPreviewImageBusy: false,
+    closePrintPreview: () => {},
+    copyPrintPreviewImage: () => {},
+    downloadPrintPreviewImage: () => {},
+    confirmPrintPreview: () => {},
+    // 模擬真實行為：套用選擇後更新來源，元件要能讀到最新狀態。
+    setPrintPreviewCopyKinds: (kinds) => { applied.push(kinds.slice()); state.copyKinds = kinds; },
+    // 空集合＝全印，與 ui-print.js 相同語意。
+    isPrintPreviewCopyKindSelected: (kind) => !Array.isArray(state.copyKinds)
+      || !state.copyKinds.length
+      || state.copyKinds.indexOf(kind) >= 0,
+    ...options.props
+  });
+  app.mount(host);
+  await nextTick();
+  const boxes = [...host.querySelectorAll('.print-preview-kind-chip input')];
+  const clickKind = async (kind) => {
+    const box = boxes.find(input => input.value === kind);
+    assert.ok(box, '找不到聯別勾選框：' + kind);
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+    await nextTick();
+  };
+  return {
+    applied, clickKind, boxes, host,
+    last: () => applied[applied.length - 1],
+    unmount: () => {
+      app.unmount();
+      host.remove();
+    }
+  };
+}
+
+test('聯別勾選列：從全印取消勾選是「移除」而非「反轉」', async () => {
+  // 重現回報的問題：只留班級聯時不該再印出教學組留存聯。
+  const bar = await mountKindBar([]);
+  assert.equal(bar.applied.length, 0, '初始不應送出選擇');
+  await bar.clickKind('retain');
+  assert.deepEqual(bar.last(), ['leave', 'substitute', 'class'], '取消教學組留存＝移除該聯');
+  await bar.clickKind('leave');
+  assert.deepEqual(bar.last(), ['substitute', 'class']);
+  await bar.clickKind('substitute');
+  assert.deepEqual(bar.last(), ['class'], '最後應只剩班級通知單，不得出現教學組留存聯');
+  bar.unmount();
+});
+
+test('聯別勾選列：重新勾選可加回，最後一聯不可取消', async () => {
+  const bar = await mountKindBar([]);
+  await bar.clickKind('retain');
+  await bar.clickKind('leave');
+  await bar.clickKind('substitute');
+  assert.deepEqual(bar.last(), ['class']);
+  // 取消最後一聯會被還原，避免印出空白。
+  await bar.clickKind('class');
+  assert.deepEqual(bar.last(), ['class']);
+  // 加回其他聯。
+  await bar.clickKind('retain');
+  assert.deepEqual(bar.last(), ['retain', 'class']);
+  // 全選按鈕（在自己的 host 內查詢，避免抓到其他測試的殘留 DOM）。
+  const allBtn = [...bar.host.querySelectorAll('.print-preview-kind-bar button')]
+    .find(btn => btn.textContent.includes('全選'));
+  assert.ok(allBtn, '應有全選按鈕');
+  assert.equal(allBtn.disabled, false, 'canPrint 時全選按鈕不應被停用');
+  allBtn.dispatchEvent(new Event('click'));
+  await nextTick();
+  assert.deepEqual(bar.last(), ['retain', 'leave', 'substitute', 'class']);
+  bar.unmount();
+});
+
+test('聯別勾選列：已指定選擇時只影響該聯', async () => {
+  const bar = await mountKindBar(['class']);
+  await bar.clickKind('retain');
+  assert.deepEqual(bar.last(), ['retain', 'class']);
+  await bar.clickKind('retain');
+  assert.deepEqual(bar.last(), ['class'], '再取消一次應回到只剩班級聯');
+  bar.unmount();
 });
