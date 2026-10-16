@@ -723,16 +723,12 @@ const loadHistoryMonth = async (monthStr, opts) => {
   if (!user.value) return;
   let ym = String(monthStr || '').slice(0, 7);
   if (!/^\d{4}-\d{2}$/.test(ym)) {
-    const d = historyFilterDate.value || toLocalDateStr(new Date());
-    ym = String(d).slice(0, 7);
+    // 日期欄位已移除，未指定月份時以今天所在月份為準。
+    ym = toLocalDateStr(new Date()).slice(0, 7);
   }
   const already = historyLoadedMonths.value.indexOf(ym) >= 0 || historyFullLoaded.value;
   if (already && !opts.force) {
-    historyFilterMode.value = 'month';
-    if (!String(historyFilterDate.value || '').startsWith(ym)) {
-      historyFilterDate.value = ym + '-15';
-    }
-    historyPage.value = 1;
+    // 純資料載入：不動篩選模式與基準日，避免預載時把使用者篩選狀態改掉。
     return;
   }
   historyMonthLoading.value = true;
@@ -750,11 +746,6 @@ const loadHistoryMonth = async (monthStr, opts) => {
     if (historyLoadedMonths.value.indexOf(ym) < 0) {
       historyLoadedMonths.value = historyLoadedMonths.value.concat([ym]);
     }
-    historyFilterMode.value = 'month';
-    if (!String(historyFilterDate.value || '').startsWith(ym)) {
-      historyFilterDate.value = ym + '-15';
-    }
-    historyPage.value = 1;
     if (!opts.silent) showToast('已合併 ' + ym + ' 共 ' + n + ' 筆', 'success');
   } catch (e) {
     console.error(e);
@@ -768,17 +759,12 @@ const loadHistoryMonth = async (monthStr, opts) => {
 const setHistoryFilterMode = (mode) => {
   historyFilterMode.value = mode;
   historyPage.value = 1;
-  // 本日／本週／本月：對齊篩選日期到今天（可再改 date 輸入）
+  // 本日／本週／本月：基準日固定為今天（日期欄位已移除，不再提供手動指定）
   if (mode === 'day' || mode === 'week' || mode === 'month') {
-    if (!historyFilterDate.value) {
-      historyFilterDate.value = toLocalDateStr(new Date());
+    historyFilterDate.value = toLocalDateStr(new Date());
+    if (mode === 'month') {
+      ensureHistoryMonthLoaded(historyFilterDate.value.slice(0, 7));
     }
-    if (mode === 'day') {
-      historyFilterDate.value = toLocalDateStr(new Date());
-    }
-  }
-  if (mode === 'month') {
-    ensureHistoryMonthLoaded(String(historyFilterDate.value || '').slice(0, 7));
   }
   if (mode === 'range') {
     // 預設帶出本月至今，第一次點區間篩選就能直接看到結果。

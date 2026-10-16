@@ -51,7 +51,7 @@ export const useDataStore = defineStore('data', () => {
       return Date.now() - ms;
     };
     const ensureHistoryMonthLoaded = (ym) => {
-      const m = String(ym || storeToRefs(useMutualStore()).historyFilterDate.value || DateUtils.toLocalDateStr(new Date())).slice(0, 7);
+      const m = String(ym || DateUtils.toLocalDateStr(new Date())).slice(0, 7);
       if (!/^\d{4}-\d{2}$/.test(m)) return;
       if (historyFullLoaded.value || historyLoadedMonths.value.indexOf(m) >= 0) return;
       if (historyMonthLoading.value) return;

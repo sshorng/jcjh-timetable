@@ -183,6 +183,82 @@ test('歷史紀錄：日期區間明確篩選（起訖互換自動對調）', ()
   assert.deepEqual(api.getHistoryRangeMonths(), [], '未設定區間時不補載月份');
 });
 
+test('歷史紀錄：日期欄位移除後，本日/本週/本月固定以今天為基準', () => {
+  const today = '2026-10-16';
+  const state = {
+    historyFilterMode: ref('all'),
+    historyTypeFilter: ref('all'),
+    historySearchQuery: ref(''),
+    historyFilterDate: ref('2020-01-01'),
+    historyRangeStart: ref(''),
+    historyRangeEnd: ref(''),
+    historyPage: ref(1),
+    historyPageSize: ref(20),
+    isHistoryExchangeType: () => false,
+    toLocalDateStr: () => today,
+    user: ref({ email: 'owner@school.example' }),
+    isAdmin: ref(true),
+    isStaff: ref(false),
+    substitutionRecords: ref(records.slice()),
+    requestsList: ref([]),
+    getTeacherNameByEmail: email => names[String(email || '').toLowerCase()] || String(email || '')
+  };
+  const loaded = [];
+  const api = UiHistory.create(Object.assign({
+    computed,
+    watch: () => {},
+    ensureHistoryMonthLoaded: ym => loaded.push(ym)
+  }, state));
+
+  ['day', 'week', 'month'].forEach(mode => {
+    state.historyFilterDate.value = '2020-01-01';
+    api.setHistoryFilterMode(mode);
+    assert.equal(state.historyFilterMode.value, mode);
+    assert.equal(state.historyFilterDate.value, today,
+      mode + ' 的基準日應重設為今天，不可沿用舊值');
+    assert.equal(state.historyPage.value, 1, mode + ' 應回到第一頁');
+  });
+
+  // 只有本月需要補載該月資料。
+  assert.ok(loaded.includes('2026-10'), '本月應補載今天所在月份');
+});
+
+test('歷史紀錄：月份預載不得改動使用者篩選狀態', () => {
+  const state = {
+    historyFilterMode: ref('range'),
+    historyTypeFilter: ref('all'),
+    historySearchQuery: ref(''),
+    historyFilterDate: ref('2026-10-16'),
+    historyRangeStart: ref('2026-09-01'),
+    historyRangeEnd: ref('2026-09-30'),
+    historyPage: ref(3),
+    historyPageSize: ref(20),
+    historyLoadedMonths: ref(['2026-09']),
+    historyFullLoaded: ref(false),
+    historyMonthLoading: ref(false),
+    isHistoryExchangeType: () => false,
+    toLocalDateStr: () => '2026-10-16',
+    user: ref({ email: 'owner@school.example' }),
+    isAdmin: ref(true),
+    isStaff: ref(false),
+    substitutionRecords: ref(records.slice()),
+    requestsList: ref([]),
+    getTeacherNameByEmail: email => names[String(email || '').toLowerCase()] || String(email || '')
+  };
+  const api = UiHistory.create(Object.assign({
+    computed,
+    watch: () => {},
+    ensureHistoryMonthLoaded: () => {},
+    fetchHistoryMonth: () => new Promise(() => {})
+  }, state));
+
+  // 已載入該月時應直接返回，且不得動篩選模式／基準日／頁碼。
+  api.loadHistoryMonth('2026-09');
+  assert.equal(state.historyFilterMode.value, 'range', '預載不應把區間模式改成本月');
+  assert.equal(state.historyFilterDate.value, '2026-10-16', '預載不應移動基準日');
+  assert.equal(state.historyPage.value, 3, '預載不應重設頁碼');
+});
+
 test('畫面接線：預覽可勾選聯別、歷史可選日期區間', () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const previewModal = fs.readFileSync(

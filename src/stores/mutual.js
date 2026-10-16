@@ -310,10 +310,8 @@ const getMutualPanelApi = () => {
     });
     }
     function initImmediateMutual7() {
-    watch(historyFilterDate, (d) => {
-      if (historyFilterMode.value !== 'month') return;
-      useDataStore().ensureHistoryMonthLoaded(String(d || '').slice(0, 7));
-    });
+    // 歷史日期欄位已移除，本日/本週/本月的基準日固定為今天，
+    // 月份資料補載改由 setHistoryFilterMode 與區間套用各自處理。
     }
     function initImmediateMutual8() {
     watch([storeToRefs(useTourStore()).inputRequestDate, exchangePeriodId, exchangeWeekOffset], () => {
