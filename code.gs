@@ -7809,10 +7809,17 @@ function handlePostSaveHistoryEdit_(ctx) {
   var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
       // 管理員可修正已生效之代／調課全部欄位（教師、日期節次、班級科目、假別經費等）
       if (!isAdmin) throw new Error("無管理員權限！");
-      var reqId = String(reqData.id || reqData.requestId || "").replace(/_[12]$/, "");
-      if (!reqId) throw new Error("缺少申請單ID");
-       var targetReq = findRowByKey_("申請單", "申請單ID", reqId, semesterId);
+      var reqIdRaw = String(reqData.id || reqData.requestId || "");
+      if (!reqIdRaw) throw new Error("缺少申請單ID");
+      // 先用完整 ID 精確查找（三角調腿 ID 以 _1／_2／_3 結尾，不可剝尾碼）；
+      // 找不到才回退相容舊的 _1／_2 調課尾碼剝除。
+      var targetReq = findRowByKey_("申請單", "申請單ID", reqIdRaw, semesterId);
+      if (!targetReq) {
+        var reqIdStripped = reqIdRaw.replace(/_[12]$/, "");
+        if (reqIdStripped !== reqIdRaw) targetReq = findRowByKey_("申請單", "申請單ID", reqIdStripped, semesterId);
+      }
       if (!targetReq) throw new Error("找不到該紀錄");
+      if (isTriangleRequest_(targetReq)) throw new Error("三角調為整組三筆連動，不支援單筆編輯，請撤銷整組後重新建立");
 
        var editDirectory = buildNameKeyDirectory_(teachers);
        var combinedReturnEdit = isCombinedReturnRequest_(targetReq);

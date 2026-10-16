@@ -2323,6 +2323,11 @@ const UiAdmin = (() => {
     }
 
     function openHistoryEditModal(rec) {
+      if (rec && (rec.type === 'triangle' || rec.type === '三角調' || String(rec.triangleId || '').trim() || rec.isTriangle
+          || (Array.isArray(rec.items) && rec.items.some(function (it) { return it && (it.type === 'triangle' || it.type === '三角調' || String(it.triangleId || '').trim()); })))) {
+        showToast('三角調為整組三筆連動，不支援單筆編輯；如需修改請撤銷整組後重新建立', 'warning');
+        return;
+      }
       var rid = rec.requestId || String(rec.id || '').replace(/_[12]$/, '') || '';
       var matched = null;
       try {
