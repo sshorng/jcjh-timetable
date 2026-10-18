@@ -280,7 +280,7 @@ const confirmPrintPreview = async () => {
   printPreviewImageBusy.value = false;
 
   if (snapshot.source === 'paperDraft') {
-    await printPaperDraft();
+    await printPaperDraft(snapshot.copyKinds || []);
     return;
   }
 
@@ -627,7 +627,7 @@ const openPaperPrintMutualDrafts = () => {
   return openPaperPrintDraft(records, { canPrint: false });
 };
 
-const printPaperDraft = async () => {
+const printPaperDraft = async (copyKinds) => {
   const draft = paperPrintDraft.value;
   if (!draft || !draft.records || !draft.records.length) return;
   if (draft.source === 'paperTour') {
@@ -648,7 +648,7 @@ const printPaperDraft = async () => {
   substitutionRecords.value = previous.concat(records);
   selectedRecordIds.value = ids.slice();
   try {
-    await printSelectedForms('Notice', null, { skipMarkPrinted: true, records });
+    await printSelectedForms('Notice', null, { skipMarkPrinted: true, records, copyKinds: normalizePrintCopyKinds(copyKinds) });
   } finally {
     substitutionRecords.value = previous;
     selectedRecordIds.value = [];
