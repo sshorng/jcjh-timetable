@@ -1508,8 +1508,17 @@ body {
   max-height: calc(100vh - 24px);
 }
 
+/* 標題與統計小字同一行（窄螢幕才換行）。 */
+.print-preview-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .print-preview-meta {
-  margin-top: 4px;
+  margin-top: 0;
   color: var(--text-secondary);
   font-size: 0.76rem;
   line-height: 1.4;
@@ -1535,22 +1544,34 @@ body {
   line-height: 1.45;
 }
 
-.print-preview-kind-bar {
+.print-preview-footer-left {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+}
+
+/* 「要印的聯別」收合在按鈕下方，展開為可複選面板。 */
+.print-preview-kind-select {
+  position: relative;
+}
+
+.print-preview-kind-bar {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 64px));
   padding: 8px 10px;
   border: 1px solid #94a3b8;
   border-radius: 8px;
   background: #f8fafc;
-}
-
-.print-preview-kind-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #334155;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
 }
 
 .print-preview-kind-chip {
@@ -1634,6 +1655,22 @@ body {
   .print-preview-confirm-actions .btn {
     flex: 1;
   }
+  .print-preview-footer-left {
+    width: 100%;
+  }
+
+  .print-preview-kind-select {
+    flex: 1;
+  }
+
+  .print-preview-kind-toggle {
+    width: 100%;
+  }
+
+  .print-preview-kind-bar {
+    max-width: calc(100vw - 32px);
+  }
+
 }
 
 /* 縮小版對比 Grid */

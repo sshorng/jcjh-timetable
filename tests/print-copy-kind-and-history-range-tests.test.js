@@ -382,3 +382,42 @@ test('聯別勾選列：已指定選擇時只影響該聯', async () => {
   assert.deepEqual(bar.last(), ['class'], '再取消一次應回到只剩班級聯');
   bar.unmount();
 });
+
+test('聯別下拉：預設收合、點按鈕展開、點面板外與 Esc 收合', async () => {
+  const bar = await mountKindBar([]);
+  const toggle = bar.host.querySelector('.print-preview-kind-toggle');
+  const panel = bar.host.querySelector('.print-preview-kind-bar');
+  assert.ok(toggle, '頁尾應有「要印的聯別」下拉按鈕');
+  assert.ok(panel, '下拉應有聯別面板');
+  assert.match(toggle.textContent, /要印的聯別：全部（4 種）/, '全印時摘要應顯示全部聯別數');
+  assert.equal(panel.style.display, 'none', '預設應收合');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'false');
+
+  toggle.dispatchEvent(new Event('click'));
+  await nextTick();
+  assert.notEqual(panel.style.display, 'none', '點按鈕應展開');
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+
+  // 點面板外的任何地方應收合。
+  document.body.dispatchEvent(new Event('mousedown'));
+  await nextTick();
+  assert.equal(panel.style.display, 'none', '點面板外應收合');
+
+  // Esc 只收合下拉：modal 的 Esc 關閉掛在 document，不能讓下拉的 Esc 冒泡上去。
+  toggle.dispatchEvent(new Event('click'));
+  await nextTick();
+  assert.notEqual(panel.style.display, 'none', '再點按鈕應可展開');
+  let reachedDocument = false;
+  const docKeySpy = () => { reachedDocument = true; };
+  document.addEventListener('keydown', docKeySpy, true);
+  // 測試環境的 globals 只有 Event，用一般事件補上 key 即可（元件只讀 event.key）。
+  const escEvent = new Event('keydown');
+  escEvent.key = 'Escape';
+  window.dispatchEvent(escEvent);
+  document.removeEventListener('keydown', docKeySpy, true);
+  await nextTick();
+  assert.equal(panel.style.display, 'none', 'Esc 應收合下拉');
+  assert.equal(reachedDocument, false, 'Esc 不應傳到 document，避免順手關掉整個列印預覽');
+
+  bar.unmount();
+});
