@@ -2254,6 +2254,7 @@
       :match-empty-reasons="matchEmptyReasons"
       :displayed-recommended-teachers="displayedRecommendedTeachers"
       :is-mutual-cover="isMutualCover"
+      :mutual-event-id="mutualImportEventId"
       :filtered-recommended-teachers="filteredRecommendedTeachers"
       :triangle-candidate-b="triangleCandidateB"
       :triangle-candidate-c-ready-count="triangleCandidateCReadyCount"
