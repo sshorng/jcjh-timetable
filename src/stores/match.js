@@ -193,7 +193,6 @@ const getMatchApi = () => {
     const eventQuotaLoading = ref(false);
     const eventQuotaError = ref('');
     let _eventQuotaSig = '';
-    let _eventQuotaRetrySig = '';
     const refreshMutualEventQuotas = async () => {
       const tourRefs = storeToRefs(useTourStore());
       const mutualRefs = storeToRefs(useMutualStore());
@@ -217,7 +216,6 @@ const getMatchApi = () => {
 
       if (!isMutual || !eventId) {
         _eventQuotaSig = '';
-        _eventQuotaRetrySig = '';
         eventQuotaError.value = '';
         if (eventQuotaEventId.value || Object.keys(eventQuotaByName.value).length) {
           eventQuotaEventId.value = '';
@@ -286,13 +284,8 @@ const getMatchApi = () => {
       }
       if (!preview) {
         eventQuotaLoading.value = false;
-        // 被其他請求取代不算失敗（不顯示紅字），但仍安排一次重試
+        // 被其他請求取代不算失敗（不顯示紅字）
         eventQuotaError.value = fetchError.indexOf('已取消') >= 0 ? '' : fetchError;
-        // 只自動重試一次，避免連線一直失敗時反覆打 API
-        if (stillSame() && _eventQuotaRetrySig !== sig) {
-          _eventQuotaRetrySig = sig;
-          setTimeout(() => { refreshMutualEventQuotas(); }, 1500);
-        }
         return;
       }
       if (!stillSame()) {
@@ -350,7 +343,6 @@ const getMatchApi = () => {
       tourRefs.recommendedTeachers.value = patched;
       eventQuotaError.value = '';
       _eventQuotaSig = sig;
-      _eventQuotaRetrySig = '';
       eventQuotaLoading.value = false;
     };
     function initImmediateMatch1() {

@@ -52,7 +52,7 @@ async function loadEventQuotaPreviewFromLedger(names, deps) {
   if (!(_cache.rows.length && _cache.semesterId === sid && (now - _cache.ts) < 60000)) {
     const res = await deps.fetchLedger({ allTeachers: true, limit: 'all' });
     const rows = (res && Array.isArray(res.ledger)) ? res.ledger : [];
-    if (!rows.length) throw new Error('額度帳本沒有資料');
+    // 帳本是空的也算正常（本學期還沒任何發放），直接回傳即可，後續會算成各包 0
     _cache = { semesterId: sid, ts: now, rows: rows };
   }
   return buildEventQuotaPreviewFromLedger(_cache.rows, names);
