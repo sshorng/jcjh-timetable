@@ -5069,14 +5069,14 @@ td.table-empty {
 }
 /* 互代媒合清單：總額度／事件額度標籤（額度不足不再擋，只提示會扣其他活動） */
 .mutual-quota-chips {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
+  vertical-align: middle;
 }
 .mutual-quota-chip {
-  display: inline-block;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border: 1px solid #ddd6fe;
   border-radius: 999px;
   background: #f5f3ff;
@@ -5106,11 +5106,13 @@ td.table-empty {
   background: #f8fafc;
   color: #64748b;
 }
-/* 建議經費自成一行，避免窄欄把「扣額度」折行 */
+/* 建議經費與額度標籤同一行；「扣額度」整段不拆字，真的塞不下才整段換行 */
 .mutual-fee-tag {
-  display: block;
+  display: inline-block;
   white-space: nowrap;
-  margin-top: 2px;
+  margin-left: 4px;
+  font-size: 0.68rem;
+  vertical-align: middle;
 }
 .mutual-quota-hint {
   margin-bottom: 8px;

@@ -652,3 +652,23 @@ test('quota ledger DOCX export（v1 移植）', async () => {
     globalThis.URL.revokeObjectURL = prevRevokeObjectURL;
   }
 });
+
+// 事件額度後備計算：getQuotaSpendPreview 掛掉時，改由額度帳本算各事件包餘額
+test('事件額度後備計算：由額度帳本算出各事件包餘額', async () => {
+  const { buildEventQuotaPreviewFromLedger } = await import('../src/modules/event-quota-ledger.js');
+  const rows = [
+    { name: '甲老師', packageId: 'pkg-a', eventId: 'evt-a', eventName: '畢旅', delta: 3 },
+    { name: '甲老師', packageId: 'pkg-a', eventId: 'evt-a', eventName: '畢旅', delta: -1 },
+    { name: '甲老師', packageId: 'pkg-b', eventId: 'evt-b', eventName: '段考', delta: 2 },
+    { name: '甲老師', packageId: 'pkg-c', eventId: 'evt-c', eventName: '用完', delta: 1 },
+    { name: '甲老師', packageId: 'pkg-c', eventId: 'evt-c', eventName: '用完', delta: -1 },
+    { name: '乙老師', packageId: 'pkg-z', eventId: 'evt-z', eventName: '別人', delta: 5 }
+  ];
+  const out = buildEventQuotaPreviewFromLedger(rows, ['甲老師']);
+  assert.equal(out.length, 1, '只回傳被詢問的老師');
+  assert.deepEqual(
+    out[0].packs.map((p) => [p.packageId, p.remaining, p.eventId]),
+    [['pkg-a', 2, 'evt-a'], ['pkg-b', 2, 'evt-b']],
+    '同包加總、用完（0）的包要濾掉、事件 ID 要帶出來'
+  );
+});

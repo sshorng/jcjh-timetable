@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
 import { ensureUiMatchModule, tabModulesReady } from '../modules/tab-gates.js';
 import { useDataStore } from './data.js';
+import { ensureEventQuotaLedger } from '../modules/quota-gates.js';
 import { useGasStore } from './gas.js';
 import { useHistoryStore } from './history.js';
 import { useMutualStore } from './mutual.js';
@@ -256,6 +257,7 @@ const getMatchApi = () => {
 
       eventQuotaLoading.value = true;
       let preview = null;
+      let fetchError = '';
       try {
         const merged = [];
         for (let ci = 0; ci < nameChunks.length; ci++) {
@@ -265,10 +267,27 @@ const getMatchApi = () => {
         }
         preview = merged;
       } catch (ePrev) {
+        fetchError = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
+      }
+      if (!preview) {
+        // 後備路徑：額度包預覽失敗時改讀額度帳本，在前端算各事件包餘額
+        try {
+          const gate = await ensureEventQuotaLedger();
+          preview = await gate.loadEventQuotaPreviewFromLedger(names, {
+            getSemesterId: () => useSessionStore().currentSemester,
+            fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(o)
+          });
+          fetchError = '';
+        } catch (eLedger) {
+          if (!fetchError) {
+            fetchError = (eLedger && eLedger.message) ? String(eLedger.message) : String(eLedger || '讀取本事件額度失敗');
+          }
+        }
+      }
+      if (!preview) {
         eventQuotaLoading.value = false;
-        const errMsg = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
         // 被其他請求取代不算失敗（不顯示紅字），但仍安排一次重試
-        eventQuotaError.value = errMsg.indexOf('已取消') >= 0 ? '' : errMsg;
+        eventQuotaError.value = fetchError.indexOf('已取消') >= 0 ? '' : fetchError;
         // 只自動重試一次，避免連線一直失敗時反覆打 API
         if (stillSame() && _eventQuotaRetrySig !== sig) {
           _eventQuotaRetrySig = sig;
@@ -280,6 +299,7 @@ const getMatchApi = () => {
         eventQuotaLoading.value = false;
         return;
       }
+      eventQuotaError.value = '';
 
       let eventName = '';
       try {

@@ -1,0 +1,61 @@
+/**
+ * 事件額度（額度包）後備計算。
+ *
+ * 正常情況抽屜會叫 getQuotaSpendPreview 取得每人各事件包餘額；那支 API 出問題時，
+ * 改讀「額度帳本」在本機算（同一支帳本 API，匯出流程已在用）。
+ * 整段只在需要時動態載入（見 quota-gates.js），不佔主包體積。
+ */
+let _cache = { semesterId: '', ts: 0, rows: [] };
+
+function buildEventQuotaPreviewFromLedger(rows, names) {
+  const want = {};
+  (names || []).forEach((nm) => { want[nm] = true; });
+  const byTeacher = {};
+  (rows || []).forEach((r) => {
+    const nm = String((r && (r.name || r.teacherName)) || '').trim();
+    if (!want[nm]) return;
+    const pid = String((r && r.packageId) || '').trim();
+    if (!pid) return;
+    const delta = parseFloat(r.delta);
+    if (!Number.isFinite(delta)) return;
+    const packs = byTeacher[nm] || (byTeacher[nm] = {});
+    const pack = packs[pid] || (packs[pid] = { packageId: pid, eventId: '', eventName: '', remaining: 0 });
+    pack.remaining += delta;
+    if (!pack.eventId && r.eventId) pack.eventId = String(r.eventId);
+    if (!pack.eventName && r.eventName) pack.eventName = String(r.eventName);
+  });
+  return (names || []).map((nm) => {
+    const packs = byTeacher[nm]
+      ? Object.keys(byTeacher[nm]).map((k) => {
+        const p = byTeacher[nm][k];
+        return {
+          packageId: p.packageId,
+          eventId: p.eventId,
+          eventName: p.eventName,
+          remaining: Math.max(0, Math.round((p.remaining || 0) * 1000) / 1000)
+        };
+      }).filter((p) => p.remaining > 0)
+      : [];
+    return { name: nm, packs: packs };
+  });
+}
+
+/**
+ * 讀額度帳本（60 秒內共用一次）後算出各事件包餘額。
+ * deps.getSemesterId(): 目前學期代號；deps.fetchLedger({allTeachers,limit}): 帳本 API
+ */
+async function loadEventQuotaPreviewFromLedger(names, deps) {
+  deps = deps || {};
+  if (typeof deps.fetchLedger !== 'function') throw new Error('缺少額度帳本 API');
+  const sid = String((typeof deps.getSemesterId === 'function' ? deps.getSemesterId() : '') || '');
+  const now = Date.now();
+  if (!(_cache.rows.length && _cache.semesterId === sid && (now - _cache.ts) < 60000)) {
+    const res = await deps.fetchLedger({ allTeachers: true, limit: 'all' });
+    const rows = (res && Array.isArray(res.ledger)) ? res.ledger : [];
+    if (!rows.length) throw new Error('額度帳本沒有資料');
+    _cache = { semesterId: sid, ts: now, rows: rows };
+  }
+  return buildEventQuotaPreviewFromLedger(_cache.rows, names);
+}
+
+export { buildEventQuotaPreviewFromLedger, loadEventQuotaPreviewFromLedger };
