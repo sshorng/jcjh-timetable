@@ -232,7 +232,7 @@
 
                   <!-- 互代模式：未選空堂事件時只能算總額度 -->
                   <div v-if="isMutualCover && !mutualEventId" class="mutual-quota-hint">
-                    目前未選空堂事件，只顯示總額度。要看「該事件」額度，請先在上方互代活動面板選事件（選好會自動更新）。
+                    目前未選空堂事件，只顯示總額度。要看「事件」額度，請先在上方互代活動面板選事件（選好會自動更新）。
                   </div>
                   <!-- 搜尋列 -->
                   <div class="mb-10">
@@ -264,23 +264,21 @@
                         </td>
                         <td style="padding: 10px 4px; color: var(--text-muted); font-size: 0.8rem;">
                           <template v-if="isBatchMatchFlow && !isBatchPerSlotMode">
-                             全節可代 <span class="text-secondary">（參考日已排：{{ t.todayPeriodCount }}節）</span>
+                            全節可代 <span class="text-secondary">（已排 {{ t.todayPeriodCount }}）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="教師整體折抵額度餘額（已扣暫定）">總額度 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件，無法計算本事件額度') : '本事件額度包剩餘（不足 1 節會轉活動公費）'">該事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
-                              <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
-                              <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}"> → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件') : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
+                              <span v-if="t.pendingDraft" class="text-violet-soft">（暫定 {{ t.pendingDraft }}）</span>
+                              <span v-if="t.suggestedFee" class="mutual-fee-tag" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">→ {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
                             </span>
                           </template>
                           <template v-else>
                             <span v-if="t.isReleasedByAway" style="color:#6b21a8;font-weight:600;">外出班釋出</span>
                             <span v-else>空堂</span>
-                             <span class="text-secondary">（當日已排：{{ t.todayPeriodCount }}節）</span>
+                            <span class="text-secondary">（已排 {{ t.todayPeriodCount }}）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="教師整體折抵額度餘額（已扣暫定）">總額度 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件，無法計算本事件額度') : '本事件額度包剩餘（不足 1 節會轉活動公費）'">該事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
-                              <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
-                              <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">
-                                → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}
-                              </span>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件') : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
+                              <span v-if="t.pendingDraft" class="text-violet-soft">（暫定 {{ t.pendingDraft }}）</span>
+                              <span v-if="t.suggestedFee" class="mutual-fee-tag" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">→ {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
                             </span>
                           </template>
                         </td>

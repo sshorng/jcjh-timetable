@@ -279,7 +279,11 @@ const getMatchApi = () => {
           const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
           if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
           const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
-          if (!c.isPeriod8) c.suggestedFee = net >= 1 ? quotaDeductFee : activityPublicFee;
+          // 經費只看「總額度」：還有 1 節就扣額度；該事件包不足時送出會改扣其他活動額度
+          const totalLeft = typeof c.remainingReleased === 'number'
+            ? c.remainingReleased
+            : (parseFloat(c.mutualQuota) || 0);
+          if (!c.isPeriod8) c.suggestedFee = totalLeft >= 1 ? quotaDeductFee : activityPublicFee;
           return c;
         });
         tourRefs.recommendedTeachers.value = patched;

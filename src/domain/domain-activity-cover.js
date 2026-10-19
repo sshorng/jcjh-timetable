@@ -611,8 +611,11 @@ const DomainActivityCover = (() => {
     var packageEntries = entries.filter(function (entry) {
       return entry.packageId && packageIds[entry.packageId];
     });
-    var eventEntries = packageEntries.length ? packageEntries : entries.filter(function (entry) {
-      return ledgerEventMatches(entry, opts);
+    // 扣用可能來自其他活動的額度包（跨活動折抵）：事件 ID／名稱對得上就計入本次安排
+    var eventEntries = packageEntries.slice();
+    entries.forEach(function (entry) {
+      if (eventEntries.indexOf(entry) >= 0) return;
+      if (ledgerEventMatches(entry, opts)) eventEntries.push(entry);
     });
 
     var rangeDates = Array.isArray(opts.rangeDates)

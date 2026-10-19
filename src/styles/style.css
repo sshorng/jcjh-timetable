@@ -5067,13 +5067,12 @@ td.table-empty {
   margin-top: 2px;
   color: #6d28d9;
 }
-/* 互代媒合清單：總額度／該事件額度標籤（事件額度 0 標紅，提示會轉活動公費） */
+/* 互代媒合清單：總額度／事件額度標籤（額度不足不再擋，只提示會扣其他活動） */
 .mutual-quota-chips {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  margin-right: 4px;
 }
 .mutual-quota-chip {
   display: inline-block;
@@ -5091,20 +5090,27 @@ td.table-empty {
   background: #ede9fe;
   font-weight: 700;
 }
+/* 事件額度：有額度＝藍灰、0＝琥珀（會扣其他活動額度，不是錯誤） */
 .mutual-quota-chip-event {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #047857;
+  border-color: #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 .mutual-quota-chip-zero {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
 }
 .mutual-quota-chip-wait {
   border-color: #e2e8f0;
   background: #f8fafc;
   color: #64748b;
+}
+/* 建議經費自成一行，避免窄欄把「扣額度」折行 */
+.mutual-fee-tag {
+  display: block;
+  white-space: nowrap;
+  margin-top: 2px;
 }
 .mutual-quota-hint {
   margin-bottom: 8px;

@@ -667,10 +667,7 @@ const UiMutualPanelState = (() => {
         var bal = dac.getTeacherReleaseBalance(subEmail, activityBalanceCtx());
         cand = { email: subEmail, remainingReleased: bal.remaining };
       }
-      // 已選空堂事件時，暫定經費以「該事件額度」判斷（與清單顯示、送出扣包一致）
-      if (cand && typeof cand.eventQuotaRemaining === 'number') {
-        cand = Object.assign({}, cand, { remainingReleased: cand.eventQuotaRemaining });
-      }
+      // 經費只看「總額度」：還有 1 節以上就扣額度；該事件額度不足時，送出會改扣其他活動額度
       var fee = dac
         ? dac.feeFromCandidate(cand, true, period)
         : (parseInt(period, 10) === 8 ? PERIOD8_FEE : ACTIVITY_PUBLIC_FEE);
@@ -973,30 +970,41 @@ const UiMutualSubmit = (() => {
         __needNames.forEach(function (__nm2) {
           var __pv = __previewByName[__nm2] || null;
           var __packs = (__pv && __pv.packs) || [];
-          var __hit = null;
+          var __need = __needByName[__nm2] || 0;
           var __k;
-          for (__k = 0; __k < __packs.length; __k++) {
-            if (spendEventId && String(__packs[__k].eventId || '') === spendEventId) { __hit = __packs[__k]; break; }
+          // 規則：只要「總額度」還有 1 節以上就能扣，不足才整批擋下
+          var __bal = parseFloat(__pv && __pv.balance);
+          if (!isFinite(__bal)) __bal = 0;
+          if (Math.floor(__bal + 1e-9) < __need) {
+            __blocked.push(__nm2 + '總額度僅剩' + __bal + '（需' + __need + '節）');
+            return;
           }
-          if (!__hit && spendEventName) {
+          // 先找本事件包
+          var __eventPack = null;
+          for (__k = 0; __k < __packs.length; __k++) {
+            if (spendEventId && String(__packs[__k].eventId || '') === spendEventId) { __eventPack = __packs[__k]; break; }
+          }
+          if (!__eventPack && spendEventName) {
             for (__k = 0; __k < __packs.length; __k++) {
-              if (String(__packs[__k].eventName || '') === spendEventName) { __hit = __packs[__k]; break; }
+              if (String(__packs[__k].eventName || '') === spendEventName) { __eventPack = __packs[__k]; break; }
             }
           }
-          var __need = __needByName[__nm2] || 0;
-          if (!__hit) {
-            __blocked.push(__nm2 + '在此事件無額度包（需' + __need + '節）');
-            return;
+          // 本事件包夠就用它；不夠就改扣其他活動額度（任一足額的包）
+          var __pick = null;
+          if (__eventPack && Math.floor(parseFloat(__eventPack.remaining) || 0) >= __need) {
+            __pick = __eventPack;
+          } else {
+            for (__k = 0; __k < __packs.length; __k++) {
+              if (Math.floor(parseFloat(__packs[__k].remaining) || 0) >= __need) { __pick = __packs[__k]; break; }
+            }
           }
-          if (Math.floor(parseFloat(__hit.remaining) || 0) < __need) {
-            __blocked.push(__nm2 + '在此事件僅剩' + (__hit.remaining || 0) + '（需' + __need + '節）');
-            return;
-          }
-          __packByName[__nm2] = __hit;
+          // 都湊不到整包（分散在數個包）→ 不指定包，後端以總餘額包記帳
+          if (!__pick) __pick = __eventPack || null;
+          if (__pick) __packByName[__nm2] = __pick;
         });
         if (__blocked.length) {
-          showToast('以下老師在「' + (spendEventName || spendEventId) + '」額度不足，已整批擋下（不會扣到別的事件）：\n' + __blocked.join('\n'), 'error');
-          throw new Error('event_pack_blocked:' + __blocked.join('、'));
+          showToast('以下老師總額度不足，已整批擋下：\n' + __blocked.join('\n'), 'error');
+          throw new Error('quota_blocked:' + __blocked.join('、'));
         }
         __planned.forEach(function (p) {
           (p.rows || []).forEach(function (r) {
@@ -1097,7 +1105,7 @@ const UiMutualSubmit = (() => {
       showSuccessModal.value = true;
     } catch (err) {
       console.error(err);
-      if (!err || String((err && err.message) || err).indexOf('event_pack_blocked:') !== 0) showToast('送出暫定失敗：' + (err && err.message ? err.message : String(err)), 'error');
+      if (!err || String((err && err.message) || err).indexOf('quota_blocked:') !== 0) showToast('送出暫定失敗：' + (err && err.message ? err.message : String(err)), 'error');
     } finally {
       loading.value = false;
       if (isSubmitting) isSubmitting.value = false;

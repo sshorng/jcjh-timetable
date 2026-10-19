@@ -161,6 +161,39 @@ test('quota ledger tests（v1 移植）', () => {
   assert.equal(yearPages[0].matrix.arranged, 1, '本次安排只算本次活動的折抵');
   assert.equal(yearPages[0].matrix.remaining, 4, '尚有＝本學年未執行 − 本次安排');
 
+  // 跨活動折抵：額度取自別的活動包，但事件 ID 記在本活動 → 仍計入「本次安排」
+  const crossPackRows = [
+    {
+      name: '甲老師', time: '2026-09-01 09:00:00', delta: 2, balanceAfter: 2,
+      type: 'earn', packageId: 'pkg-other', eventId: 'other-1', eventName: '隔宿露營',
+      startDate: '2026-09-01'
+    },
+    {
+      name: '甲老師', time: '2026-10-05 09:00:00', delta: 1, balanceAfter: 3,
+      type: 'earn', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    },
+    {
+      name: '甲老師', time: '2026-10-20 09:00:00', delta: -1, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-other', eventId: 'trip-1', eventName: '九年級畢旅',
+      requestId: 'trip-1-request'
+    }
+  ];
+  const crossPages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests,
+    teachers: [{ email: 'a@example.test', name: '甲老師' }],
+    teacherDemands: [{ email: 'a@example.test', name: '甲老師', releasedSlots: 1 }],
+    ledgerRows: crossPackRows,
+    requireActivityHint: true
+  });
+  assert.equal(crossPages[0].matrix.demand, 3, '本學年未執行＝各活動釋出 2＋1');
+  assert.equal(crossPages[0].matrix.arranged, 1, '包在別的活動、事件 ID 記在本活動，仍算本次安排');
+  assert.equal(crossPages[0].matrix.remaining, 2);
+
   const idMatchedPages = exporter.buildTeacherPages({
     startDate: '2026-10-20',
     endDate: '2026-10-20',
