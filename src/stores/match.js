@@ -193,27 +193,18 @@ const getMatchApi = () => {
     const eventQuotaLoading = ref(false);
     const eventQuotaError = ref('');
     let _eventQuotaSig = '';
+    // 互代模式：找人代課清單顯示「該空堂事件」額度。
+    // 資料只有一個來源：額度帳本（與匯出、發放同一支 API），在前端算出每人各事件包剩餘。
+    // 不用 getQuotaSpendPreview、不重試、不分批：失敗就顯示「!」，下次開抽屜會再算。
     const refreshMutualEventQuotas = async () => {
       const tourRefs = storeToRefs(useTourStore());
       const mutualRefs = storeToRefs(useMutualStore());
       const sessionRefs = storeToRefs(useSessionStore());
-      let isMutual = false;
-      let eventId = '';
-      let list = [];
-      const names = [];
-      try {
-        isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
-        eventId = (isMutual && mutualRefs.mutualImportEventId)
-          ? String(mutualRefs.mutualImportEventId.value || '').trim()
-          : '';
-        list = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
-        const seen = {};
-        list.forEach((t) => {
-          const nm = String((t && (t.name || t.teacherName)) || '').trim();
-          if (nm && !seen[nm]) { seen[nm] = true; names.push(nm); }
-        });
-      } catch (eCtx) { return; }
-
+      const isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
+      const eventId = (isMutual && mutualRefs.mutualImportEventId)
+        ? String(mutualRefs.mutualImportEventId.value || '').trim()
+        : '';
+      const list = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
       if (!isMutual || !eventId) {
         _eventQuotaSig = '';
         eventQuotaError.value = '';
@@ -235,117 +226,78 @@ const getMatchApi = () => {
         if (stripped) tourRefs.recommendedTeachers.value = cleaned;
         return;
       }
-      const sig = eventId + '|' + names.join(',');
-      // 一次最多 60 人：名單更長時分批抓，避免尾端候選人永遠顯示「讀取中」
-      const nameChunks = [];
-      for (let ci = 0; ci < names.length; ci += 60) nameChunks.push(names.slice(ci, ci + 60));
-
-      if (!names.length) return;
-      // 同一事件＋同一份名單已完成就不再打 API；sig 只在成功寫回後才記，
-      // 失敗（含被下一次請求 abort）不會卡在「讀取中」，後續觸發會自動重試。
-      if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId) return;
-
-      const stillSame = () => {
-        try {
-          if (!(tourRefs.isMutualCover && tourRefs.isMutualCover.value)) return false;
-          const em = String((mutualRefs.mutualImportEventId && mutualRefs.mutualImportEventId.value) || '').trim();
-          return em === eventId;
-        } catch (eSame) { return false; }
-      };
-
-      eventQuotaLoading.value = true;
-      let preview = null;
-      let fetchError = '';
-      try {
-        const merged = [];
-        for (let ci = 0; ci < nameChunks.length; ci++) {
-          // abortPrevious:false：不與其他流程互相取消（被取消會變成「讀取失敗」）
-          const res = await useGasStore().fetchQuotaSpendPreview({ names: nameChunks[ci], abortPrevious: false });
-          ((res && res.preview) || []).forEach((p) => merged.push(p));
-        }
-        preview = merged;
-      } catch (ePrev) {
-        fetchError = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
-        if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 預覽 API 失敗，改走帳本後備：', ePrev);
-      }
-      if (!preview) {
-        // 後備路徑：額度包預覽失敗時改讀額度帳本，在前端算各事件包餘額
-        try {
-          const gate = await ensureEventQuotaLedger();
-          preview = await gate.loadEventQuotaPreviewFromLedger(names, {
-            getSemesterId: () => useSessionStore().currentSemester,
-          fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(Object.assign({ abortPrevious: false }, o || {}))
-          });
-          fetchError = '';
-        } catch (eLedger) {
-          if (!fetchError) {
-            fetchError = (eLedger && eLedger.message) ? String(eLedger.message) : String(eLedger || '讀取本事件額度失敗');
-          }
-          if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 帳本後備也失敗：', eLedger);
-        }
-      }
-      if (!preview) {
-        eventQuotaLoading.value = false;
-        // 被其他請求取代不算失敗（不顯示紅字）
-        eventQuotaError.value = fetchError.indexOf('已取消') >= 0 ? '' : fetchError;
-        return;
-      }
-      if (!stillSame()) {
-        eventQuotaLoading.value = false;
-        return;
-      }
-      eventQuotaError.value = '';
-
-      let eventName = '';
-      try {
-        const evs = (sessionRefs.classAwayEvents && sessionRefs.classAwayEvents.value) || [];
-        for (let i = 0; i < evs.length; i++) {
-          if (String((evs[i] && evs[i].id) || '') === eventId) { eventName = String(evs[i].name || '').trim(); break; }
-        }
-      } catch (eEv) { /* ignore */ }
-      const byName = {};
-      (preview || []).forEach((p) => { if (p && p.name) byName[String(p.name)] = p; });
-      const quotaDeductFee = useTourStore().QUOTA_DEDUCT_FEE;
-      const activityPublicFee = useTourStore().ACTIVITY_PUBLIC_FEE;
-      const map = {};
-      names.forEach((nm) => {
-        const pv = byName[nm] || null;
-        const packs = (pv && pv.packs) || [];
-        let hit = null;
-        for (let k = 0; k < packs.length; k++) {
-          if (String(packs[k].eventId || '') === eventId) { hit = packs[k]; break; }
-        }
-        if (!hit && eventName) {
-          for (let k = 0; k < packs.length; k++) {
-            if (String(packs[k].eventName || '') === eventName) { hit = packs[k]; break; }
-          }
-        }
-        map[nm] = hit
-          ? { remaining: Math.max(0, Math.round((parseFloat(hit.remaining) || 0) * 1000) / 1000), packageId: hit.packageId || '' }
-          : { remaining: 0, packageId: '' };
-      });
-      eventQuotaEventId.value = eventId;
-      eventQuotaByName.value = map;
-      const cur = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
-      const patched = cur.map((t) => {
+      const names = [];
+      const seen = {};
+      list.forEach((t) => {
         const nm = String((t && (t.name || t.teacherName)) || '').trim();
-        const hit = (nm && map[nm]) || null;
-        if (!hit) return t;
-        const pending = parseFloat(t.pendingDraft) || 0;
-        const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
-        if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
-        const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
-        // 經費只看「總額度」：還有 1 節就扣額度；該事件包不足時送出會改扣其他活動額度
-        const totalLeft = typeof c.remainingReleased === 'number'
-          ? c.remainingReleased
-          : (parseFloat(c.mutualQuota) || 0);
-        if (!c.isPeriod8) c.suggestedFee = totalLeft >= 1 ? quotaDeductFee : activityPublicFee;
-        return c;
+        if (nm && !seen[nm]) { seen[nm] = true; names.push(nm); }
       });
-      tourRefs.recommendedTeachers.value = patched;
-      eventQuotaError.value = '';
-      _eventQuotaSig = sig;
-      eventQuotaLoading.value = false;
+      if (!names.length) return;
+      const sig = eventId + '|' + names.join(',');
+      if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId) return;
+      eventQuotaLoading.value = true;
+      try {
+        const gate = await ensureEventQuotaLedger();
+        const preview = await gate.loadEventQuotaPreviewFromLedger(names, {
+          getSemesterId: () => useSessionStore().currentSemester,
+          fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(o)
+        });
+        const nowEventId = String((mutualRefs.mutualImportEventId && mutualRefs.mutualImportEventId.value) || '').trim();
+        if (nowEventId !== eventId) return;
+        let eventName = '';
+        try {
+          const evs = (sessionRefs.classAwayEvents && sessionRefs.classAwayEvents.value) || [];
+          for (let i = 0; i < evs.length; i++) {
+            if (String((evs[i] && evs[i].id) || '') === eventId) { eventName = String(evs[i].name || '').trim(); break; }
+          }
+        } catch (eEv) { /* ignore */ }
+        const byName = {};
+        (preview || []).forEach((p) => { if (p && p.name) byName[String(p.name)] = p; });
+        const quotaDeductFee = useTourStore().QUOTA_DEDUCT_FEE;
+        const activityPublicFee = useTourStore().ACTIVITY_PUBLIC_FEE;
+        const map = {};
+        names.forEach((nm) => {
+          const pv = byName[nm] || null;
+          const packs = (pv && pv.packs) || [];
+          let hit = null;
+          for (let k = 0; k < packs.length; k++) {
+            if (String(packs[k].eventId || '') === eventId) { hit = packs[k]; break; }
+          }
+          if (!hit && eventName) {
+            for (let k = 0; k < packs.length; k++) {
+              if (String(packs[k].eventName || '') === eventName) { hit = packs[k]; break; }
+            }
+          }
+          map[nm] = hit
+            ? { remaining: Math.max(0, Math.round((parseFloat(hit.remaining) || 0) * 1000) / 1000), packageId: hit.packageId || '' }
+            : { remaining: 0, packageId: '' };
+        });
+        eventQuotaEventId.value = eventId;
+        eventQuotaByName.value = map;
+        const cur = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
+        const patched = cur.map((t) => {
+          const nm = String((t && (t.name || t.teacherName)) || '').trim();
+          const hit = (nm && map[nm]) || null;
+          if (!hit) return t;
+          const pending = parseFloat(t.pendingDraft) || 0;
+          const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
+          if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
+          const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
+          const totalLeft = typeof c.remainingReleased === 'number'
+            ? c.remainingReleased
+            : (parseFloat(c.mutualQuota) || 0);
+          if (!c.isPeriod8) c.suggestedFee = totalLeft >= 1 ? quotaDeductFee : activityPublicFee;
+          return c;
+        });
+        tourRefs.recommendedTeachers.value = patched;
+        eventQuotaError.value = '';
+        _eventQuotaSig = sig;
+      } catch (eAll) {
+        if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 讀取失敗：', eAll);
+        eventQuotaError.value = '讀不到';
+      } finally {
+        eventQuotaLoading.value = false;
+      }
     };
     function initImmediateMatch1() {
     watch(storeToRefs(useMutualStore()).pendingRequestData, (pending) => {
