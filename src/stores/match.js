@@ -274,7 +274,7 @@ const getMatchApi = () => {
           const gate = await ensureEventQuotaLedger();
           preview = await gate.loadEventQuotaPreviewFromLedger(names, {
             getSemesterId: () => useSessionStore().currentSemester,
-            fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(o)
+          fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(Object.assign({ abortPrevious: false }, o || {}))
           });
           fetchError = '';
         } catch (eLedger) {
