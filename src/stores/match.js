@@ -259,13 +259,16 @@ const getMatchApi = () => {
       try {
         const merged = [];
         for (let ci = 0; ci < nameChunks.length; ci++) {
-          const res = await useGasStore().fetchQuotaSpendPreview({ names: nameChunks[ci] });
+          // abortPrevious:false：不與其他流程互相取消（被取消會變成「讀取失敗」）
+          const res = await useGasStore().fetchQuotaSpendPreview({ names: nameChunks[ci], abortPrevious: false });
           ((res && res.preview) || []).forEach((p) => merged.push(p));
         }
         preview = merged;
       } catch (ePrev) {
         eventQuotaLoading.value = false;
-        eventQuotaError.value = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
+        const errMsg = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
+        // 被其他請求取代不算失敗（不顯示紅字），但仍安排一次重試
+        eventQuotaError.value = errMsg.indexOf('已取消') >= 0 ? '' : errMsg;
         // 只自動重試一次，避免連線一直失敗時反覆打 API
         if (stillSame() && _eventQuotaRetrySig !== sig) {
           _eventQuotaRetrySig = sig;

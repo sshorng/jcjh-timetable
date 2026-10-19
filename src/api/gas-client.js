@@ -807,7 +807,7 @@ const GasApi = (() => {
       return await postJson('getQuotaSpendPreview', {
         names: options.names || (options.name ? [options.name] : []),
         requests: options.requests || []
-      }, { abortPrevious: true, semesterId: semesterId });
+      }, { abortPrevious: options.abortPrevious !== false, semesterId: semesterId });
     }
 
     return {

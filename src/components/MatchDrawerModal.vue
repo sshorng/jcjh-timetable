@@ -230,9 +230,10 @@
                     <button class="btn match-empty-btn" @click="closeMatchModal">我知道了，關閉視窗</button>
                   </div>
 
-                  <!-- 互代模式：未選空堂事件時只能算總額度 -->
-                  <div v-if="isMutualCover && !mutualEventId" class="mutual-quota-hint">
-                    目前未選空堂事件，只顯示總額度。要看「事件」額度，請先在上方互代活動面板選事件（選好會自動更新）。
+                  <!-- 互代模式：事件額度讀取失敗或未選事件時，直接在清單上方說明 -->
+                  <div v-if="isMutualCover && (mutualEventQuotaError || !mutualEventId)" class="mutual-quota-hint">
+                    <template v-if="mutualEventQuotaError">事件額度讀取失敗：{{ mutualEventQuotaError }}（總額度仍可正常扣用；會自動重試一次）</template>
+                    <template v-else>目前未選空堂事件，只顯示總額度。要看「事件」額度，請先在上方互代活動面板選事件（選好會自動更新）。</template>
                   </div>
                   <!-- 搜尋列 -->
                   <div class="mb-10">
