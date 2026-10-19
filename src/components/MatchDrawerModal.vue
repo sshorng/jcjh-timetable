@@ -266,7 +266,7 @@
                           <template v-if="isBatchMatchFlow && !isBatchPerSlotMode">
                             全節可代 <span class="text-secondary">（已排 {{ t.todayPeriodCount }}）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件') : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventQuotaError ? 'mutual-quota-chip-error' : 'mutual-quota-chip-wait') : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventQuotaError ? ('讀取本事件額度失敗：' + mutualEventQuotaError) : (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件')) : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventQuotaError ? '!' : (mutualEventId ? '…' : '－')) }}</span></span>
                               <span v-if="t.pendingDraft" class="text-violet-soft">（暫定 {{ t.pendingDraft }}）</span>
                               <span v-if="t.suggestedFee" class="mutual-fee-tag" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">→ {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
                             </span>
@@ -276,7 +276,7 @@
                             <span v-else>空堂</span>
                             <span class="text-secondary">（已排 {{ t.todayPeriodCount }}）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? 'mutual-quota-chip-wait' : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件') : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventId ? '…' : '－') }}</span></span>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total" title="總額度：整體折抵額度餘額（已扣暫定）">總額 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span class="mutual-quota-chip" :class="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventQuotaError ? 'mutual-quota-chip-error' : 'mutual-quota-chip-wait') : (t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero')" :title="typeof t.eventQuotaRemaining !== 'number' ? (mutualEventQuotaError ? ('讀取本事件額度失敗：' + mutualEventQuotaError) : (mutualEventId ? '正在讀取本事件額度…' : '尚未選空堂事件')) : '本事件額度（不足時會改扣其他活動額度）'">事件 {{ typeof t.eventQuotaRemaining === 'number' ? t.eventQuotaRemaining : (mutualEventQuotaError ? '!' : (mutualEventId ? '…' : '－')) }}</span></span>
                               <span v-if="t.pendingDraft" class="text-violet-soft">（暫定 {{ t.pendingDraft }}）</span>
                               <span v-if="t.suggestedFee" class="mutual-fee-tag" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">→ {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
                             </span>
@@ -545,6 +545,7 @@ defineProps({
   displayedRecommendedTeachers: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   isMutualCover: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   mutualEventId: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  mutualEventQuotaError: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   filteredRecommendedTeachers: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   triangleCandidateB: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   triangleCandidateCReadyCount: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },

@@ -190,106 +190,145 @@ const getMatchApi = () => {
     const eventQuotaByName = ref({});
     const eventQuotaEventId = ref('');
     const eventQuotaLoading = ref(false);
+    const eventQuotaError = ref('');
     let _eventQuotaSig = '';
-    let _eventQuotaReq = 0;
+    let _eventQuotaRetrySig = '';
     const refreshMutualEventQuotas = async () => {
-      const myReq = ++_eventQuotaReq;
       const tourRefs = storeToRefs(useTourStore());
       const mutualRefs = storeToRefs(useMutualStore());
       const sessionRefs = storeToRefs(useSessionStore());
+      let isMutual = false;
+      let eventId = '';
+      let list = [];
+      const names = [];
       try {
-        const isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
-        const eventId = (isMutual && mutualRefs.mutualImportEventId)
+        isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
+        eventId = (isMutual && mutualRefs.mutualImportEventId)
           ? String(mutualRefs.mutualImportEventId.value || '').trim()
           : '';
-        const list = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
-        if (!isMutual || !eventId) {
-          _eventQuotaSig = '';
-          if (eventQuotaEventId.value || Object.keys(eventQuotaByName.value).length) {
-            eventQuotaEventId.value = '';
-            eventQuotaByName.value = {};
-          }
-          let stripped = false;
-          const cleaned = list.map((t) => {
-            if (t && (typeof t.eventQuotaRemaining !== 'undefined' || typeof t.eventQuotaPackageId !== 'undefined')) {
-              stripped = true;
-              const c = Object.assign({}, t);
-              delete c.eventQuotaRemaining;
-              delete c.eventQuotaPackageId;
-              return c;
-            }
-            return t;
-          });
-          if (stripped) tourRefs.recommendedTeachers.value = cleaned;
-          return;
-        }
-        const names = [];
+        list = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
         const seen = {};
         list.forEach((t) => {
           const nm = String((t && (t.name || t.teacherName)) || '').trim();
           if (nm && !seen[nm]) { seen[nm] = true; names.push(nm); }
         });
-        if (!names.length) return;
-        const sig = eventId + '|' + names.slice(0, 60).join(',');
-        if (sig === _eventQuotaSig) return;
-        _eventQuotaSig = sig;
-        eventQuotaLoading.value = true;
-        let preview = [];
-        try {
-          const res = await useGasStore().fetchQuotaSpendPreview({ names: names.slice(0, 60) });
-          preview = (res && res.preview) || [];
-        } catch (ePrev) { preview = []; }
-        if (myReq !== _eventQuotaReq) return;
-        let eventName = '';
-        try {
-          const evs = (sessionRefs.classAwayEvents && sessionRefs.classAwayEvents.value) || [];
-          for (let i = 0; i < evs.length; i++) {
-            if (String((evs[i] && evs[i].id) || '') === eventId) { eventName = String(evs[i].name || '').trim(); break; }
+      } catch (eCtx) { return; }
+
+      if (!isMutual || !eventId) {
+        _eventQuotaSig = '';
+        _eventQuotaRetrySig = '';
+        eventQuotaError.value = '';
+        if (eventQuotaEventId.value || Object.keys(eventQuotaByName.value).length) {
+          eventQuotaEventId.value = '';
+          eventQuotaByName.value = {};
+        }
+        let stripped = false;
+        const cleaned = list.map((t) => {
+          if (t && (typeof t.eventQuotaRemaining !== 'undefined' || typeof t.eventQuotaPackageId !== 'undefined')) {
+            stripped = true;
+            const c = Object.assign({}, t);
+            delete c.eventQuotaRemaining;
+            delete c.eventQuotaPackageId;
+            return c;
           }
-        } catch (eEv) { /* ignore */ }
-        const byName = {};
-        (preview || []).forEach((p) => { if (p && p.name) byName[String(p.name)] = p; });
-        const quotaDeductFee = useTourStore().QUOTA_DEDUCT_FEE;
-        const activityPublicFee = useTourStore().ACTIVITY_PUBLIC_FEE;
-        const map = {};
-        names.forEach((nm) => {
-          const pv = byName[nm] || null;
-          const packs = (pv && pv.packs) || [];
-          let hit = null;
-          for (let k = 0; k < packs.length; k++) {
-            if (String(packs[k].eventId || '') === eventId) { hit = packs[k]; break; }
-          }
-          if (!hit && eventName) {
-            for (let k = 0; k < packs.length; k++) {
-              if (String(packs[k].eventName || '') === eventName) { hit = packs[k]; break; }
-            }
-          }
-          map[nm] = hit
-            ? { remaining: Math.max(0, Math.round((parseFloat(hit.remaining) || 0) * 1000) / 1000), packageId: hit.packageId || '' }
-            : { remaining: 0, packageId: '' };
+          return t;
         });
-        eventQuotaEventId.value = eventId;
-        eventQuotaByName.value = map;
-        const cur = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
-        const patched = cur.map((t) => {
-          const nm = String((t && (t.name || t.teacherName)) || '').trim();
-          const hit = (nm && map[nm]) || null;
-          if (!hit) return t;
-          const pending = parseFloat(t.pendingDraft) || 0;
-          const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
-          if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
-          const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
-          // 經費只看「總額度」：還有 1 節就扣額度；該事件包不足時送出會改扣其他活動額度
-          const totalLeft = typeof c.remainingReleased === 'number'
-            ? c.remainingReleased
-            : (parseFloat(c.mutualQuota) || 0);
-          if (!c.isPeriod8) c.suggestedFee = totalLeft >= 1 ? quotaDeductFee : activityPublicFee;
-          return c;
-        });
-        tourRefs.recommendedTeachers.value = patched;
-      } finally {
-        if (myReq === _eventQuotaReq) eventQuotaLoading.value = false;
+        if (stripped) tourRefs.recommendedTeachers.value = cleaned;
+        return;
       }
+      const sig = eventId + '|' + names.join(',');
+      // 一次最多 60 人：名單更長時分批抓，避免尾端候選人永遠顯示「讀取中」
+      const nameChunks = [];
+      for (let ci = 0; ci < names.length; ci += 60) nameChunks.push(names.slice(ci, ci + 60));
+
+      if (!names.length) return;
+      // 同一事件＋同一份名單已完成就不再打 API；sig 只在成功寫回後才記，
+      // 失敗（含被下一次請求 abort）不會卡在「讀取中」，後續觸發會自動重試。
+      if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId) return;
+
+      const stillSame = () => {
+        try {
+          if (!(tourRefs.isMutualCover && tourRefs.isMutualCover.value)) return false;
+          const em = String((mutualRefs.mutualImportEventId && mutualRefs.mutualImportEventId.value) || '').trim();
+          return em === eventId;
+        } catch (eSame) { return false; }
+      };
+
+      eventQuotaLoading.value = true;
+      let preview = null;
+      try {
+        const merged = [];
+        for (let ci = 0; ci < nameChunks.length; ci++) {
+          const res = await useGasStore().fetchQuotaSpendPreview({ names: nameChunks[ci] });
+          ((res && res.preview) || []).forEach((p) => merged.push(p));
+        }
+        preview = merged;
+      } catch (ePrev) {
+        eventQuotaLoading.value = false;
+        eventQuotaError.value = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
+        // 只自動重試一次，避免連線一直失敗時反覆打 API
+        if (stillSame() && _eventQuotaRetrySig !== sig) {
+          _eventQuotaRetrySig = sig;
+          setTimeout(() => { refreshMutualEventQuotas(); }, 1500);
+        }
+        return;
+      }
+      if (!stillSame()) {
+        eventQuotaLoading.value = false;
+        return;
+      }
+
+      let eventName = '';
+      try {
+        const evs = (sessionRefs.classAwayEvents && sessionRefs.classAwayEvents.value) || [];
+        for (let i = 0; i < evs.length; i++) {
+          if (String((evs[i] && evs[i].id) || '') === eventId) { eventName = String(evs[i].name || '').trim(); break; }
+        }
+      } catch (eEv) { /* ignore */ }
+      const byName = {};
+      (preview || []).forEach((p) => { if (p && p.name) byName[String(p.name)] = p; });
+      const quotaDeductFee = useTourStore().QUOTA_DEDUCT_FEE;
+      const activityPublicFee = useTourStore().ACTIVITY_PUBLIC_FEE;
+      const map = {};
+      names.forEach((nm) => {
+        const pv = byName[nm] || null;
+        const packs = (pv && pv.packs) || [];
+        let hit = null;
+        for (let k = 0; k < packs.length; k++) {
+          if (String(packs[k].eventId || '') === eventId) { hit = packs[k]; break; }
+        }
+        if (!hit && eventName) {
+          for (let k = 0; k < packs.length; k++) {
+            if (String(packs[k].eventName || '') === eventName) { hit = packs[k]; break; }
+          }
+        }
+        map[nm] = hit
+          ? { remaining: Math.max(0, Math.round((parseFloat(hit.remaining) || 0) * 1000) / 1000), packageId: hit.packageId || '' }
+          : { remaining: 0, packageId: '' };
+      });
+      eventQuotaEventId.value = eventId;
+      eventQuotaByName.value = map;
+      const cur = (tourRefs.recommendedTeachers && tourRefs.recommendedTeachers.value) || [];
+      const patched = cur.map((t) => {
+        const nm = String((t && (t.name || t.teacherName)) || '').trim();
+        const hit = (nm && map[nm]) || null;
+        if (!hit) return t;
+        const pending = parseFloat(t.pendingDraft) || 0;
+        const net = Math.max(0, Math.round((hit.remaining - pending) * 1000) / 1000);
+        if (t.eventQuotaRemaining === net && t.eventQuotaPackageId === hit.packageId) return t;
+        const c = Object.assign({}, t, { eventQuotaRemaining: net, eventQuotaPackageId: hit.packageId });
+        // 經費只看「總額度」：還有 1 節就扣額度；該事件包不足時送出會改扣其他活動額度
+        const totalLeft = typeof c.remainingReleased === 'number'
+          ? c.remainingReleased
+          : (parseFloat(c.mutualQuota) || 0);
+        if (!c.isPeriod8) c.suggestedFee = totalLeft >= 1 ? quotaDeductFee : activityPublicFee;
+        return c;
+      });
+      tourRefs.recommendedTeachers.value = patched;
+      eventQuotaError.value = '';
+      _eventQuotaSig = sig;
+      _eventQuotaRetrySig = '';
+      eventQuotaLoading.value = false;
     };
     function initImmediateMatch1() {
     watch(storeToRefs(useMutualStore()).pendingRequestData, (pending) => {
@@ -319,5 +358,5 @@ const getMatchApi = () => {
       _mutualRefs.mutualImportEventId.value
     ], () => { refreshMutualEventQuotas(); });
     }
-  return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, eventQuotaByName, eventQuotaEventId, eventQuotaLoading, refreshMutualEventQuotas, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
+    return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, eventQuotaByName, eventQuotaEventId, eventQuotaLoading, eventQuotaError, refreshMutualEventQuotas, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
 });

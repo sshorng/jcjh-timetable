@@ -5122,6 +5122,12 @@ td.table-empty {
   font-size: 0.75rem;
   line-height: 1.5;
 }
+.mutual-quota-chip-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 700;
+}
 .fs-65 { font-size: 0.65rem; }
 .fs-78 { font-size: 0.78rem; }
 .btn-xs-tight-nowrap {
