@@ -18,7 +18,8 @@ const TemplateBuffer = (() => {
 
   // 範本異動時才 bump；讓瀏覽器／CDN 可快取範本檔
   // 20261012：班級版範本改 ExcelJS 原生重建（根除舊附檔 DPI 遺留值），強制重抓
-  var TEMPLATE_VERSION = '20261012';
+  // 20261019：輪值單文案改「本學年未執行的課務」，bump 讓舊快取失效
+  var TEMPLATE_VERSION = '20261019';
   // 同一頁面內同一 URL 共用一次抓取
   var _cache = {};
 
