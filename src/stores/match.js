@@ -266,6 +266,7 @@ const getMatchApi = () => {
         preview = merged;
       } catch (ePrev) {
         fetchError = (ePrev && ePrev.message) ? String(ePrev.message) : String(ePrev || '讀取本事件額度失敗');
+        if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 預覽 API 失敗，改走帳本後備：', ePrev);
       }
       if (!preview) {
         // 後備路徑：額度包預覽失敗時改讀額度帳本，在前端算各事件包餘額
@@ -280,6 +281,7 @@ const getMatchApi = () => {
           if (!fetchError) {
             fetchError = (eLedger && eLedger.message) ? String(eLedger.message) : String(eLedger || '讀取本事件額度失敗');
           }
+          if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 帳本後備也失敗：', eLedger);
         }
       }
       if (!preview) {
