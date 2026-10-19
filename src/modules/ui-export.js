@@ -30,13 +30,26 @@ const UiExport = (() => {
       const billing = await ensureDomainBilling();
       if (!billing) throw new Error('大鐘點模組未載入');
     }
-    async function fetchQuotaLedgerHistoryForExport() {
+    // 學年（民國）：8/1 起算新學年；事件 2026-10-15 → 115
+    const schoolYearOfDate = (dateStr) => {
+      const m = /^(\d{4})-(\d{1,2})-\d{1,2}/.exec(String(dateStr || '').trim());
+      if (!m) return '';
+      const roc = parseInt(m[1], 10) - 1911;
+      return String(parseInt(m[2], 10) >= 8 ? roc : roc - 1);
+    };
+    async function fetchQuotaLedgerHistoryForExport(options) {
       if (typeof fetchMutualQuotaLedger !== 'function') {
         throw new Error('額度帳本歷程 API 未載入，請重新整理頁面');
       }
-      const res = await fetchMutualQuotaLedger({ allTeachers: true, limit: 'all' });
+      // 指定學年 → 後端回傳整個學年（上／下學期）的帳本列，供「本學年未執行的課務」累計
+      const schoolYear = String((options && options.schoolYear) || '').trim();
+      const res = await fetchMutualQuotaLedger({ allTeachers: true, limit: 'all', schoolYear });
       if (!res || res.success === false || !Array.isArray(res.ledger) || res.historyComplete !== true) {
         throw new Error('無法取得完整額度帳本歷程，為避免數字失真已停止匯出');
+      }
+      // 後端未更新時仍以本學期帳本出單，只提示、不中斷匯出
+      if (schoolYear && res.yearScope !== true) {
+        showToast('額度帳本後端尚未支援本學年（請重新部署 code.gs）；本次「未執行課務」只含本學期', 'warning');
       }
       return res.ledger;
     }
@@ -143,8 +156,8 @@ const UiExport = (() => {
         return isActFee(r.subFee, p);
       });
 
-       // OO＝事件第一天開始時的剩餘未執行堂數；XX＝早自習／1～7／午休扣額度已排（export 內算）。
-       // 個人頁會以額度帳本補回事件第一天以前已扣用的數量。
+       // OO＝本學年未執行的課務：學年累計發放到事件第一天 − 此前已折抵（本次活動折抵前，跨活動／跨學期）。XX＝早自習／1～7／午休扣額度已排（export 內算）。
+       // 個人頁以帳本重建 OO／XX／尚有；帳本一次取回整個學年（含上／下學期）。
       let demand = 0;
       let teacherDemandRows = [];
       const dac = await ensureDAC();
@@ -188,7 +201,8 @@ const UiExport = (() => {
 
       let ledgerRows;
       try {
-        ledgerRows = await fetchQuotaLedgerHistoryForExport();
+        // 本學年（上／下學期）帳本，供「本學年未執行的課務」累計
+        ledgerRows = await fetchQuotaLedgerHistoryForExport({ schoolYear: schoolYearOfDate(startDate) });
       } catch (eLedger) {
         showToast(eLedger && eLedger.message ? eLedger.message : '無法取得額度帳本歷程', 'error');
         return;
@@ -239,7 +253,7 @@ const UiExport = (() => {
        const pageTip = res.pageCount != null
          ? `，輪值 ${res.dutyPageCount || 0} 頁、被代課 ${res.coveredPageCount || 0} 頁`
          : '';
-       showToast(`已下載：${res.fileName}（釋出 ${res.demand}／扣額度安排 ${res.arranged}／尚有 ${res.remaining}${pageTip}）`, 'success');
+      showToast(`已下載：${res.fileName}（本學年未執行 ${res.demand}／本次安排 ${res.arranged}／尚有 ${res.remaining}${pageTip}）`, 'success');
     }
 
     const buildPaperRecordsForSubmittedRequests = (requests) => {

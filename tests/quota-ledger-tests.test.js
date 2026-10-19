@@ -123,6 +123,44 @@ test('quota ledger tests（v1 移植）', () => {
   assert.equal(allChangePages[0].matrix.demand, 2, '列出全部異動不可改變個人額度統計');
   assert.equal(allChangePages[0].matrix.remaining, 1);
 
+  // 本學年未執行的課務：跨活動、跨學期累計；只扣「本次活動之前」的折抵
+  const yearLedgerRows = [
+    {
+      name: '甲老師', time: '2025-11-03 09:00:00', delta: 4, balanceAfter: 4,
+      type: 'earn', packageId: 'pkg-autumn', eventId: 'autumn-1', eventName: '隔宿露營',
+      startDate: '2025-11-03'
+    },
+    {
+      name: '甲老師', time: '2025-11-20 09:00:00', delta: -2, balanceAfter: 2,
+      type: 'spend', packageId: 'pkg-autumn', eventId: 'evt_sub', eventName: '代課',
+      requestId: 'autumn-sub'
+    },
+    {
+      name: '甲老師', time: '2026-10-05 09:00:00', delta: 3, balanceAfter: 5,
+      type: 'earn', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      startDate: '2026-10-05'
+    },
+    {
+      name: '甲老師', time: '2026-10-20 09:00:00', delta: -1, balanceAfter: 4,
+      type: 'spend', packageId: 'pkg-trip-甲', eventId: 'trip-1', eventName: '九年級畢旅',
+      requestId: 'trip-1-request'
+    }
+  ];
+  const yearPages = exporter.buildTeacherPages({
+    startDate: '2026-10-20',
+    endDate: '2026-10-20',
+    activityName: '九年級畢旅',
+    eventId: 'trip-1',
+    requests,
+    teachers: [{ email: 'a@example.test', name: '甲老師' }],
+    teacherDemands: [{ email: 'a@example.test', name: '甲老師', releasedSlots: 3 }],
+    ledgerRows: yearLedgerRows,
+    requireActivityHint: true
+  });
+  assert.equal(yearPages[0].matrix.demand, 5, '本學年未執行＝上學期 4 ＋ 本次 3 − 先前已折抵 2');
+  assert.equal(yearPages[0].matrix.arranged, 1, '本次安排只算本次活動的折抵');
+  assert.equal(yearPages[0].matrix.remaining, 4, '尚有＝本學年未執行 − 本次安排');
+
   const idMatchedPages = exporter.buildTeacherPages({
     startDate: '2026-10-20',
     endDate: '2026-10-20',

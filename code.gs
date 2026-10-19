@@ -5623,7 +5623,20 @@ function handleReadAction_(postData) {
   if (action === "getMutualQuotaLedger"
       && (reqData.allTeachers === true || reqData.allTeachers === "true" || reqData.allTeachers === 1)) {
     if (!readerIsAdmin) throw new Error("僅管理員可查看全校額度歷程");
-    var allLedgerRows = getQuotaLedgerRows_(semesterId) || [];
+    // 輪值單「本學年未執行的課務」需跨上／下學期累計：可指定學年（民國，如 115），
+    // 一次取回該學年所有學期的帳本列；未指定時維持原行為（只回目前學期）。
+    var wantYear = String(reqData.schoolYear || "").trim();
+    var yearScope = false;
+    var allLedgerRows;
+    if (wantYear) {
+      allLedgerRows = (getQuotaLedgerRows_("") || []).filter(function (row) {
+        var sem = String((row && (row["學期代號"] || row.semesterId)) || "").trim();
+        return !!sem && sem.indexOf(wantYear) === 0;
+      });
+      yearScope = true;
+    } else {
+      allLedgerRows = getQuotaLedgerRows_(semesterId) || [];
+    }
     var allLedger = allLedgerRows.map(function (row, index) {
       return quotaLedgerPublicRow_(row, index);
     });
@@ -5631,7 +5644,8 @@ function handleReadAction_(postData) {
       success: true,
       ledger: allLedger,
       count: allLedger.length,
-      historyComplete: true
+      historyComplete: true,
+      yearScope: yearScope
     })).setMimeType(ContentService.MimeType.JSON);
   }
 

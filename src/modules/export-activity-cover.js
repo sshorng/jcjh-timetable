@@ -418,7 +418,7 @@ const ExportActivityCover = (() => {
   /**
    * 從已送出申請組矩陣
    * 統計口徑（與發放額度／輪值文案）：
-   * - demand(OO)＝事件第一天開始時的剩餘未執行堂數（含早自習／午休）
+   * - demand(OO)＝本學年未執行的課務：學年累計發放到事件第一天 − 此前已折抵（本次活動折抵前，跨活動／跨學期）
    * - arranged(XX)＝早自習／1～7／午休已排且「扣額度」節數
    * - remaining＝OO−XX
    * 表內仍列活動互代（扣額度／活動公費）；表格僅列第 1～7 節，早自習／午休計入 XX 但不另列表格；第 8 節不列入、不入 OO／XX
@@ -519,7 +519,7 @@ const ExportActivityCover = (() => {
       return String(a.className || '').localeCompare(String(b.className || ''), 'zh-Hant', { numeric: true });
     });
 
-    // OO＝事件第一天剩餘堂數；個人頁以帳本活動包歷程重建 XX／尚有。
+    // OO＝本學年未執行的課務（個人頁以帳本重建，跨活動／跨學期）；XX＝本次活動已排扣額度；尚有＝OO−XX。
     var demand = opts.teacherDemand != null ? parseInt(opts.teacherDemand, 10) : parseInt(opts.demand, 10);
     if (Number.isNaN(demand) || demand < 0) demand = 0;
     var arranged = arrangedQuota;
@@ -538,10 +538,11 @@ const ExportActivityCover = (() => {
         demand: demand,
         fallbackArranged: arrangedQuota
       });
-      if (ledgerStats.hasEvent) {
-        demand = ledgerStats.demand;
+      if (ledgerStats && (ledgerStats.hasEvent || ledgerStats.yearEarnEntries > 0)) {
         arranged = ledgerStats.arranged;
-        remaining = ledgerStats.remaining;
+        // 輪值單口徑：本學年未執行的課務＝本學年折抵前整體餘額（跨活動、跨學期累計）
+        demand = ledgerStats.yearEarnEntries > 0 ? ledgerStats.yearDemand : ledgerStats.demand;
+        remaining = Math.max(0, Math.round((demand - arranged) * 1000) / 1000);
       }
     }
 

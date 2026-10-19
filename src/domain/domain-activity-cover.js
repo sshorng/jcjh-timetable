@@ -676,6 +676,29 @@ const DomainActivityCover = (() => {
       else if (entry.type === 'restore' && entry.delta > 0) selectedRestore += entry.delta;
     });
 
+    // 本學年未執行課務（輪值單口徑）：跨活動、跨學期累計
+    // ＝全部發放到事件第一天為止 − 此前已扣用 + 此前已還原（本次活動的折抵尚未扣掉）
+    // 與 demand 的差別：demand 只算「本活動包」，yearDemand 算「整學年所有活動包」
+    var yearEarn = 0;
+    var yearEarnEntries = 0;
+    var yearPriorSpend = 0;
+    var yearPriorRestore = 0;
+    entries.forEach(function (entry) {
+      var date = entryDate(entry);
+      if (entry.type === 'earn' && entry.delta > 0) {
+        if (!rangeStart || !date || date <= rangeStart) {
+          yearEarn += entry.delta;
+          yearEarnEntries++;
+        }
+        return;
+      }
+      if (rangeStart && date && date < rangeStart) {
+        if (isLedgerSpend(entry)) yearPriorSpend += Math.abs(entry.delta);
+        else if (entry.type === 'restore' && entry.delta > 0) yearPriorRestore += entry.delta;
+      }
+    });
+    var yearDemand = Math.max(0, roundQuota(yearEarn - yearPriorSpend + yearPriorRestore));
+
     var ledgerDemand = Math.max(0, roundQuota(availableEarn - priorSpend + priorRestore));
     var fallbackDemand = ledgerNumber(opts.demand);
     if (fallbackDemand === null || fallbackDemand < 0) fallbackDemand = 0;
@@ -692,6 +715,9 @@ const DomainActivityCover = (() => {
       demand: Math.round(demand * 1000) / 1000,
       arranged: Math.round(arranged * 1000) / 1000,
       remaining: Math.round(remaining * 1000) / 1000,
+      yearEarn: Math.round(yearEarn * 1000) / 1000,
+      yearEarnEntries: yearEarnEntries,
+      yearDemand: Math.round(yearDemand * 1000) / 1000,
       entries: selectedEventEntries
     };
   }

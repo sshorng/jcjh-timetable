@@ -789,11 +789,15 @@ const GasApi = (() => {
     async function fetchMutualQuotaLedger(options) {
       options = options || {};
       const semesterId = options.semesterId || opts.getSemesterId();
-      return await postJson('getMutualQuotaLedger', {
+      const payload = {
         name: options.name || options.teacherName || '',
         limit: options.limit != null ? options.limit : 50,
         allTeachers: options.allTeachers === true
-      }, { abortPrevious: true, semesterId: semesterId });
+      };
+      // 指定學年（民國，如 115）→ 後端回傳該學年所有學期，供跨上／下學期累計
+      const schoolYear = String(options.schoolYear || '').trim();
+      if (schoolYear) payload.schoolYear = schoolYear;
+      return await postJson('getMutualQuotaLedger', payload, { abortPrevious: true, semesterId: semesterId });
     }
 
     /** 扣額度預覽：姓名為唯一識別，回傳包餘額＋FIFO 預設（送出前顯示，可下拉覆寫） */
