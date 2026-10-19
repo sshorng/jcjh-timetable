@@ -62,6 +62,23 @@ test('match panel tests（v1 移植）', () => {
   assert.equal([...api.filteredRecommendedTeachers.value].length, 1);
   deps.matchSearchQuery.value = '';
 
+  // 互代模式：清單以「總額度」主排、同額度再比「該事件額度」（＝UI 顯示的兩個數字）
+  const originTeachers = deps.recommendedTeachers.value;
+  deps.isMutualCover.value = true;
+  deps.recommendedTeachers.value = [
+    { email: 'a@x', name: '甲師', subject: '國文', remainingReleased: 1, eventQuotaRemaining: 1 },
+    { email: 'b@x', name: '乙師', subject: '英文', remainingReleased: 4, eventQuotaRemaining: 0 },
+    { email: 'c@x', name: '丙師', subject: '數學', remainingReleased: 4, eventQuotaRemaining: 3 },
+    { email: 'd@x', name: '丁師', subject: '自然', mutualQuota: 4, eventQuotaRemaining: 1 },
+  ];
+  assert.deepEqual(
+    [...api.filteredRecommendedTeachers.value].map((t) => t.email),
+    ['c@x', 'd@x', 'b@x', 'a@x'],
+    '總額度主排（4／4／4／1），同額度以該事件額度次排（3／1／0）；無 remainingReleased 時退回 mutualQuota'
+  );
+  deps.isMutualCover.value = false;
+  deps.recommendedTeachers.value = originTeachers;
+
   // R14：抽屜 DOM 簇（無 DOM 環境下應靜默不拋）
   api.clearMatchHoverDom();
   api.paintMatchHoverCell(1, 2);

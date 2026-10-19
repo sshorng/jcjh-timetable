@@ -201,21 +201,33 @@ const filteredRecommendedTeachers = computed(() => {
   if (q) {
     list = list.filter(t => t.name.toLowerCase().includes(q) || (t.subject || '').toLowerCase().includes(q));
   }
-  // 活動互代：額度多／有釋出優先（搜尋後仍維持；已選空堂事件時以該事件額度排序）
+  // 活動互代：以「總額度」排序（釋出多、最該回補者優先），同額度再比「該事件額度」
+  // 總額度＝教師整體折抵額度（remainingReleased）；該事件額度＝本事件額度包（eventQuotaRemaining），
+  // 只決定這一筆能否直接扣額度，故退居第二排序鍵。
   if (isMutualCover.value) {
-    const quotaOf = (t) => (t && typeof t.eventQuotaRemaining === 'number')
+    const numOf = (v) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const totalQuotaOf = (t) => (t && typeof t.remainingReleased === 'number')
+      ? t.remainingReleased
+      : numOf(t && t.mutualQuota);
+    const eventQuotaOf = (t) => (t && typeof t.eventQuotaRemaining === 'number')
       ? t.eventQuotaRemaining
-      : (typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0));
+      : -1;
     list.sort((a, b) => {
-      const qa = quotaOf(a);
-      const qb = quotaOf(b);
-      if (qb !== qa) return qb - qa;
+      const ta = totalQuotaOf(a);
+      const tb = totalQuotaOf(b);
+      if (tb !== ta) return tb - ta;
+      const ea = eventQuotaOf(a);
+      const eb = eventQuotaOf(b);
+      if (eb !== ea) return eb - ea;
       const ra = a.isReleasedByAway ? 1 : 0;
       const rb = b.isReleasedByAway ? 1 : 0;
       if (rb !== ra) return rb - ra;
-       return (b.score || 0) - (a.score || 0)
-         || (b.subjectMatchRank || 0) - (a.subjectMatchRank || 0)
-         || (a.todayPeriodCount || 0) - (b.todayPeriodCount || 0);
+      return (b.score || 0) - (a.score || 0)
+        || (b.subjectMatchRank || 0) - (a.subjectMatchRank || 0)
+        || (a.todayPeriodCount || 0) - (b.todayPeriodCount || 0);
     });
   }
   return list;

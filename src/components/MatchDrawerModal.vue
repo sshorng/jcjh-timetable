@@ -262,7 +262,7 @@
                           <template v-if="isBatchMatchFlow && !isBatchPerSlotMode">
                              全節可代 <span class="text-secondary">（參考日已排：{{ t.todayPeriodCount }}節）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <template v-if="typeof t.eventQuotaRemaining === 'number'">該事件額度：{{ t.eventQuotaRemaining }}</template><template v-else>折抵額度：{{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</template>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total">總額度 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span v-if="typeof t.eventQuotaRemaining === 'number'" class="mutual-quota-chip" :class="t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero'">該事件 {{ t.eventQuotaRemaining }}</span></span>
                               <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
                               <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}"> → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}</span>
                             </span>
@@ -272,7 +272,7 @@
                             <span v-else>空堂</span>
                              <span class="text-secondary">（當日已排：{{ t.todayPeriodCount }}節）</span>
                             <span v-if="isMutualCover" class="text-mutual-sub">
-                              <template v-if="typeof t.eventQuotaRemaining === 'number'">該事件額度：{{ t.eventQuotaRemaining }}</template><template v-else>折抵額度：{{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</template>
+                              <span class="mutual-quota-chips"><span class="mutual-quota-chip mutual-quota-chip-total">總額度 {{ typeof t.remainingReleased === 'number' ? t.remainingReleased : (t.mutualQuota || 0) }}</span><span v-if="typeof t.eventQuotaRemaining === 'number'" class="mutual-quota-chip" :class="t.eventQuotaRemaining >= 1 ? 'mutual-quota-chip-event' : 'mutual-quota-chip-zero'">該事件 {{ t.eventQuotaRemaining }}</span></span>
                               <span v-if="t.pendingDraft" class="text-violet-soft">（已暫定佔 {{ t.pendingDraft }}）</span>
                               <span v-if="t.suggestedFee" :style="{color: (t.suggestedFee==='扣額度' || t.suggestedFee==='互代不結') ? '#6b21a8' : '#b45309'}">
                                 → {{ t.suggestedFee === '互代不結' ? '扣額度' : t.suggestedFee }}

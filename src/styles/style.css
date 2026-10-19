@@ -5067,6 +5067,40 @@ td.table-empty {
   margin-top: 2px;
   color: #6d28d9;
 }
+/* 互代媒合清單：總額度／該事件額度標籤（事件額度 0 標紅，提示會轉活動公費） */
+.mutual-quota-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-right: 4px;
+}
+.mutual-quota-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #6d28d9;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.mutual-quota-chip-total {
+  border-color: #c4b5fd;
+  background: #ede9fe;
+  font-weight: 700;
+}
+.mutual-quota-chip-event {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+.mutual-quota-chip-zero {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
 .fs-65 { font-size: 0.65rem; }
 .fs-78 { font-size: 0.78rem; }
 .btn-xs-tight-nowrap {
