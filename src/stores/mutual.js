@@ -226,6 +226,7 @@ const getMutualPanelApi = () => {
         classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
         fetchMutualQuotaLedger: useGasStore().fetchMutualQuotaLedger,
         getMutualImportEventId: function () { return _getMutualImportEventId(); },
+        setMutualImportEventId: function (id) { if (mutualImportEventId) mutualImportEventId.value = String(id || ''); },
         DAC: useTourStore().DAC
       });
       return _mutualPanelApi;

@@ -59,6 +59,7 @@ const UiMutualPanelState = (() => {
     var defaultSubFeeForReason = deps.defaultSubFeeForReason || function () { return '自費代課'; };
     var getScheduleForDate = deps.getScheduleForDate;
     var classAwayEvents = deps.classAwayEvents;
+    var setMutualImportEventId = deps.setMutualImportEventId || null;
     var getMutualImportEventId = deps.getMutualImportEventId || function () { return ''; };
     var DAC = deps.DAC || function () { return DomainActivityCover; };
     var fetchMutualQuotaLedger = deps.fetchMutualQuotaLedger;
@@ -67,6 +68,7 @@ const UiMutualPanelState = (() => {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify({
           awayClasses: mutualAwayClasses.value || [],
+          eventId: (typeof getMutualImportEventId === 'function' ? getMutualImportEventId() : '') || '',
           leadEmails: mutualLeadEmails.value || [],
           skipNotify: !!mutualSkipNotify.value,
           note: mutualNote.value || '',
@@ -105,6 +107,15 @@ const UiMutualPanelState = (() => {
       if (Array.isArray(saved.periods)) mutualActivityPeriods.value = saved.periods.slice();
       if (saved.startPeriod != null) mutualActivityStartPeriod.value = String(saved.startPeriod);
       if (saved.endPeriod != null) mutualActivityEndPeriod.value = String(saved.endPeriod);
+      // 空堂事件下拉也要記憶：事件還在清單才還原（被刪除就不還原，避免卡幽靈選項）
+      var savedEventId = (saved && typeof saved.eventId === 'string' ? saved.eventId : '').trim();
+      if (savedEventId && typeof setMutualImportEventId === 'function') {
+        try {
+          var evList = (classAwayEvents && classAwayEvents.value) || [];
+          var evGone = evList.length > 0 && !evList.some(function (e) { return e && String(e.id) === savedEventId; });
+          if (!evGone) setMutualImportEventId(savedEventId);
+        } catch (eEv) { /* ignore */ }
+      }
     }
 
     function setMutualActivityThisWeek() {
