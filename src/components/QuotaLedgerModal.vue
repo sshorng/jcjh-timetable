@@ -11,7 +11,7 @@
             <button type="button" class="btn-close" @click="closeQuotaLedger" aria-label="關閉">&times;</button>
           </div>
           <div class="modal-body">
-            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。僅管理員可見。事件＝顯示名稱；包ID＝實際扣自哪個額度包（同名事件可能分屬不同包）；事件ID＝系統分類（evt_sub 代課／evt_exam 段考／evt_empty_slot 空堂）。</p>
+            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。僅管理員可見。</p>
             <div v-if="quotaLedgerLoading" class="quota-ledger-loading">載入中…</div>
             <div v-if="!quotaLedgerLoading && !quotaLedgerRows.length" class="quota-ledger-empty">尚無歷程列</div>
             <div v-if="quotaLedgerRows.length" class="table-responsive quota-ledger-table-wrap" :class="{ 'is-refreshing': quotaLedgerLoading }">
@@ -23,8 +23,6 @@
                     <th>異動</th>
                     <th>餘額後</th>
                     <th>事件</th>
-                    <th title="實際扣自哪個額度包">包ID</th>
-                    <th title="系統事件分類">事件ID</th>
                     <th>備註</th>
                   </tr>
                 </thead>
@@ -43,8 +41,6 @@
                        <span v-else class="text-muted">無</span>
                       <span v-if="row.startDate" class="quota-ledger-range"> {{ row.startDate }}{{ row.endDate && row.endDate !== row.startDate ? ('～' + row.endDate) : '' }}</span>
                     </td>
-                    <td style="font-size:0.7rem;word-break:break-all;max-width:160px;">{{ row.packageId || '—' }}</td>
-                    <td style="font-size:0.7rem;">{{ row.eventId || '—' }}</td>
                      <td class="quota-ledger-note">{{ row.note || (row.operator ? ('操作：' + row.operator) : '未填') }}<div v-if="row.requestId" style="font-size:0.68rem;color:var(--text-muted);">單 {{ row.requestId }}</div></td>
                   </tr>
                 </tbody>
