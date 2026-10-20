@@ -781,6 +781,10 @@ test('domain 領域測試（173 項）', () => {
           var grade7Away = DAC.toggleAwayGrade(awayOptsSource, [], '7');
           assert('年級快捷不含合班', grade7Away.indexOf('703·704') < 0 && grade7Away.indexOf('701、702') < 0
             && grade7Away.indexOf('701') >= 0, 'away=' + grade7Away.join(','));
+          // 只比對開頭數字：907 是九年級，不可被「七年級」按鈕選中
+          assert('年級快捷只比對開頭數字', grade7Away.indexOf('907') < 0
+            && DAC.toggleAwayGrade(awayOptsSource, [], '9').join(',') === '907',
+            'grade7=' + grade7Away.join(','));
        }
 
       // ── 巡堂 ──
@@ -1237,5 +1241,5 @@ test('domain 領域測試（173 項）', () => {
         for (const l of log) { if (l.indexOf('✗') === 0) console.log(l); }
   console.log('全部通過 ' + passed + ' 項（失敗 ' + failed + '）');
   expect(failed).toBe(0);
-  expect(passed).toBe(177);
+  expect(passed).toBe(178);
 });

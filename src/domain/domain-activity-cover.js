@@ -1084,8 +1084,9 @@ const DomainActivityCover = (() => {
     var g = String(grade || '');
     var all = (classList || []).filter(function (c) {
       if (!isSingleClassOption(c)) return false;
-      var s = String(c);
-      return s.indexOf(g) >= 0 || s.indexOf(g) === 0;
+      // 只比對開頭數字（與空堂事件的 filterClassesByGrade 同口徑）；
+      // 用「包含」比對會讓 907 被七年級按鈕選中
+      return String(c || '').trim().charAt(0) === g;
     });
     var set = toAwaySet(awayClasses);
     var allSelected = all.length > 0 && all.every(function (c) { return !!set[normalizeClass(c)]; });
