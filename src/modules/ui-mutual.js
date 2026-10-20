@@ -585,12 +585,15 @@ const UiMutualPanelState = (() => {
         } else {
           showToast('已寫入額度帳本 ' + wroteN + ' 列／發放 ' + earnedN + ' 人' + dupMsg + skipMsg, 'success');
         }
-        // 額度已變：清前端歷程快取（若有）
-        try {
-          if (typeof window !== 'undefined' && window.__quotaLedgerCacheBust) window.__quotaLedgerCacheBust();
-        } catch (eB) { /* ignore */ }
-        softRefreshInBackground({ force: true, delay: 900 });
-      } catch (e) {
+         // 額度已變：清前端歷程快取＋事件額度抽屜快取（否則側面板「事件」數字卡在舊值）
+         try {
+           if (typeof window !== 'undefined' && window.__quotaLedgerCacheBust) window.__quotaLedgerCacheBust();
+         } catch (eB) { /* ignore */ }
+         try {
+           if (typeof window !== 'undefined' && window.__mutualEventQuotaCacheBust) window.__mutualEventQuotaCacheBust();
+         } catch (eB2) { /* ignore */ }
+         softRefreshInBackground({ force: true, delay: 900 });
+       } catch (e) {
         console.error(e);
         showToast('發放額度失敗：' + (e && e.message ? e.message : String(e)), 'error');
       } finally {

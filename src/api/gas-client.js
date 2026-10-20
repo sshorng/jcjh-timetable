@@ -786,19 +786,21 @@ const GasApi = (() => {
     }
 
     /** 折抵額度帳本歷程（email 可選；管理員可查他人） */
-    async function fetchMutualQuotaLedger(options) {
-      options = options || {};
-      const semesterId = options.semesterId || opts.getSemesterId();
-      const payload = {
-        name: options.name || options.teacherName || '',
-        limit: options.limit != null ? options.limit : 50,
-        allTeachers: options.allTeachers === true
-      };
-      // 指定學年（民國，如 115）→ 後端回傳該學年所有學期，供跨上／下學期累計
-      const schoolYear = String(options.schoolYear || '').trim();
-      if (schoolYear) payload.schoolYear = schoolYear;
-      return await postJson('getMutualQuotaLedger', payload, { abortPrevious: true, semesterId: semesterId });
-    }
+     async function fetchMutualQuotaLedger(options) {
+       options = options || {};
+       const semesterId = options.semesterId || opts.getSemesterId();
+       const payload = {
+         name: options.name || options.teacherName || '',
+         limit: options.limit != null ? options.limit : 50,
+         allTeachers: options.allTeachers === true
+       };
+       // 指定學年（民國，如 115）→ 後端回傳該學年所有學期，供跨上／下學期累計
+       const schoolYear = String(options.schoolYear || '').trim();
+       if (schoolYear) payload.schoolYear = schoolYear;
+       // 事件額度抽屜會與其他帳本請求併發：允許 abortPrevious:false，避免互相取消變「讀不到」
+       const abortPrev = options.abortPrevious === false ? false : true;
+       return await postJson('getMutualQuotaLedger', payload, { abortPrevious: abortPrev, semesterId: semesterId });
+     }
 
     /** 扣額度預覽：姓名為唯一識別，回傳包餘額＋FIFO 預設（送出前顯示，可下拉覆寫） */
     async function fetchQuotaSpendPreview(options) {

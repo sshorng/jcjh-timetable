@@ -671,4 +671,22 @@ test('事件額度後備計算：由額度帳本算出各事件包餘額', async
     [['pkg-a', 2, 'evt-a'], ['pkg-b', 2, 'evt-b']],
     '同包加總、用完（0）的包要濾掉、事件 ID 要帶出來'
   );
-});
+ });
+ 
+ test('事件額度：無包ID舊列歸戶＋快取失效後重抓', async () => {
+   const mod = await import('../src/modules/event-quota-ledger.js');
+   // 舊帳本列沒有包ID：應歸戶為 nopack_姓名，不可整包遺失（與後端 buildQuotaSpendPreview_ 一致）
+   const rows = [
+     { name: '甲老師', packageId: '', eventId: 'evt-a', eventName: '畢旅', delta: 2 },
+     { name: '甲老師', packageId: '', eventId: 'evt-a', eventName: '畢旅', delta: -1 },
+   ];
+   const out = mod.buildEventQuotaPreviewFromLedger(rows, ['甲老師']);
+   assert.equal(out[0].packs.length, 1, '無包ID應歸戶為一包');
+   assert.equal(out[0].packs[0].remaining, 1, '歸戶包餘額應為 2-1=1');
+   assert.equal(typeof mod.bustEventQuotaLedgerCache, 'function', '應匯出快取失效函式');
+   // 快取失效不應拋錯；發放／扣用後側面板事件數字靠它重抓
+   mod.bustEventQuotaLedgerCache();
+   const empty = mod.buildEventQuotaPreviewFromLedger([], ['甲老師']);
+   assert.deepEqual(empty[0].packs, [], '無列時回空包（顯示事件 0）');
+   console.log('event quota nopack＋bust tests PASS');
+ });

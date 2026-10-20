@@ -5,25 +5,29 @@
  * 改讀「額度帳本」在本機算（同一支帳本 API，匯出流程已在用）。
  * 整段只在需要時動態載入（見 quota-gates.js），不佔主包體積。
  */
-let _cache = { semesterId: '', ts: 0, rows: [] };
+ let _cache = { semesterId: '', ts: 0, rows: [] };
+ function bustEventQuotaLedgerCache() {
+   _cache = { semesterId: '', ts: 0, rows: [] };
+ }
 
-function buildEventQuotaPreviewFromLedger(rows, names) {
-  const want = {};
-  (names || []).forEach((nm) => { want[nm] = true; });
-  const byTeacher = {};
-  (rows || []).forEach((r) => {
-    const nm = String((r && (r.name || r.teacherName)) || '').trim();
-    if (!want[nm]) return;
-    const pid = String((r && r.packageId) || '').trim();
-    if (!pid) return;
-    const delta = parseFloat(r.delta);
-    if (!Number.isFinite(delta)) return;
-    const packs = byTeacher[nm] || (byTeacher[nm] = {});
-    const pack = packs[pid] || (packs[pid] = { packageId: pid, eventId: '', eventName: '', remaining: 0 });
-    pack.remaining += delta;
-    if (!pack.eventId && r.eventId) pack.eventId = String(r.eventId);
-    if (!pack.eventName && r.eventName) pack.eventName = String(r.eventName);
-  });
+ function buildEventQuotaPreviewFromLedger(rows, names) {
+   const want = {};
+   (names || []).forEach((nm) => { want[String(nm || '').trim()] = true; });
+   const byTeacher = {};
+   (rows || []).forEach((r) => {
+     const nm = String((r && (r.name || r.teacherName)) || '').trim();
+     if (!nm || !want[nm]) return;
+     // 舊帳本列可能沒有包ID：與後端 buildQuotaSpendPreview_ 一致，用 nopack_歸戶，避免整包遺失
+     let pid = String((r && r.packageId) || '').trim();
+     if (!pid) pid = 'nopack_' + nm;
+     const delta = parseFloat(r && r.delta);
+     if (!Number.isFinite(delta)) return;
+     const packs = byTeacher[nm] || (byTeacher[nm] = {});
+     const pack = packs[pid] || (packs[pid] = { packageId: pid, eventId: '', eventName: '', remaining: 0 });
+     pack.remaining = Math.round(((pack.remaining || 0) + delta) * 1000) / 1000;
+     if (!pack.eventId && r.eventId) pack.eventId = String(r.eventId);
+     if (!pack.eventName && r.eventName) pack.eventName = String(r.eventName);
+   });
   return (names || []).map((nm) => {
     const packs = byTeacher[nm]
       ? Object.keys(byTeacher[nm]).map((k) => {
@@ -58,4 +62,4 @@ async function loadEventQuotaPreviewFromLedger(names, deps) {
   return buildEventQuotaPreviewFromLedger(_cache.rows, names);
 }
 
-export { buildEventQuotaPreviewFromLedger, loadEventQuotaPreviewFromLedger };
+ export { buildEventQuotaPreviewFromLedger, bustEventQuotaLedgerCache, loadEventQuotaPreviewFromLedger };

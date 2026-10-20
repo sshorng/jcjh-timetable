@@ -188,18 +188,33 @@ const getMatchApi = () => {
       return '';
     };
     // 互代模式：找人代課清單顯示「該空堂事件」額度（而非總額度），與送出扣包一致。
-    const eventQuotaByName = ref({});
-    const eventQuotaEventId = ref('');
-    const eventQuotaLoading = ref(false);
-    const eventQuotaError = ref('');
-    let _eventQuotaSig = '';
-    // 互代模式：找人代課清單顯示「該空堂事件」額度。
-    // 資料只有一個來源：額度帳本（與匯出、發放同一支 API），在前端算出每人各事件包剩餘。
-    // 不用 getQuotaSpendPreview、不重試、不分批：失敗就顯示「!」，下次開抽屜會再算。
-    const refreshMutualEventQuotas = async () => {
-      const tourRefs = storeToRefs(useTourStore());
-      const mutualRefs = storeToRefs(useMutualStore());
-      const sessionRefs = storeToRefs(useSessionStore());
+     const eventQuotaByName = ref({});
+     const eventQuotaEventId = ref('');
+     const eventQuotaLoading = ref(false);
+     const eventQuotaError = ref('');
+     let _eventQuotaSig = '';
+     // 發放／扣用後帳本已變：清 sig＋事件包快取，下次 refresh 重抓，不再卡舊數字（strip 名單觸發 watch 重抓）
+     const bustMutualEventQuotaCache = async () => {
+       _eventQuotaSig = '';
+       eventQuotaError.value = '';
+       eventQuotaEventId.value = '';
+       eventQuotaByName.value = {};
+       try {
+         const gate = await ensureEventQuotaLedger();
+         if (gate && gate.bustEventQuotaLedgerCache) gate.bustEventQuotaLedgerCache();
+       } catch (eBust) { /* ignore */ }
+       try { refreshMutualEventQuotas(); } catch (eRe) { /* ignore */ }
+     };
+     try {
+       if (typeof window !== 'undefined') window.__mutualEventQuotaCacheBust = bustMutualEventQuotaCache;
+     } catch (eWin) { /* ignore */ }
+     // 互代模式：找人代課清單顯示「該空堂事件」額度。
+     // 資料只有一個來源：額度帳本（與匯出、發放同一支 API），在前端算出每人各事件包剩餘。
+     // 不用 getQuotaSpendPreview、不重試、不分批：失敗就顯示「!」，下次開抽屜會再算。
+     const refreshMutualEventQuotas = async () => {
+       const tourRefs = storeToRefs(useTourStore());
+       const mutualRefs = storeToRefs(useMutualStore());
+       const sessionRefs = storeToRefs(useSessionStore());
       const isMutual = !!(tourRefs.isMutualCover && tourRefs.isMutualCover.value);
       const eventId = (isMutual && mutualRefs.mutualImportEventId)
         ? String(mutualRefs.mutualImportEventId.value || '').trim()
@@ -233,15 +248,19 @@ const getMatchApi = () => {
         if (nm && !seen[nm]) { seen[nm] = true; names.push(nm); }
       });
       if (!names.length) return;
-      const sig = eventId + '|' + names.join(',');
-      if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId) return;
-      eventQuotaLoading.value = true;
-      try {
-        const gate = await ensureEventQuotaLedger();
-        const preview = await gate.loadEventQuotaPreviewFromLedger(names, {
-          getSemesterId: () => useSessionStore().currentSemester,
-          fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(o)
-        });
+       const sig = eventId + '|' + names.join(',');
+       // 同事件＋同名單且清單已有數字才跳過；剛重算的乾淨名單（無事件額度）要往下重抓，
+       // 帳本列 60 秒內有快取，重算只是記憶體加總，不會多打 API
+       if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId
+         && !list.some((t) => t && typeof t.eventQuotaRemaining !== 'number')) return;
+       eventQuotaLoading.value = true;
+       try {
+         const gate = await ensureEventQuotaLedger();
+         const preview = await gate.loadEventQuotaPreviewFromLedger(names, {
+           getSemesterId: () => useSessionStore().currentSemester,
+           // 與其他帳本請求併發時不要互相取消，否則會誤顯示「讀不到」
+           fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(Object.assign({ abortPrevious: false }, o || {}))
+         });
         const nowEventId = String((mutualRefs.mutualImportEventId && mutualRefs.mutualImportEventId.value) || '').trim();
         if (nowEventId !== eventId) return;
         let eventName = '';
@@ -327,5 +346,5 @@ const getMatchApi = () => {
       _mutualRefs.mutualImportEventId.value
     ], () => { refreshMutualEventQuotas(); });
     }
-    return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, eventQuotaByName, eventQuotaEventId, eventQuotaLoading, eventQuotaError, refreshMutualEventQuotas, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
+     return { batchExchangePreviewSlotKey, compareWeekSelectionA, compareWeekSelectionB, quotaPackPreview, quotaPackLoading, quotaPackError, quotaPackOptions, quotaFifoPackageId, quotaSelectedPack, eventQuotaByName, eventQuotaEventId, eventQuotaLoading, eventQuotaError, refreshMutualEventQuotas, bustMutualEventQuotaCache, personalChanges, scheduleScope, MATCH_PAGE_SIZE, filteredRecommendedTeachers, filteredExchangeList, displayedRecommendedTeachers, displayedExchangeList, batchCompareViewEmail, batchCompareSubGroups, exchangeIncomingConflict, hasSubTeacherConflict, getMatchApi, ensureMatchModule, setBatchExchangePreviewSlot, quotaTeacherNameOf, warmQuotaPackCache, fetchQuotaPackPreview, doFetchQuotaPackPreview, resetQuotaPackOverride, loadMoreMatches, bindMatchNativeSelect, unbindMatchNativeSelect, selectMatchPreviewSub, selectMatchPreviewExchange, clearMatchPreview, closeMatchModal, getMatchSlotDateMMDD, initImmediateMatch1 };
 });

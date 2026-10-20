@@ -30,13 +30,19 @@ export const useMutualStore = defineStore('mutual', () => {
       if (wasLead) showToast(`已取消帶隊：${name}`, 'info');
       else showToast(`已加入帶隊：${name}`, 'info');
     };
-    const bustQuotaLedgerViewCache = () => {
-      try {
-        if (typeof window !== 'undefined' && typeof window.__quotaLedgerCacheBust === 'function') {
-          window.__quotaLedgerCacheBust();
-        }
-      } catch (e) { /* ignore */ }
-    };
+     const bustQuotaLedgerViewCache = () => {
+       try {
+         if (typeof window !== 'undefined' && typeof window.__quotaLedgerCacheBust === 'function') {
+           window.__quotaLedgerCacheBust();
+         }
+       } catch (e) { /* ignore */ }
+       // 事件額度抽屜另有快取：額度異動後一併失效，否則側面板事件數字卡舊值
+       try {
+         if (typeof window !== 'undefined' && typeof window.__mutualEventQuotaCacheBust === 'function') {
+           window.__mutualEventQuotaCacheBust();
+         }
+       } catch (e2) { /* ignore */ }
+     };
     const selectedClass = ref('');
     const classReadonlyMode = ref(false);
     const pendingClassView = ref('');
