@@ -19,12 +19,12 @@ const UiHistory = (() => {
   'use strict';
   function create(deps) {
     deps = deps || {};
-    var ensureHistoryMonthLoaded = deps.ensureHistoryMonthLoaded;
+    var ensureHistoryMonthLoaded = deps.ensureHistoryMonthLoaded || function () {};
     var historyLoadingFull = deps.historyLoadingFull;
     var fetchInitialData = deps.fetchInitialData;
     var applyInitialPayload = deps.applyInitialPayload;
-    var loadWeeklyData = deps.loadWeeklyData;
-    var toLocalDateStr = deps.toLocalDateStr;
+    var loadWeeklyData = deps.loadWeeklyData || (function () { var noop = function () { return Promise.resolve(); }; return noop; })();
+    var toLocalDateStr = deps.toLocalDateStr || DateUtils.toLocalDateStr || function (d) { return new Date(d).toISOString().slice(0, 10); };
     var historyLoadedMonths = deps.historyLoadedMonths;
     var historyFullLoaded = deps.historyFullLoaded;
     var historyMonthLoading = deps.historyMonthLoading;

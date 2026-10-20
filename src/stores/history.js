@@ -41,6 +41,7 @@ const getHistoryApi = () => {
         loading: storeToRefs(useSessionStore()).loading, loadingMessage: storeToRefs(useSessionStore()).loadingMessage,
         watch,
         user: storeToRefs(useSessionStore()).user, allSchedules: storeToRefs(useSessionStore()).allSchedules, schoolSwaps: storeToRefs(useSessionStore()).schoolSwaps, isSingleWeek: useSessionStore().isSingleWeek, substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords, isAdmin: storeToRefs(useSessionStore()).isAdmin, isStaff: storeToRefs(useSessionStore()).isStaff, getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, requestsList: storeToRefs(useSessionStore()).requestsList,
+        toLocalDateStr: useSessionStore().toLocalDateStr, loadWeeklyData: useDataStore().loadWeeklyData,
         isProxySubmitRequest: useRequestsStore().isProxySubmitRequest, historyTypeFilter: storeToRefs(useMutualStore()).historyTypeFilter, historySearchQuery: storeToRefs(useMutualStore()).historySearchQuery, historyFilterMode: storeToRefs(useMutualStore()).historyFilterMode,
         historyFilterDate: storeToRefs(useMutualStore()).historyFilterDate, historyRangeStart: storeToRefs(useMutualStore()).historyRangeStart, historyRangeEnd: storeToRefs(useMutualStore()).historyRangeEnd, isHistoryExchangeType: useMutualStore().isHistoryExchangeType, historyPageSize: storeToRefs(useMutualStore()).historyPageSize, historyPage: storeToRefs(useMutualStore()).historyPage,
         flattenBatchDisplayGroups: useHomeroomStore().flattenBatchDisplayGroups,
