@@ -193,7 +193,8 @@ const getMatchApi = () => {
      const eventQuotaLoading = ref(false);
      const eventQuotaError = ref('');
      let _eventQuotaSig = '';
-     // 發放／扣用後帳本已變：清 sig＋事件包快取，下次 refresh 重抓，不再卡舊數字（strip 名單觸發 watch 重抓）
+     let _eventQuotaQueued = false;
+     // 發放／扣用後帳本已變：清 sig＋事件包快取並重抓，不再卡舊數字
      const bustMutualEventQuotaCache = async () => {
        _eventQuotaSig = '';
        eventQuotaError.value = '';
@@ -253,6 +254,8 @@ const getMatchApi = () => {
        // 帳本列 60 秒內有快取，重算只是記憶體加總，不會多打 API
        if (sig === _eventQuotaSig && eventQuotaEventId.value === eventId
          && !list.some((t) => t && typeof t.eventQuotaRemaining !== 'number')) return;
+       // 已有抓取在飛：排隊等它做完再重算一次（到時帳本列已有快取，不會多打 API、不會觸發後端節流）
+       if (eventQuotaLoading.value) { _eventQuotaQueued = true; return; }
        eventQuotaLoading.value = true;
        try {
          const gate = await ensureEventQuotaLedger();
@@ -311,13 +314,15 @@ const getMatchApi = () => {
         tourRefs.recommendedTeachers.value = patched;
         eventQuotaError.value = '';
         _eventQuotaSig = sig;
-      } catch (eAll) {
-        if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 讀取失敗：', eAll);
-        eventQuotaError.value = '讀不到';
-      } finally {
-        eventQuotaLoading.value = false;
-      }
-    };
+       } catch (eAll) {
+         if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 讀取失敗：', eAll);
+         eventQuotaError.value = '讀不到';
+       } finally {
+         eventQuotaLoading.value = false;
+         // 有排隊的重算：成功才追跑（快取已暖）；失敗就丟掉等下次觸發，避免連打觸發後端節流
+         if (_eventQuotaQueued) { _eventQuotaQueued = false; if (!eventQuotaError.value) refreshMutualEventQuotas(); }
+       }
+     };
     function initImmediateMatch1() {
     watch(storeToRefs(useMutualStore()).pendingRequestData, (pending) => {
       if (pending && pending.mode === 'exchange') {
