@@ -746,3 +746,20 @@ test('事件額度：兩路都掛時合併原因（hover 可見免猜）', async
   mod.bustEventQuotaLedgerCache();
   console.log('event quota combined-error tests PASS');
 });
+
+test('事件額度：連布林／非 Error 拋出值也要描述型別', async () => {
+  const mod = await import('../src/modules/event-quota-ledger.js');
+  mod.bustEventQuotaLedgerCache();
+  let caught = null;
+  try {
+    await mod.loadEventQuotaPreview(['甲老師'], {
+      getSemesterId: () => '115-1-event-quota-bool-throw',
+      fetchPreview: async () => { throw true; },
+      fetchLedger: async () => { throw true; }
+    });
+  } catch (e) { caught = e; }
+  assert.ok(caught, '布林拋出也應被接住合併');
+  assert.match(String(caught.message), /boolean:true/, '合併訊息應標出布林型別，不可只剩光禿禿的 true');
+  mod.bustEventQuotaLedgerCache();
+  console.log('event quota describe-thrown tests PASS');
+});

@@ -24,7 +24,9 @@ const zlib = require('zlib');
 // 新增 ui-mutual／stores-match 約 300 行（實測 717.13 → 720.64 KiB，gzip 210.61 → 212.42 KiB），
 // 屬功能成長而非閘門退化（無新增靜態 import、modal 未改回靜態、CSS 未搬回 public/），
 // 故上調 4 KiB 並在此明文記錄，不假裝是「瘦身」成果。
-const RAW_LIMIT_KIB = 724;
+// 2026-10-20 再 re-baseline 為 725 KiB：ee06e85「歷史篩選補依賴」進主包（實測 723.97 → 724.03 KiB，
+// gzip 213.47 → 213.48 KiB），屬功能成長而非閘門退化，故上調 1 KiB 並在此明文記錄。
+const RAW_LIMIT_KIB = 725;
 const GZIP_LIMIT_KIB = 220;
 const DIST = path.resolve(__dirname, '..', 'dist', 'assets');
 

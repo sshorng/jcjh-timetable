@@ -43,6 +43,18 @@
     return { name: nm, packs: packs };
   });
 }
+/**
+ * 把各種形狀的拋出值（Error／字串／布林／物件）都描述成可讀字串，免得再看到「true」卻不知是什麼。
+ */
+function describeThrown_(e) {
+  try {
+    if (e instanceof Error) return 'Error:' + String(e.message || e);
+    if (e !== null && typeof e === 'object') {
+      try { return 'object:' + JSON.stringify(e).slice(0, 120); } catch (_) { return 'object'; }
+    }
+    return typeof e + ':' + String(e);
+  } catch (_) { return 'undescribable'; }
+}
 
 /**
  * 讀額度帳本（60 秒內共用一次）後算出各事件包餘額。
@@ -61,6 +73,7 @@ async function loadEventQuotaPreviewFromLedger(names, deps) {
   }
   return buildEventQuotaPreviewFromLedger(_cache.rows, names);
 }
+
 /**
  * 事件額度統一入口：先走 getQuotaSpendPreview（不限管理員，人人可用），
  * 失敗才後備讀全校帳本（僅管理員）。兩路回傳同形 [{name, packs}]。
@@ -88,11 +101,9 @@ async function loadEventQuotaPreview(names, deps) {
       fetchLedger: (o) => deps.fetchLedger(Object.assign({ abortPrevious: false }, o || {}))
     });
   } catch (eLedger) {
-    // 兩路都掛才顯示「!」：把兩邊原因併成一句（hover「事件 !」可見），才不用猜是權限、節流還是斷線
+    // 兩路都掛才顯示「!」：把兩邊原因併成一句（抽屜紅字可見），才不用猜是權限、節流還是斷線
     if (!previewErr) throw eLedger;
-    const m1 = String((previewErr && previewErr.message) || previewErr || '未知');
-    const m2 = String((eLedger && eLedger.message) || eLedger || '未知');
-    throw new Error('預覽失敗(' + m1.slice(0, 80) + ')；帳本失敗(' + m2.slice(0, 80) + ')');
+    throw new Error('預覽失敗[' + describeThrown_(previewErr) + ']；帳本失敗[' + describeThrown_(eLedger) + ']');
   }
 }
  export { buildEventQuotaPreviewFromLedger, bustEventQuotaLedgerCache, loadEventQuotaPreview, loadEventQuotaPreviewFromLedger };
