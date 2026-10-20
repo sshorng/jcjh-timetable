@@ -61,5 +61,28 @@ async function loadEventQuotaPreviewFromLedger(names, deps) {
   }
   return buildEventQuotaPreviewFromLedger(_cache.rows, names);
 }
-
- export { buildEventQuotaPreviewFromLedger, bustEventQuotaLedgerCache, loadEventQuotaPreviewFromLedger };
+/**
+ * 事件額度統一入口：先走 getQuotaSpendPreview（不限管理員，人人可用），
+ * 失敗才後備讀全校帳本（僅管理員）。兩路回傳同形 [{name, packs}]。
+ * deps.fetchPreview(chunkNames60): 預覽 API；deps.fetchLedger/getSemesterId: 帳本後備。
+ */
+async function loadEventQuotaPreview(names, deps) {
+  deps = deps || {};
+  if (typeof deps.fetchPreview === 'function') {
+    try {
+      const merged = [];
+      for (let i = 0; i < (names || []).length; i += 60) {
+        const res = await deps.fetchPreview((names || []).slice(i, i + 60));
+        ((res && res.preview) || []).forEach((p) => merged.push(p));
+      }
+      return merged;
+    } catch (ePrev) {
+      if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 預覽失敗改走帳本：', ePrev);
+    }
+  }
+  return loadEventQuotaPreviewFromLedger(names, {
+    getSemesterId: deps.getSemesterId,
+    fetchLedger: (o) => deps.fetchLedger(Object.assign({ abortPrevious: false }, o || {}))
+  });
+}
+ export { buildEventQuotaPreviewFromLedger, bustEventQuotaLedgerCache, loadEventQuotaPreview, loadEventQuotaPreviewFromLedger };

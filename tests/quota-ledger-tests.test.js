@@ -690,3 +690,41 @@ test('事件額度後備計算：由額度帳本算出各事件包餘額', async
    assert.deepEqual(empty[0].packs, [], '無列時回空包（顯示事件 0）');
    console.log('event quota nopack＋bust tests PASS');
  });
+
+// 事件額度統一入口：預覽優先（後端不限管理員）、失敗才後備讀帳本（僅管理員）
+test('事件額度：預覽成功時直接回傳、不打帳本 API', async () => {
+  const mod = await import('../src/modules/event-quota-ledger.js');
+  let ledgerCalls = 0;
+  const previewRows = [{ name: '甲老師', packs: [{ packageId: 'pkg-a', eventId: 'evt-a', eventName: '畢旅', remaining: 2 }] }];
+  const out = await mod.loadEventQuotaPreview(['甲老師'], {
+    fetchPreview: async (chunk) => {
+      assert.deepEqual(chunk, ['甲老師'], '預覽應收到被詢問的名單');
+      return { preview: previewRows };
+    },
+    fetchLedger: async () => { ledgerCalls += 1; return { ledger: [] }; }
+  });
+  assert.deepEqual(out, previewRows, '預覽成功應直接回傳');
+  assert.equal(ledgerCalls, 0, '預覽成功不可再打全校帳本（非管理員會被拒）');
+  console.log('event quota preview-first tests PASS');
+});
+
+test('事件額度：預覽失敗時後備讀帳本（含無包ID舊列）', async () => {
+  const mod = await import('../src/modules/event-quota-ledger.js');
+  mod.bustEventQuotaLedgerCache();
+  let previewCalls = 0;
+  const out = await mod.loadEventQuotaPreview(['甲老師'], {
+    getSemesterId: () => '115-1-event-quota-fallback',
+    fetchPreview: async () => { previewCalls += 1; throw new Error('預覽 API 掛了'); },
+    fetchLedger: async (o) => {
+      assert.equal(o.abortPrevious, false, '帳本後備不可與其他請求互相取消');
+      assert.equal(o.allTeachers, true, '帳本後備應取全校列');
+      return { ledger: [{ name: '甲老師', packageId: '', eventId: 'evt-a', eventName: '畢旅', delta: 2 }] };
+    }
+  });
+  assert.equal(previewCalls, 1, '應先試預覽一次');
+  assert.equal(out.length, 1, '後備應回傳被詢問的老師');
+  assert.equal(out[0].packs.length, 1, '無包ID舊列應歸戶不斷線');
+  assert.equal(out[0].packs[0].remaining, 2, '歸戶包餘額應正確');
+  mod.bustEventQuotaLedgerCache();
+  console.log('event quota ledger-fallback tests PASS');
+});

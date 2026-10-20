@@ -258,12 +258,13 @@ const getMatchApi = () => {
        if (eventQuotaLoading.value) { _eventQuotaQueued = true; return; }
        eventQuotaLoading.value = true;
        try {
-         const gate = await ensureEventQuotaLedger();
-         const preview = await gate.loadEventQuotaPreviewFromLedger(names, {
-           getSemesterId: () => useSessionStore().currentSemester,
-           // 與其他帳本請求併發時不要互相取消，否則會誤顯示「讀不到」
-           fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(Object.assign({ abortPrevious: false }, o || {}))
-         });
+        const gate = await ensureEventQuotaLedger();
+        // 預覽 API 不限管理員（人人可用），失敗才後備讀全校帳本（僅管理員）；兩路都不互相取消。實抓在 lazy chunk。
+        const preview = await gate.loadEventQuotaPreview(names, {
+          getSemesterId: () => useSessionStore().currentSemester,
+          fetchPreview: (chunk) => useGasStore().fetchQuotaSpendPreview({ names: chunk, abortPrevious: false }),
+          fetchLedger: (o) => useGasStore().fetchMutualQuotaLedger(o)
+        });
         const nowEventId = String((mutualRefs.mutualImportEventId && mutualRefs.mutualImportEventId.value) || '').trim();
         if (nowEventId !== eventId) return;
         let eventName = '';
