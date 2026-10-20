@@ -194,9 +194,11 @@ const getMatchApi = () => {
      const eventQuotaError = ref('');
      let _eventQuotaSig = '';
      let _eventQuotaQueued = false;
+     let _eventQuotaRetriedSig = '';
      // 發放／扣用後帳本已變：清 sig＋事件包快取並重抓，不再卡舊數字
      const bustMutualEventQuotaCache = async () => {
        _eventQuotaSig = '';
+       _eventQuotaRetriedSig = '';
        eventQuotaError.value = '';
        eventQuotaEventId.value = '';
        eventQuotaByName.value = {};
@@ -315,9 +317,15 @@ const getMatchApi = () => {
         tourRefs.recommendedTeachers.value = patched;
         eventQuotaError.value = '';
         _eventQuotaSig = sig;
+        _eventQuotaRetriedSig = '';
        } catch (eAll) {
          if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 讀取失敗：', eAll);
         eventQuotaError.value = String((eAll && eAll.message) || eAll || '讀不到');
+        // 偶發失敗（網路抖動、GAS 冷啟動）自癒：同條件只自動重試一次，條件變了或成功就不再追打
+        if (_eventQuotaRetriedSig !== sig && typeof setTimeout === 'function') {
+          _eventQuotaRetriedSig = sig;
+          setTimeout(() => { try { if (eventQuotaError.value && !eventQuotaLoading.value) refreshMutualEventQuotas(); } catch (eRetry) { /* ignore */ } }, 1500);
+        }
        } finally {
          eventQuotaLoading.value = false;
          // 有排隊的重算：成功才追跑（快取已暖）；失敗就丟掉等下次觸發，避免連打觸發後端節流
