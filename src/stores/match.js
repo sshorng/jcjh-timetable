@@ -317,7 +317,7 @@ const getMatchApi = () => {
         _eventQuotaSig = sig;
        } catch (eAll) {
          if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 讀取失敗：', eAll);
-         eventQuotaError.value = '讀不到';
+        eventQuotaError.value = String((eAll && eAll.message) || eAll || '讀不到');
        } finally {
          eventQuotaLoading.value = false;
          // 有排隊的重算：成功才追跑（快取已暖）；失敗就丟掉等下次觸發，避免連打觸發後端節流

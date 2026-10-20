@@ -68,6 +68,7 @@ async function loadEventQuotaPreviewFromLedger(names, deps) {
  */
 async function loadEventQuotaPreview(names, deps) {
   deps = deps || {};
+  let previewErr = null;
   if (typeof deps.fetchPreview === 'function') {
     try {
       const merged = [];
@@ -77,12 +78,21 @@ async function loadEventQuotaPreview(names, deps) {
       }
       return merged;
     } catch (ePrev) {
+      previewErr = ePrev;
       if (typeof console !== 'undefined' && console.error) console.error('[事件額度] 預覽失敗改走帳本：', ePrev);
     }
   }
-  return loadEventQuotaPreviewFromLedger(names, {
-    getSemesterId: deps.getSemesterId,
-    fetchLedger: (o) => deps.fetchLedger(Object.assign({ abortPrevious: false }, o || {}))
-  });
+  try {
+    return await loadEventQuotaPreviewFromLedger(names, {
+      getSemesterId: deps.getSemesterId,
+      fetchLedger: (o) => deps.fetchLedger(Object.assign({ abortPrevious: false }, o || {}))
+    });
+  } catch (eLedger) {
+    // 兩路都掛才顯示「!」：把兩邊原因併成一句（hover「事件 !」可見），才不用猜是權限、節流還是斷線
+    if (!previewErr) throw eLedger;
+    const m1 = String((previewErr && previewErr.message) || previewErr || '未知');
+    const m2 = String((eLedger && eLedger.message) || eLedger || '未知');
+    throw new Error('預覽失敗(' + m1.slice(0, 80) + ')；帳本失敗(' + m2.slice(0, 80) + ')');
+  }
 }
  export { buildEventQuotaPreviewFromLedger, bustEventQuotaLedgerCache, loadEventQuotaPreview, loadEventQuotaPreviewFromLedger };

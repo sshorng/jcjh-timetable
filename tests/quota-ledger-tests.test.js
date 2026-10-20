@@ -728,3 +728,21 @@ test('事件額度：預覽失敗時後備讀帳本（含無包ID舊列）', asy
   mod.bustEventQuotaLedgerCache();
   console.log('event quota ledger-fallback tests PASS');
 });
+
+test('事件額度：兩路都掛時合併原因（hover 可見免猜）', async () => {
+  const mod = await import('../src/modules/event-quota-ledger.js');
+  mod.bustEventQuotaLedgerCache();
+  let caught = null;
+  try {
+    await mod.loadEventQuotaPreview(['甲老師'], {
+      getSemesterId: () => '115-1-event-quota-both-fail',
+      fetchPreview: async () => { throw new Error('預覽掛了'); },
+      fetchLedger: async () => { throw new Error('僅管理員可查看全校額度歷程'); }
+    });
+  } catch (e) { caught = e; }
+  assert.ok(caught, '兩路都掛應拋錯');
+  assert.match(String(caught.message), /預覽掛了/, '應含預覽路原因');
+  assert.match(String(caught.message), /僅管理員/, '應含帳本路原因');
+  mod.bustEventQuotaLedgerCache();
+  console.log('event quota combined-error tests PASS');
+});
