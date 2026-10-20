@@ -1259,6 +1259,8 @@ const DomainActivityCover = (() => {
      */
     function isDemandCell_(cell, dateStr, period) {
       if (!cell) return false;
+      // 需求只算活動時段內（與已送出／暫定／釋出口徑一致）：事件帶入 5–8 節時，之外節次不算需求
+      if (!isActivitySlotInRange(dateStr, period, opts)) return false;
       if (DomainSchedule && DomainSchedule.isPatrolCell
           && DomainSchedule.isPatrolCell(cell)) return false;
       var attr = String(cell.attr || '');
@@ -1331,6 +1333,8 @@ const DomainActivityCover = (() => {
           }
           var cn = normalizeClass(s.className);
           if (!cn || cn === '巡堂') return;
+          // 後備迴路同主路徑：只算活動時段內（事件 5–8 節時，之外不算需求）
+          if (!isActivitySlotInRange(dateStr, per, opts)) return;
             if (awayCount && isAnyClassAway(cn, away)
                 && isActivitySlotInRange(dateStr, per, opts)) return;
           slotKeys[dateStr + '|' + per] = true;

@@ -738,8 +738,8 @@ test('domain 領域測試（173 項）', () => {
               return period === 1 || period === 2 ? { className: '701、702', attr: '一般' } : null;
             }
           });
-          assert('指定時段互代只計區間內釋出與區間外需求', partialActivityStats.releasedSlots === 1
-            && partialActivityStats.demand === 1,
+          assert('指定時段互代只計區間內釋出，區間外不計需求', partialActivityStats.releasedSlots === 1
+            && partialActivityStats.demand === 0,
             'released=' + partialActivityStats.releasedSlots + ' demand=' + partialActivityStats.demand);
           assert('指定時段互代衝堂只釋出區間內', DAC.isConflictCell({ className: '702' }, true, ['702'], {
             dateStr: '2026-07-13', period: 1,
@@ -748,6 +748,29 @@ test('domain 領域測試（173 項）', () => {
             dateStr: '2026-07-13', period: 2,
             startDate: '2026-07-13', endDate: '2026-07-13', startPeriod: '2', endPeriod: '2'
           }));
+          // 事件帶入 5–8 節：帶隊老師當天 4 節課（2 節在外＋2 節在內），需求只算區間內 2 節
+          var suSchedules = [
+            { teacherEmail: 'su@x', teacherName: '蘇師', dayOfWeek: 1, period: 2, className: '901', attr: '一般' },
+            { teacherEmail: 'su@x', teacherName: '蘇師', dayOfWeek: 1, period: 3, className: '901', attr: '一般' },
+            { teacherEmail: 'su@x', teacherName: '蘇師', dayOfWeek: 1, period: 5, className: '903', attr: '一般' },
+            { teacherEmail: 'su@x', teacherName: '蘇師', dayOfWeek: 1, period: 6, className: '903', attr: '一般' }
+          ];
+          function suGetSched(email, date, period) {
+            if (period === 2 || period === 3) return { className: '901', attr: '一般' };
+            if (period === 5 || period === 6) return { className: '903', attr: '一般' };
+            return null;
+          }
+          var suBaseOpts = {
+            active: true, awayClasses: ['902'], startDate: '2026-07-13', endDate: '2026-07-13',
+            periodMode: 'range', startPeriod: '5', endPeriod: '8',
+            allSchedules: suSchedules, weekDates: ['2026-07-13'],
+            leaderEmails: [{ email: 'su@x', name: '蘇師' }],
+            teachers: [{ email: 'su@x', name: '蘇師' }]
+          };
+          var suStats = DAC.buildStats(Object.assign({}, suBaseOpts, { getScheduleForDate: suGetSched }));
+          assert('事件 5–8 節需求只算區間內（主路徑）', suStats.demand === 2, 'demand=' + suStats.demand);
+          var suStatsFallback = DAC.buildStats(suBaseOpts);
+          assert('事件 5–8 節需求只算區間內（後備迴路）', suStatsFallback.demand === 2, 'demand=' + suStatsFallback.demand);
        }
 
       // ── 巡堂 ──
@@ -1204,5 +1227,5 @@ test('domain 領域測試（173 項）', () => {
         for (const l of log) { if (l.indexOf('✗') === 0) console.log(l); }
   console.log('全部通過 ' + passed + ' 項（失敗 ' + failed + '）');
   expect(failed).toBe(0);
-  expect(passed).toBe(173);
+  expect(passed).toBe(175);
 });
