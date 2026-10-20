@@ -93,10 +93,10 @@
                       </span>
                     </td>
                      <td style="vertical-align:middle;">
-                        <div style="display:grid;grid-template-columns:minmax(66px,0.7fr) minmax(0,1.3fr);gap:6px;align-items:center;">
+                        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;align-items:center;">
                          <button class="btn btn-secondary" style="width:100%;min-width:0;padding:4px 5px;font-size:0.75rem;white-space:nowrap;" @click.stop="openEditTeacherModal(t)">✏️ 編輯</button>
-                          <button class="btn btn-secondary" style="width:100%;min-width:0;padding:4px 5px;font-size:0.75rem;white-space:nowrap;" @click.stop="openOvertimePlanModal(t)">💰 超鐘點／代課來源</button>
-                         <button class="btn btn-secondary" style="width:100%;min-width:0;grid-column:1 / 2;padding:4px 5px;font-size:0.75rem;white-space:nowrap;color:var(--color-danger);border-color:rgba(239,68,68,0.1);" @click.stop="deleteTeacher(t.loginEmail, t.name)">🗑️ 刪除</button>
+                          <button class="btn btn-secondary" style="width:100%;min-width:0;padding:4px 5px;font-size:0.75rem;white-space:nowrap;" @click.stop="openOvertimePlanModal(t)">💰 經費來源</button>
+                         <button class="btn btn-secondary" style="width:100%;min-width:0;padding:4px 5px;font-size:0.75rem;white-space:nowrap;color:var(--color-danger);border-color:rgba(239,68,68,0.1);" @click.stop="deleteTeacher(t.loginEmail, t.name)">🗑️ 刪除</button>
                        </div>
                      </td>
                   </tr>
