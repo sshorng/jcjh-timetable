@@ -1064,6 +1064,17 @@ const DomainActivityCover = (() => {
   }
 
   /**
+   * 互代面板外出班選項：只收單一班級，隱藏合班（703·704 這類多班併課）。
+   * 只管選項顯示，不動匹配語義；已選的合班留存仍有效。
+   */
+  function isSingleClassOption(c) {
+    var s = String(c || '').trim();
+    if (!s || s.indexOf('·') >= 0) return false;
+    if (DateUtils && DateUtils.isCombinedClass) return !DateUtils.isCombinedClass(s);
+    return true;
+  }
+
+  /**
    * 年級快捷：全選／全消該年級班級
    * @param {string[]} classList 全校班級
    * @param {string[]} awayClasses 目前外出
@@ -1072,6 +1083,7 @@ const DomainActivityCover = (() => {
   function toggleAwayGrade(classList, awayClasses, grade) {
     var g = String(grade || '');
     var all = (classList || []).filter(function (c) {
+      if (!isSingleClassOption(c)) return false;
       var s = String(c);
       return s.indexOf(g) >= 0 || s.indexOf(g) === 0;
     });
@@ -1587,6 +1599,7 @@ const DomainActivityCover = (() => {
     isLeaveNonDeductible: isLeaveNonDeductible,
     isPublicSubPayout: isPublicSubPayout,
     toggleAwayClass: toggleAwayClass,
+    isSingleClassOption: isSingleClassOption,
     toggleAwayGrade: toggleAwayGrade,
     buildStats: buildStats,
     isEmptySlotAssignable: isEmptySlotAssignable,

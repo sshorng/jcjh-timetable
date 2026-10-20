@@ -771,6 +771,16 @@ test('domain 領域測試（173 項）', () => {
           assert('事件 5–8 節需求只算區間內（主路徑）', suStats.demand === 2, 'demand=' + suStats.demand);
           var suStatsFallback = DAC.buildStats(suBaseOpts);
           assert('事件 5–8 節需求只算區間內（後備迴路）', suStatsFallback.demand === 2, 'demand=' + suStatsFallback.demand);
+          // 互代面板外出班選項：隱藏合班（703·704 這類多班併課），年級快捷也一併跳過
+          var awayOptsSource = ['701', '703·704', '8英資A', '701、702', '907'];
+          assert('外出班選項排除合班',
+            DAC.isSingleClassOption('701') === true
+            && DAC.isSingleClassOption('8英資A') === true
+            && DAC.isSingleClassOption('703·704') === false
+            && DAC.isSingleClassOption('701、702') === false);
+          var grade7Away = DAC.toggleAwayGrade(awayOptsSource, [], '7');
+          assert('年級快捷不含合班', grade7Away.indexOf('703·704') < 0 && grade7Away.indexOf('701、702') < 0
+            && grade7Away.indexOf('701') >= 0, 'away=' + grade7Away.join(','));
        }
 
       // ── 巡堂 ──
@@ -1227,5 +1237,5 @@ test('domain 領域測試（173 項）', () => {
         for (const l of log) { if (l.indexOf('✗') === 0) console.log(l); }
   console.log('全部通過 ' + passed + ' 項（失敗 ' + failed + '）');
   expect(failed).toBe(0);
-  expect(passed).toBe(175);
+  expect(passed).toBe(177);
 });

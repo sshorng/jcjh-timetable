@@ -411,7 +411,7 @@
                   </div>
                   <div class="mutual-away-chips mutual-chips-away">
                     <button
-                      v-for="c in classList"
+                      v-for="c in classList.filter((c) => String(c || '').trim() !== '' && String(c).indexOf('·') < 0 && !isCombinedClass(c))"
                       :key="'away-'+c"
                       type="button"
                       class="mutual-away-chip"
