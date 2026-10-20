@@ -231,6 +231,10 @@
                   </div>
 
                   <!-- 互代模式：未選空堂事件時只能算總額度 -->
+                  <!-- 互代模式：事件額度讀取失敗時直接顯示原因（免 hover、免 Console） -->
+                  <div v-if="isMutualCover && mutualEventId && mutualEventQuotaError" class="mutual-quota-hint" style="border-color:#fecaca;background:#fef2f2;color:#b91c1c;">
+                    事件額度讀取失敗：{{ mutualEventQuotaError }}
+                  </div>
                   <div v-if="isMutualCover && !mutualEventId" class="mutual-quota-hint">
                     未選空堂事件，只顯示總額度（要「事件」額度請先在上方面板選事件）
                   </div>
