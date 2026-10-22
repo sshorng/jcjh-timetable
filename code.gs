@@ -5554,6 +5554,20 @@ function assertPublicClassRateLimit_() {
   }
 }
 
+function assertLogClientErrorRateLimit_() {
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = "rl_log_client_error_global";
+    var n = parseInt(cache.get(key) || "0", 10) || 0;
+    if (n > 60) throw new Error("錯誤回報請求過於頻繁，請稍後再試");
+    cache.put(key, String(n + 1), 60);
+  } catch (e) {
+    if (String(e.message || e).indexOf("過於頻繁") !== -1) throw e;
+  }
+}
+var LOG_CLIENT_ERROR_MAX_ROWS_ = 5000;
+var LOG_CLIENT_ERROR_PRUNE_ROWS_ = 1000;
+
 function getHistoryMonthRowsCached_(semesterId, monthStr, forceFresh) {
   var dataGeneration = getCacheGeneration_("data", semesterId);
   var histKey = "jcjh_hist_" + CACHE_SCHEMA_VERSION_ + "_" + semesterId + "_" + dataGeneration + "_" + monthStr;
@@ -6624,6 +6638,14 @@ function logClientError_(data) {
     sheet.appendRow(["時間", "Email", "訊息", "堆疊", "網址", "UserAgent"]);
     sheet.setFrozenRows(1);
   }
+  // 上限保護：超過上限先刪最舊列，避免被灌爆耗盡試算表配額
+  try {
+    var maxRows = (typeof LOG_CLIENT_ERROR_MAX_ROWS_ !== "undefined" && LOG_CLIENT_ERROR_MAX_ROWS_) || 5000;
+    var pruneRows = (typeof LOG_CLIENT_ERROR_PRUNE_ROWS_ !== "undefined" && LOG_CLIENT_ERROR_PRUNE_ROWS_) || 1000;
+    if (sheet.getLastRow() >= maxRows + 1) {
+      sheet.deleteRows(2, Math.min(pruneRows, sheet.getLastRow() - 1));
+    }
+  } catch (ePrune) {}
   sheet.appendRow(row);
   return 1;
 }
@@ -6647,6 +6669,10 @@ function doPost(e) {
 
     // 前端錯誤回報：免 Token（未登入／啟動期也要能報）；僅 append「前端錯誤」表，無其他副作用
     if (action === "logClientError") {
+      try { assertLogClientErrorRateLimit_(); } catch (eRl) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: String(eRl && eRl.message || eRl) }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
       var loggedErrors = 0;
       try { loggedErrors = logClientError_(postData.data || {}); } catch (eLog) { loggedErrors = 0; }
       return ContentService.createTextOutput(JSON.stringify({ success: true, logged: loggedErrors }))
@@ -9193,7 +9219,15 @@ function handleReadGetQuotaSpendPreview_(rctx) {
     if (reqData.name && (!pvNames || !pvNames.length)) pvNames = [reqData.name];
     if (typeof pvNames === "string") pvNames = [pvNames];
     var pvReqs = reqData.requests || [];
+    // 非管理員：單次上限 60 筆（前端抽屜本就分 60 塊取）；回傳去 Email，僅留姓名＋包餘額（功能所需最小揭露）
+    // 不加 3 秒節流：媒合抽屜會連續打預熱＋正式查詢，節流會誤殺正常操作
+    if (!readerIsAdmin) {
+      if (pvEmails.length > 60 || pvNames.length > 60) throw new Error("單次最多查詢 60 位教師！");
+    }
     var preview = buildQuotaSpendPreview_(semesterId, pvEmails, pvReqs, pvNames);
+    if (!readerIsAdmin) {
+      preview = (preview || []).map(function (p) { return { name: p.name, balance: p.balance, packs: p.packs, fifoPackageId: p.fifoPackageId, fifoEventId: p.fifoEventId, fifoEventName: p.fifoEventName }; });
+    }
     return ContentService.createTextOutput(JSON.stringify({
       success: true,
       preview: preview

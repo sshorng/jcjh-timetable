@@ -2210,11 +2210,11 @@
               <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;">
                 <div>
                   <label class="form-label fs-78">GAS Web App 網址</label>
-                  <input type="text" class="form-input btn-ghost-muted" :value="gasApiUrl" readonly>
+                  <input type="text" class="form-input btn-ghost-muted" :value="String(gasApiUrl).slice(0,24)+'…'+String(gasApiUrl).slice(-4)" readonly title="完整網址已隱藏，避免隨手外流；功能不受影響">
                 </div>
                 <div>
                   <label class="form-label fs-78">Google OAuth Client ID</label>
-                  <input type="text" class="form-input btn-ghost-muted" :value="googleClientId" readonly>
+                  <input type="text" class="form-input btn-ghost-muted" :value="String(googleClientId).slice(0,12)+'…'+String(googleClientId).slice(-12)" readonly title="完整 Client ID 已隱藏，避免隨手外流；登入功能不受影響">
                 </div>
                 <p style="font-size:0.72rem;color:var(--text-muted);margin:0;">固定內建連線，不可於介面修改，亦不寫入本機。</p>
               </div>
