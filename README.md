@@ -11,8 +11,9 @@ npm run dev              # 本地開發
 npm run build            # 打包 dist（Vercel 同指令）
 npm test                 # 全測（vitest，50+ 檔／70+ 項）
 npm run test:coverage    # 覆蓋率（門檻：語句 60／分支 75／函數 55／行 60）
-npm run lint             # ESLint（零錯誤門檻）
-npm run lint:sync-gas    # code.gs 新增頂層函數後，再生測試用 GAS 全域清單
+ npm run lint             # ESLint（src＋tests＋scripts＋code.gs，零錯誤門檻）
+ npm run lint:gas         # 只掃後端 code.gs（結構規則：未定義、重複定義、不可達碼）
+ npm run lint:sync-gas    # code.gs 新增頂層函數後，再生測試用 GAS 全域清單
 npm run e2e:boot         # 建置＋開機自檢
 ```
 

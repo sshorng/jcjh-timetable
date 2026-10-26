@@ -1962,12 +1962,6 @@ function restoreScheduleImportSnapshots_(scheduleSheet, scheduleHeaders, schedul
   bustTableDataMem_("教師名單");
 }
 
-function isPatrolScheduleRow_(row) {
-  if (!row) return false;
-  return [row["課堂屬性"], row["班級"], row["科目"], row.attr, row.className, row.subject]
-    .some(function (value) { return String(value || "").trim().indexOf("巡堂") >= 0; });
-}
-
 function normalizePatrolScheduleRow_(row) {
   if (!isPatrolScheduleRow_(row)) return row;
   var normalized = Object.assign({}, row);
