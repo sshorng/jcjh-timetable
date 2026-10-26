@@ -1,0 +1,468 @@
+/* ui-refresh.css：外觀改版覆蓋層（沙盒 ui-lab）
+ * 載入順序：style.css → ui-refresh.css → mobile.css（手機規則仍可覆蓋本檔）
+ * 設計方向：冷靜精密的工作台。靛藍墨色單一強調色、1px 細邊框、雙層細陰影、
+ *           狀態 pill 化、動效只動 transform／opacity、全域支援 prefers-reduced-motion。
+ * 原則：不改任何 class 名稱、不動列印樣式；整檔移除即可還原。
+ */
+
+:root {
+  /* 色彩：中性色階偏冷，強調色收斂為靛藍 */
+  --bg-primary: #f3f4f8;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-soft: #f7f8fb;
+  --border-color: rgba(30, 41, 90, 0.10);
+  --border-strong: rgba(30, 41, 90, 0.20);
+  --border-focus: #3454d1;
+
+  --text-primary: #12162b;
+  --text-secondary: #3b4260;
+  --text-muted: #6b7290;
+
+  --color-primary: #3454d1;
+  --color-primary-hover: #2a45b0;
+  --color-primary-glow: rgba(52, 84, 209, 0.10);
+
+  --color-success: #12805c;
+  --color-success-hover: #0e684a;
+  --color-success-glow: rgba(18, 128, 92, 0.10);
+
+  --color-warning: #b86a0b;
+  --color-warning-hover: #985609;
+  --color-warning-glow: rgba(184, 106, 11, 0.10);
+
+  --color-danger: #c8332f;
+  --color-danger-hover: #a82925;
+  --color-danger-glow: rgba(200, 51, 47, 0.10);
+
+  /* 質感：雙層細陰影取代單層黑影 */
+  --shadow-premium: 0 0 0 1px rgba(30, 41, 90, 0.04), 0 1px 2px rgba(18, 22, 43, 0.04), 0 4px 14px -6px rgba(18, 22, 43, 0.08);
+  --shadow-card-hover: 0 0 0 1px rgba(52, 84, 209, 0.18), 0 2px 4px rgba(18, 22, 43, 0.05), 0 10px 24px -10px rgba(52, 84, 209, 0.28);
+  --shadow-pop: 0 0 0 1px rgba(30, 41, 90, 0.06), 0 8px 16px -4px rgba(18, 22, 43, 0.10), 0 28px 56px -16px rgba(18, 22, 43, 0.28);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  /* 動效 token */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --transition-smooth:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+body {
+  background-color: var(--bg-primary);
+}
+
+/* ---------- 登入 ---------- */
+.login-card {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  animation: uiRiseIn var(--dur-slow) var(--ease-out) both;
+}
+.login-card:hover { box-shadow: var(--shadow-pop); }
+
+/* ---------- 導覽列：白底細線，active 改為柔和 pill ---------- */
+.navbar {
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 6px 16px -14px rgba(18, 22, 43, 0.35);
+}
+.nav-logo-icon {
+  background: linear-gradient(145deg, #4a6bea, #2a45b0);
+  box-shadow: 0 1px 2px rgba(42, 69, 176, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+}
+.nav-menu { gap: 4px; align-items: center; }
+.nav-item {
+  min-height: 34px;
+  align-self: center;
+  padding: 0 13px;
+  border-bottom: none;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: var(--transition-smooth);
+}
+.nav-item:hover { color: var(--text-primary); background: rgba(30, 41, 90, 0.05); }
+.nav-item:active { transform: scale(0.97); }
+.nav-item.active {
+  color: var(--color-primary);
+  font-weight: 650;
+  background: var(--color-primary-glow);
+  border-bottom: none;
+  box-shadow: 0 0 0 1px rgba(52, 84, 209, 0.14) inset;
+}
+.nav-badge { box-shadow: 0 0 0 2px #fff; }
+.user-avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(30, 41, 90, 0.12); border: none; }
+.btn-nav-icon, .btn-logout { border-radius: 9px; background: #fff; }
+.btn-nav-icon:active, .btn-logout:active { transform: scale(0.95); }
+
+/* ---------- 卡片與表單 ---------- */
+.card {
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-premium);
+}
+.card-title { letter-spacing: -0.015em; }
+.form-control, .form-select, .form-input {
+  border-radius: 9px;
+  border-color: var(--border-strong);
+  background: #fff;
+  transition: var(--transition-smooth);
+}
+.form-control:hover, .form-select:hover, .form-input:hover { border-color: rgba(52, 84, 209, 0.45); }
+.form-control:focus, .form-select:focus, .form-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 4px rgba(52, 84, 209, 0.14);
+}
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(52, 84, 209, 0.75);
+  outline-offset: 2px;
+}
+
+/* ---------- 按鈕：按壓有重量，放開回彈 ---------- */
+.btn {
+  border-radius: 9px;
+  letter-spacing: 0.01em;
+  transition: var(--transition-smooth);
+}
+.btn:active { opacity: 1; transform: scale(0.97); }
+.btn:disabled, .btn[disabled] { transform: none; }
+/* 選中 chip 同時帶 btn-secondary＋btn-primary：用 .btn.btn-primary 提高權重，
+   確保藍底一定配白字（先前只改底色，字色被 btn-secondary 蓋成深色） */
+.btn.btn-primary,
+.btn.btn-secondary.btn-primary {
+  background: linear-gradient(180deg, #4160dc, var(--color-primary));
+  border-color: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(42, 69, 176, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+}
+.btn.btn-primary:hover,
+.btn.btn-secondary.btn-primary:hover {
+  background: linear-gradient(180deg, #3a58d2, var(--color-primary-hover));
+  border-color: var(--color-primary-hover);
+  color: #fff;
+  box-shadow: 0 4px 12px -2px rgba(52, 84, 209, 0.42);
+}
+.btn-secondary {
+  box-shadow: 0 1px 1px rgba(18, 22, 43, 0.04);
+  color: var(--text-primary) !important;
+  background: #fff;
+}
+.btn-secondary:hover {
+  color: var(--text-primary) !important;
+}
+
+/* 後台管理與各處藥丸鈕防禦：未選中必黑字、選中必白字，絕不發生白底白字 */
+.btn-pill.btn-secondary {
+  color: var(--text-primary) !important;
+  background: #ffffff !important;
+  border: 1px solid var(--border-color) !important;
+}
+.btn-pill.btn-secondary:hover {
+  background: var(--bg-soft) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-strong) !important;
+}
+.btn-pill.btn-primary {
+  color: #ffffff !important;
+  background: linear-gradient(180deg, #4160dc, var(--color-primary)) !important;
+  border-color: var(--color-primary) !important;
+}
+.btn-success { box-shadow: 0 1px 2px rgba(14, 104, 74, 0.3); }
+.btn-danger { box-shadow: 0 1px 2px rgba(168, 41, 37, 0.3); }
+
+/* ---------- 課表格：扁平表頭、卡片式課格 ---------- */
+.timetable-grid { gap: 7px; }
+.grid-header,
+.grid-cell-time {
+  background: rgba(30, 41, 90, 0.045);
+  border: none;
+  border-radius: 10px;
+  color: var(--text-secondary);
+}
+.grid-header .date-sub { color: var(--text-muted); }
+.grid-cell-time .period { color: var(--text-primary); letter-spacing: -0.02em; }
+.grid-cell-time.is-lunch-period { background: rgba(15, 118, 110, 0.07); border: none; }
+
+.grid-cell-class,
+.class-timetable .grid-cell-class {
+  border-radius: 10px;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
+}
+.grid-cell-class.has-class,
+.class-timetable .grid-cell-class.has-class {
+  border-color: var(--border-color);
+  box-shadow: var(--shadow-premium);
+}
+.grid-cell-class.is-empty,
+.class-timetable .grid-cell-class.is-empty {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  opacity: 0.6;
+}
+@media (hover: hover) {
+  .grid-cell-class:hover,
+  .class-timetable .grid-cell-class:hover {
+    border-color: rgba(52, 84, 209, 0.5);
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+  }
+  .grid-cell-class.is-empty:hover,
+  .class-timetable .grid-cell-class.is-empty:hover {
+    background: var(--color-primary-glow);
+    border-style: solid;
+    transform: translateY(-1px);
+  }
+}
+.grid-cell-class:active,
+.class-timetable .grid-cell-class:active { transform: scale(0.985); transition-duration: 80ms; }
+
+.subject-color-tag,
+.class-color-badge { border-radius: 7px; box-shadow: none; transition: var(--transition-smooth); }
+
+/* ---------- 狀態徽章 pill 化（原規則帶 !important，這裡同樣加上） ---------- */
+.status-badge {
+  border-radius: 999px;
+  padding: 4px 10px 4px 9px;
+  gap: 6px;
+  letter-spacing: 0.01em;
+}
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.status-pending_teacher, .status-pending-teacher {
+  background: rgba(200, 51, 47, 0.08) !important; color: #a82925 !important; border: 1px solid rgba(200, 51, 47, 0.20) !important;
+}
+.status-pending_admin, .status-pending-admin {
+  background: rgba(184, 106, 11, 0.09) !important; color: #8a4f07 !important; border: 1px solid rgba(184, 106, 11, 0.24) !important;
+}
+.status-approved {
+  background: rgba(18, 128, 92, 0.09) !important; color: #0e684a !important; border: 1px solid rgba(18, 128, 92, 0.22) !important;
+}
+.status-rejected, .status-admin_rejected, .status-cancelled, .status-withdrawn {
+  background: rgba(30, 41, 90, 0.05) !important; color: #5b6280 !important; border: 1px solid rgba(30, 41, 90, 0.12) !important;
+}
+.tag-red { background: rgba(200, 51, 47, 0.08) !important; color: #a82925 !important; border: 1px solid rgba(200, 51, 47, 0.20) !important; }
+.tag-yellow, .tag-orange { background: rgba(184, 106, 11, 0.09) !important; color: #8a4f07 !important; border: 1px solid rgba(184, 106, 11, 0.24) !important; }
+.tag-green { background: rgba(18, 128, 92, 0.09) !important; color: #0e684a !important; border: 1px solid rgba(18, 128, 92, 0.22) !important; }
+.tag-blue { background: rgba(52, 84, 209, 0.09) !important; color: #2a45b0 !important; border: 1px solid rgba(52, 84, 209, 0.22) !important; }
+.tag-gray { background: rgba(30, 41, 90, 0.05) !important; color: #5b6280 !important; border: 1px solid rgba(30, 41, 90, 0.12) !important; }
+
+/* ---------- 表格：表頭收斂、列 hover 柔和 ---------- */
+.custom-table th,
+.match-table th,
+.summary-table th {
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border-color);
+}
+.custom-table td { border-bottom: 1px solid rgba(30, 41, 90, 0.06); }
+.custom-table tr:hover td,
+.match-table tr:hover td,
+.summary-table tr:hover td { background: rgba(52, 84, 209, 0.045); }
+
+/* ---------- Modal：淡入遮罩＋縮放進場 ---------- */
+.modal-overlay {
+  background: rgba(18, 22, 43, 0.42);
+  animation: uiFadeIn var(--dur-base) var(--ease-out) both;
+}
+.modal-card {
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  animation: modalUp var(--dur-base) var(--ease-out) both;
+  transform-origin: 50% 40%;
+}
+@keyframes modalUp {
+  from { transform: translateY(8px) scale(0.965); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.modal-header { background: #fff; border-bottom: 1px solid var(--border-color); }
+.modal-footer { background: var(--bg-soft); }
+.btn-close:active { transform: scale(0.9); }
+
+/* ---------- 代課媒合抽屜：強 ease-out 滑入 ---------- */
+.match-drawer {
+  border-left: none;
+  box-shadow: -1px 0 0 var(--border-color), -24px 0 48px -24px rgba(18, 22, 43, 0.28);
+  animation: matchDrawerIn var(--dur-slow) var(--ease-drawer) both;
+}
+@keyframes matchDrawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.match-table tr.match-row { transition: background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.match-table tr.match-row:active:not(:has(.match-pick-radio:checked)) { transform: scale(0.995); }
+.match-mode-btn { border-radius: 9px; transition: var(--transition-smooth); }
+.match-mode-btn:active { transform: scale(0.97); }
+.filter-chip { border-radius: 999px; transition: var(--transition-smooth); }
+.filter-chip:active { transform: scale(0.96); }
+
+/* 媒合清單列階梯進場已移除：每次篩選或重繪都會重播，反而造成點擊後的停頓感 */
+
+/* 共用進場 keyframes */
+@keyframes uiRiseIn {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+@keyframes uiFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- 現代日曆微網格（Google / Apple Calendar 風格） ----------
+ * 1. 課表格子全體圓角統一（含巡堂，解決巡堂單獨為方塊的問題）
+ * 2. 空堂格：極淡的透亮網格線搭配微暖底色，視野乾淨透亮，一眼數得出節次
+ * 3. 有課格：浮雕卡片質感，但特殊時段（第8節、早自習、午休）保留專屬底色，絕不變純白！
+ */
+:root .timetable-grid,
+:root .class-timetable {
+  --tt-line: rgba(0, 0, 0, 0.06);
+  --tt-line-soft: rgba(0, 0, 0, 0.045);
+}
+
+/* 所有儲存格統一 6px 圓角，避免任何個別狀態（如巡堂）退回直角方塊 */
+.timetable-grid .grid-cell-class,
+.class-timetable .grid-cell-class {
+  border-radius: 6px !important;
+}
+
+/* 空堂格：柔和透亮微網格 */
+.timetable-grid .grid-cell-class.is-empty,
+.class-timetable .grid-cell-class.is-empty {
+  border: 1px solid rgba(0, 0, 0, 0.045) !important;
+  background: #fbfcfd !important;
+  box-shadow: none !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.timetable-grid .grid-cell-class.is-empty:hover,
+.class-timetable .grid-cell-class.is-empty:hover {
+  background: #f0f5ff !important;
+  border-color: rgba(52, 84, 209, 0.22) !important;
+}
+
+/* 巡堂格：統一圓角、去除粗黑側框，維持優雅一致的柔和邊框 */
+.timetable-grid .grid-cell-class.is-patrol,
+.class-timetable .grid-cell-class.is-patrol {
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-left: 1px solid rgba(0, 0, 0, 0.06) !important;
+  background: #fbfcfd !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+.timetable-grid .grid-cell-class.is-patrol:hover,
+.class-timetable .grid-cell-class.is-patrol:hover {
+  background: #f0f5ff !important;
+  border-color: rgba(52, 84, 209, 0.22) !important;
+}
+
+/* 一般時段（1～7節）有課堂：純白卡片微浮雕 */
+.timetable-grid .grid-cell-class.has-class,
+.class-timetable .grid-cell-class.has-class {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(255, 255, 255, 0.8) inset !important;
+}
+
+.timetable-grid .grid-cell-class.has-class:hover,
+.class-timetable .grid-cell-class.has-class:hover {
+  border-color: rgba(52, 84, 209, 0.3) !important;
+  box-shadow: 0 4px 12px -2px rgba(52, 84, 209, 0.12), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* 特殊時段時序底色守護：無論有課或無課，整排維持該時段色彩，絕不被純白覆蓋！ */
+/* 第8節：淡暖黃 */
+.timetable-grid .grid-cell-class.is-p8-period,
+.class-timetable .grid-cell-class.is-p8-period {
+  background: #fffaf0 !important;
+}
+.timetable-grid .grid-cell-class.is-p8-period.has-class,
+.class-timetable .grid-cell-class.is-p8-period.has-class {
+  background: #fff8eb !important;
+  border: 1px solid rgba(184, 106, 11, 0.18) !important;
+}
+
+/* 早自習：淺灰青藍 */
+.timetable-grid .grid-cell-class.is-early-period,
+.class-timetable .grid-cell-class.is-early-period {
+  background: #f5f8fc !important;
+}
+.timetable-grid .grid-cell-class.is-early-period.has-class,
+.class-timetable .grid-cell-class.is-early-period.has-class {
+  background: #edf3fb !important;
+  border: 1px solid rgba(52, 84, 209, 0.16) !important;
+}
+
+/* 午休：淡青色 */
+.timetable-grid .grid-cell-class.is-lunch-period,
+.class-timetable .grid-cell-class.is-lunch-period {
+  background: #f0fdfa !important;
+}
+.timetable-grid .grid-cell-class.is-lunch-period.has-class,
+.class-timetable .grid-cell-class.is-lunch-period.has-class {
+  background: #e6faf6 !important;
+  border: 1px solid rgba(15, 118, 110, 0.18) !important;
+}
+
+/* 空堂事件／外出班：完整復原經典淺灰斜線條紋，清楚一眼辨識不用上課 */
+.timetable-grid .grid-cell-class.is-away-vacant,
+.class-timetable .grid-cell-class.is-away-vacant {
+  background: repeating-linear-gradient(-45deg, #f8fafc, #f8fafc 4px, #eef2f7 4px, #eef2f7 8px) !important;
+  border: 1px dashed #cbd5e1 !important;
+}
+
+.timetable-grid .grid-cell-class.is-away-class,
+.class-timetable .grid-cell-class.is-away-class {
+  background: repeating-linear-gradient(-45deg, #ffffff, #ffffff 6px, #f1f5f9 6px, #f1f5f9 12px) !important;
+  border: 1px dashed #94a3b8 !important;
+}
+
+/* ---------- v-autofit 防閃動 ----------
+ * v-autofit 每次量測都先把字級設回最大再縮小，span 高度隨字級變動，
+ * 可能讓橫向捲軸出現／消失而改變欄寬，再觸發重新量測，形成回饋循環。
+ * 固定高度（13.5px × line-height 1.45）並預留捲軸空間，切斷這條循環。 */
+[data-autofit-max="13.5"] {
+  height: calc(13.5px * 1.45);
+  transition: none !important;
+}
+.table-responsive { scrollbar-gutter: stable; }
+
+/* ---------- 減少動態：系統設定要求時，縮短進出場動畫與過渡 ----------
+ * 載入轉圈（.spinner）是「進度指示」不是裝飾動畫，必須持續旋轉，
+ * 否則使用者會以為畫面當機；因此明確排除，並以較慢速度轉動。 */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.spinner), *:not(.spinner)::before, *:not(.spinner)::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .spinner { animation: spin 1.6s linear infinite !important; }
+}
+
+/* 列印不受本檔影響：還原會干擾輸出的動畫與陰影 */
+@media print {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

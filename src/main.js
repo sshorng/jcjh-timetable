@@ -1,4 +1,5 @@
 import './styles/style.css';
+import './styles/ui-refresh.css';
 import './styles/mobile.css';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';

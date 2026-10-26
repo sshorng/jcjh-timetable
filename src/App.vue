@@ -575,6 +575,7 @@
                   🗓️ 當週：{{ formatDateMMDD(currentWeekDates[0]) }} ~ {{ formatDateMMDD(currentWeekDates[4]) }} <span v-if="currentWeekNumber" class="text-primary-bold">（{{ currentWeekNumber }}）</span>
                 </div>
                 <button class="btn btn-secondary btn-week-round" @click="changeWeek(1)" title="下一週">▶</button>
+                <button type="button" class="btn btn-secondary btn-sm-78-ml" @click="selectedWeekDate = toLocalDateStr(new Date())" title="跳回本週">本週</button>
                 <input type="date" class="form-control form-control-week-date" v-model="selectedWeekDate">
               </div>
 
