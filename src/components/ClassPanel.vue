@@ -16,7 +16,7 @@
                     <span v-if="classWeekNumber" class="text-primary-bold">（{{ classWeekNumber }}）</span>
                   </div>
                   <button class="btn btn-secondary btn-week-round" @click="changeClassWeek(1)" title="下一週">▶</button>
-                  <button class="btn btn-secondary btn-sm-78-ml" @click="goToClassThisWeek">本週</button>
+                  <button class="btn btn-secondary btn-this-week" @click="goToClassThisWeek" title="跳回本週">本週</button>
                 </div>
                 <!-- 班級按鈕（唯讀深連結時鎖定該班；併班項目不設按鈕，其課程併入各單班顯示） -->
                 <div v-if="!classReadonlyMode" class="flex-wrap-gap-6" style="margin:12px 0;">
