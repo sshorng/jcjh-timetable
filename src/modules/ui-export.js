@@ -402,13 +402,15 @@ const UiExport = (() => {
             type: 'substitution',
             originalTeacherEmail: original,
             actualTeacherEmail: actual,
+            originalTeacherName: getTeacherNameByEmail(original),
+            actualTeacherName: getTeacherNameByEmail(actual),
             date: date,
             period: period,
             className: getValue(source, ['班級', 'className']),
             subject: getValue(source, ['科目', 'subject']),
             specialFlow: combinedReturn ? 'combined_return' : '',
-             leaveTimeType: courseAdjustmentOnly ? '' : getValue(source, ['請假時間類型', 'leaveTimeType']),
-             leaveTime: courseAdjustmentOnly ? '' : getValue(source, ['請假時間', 'leaveTime', 'timeRange'])
+            leaveTimeType: courseAdjustmentOnly ? '' : getValue(source, ['請假時間類型', 'leaveTimeType']),
+            leaveTime: courseAdjustmentOnly ? '' : getValue(source, ['請假時間', 'leaveTime', 'timeRange'])
           }));
         }
       });

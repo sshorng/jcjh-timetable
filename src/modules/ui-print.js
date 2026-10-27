@@ -110,6 +110,26 @@ const ensureExportReady = async () => {
   // 課表匯出已遷 ui-report 按需載入；此 gate 保留相容（恆成功）
 };
 
+/**
+ * 紙本單據的「代課教師」姓名對照表：管理員版預填姓名，非管理員版留空待簽名。
+ * 歷史列印、批次列印（待核准發放／核准後一鍵列印）與紙本草稿共用同一份規則，
+ * 只要呼叫端組好紙本紀錄，姓名欄的呈現就不會有兩種結果。
+ */
+const buildPrintSignatureMap = (records) => {
+  const isAdminFlag = !!(isAdmin && typeof isAdmin.value === 'boolean' ? isAdmin.value : isAdmin);
+  const map = {};
+  (records || []).filter(Boolean).forEach(record => {
+    [record.actualTeacherEmail, record.originalTeacherEmail, record.actualTeacherName, record.originalTeacherName]
+      .forEach(key => {
+        const raw = String(key || '').trim();
+        if (!raw) return;
+        const name = String((typeof getTeacherNameByEmail === 'function' ? getTeacherNameByEmail(raw) : '') || raw).trim();
+        if (name) map[name.toLowerCase()] = isAdminFlag ? name : '';
+      });
+  });
+  return map;
+};
+
 const printSelectedForms = async (formType, existingWin = null, printOptions = {}) => {
   const printWin = existingWin || window.open('', '_blank');
   try {
@@ -193,19 +213,8 @@ const openHistoryPrintPreview = async () => {
       return false;
     }
 
-    // 與待辦批核紙本預覽相同：管理員版預填教師姓名，行政版保留簽名空格。
-    const signatureByTeacher = {};
-    records.forEach(record => {
-      [record.actualTeacherEmail, record.originalTeacherEmail].forEach(email => {
-        const name = String(getTeacherNameByEmail(email) || email || '').trim();
-        if (name) signatureByTeacher[name.toLowerCase()] = isAdmin.value ? name : '';
-      });
-    });
-    const printRecords = records.map(record => Object.assign({}, record, {
-      signatureByTeacher: Object.assign({}, record.signatureByTeacher || {}, signatureByTeacher)
-    }));
-
-    return await openPrintPreviewForRecords(printRecords, { source: 'history', skipMarkPrinted: false });
+    // 姓名對照表統一由 openPrintPreviewForRecords 補上（管理員預填、非管理員留空待簽名）。
+    return await openPrintPreviewForRecords(records, { source: 'history', skipMarkPrinted: false });
   } catch (error) {
     console.error('歷史紀錄列印預覽失敗：', error);
     showToast('產生列印預覽失敗：' + (error && error.message ? error.message : error), 'error');
@@ -225,9 +234,16 @@ const openPrintPreviewForRecords = async (records, options = {}) => {
     showToast(opts.emptyHint || '請先勾選要列印的單據！', 'warning');
     return false;
   }
+  // 紙本紀錄（isPaperDraft）的代課教師欄走 signatureByTeacher 對照表；待核准批次／
+  // 核准後批次經 buildPaperRecordsForSubmittedRequests 產生的紀錄本身不帶對照表，
+  // 未補會整欄空白。對照規則集中在 buildPrintSignatureMap，各入口只呼叫一次。
+  const signatureByTeacher = buildPrintSignatureMap(list);
+  const printRecords = list.map(record => Object.assign({}, record, {
+    signatureByTeacher: Object.assign({}, signatureByTeacher, record.signatureByTeacher || {})
+  }));
   return openPrintPreview('Notice', {
-    records: list,
-    allSubs: (substitutionRecords.value || []).concat(list),
+    records: printRecords,
+    allSubs: (substitutionRecords.value || []).concat(printRecords),
     source: opts.source || 'selection',
     skipMarkPrinted: opts.skipMarkPrinted === true
   });
@@ -563,20 +579,13 @@ const openPaperPrintDraft = (records, options = {}) => {
     showToast('請先完成媒合模擬並選擇代課／調課教師', 'warning');
     return false;
   }
-   const signatureMap = {};
-   list.forEach(r => {
-     [r.actualTeacherEmail, r.originalTeacherEmail].forEach(email => {
-       const name = String(getTeacherNameByEmail(email) || email || '').trim();
-       if (name) signatureMap[name.toLowerCase()] = isAdmin.value ? name : '';
-     });
-   });
   paperPrintDraft.value = {
     records: list,
     returnTo: options.returnTo || '',
     canPrint: options.canPrint === true,
     source: options.source || 'paperDraft'
   };
-  paperSignatureByTeacher.value = signatureMap;
+  paperSignatureByTeacher.value = buildPrintSignatureMap(list);
   return openPaperDraftPreview();
 };
 
