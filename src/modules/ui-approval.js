@@ -216,7 +216,12 @@ const UiApproval = (() => {
     var showCompareModal = deps.showCompareModal;
     var inputRequestDate = deps.inputRequestDate;
     var currentWeekDates = deps.currentWeekDates;
-    var hasScheduleSpecialTag = deps.hasScheduleSpecialTag || function () { return false; };
+    // 併班標記判定：deps 未注入時退回 UiLineTemplate 真函式（此檔已 import）。
+    // 舊版 fallback 寫死 false，導致「按鈕看得到、按下必失敗」。
+    var hasScheduleSpecialTag = deps.hasScheduleSpecialTag
+      || (UiLineTemplate && typeof UiLineTemplate.hasScheduleSpecialTag === 'function'
+        ? UiLineTemplate.hasScheduleSpecialTag
+        : function () { return false; });
     var isCombinedClass2 = deps.isCombinedClass || function () { return false; };
     var findCombinedReturnCandidates = deps.findCombinedReturnCandidates || function () { return []; };
     var paperMode = deps.paperMode;
@@ -1348,8 +1353,12 @@ const UiApproval = (() => {
       const cell = activeCell.value || {};
       const classData = cell.classData || {};
       const className = String(classData.className || '').trim();
-      const hasCombinedTag = typeof hasScheduleSpecialTag === 'function'
-        && hasScheduleSpecialTag(classData, '併班');
+      // 併班認定：特殊標記含「併班／合班」、課堂屬性含併班，或班名為多班（707、708）
+      const attrText = String(classData.attr || '').trim();
+      const hasCombinedTag = (typeof hasScheduleSpecialTag === 'function'
+        && hasScheduleSpecialTag(classData, '併班'))
+        || attrText.indexOf('併班') >= 0
+        || attrText.indexOf('合班') >= 0;
       if (!isAdmin2.value) {
         showToast('併班上課僅限教學組建立', 'warning');
         return false;
@@ -1363,7 +1372,7 @@ const UiApproval = (() => {
         return false;
       }
       if (!isCombinedClass2(className) && !hasCombinedTag) {
-        showToast('此功能僅適用於併班課堂', 'warning');
+        showToast('此堂不是併班課：請在課表把該堂「特殊標記」設為併班（或班名填成 707、708）', 'warning', 5000);
         return false;
       }
       const candidates = findCombinedReturnCandidates(cell);

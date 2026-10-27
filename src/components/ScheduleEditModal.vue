@@ -55,6 +55,14 @@
                    @change="normalizeScheduleFormFlags">
                  <span>超鐘點（計入超鐘點結算，可與抽離並存）</span>
                </label>
+              <label class="form-label" style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
+                <input type="checkbox" class="chk-box-16" v-model="combinedClass"
+                  :disabled="scheduleForm.attr === '巡堂'">
+                <span>併班／合班（同節多班一起上，例：本土語、英資班、樂團）</span>
+              </label>
+              <span v-if="combinedClass" class="text-xs-muted-70">
+                已寫入「特殊標記＝併班」；代課抽屜會出現「↩ 併班上課」。
+              </span>
              </div>
             <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
               <input type="checkbox" id="chk-restricted-course" v-model="scheduleForm.restriction" true-value="restricted" false-value="" class="chk-box-16">
@@ -89,6 +97,7 @@
 
 <!-- 基礎課表編輯 modal（自 App.vue 抽出；表單經 defineModel 雙向綁定，其餘 props 注入） -->
 <script setup>
+import { computed } from 'vue';
 defineProps({
   getWeekDayText: { type: Function, required: true },
   formatPeriodText: { type: Function, required: true },
@@ -102,4 +111,26 @@ defineProps({
 });
 defineEmits(['close']);
 const scheduleForm = defineModel('scheduleForm');
+
+const COMBINED_TAGS = ['併班', '合班'];
+function splitSpecialTags(raw) {
+  return String(raw || '')
+    .split(/[,，、;；\/／|｜\n]+/)
+    .map((tag) => String(tag || '').trim())
+    .filter(Boolean);
+}
+// 併班沿用「特殊標記」單一入口，不另開欄位：勾選＝寫入併班，取消＝移除（含別名合班）。
+const combinedClass = computed({
+  get() {
+    const tags = splitSpecialTags(scheduleForm.value && scheduleForm.value.specialTags);
+    return tags.some((tag) => COMBINED_TAGS.indexOf(tag) >= 0);
+  },
+  set(on) {
+    if (!scheduleForm.value) return;
+    const rest = splitSpecialTags(scheduleForm.value.specialTags)
+      .filter((tag) => COMBINED_TAGS.indexOf(tag) < 0);
+    if (on) rest.push('併班');
+    scheduleForm.value.specialTags = rest.join('、');
+  }
+});
 </script>
