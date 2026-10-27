@@ -2727,10 +2727,11 @@
 import { defineAsyncComponent, getCurrentInstance, onMounted, watch } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
-import TeachersTable from './components/TeachersTable.vue';
-import ClassPanel from './components/ClassPanel.vue';
+// 分頁內容（教師名單、班級課表）改成非同步：只在切到該頁時才抓 chunk，不佔首屏主包。
+const TeachersTable = defineAsyncComponent(() => import('./components/TeachersTable.vue'));
+const ClassPanel = defineAsyncComponent(() => import('./components/ClassPanel.vue'));
 // modal 一律改非同步載入：不進首屏主包，掛載時才抓各自的 chunk。
-// LoadingOverlay／LoginCard／TeachersTable／ClassPanel 為首屏必要，維持同步載入。
+// LoadingOverlay／LoginCard 為首屏必要，維持同步載入。
 const PrintPreviewModal = defineAsyncComponent(() => import('./components/PrintPreviewModal.vue'));
 const HistoryEditModal = defineAsyncComponent(() => import('./components/HistoryEditModal.vue'));
 const ClassAwayModal = defineAsyncComponent(() => import('./components/ClassAwayModal.vue'));
