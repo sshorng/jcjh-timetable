@@ -6709,6 +6709,7 @@ function doPost(e) {
       saveHomeroomCoverTeacher: 1,
       deleteSubstitutionRecord: 1,
       saveHistoryEdit: 1, saveMailSettings: 1, sendBatchNotices: 1,
+      mergeRequestBatch: 1,
       migrateNameKeySchema: 1, renameTeacherNameKey: 1
     };
     if (ADMIN_ONLY_ACTIONS[action] && !isAdmin) {
@@ -6808,6 +6809,7 @@ function postActionRoutes_() {
     saveHistoryEdit: handlePostSaveHistoryEdit_,
     saveMailSettings: handlePostSaveMailSettings_,
     batchMarkPrinted: handlePostBatchMarkPrinted_,
+    mergeRequestBatch: handlePostMergeRequestBatch_,
     submitTriangleRequest: handlePostSubmitTriangleRequest_,
     submitRequest: handlePostSubmitRequest_,
     submitExchangeBatch: handlePostSubmitExchangeBatch_,
@@ -8046,6 +8048,84 @@ function handlePostBatchMarkPrinted_(ctx) {
       invalidateSemesterCaches_(semesterId);
       
     // 2. 一般教師/受邀教師 Actions (包含基本身分檢驗)
+}
+
+/**
+ * 併批：把勾選的申請單寫上同一個新的批次ID（只改「批次ID」欄，其他欄位原樣保留）。
+ * 限未結案（待簽核／待核准）、且非三角調的單；新批次ID掃全表確認不與歷來重複。
+ */
+function handlePostMergeRequestBatch_(ctx) {
+  var {reqData, semesterId, userEmail, isAdmin, isStaff, teachers, currentTeacher, currentUrl, requestContext, cacheKey} = ctx;
+  if (!isAdmin) throw new Error("僅教學組可併批！");
+  var ids = (reqData.ids || []).map(function (id) { return String(id || "").trim(); })
+    .filter(function (id) { return !!id; });
+  var unique = [];
+  var seen = {};
+  ids.forEach(function (id) {
+    if (seen[id]) return;
+    seen[id] = true;
+    unique.push(id);
+  });
+  if (unique.length < 2) throw new Error("請選擇兩筆以上不同的申請單再併批！");
+
+  var rowById = findRowsByKeys_("申請單", "申請單ID", unique, semesterId);
+  var rows = [];
+  var missing = [];
+  unique.forEach(function (id) {
+    if (rowById[id]) rows.push(rowById[id]);
+    else missing.push(id);
+  });
+  if (missing.length) throw new Error("找不到申請單：" + missing.join("、"));
+
+  rows.forEach(function (row) {
+    var status = String(row["狀態"] || "").trim();
+    if (status !== "pending_teacher" && status !== "pending_admin") {
+      throw new Error("僅待簽核／待核准的申請可併批：" + String(row["單號"] || row["申請單ID"] || ""));
+    }
+    if (isTriangleRequest_(row)) {
+      throw new Error("三角調申請不可併批：" + String(row["單號"] || row["申請單ID"] || ""));
+    }
+  });
+
+  var batchId = newUniqueBatchId_();
+  rows.forEach(function (row) { row["批次ID"] = batchId; });
+  saveRows("申請單", rows, "申請單ID");
+  invalidateSemesterCaches_(semesterId);
+  logOperation_("mergeRequestBatch", "success", {
+    requestId: requestContext && requestContext.requestId,
+    operator: requestContext && requestContext.operator,
+    semesterId: semesterId,
+    batchId: batchId,
+    count: rows.length
+  });
+  return ContentService.createTextOutput(JSON.stringify({
+    success: true,
+    batchId: batchId,
+    updated: rows.length
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** 產生全表未使用過的批次ID（不與歷來任何批次重複）。 */
+function newUniqueBatchId_() {
+  var used = {};
+  var sheet = getSpreadsheet().getSheetByName("申請單");
+  if (sheet) {
+    var headers = getHeadersForSheet("申請單");
+    var col = headers.indexOf("批次ID") + 1;
+    var lastRow = sheet.getLastRow();
+    if (col >= 1 && lastRow >= 2) {
+      var values = sheet.getRange(2, col, lastRow - 1, 1).getValues();
+      for (var i = 0; i < values.length; i++) {
+        var value = String(values[i][0] == null ? "" : values[i][0]).trim();
+        if (value) used[value] = true;
+      }
+    }
+  }
+  for (var tries = 0; tries < 80; tries++) {
+    var candidate = "bat_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+    if (!used[candidate]) return candidate;
+  }
+  throw new Error("無法產生不重複的批次ID，請重試！");
 }
 
 function handlePostSubmitTriangleRequest_(ctx) {

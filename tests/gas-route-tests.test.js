@@ -6,14 +6,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-// Phase 3 路由表化契約：doPost 40 寫入 actions＋讀取 8 actions 皆經路由表分派。
+// Phase 3 路由表化契約：doPost 41 寫入 actions＋讀取 8 actions 皆經路由表分派。
 const POST_ACTIONS = ['migrateNameKeySchema', 'renameTeacherNameKey', 'saveSemester', 'deleteSemester',
   'setDefaultSemester', 'saveSchoolSwap', 'deleteSchoolSwap', 'saveClassAwayEvent', 'deleteClassAwayEvent',
   'backupTeacherExpensePlans', 'saveTeacher', 'deleteTeacher', 'importTeachersBatch', 'updateMutualQuotas',
   'earnMutualQuotaFromActivity', 'getMutualQuotaPackages', 'saveScheduleCell', 'clearScheduleCell',
   'importSchedulesBatch', 'saveHomeroomCoverTeacher', 'saveManualHomeroomRecord', 'deleteHomeroomRecord',
   'adminApprove', 'adminApproveBatch', 'adminReject', 'adminRejectBatch', 'deleteSubstitutionRecord',
-  'saveHistoryEdit', 'saveMailSettings', 'batchMarkPrinted', 'submitTriangleRequest', 'submitRequest',
+  'saveHistoryEdit', 'saveMailSettings', 'batchMarkPrinted', 'mergeRequestBatch', 'submitTriangleRequest', 'submitRequest',
   'submitExchangeBatch', 'submitRequestBatch', 'sendBatchNotices', 'respondTriangleRequest', 'respondToRequest',
   'respondToBatch', 'cancelRequest', 'withdrawRequest'];
 const READ_ACTIONS = ['getMatchCandidates', 'getMetaData', 'getPendingOnly', 'getHistoryMonth',
@@ -58,7 +58,7 @@ test('gas route tables（Phase 3：doPost／讀取路由完整＋舊鏈移除）
   vm.createContext(postCtx);
   vm.runInContext(source.slice(postTableStart, postTableEnd), postCtx, { filename: 'code.gs.post-routes' });
   const postRoutes = postCtx.postActionRoutes_();
-  assert.equal(Object.keys(postRoutes).length, 40, '寫入路由表應有 40 個 action');
+  assert.equal(Object.keys(postRoutes).length, 41, '寫入路由表應有 41 個 action');
   POST_ACTIONS.forEach((a) => {
     assert.equal(typeof postRoutes[a], 'function', '寫入路由缺 ' + a);
     assert.equal(postRoutes[a](), 'stub:' + a, '寫入路由錯接 ' + a);

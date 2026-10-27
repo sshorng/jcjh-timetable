@@ -127,6 +127,11 @@ const getApprovalApi = () => {
       const a = getApprovalApi();
       return a ? a.toggleSelectAllAdminPending(...args) : undefined;
     };
+    const mergeSelectedAdminPendingBatch = async (...args) => {
+      await ensureApprovalModule();
+      const a = getApprovalApi();
+      return a ? a.mergeSelectedAdminPendingBatch(...args) : false;
+    };
     const toggleAdminBatchGroupSelection = async (...args) => {
       await ensureApprovalModule();
       const a = getApprovalApi();
@@ -240,5 +245,5 @@ const getApprovalApi = () => {
       useInteractionStore().bindFlagModal(storeToRefs(useBackofficeStore()).showClassAwayModal, () => { storeToRefs(useBackofficeStore()).showClassAwayModal.value = false; }, '空堂事件');
       useInteractionStore().bindFlagModal(showBatchPrintPrompt, () => { dismissBatchPrintPrompt(); }, '批次列印');
     }
-  return { selectedAdminPendingIds, lastBatchPrintIds, showBatchPrintPrompt, getApprovalApi, ensureApprovalModule, isAdminPendingSelected, toggleAdminPendingSelect, toggleSelectAllAdminPending, isAdminBatchGroupSelected, toggleAdminBatchGroupSelection, clearAdminPendingSelection, respondToRequest, respondToBatch, adminApprove, adminReject, batchAdminApprove, batchAdminReject, printLastBatchNotices, dismissBatchPrintPrompt, cancelRequest, deleteSubstitutionRecord, sendSelectedBatchNotices, startCombinedReturn, executeEmptySlotAssign, formatRequestSummary, getApproveRiskFlags, formatApproveBatchRiskSummary, getRequestProgressSteps, isPaperFlowRequest, isProxySubmitRequest, submitTriangleRequest, checkUrlCallback, initRequests1 };
+  return { selectedAdminPendingIds, lastBatchPrintIds, showBatchPrintPrompt, getApprovalApi, ensureApprovalModule, isAdminPendingSelected, toggleAdminPendingSelect, toggleSelectAllAdminPending, isAdminBatchGroupSelected, toggleAdminBatchGroupSelection, clearAdminPendingSelection, respondToRequest, respondToBatch, adminApprove, adminReject, batchAdminApprove, batchAdminReject, mergeSelectedAdminPendingBatch, printLastBatchNotices, dismissBatchPrintPrompt, cancelRequest, deleteSubstitutionRecord, sendSelectedBatchNotices, startCombinedReturn, executeEmptySlotAssign, formatRequestSummary, getApproveRiskFlags, formatApproveBatchRiskSummary, getRequestProgressSteps, isPaperFlowRequest, isProxySubmitRequest, submitTriangleRequest, checkUrlCallback, initRequests1 };
 });

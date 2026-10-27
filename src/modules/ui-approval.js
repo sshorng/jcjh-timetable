@@ -765,6 +765,61 @@ const UiApproval = (() => {
       }
     }
 
+    /**
+     * 併批：把勾選的待核准申請寫上同一個新的批次ID（只改批次ID欄，其他欄位不動）。
+     * 後端負責產生不重複的批次ID；成功後整批重抓，列表自然按批次分組。
+     */
+    async function mergeSelectedAdminPendingBatch() {
+      try { syncAdminSelectionFromDom(); } catch (eS) { /* ignore */ }
+      var unique = [];
+      var seen = {};
+      (selectedAdminPendingIds.value || []).forEach(function (rawId) {
+        var id = String(rawId || '').trim();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        unique.push(id);
+      });
+      if (unique.length < 2) {
+        showToast('請勾選兩筆以上的申請單再併批', 'warning');
+        return false;
+      }
+      var triangleSerials = unique.map(function (id) {
+        var req = findRequestById(id);
+        return req && isTriangleRequest(req) ? (req.serial || id) : '';
+      }).filter(Boolean);
+      if (triangleSerials.length) {
+        showToast('三角調申請不可併批，請取消勾選：' + triangleSerials.join('、'), 'warning');
+        return false;
+      }
+      var preview = unique.slice(0, 8).map(function (id) {
+        var req = findRequestById(id);
+        return req
+          ? '• ' + (req.serial || id) + ' ' + (req.requesterName || '') + '→' + (req.targetTeacherName || '')
+          : '• ' + id;
+      }).join('\n');
+      var more = unique.length > 8 ? '\n…另有 ' + (unique.length - 8) + ' 筆' : '';
+      if (!await showConfirm(
+        '即將把 ' + unique.length + ' 筆申請單併成同一批次（寫入相同的批次ID）：\n' + preview + more +
+        '\n\n併批後這幾張單會一起簽核、一起列印。確定？',
+        '併單（同批次ID）'
+      )) return false;
+      loading.value = true;
+      loadingMessage.value = '併批中（' + unique.length + ' 筆）…';
+      try {
+        var res = await callGasApi('mergeRequestBatch', { ids: unique });
+        var batchId = String((res && res.batchId) || '');
+        showToast('已併批 ' + unique.length + ' 筆，批次ID：' + (batchId || '（未回傳）'), 'success', 6000);
+        softRefreshInBackground({ delay: 600 });
+        return true;
+      } catch (error) {
+        console.error('併批失敗：', error);
+        showToast('併批失敗：' + (error && error.message ? error.message : error), 'error');
+        return false;
+      } finally {
+        loading.value = false;
+      }
+    }
+
     async function batchAdminApprove() {
       // 勾選可能只在 DOM
       try { syncAdminSelectionFromDom(); } catch (eS) { /* ignore */ }
@@ -1620,6 +1675,7 @@ const UiApproval = (() => {
       submitTriangleRequest: submitTriangleRequest,
       sendSelectedBatchNotices: sendSelectedBatchNotices,
       startCombinedReturn: startCombinedReturn,
+      mergeSelectedAdminPendingBatch: mergeSelectedAdminPendingBatch,
       executeEmptySlotAssign: executeEmptySlotAssign
     };
   }

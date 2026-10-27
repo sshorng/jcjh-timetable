@@ -539,6 +539,7 @@
     "adminReject",
     "batchAdminApprove",
     "batchAdminReject",
+    "mergeSelectedAdminPendingBatch",
     "printLastBatchNotices",
     "dismissBatchPrintPrompt",
     "cancelRequest",

@@ -306,6 +306,7 @@
   "adminApprove": "requests",
   "adminReject": "requests",
   "batchAdminApprove": "requests",
+  "mergeSelectedAdminPendingBatch": "requests",
   "batchAdminReject": "requests",
   "cancelRequest": "requests",
   "clearAdminPendingSelection": "requests",
