@@ -925,6 +925,9 @@
                  <button type="button" class="btn btn-secondary pad-6-10-78"  @click="toggleSelectAllAdminPending">
                    {{ isAdminPendingPageFullySelected() ? '取消本頁全選' : '本頁全選' }}
                  </button>
+                <button v-if="isAdmin" type="button" class="btn btn-secondary btn-sm-78" :disabled="selectedAdminPendingIds.length < 2" title="把勾選的申請單寫上同一個新的批次ID（併批後一起簽核、一起列印）" @click="mergeSelectedAdminPendingBatch">
+                  🧷 併單
+                </button>
                  <button type="button" class="btn btn-secondary btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="openBatchPendingPrintPreview">
                    🖨️ 批次預覽列印 ({{ selectedAdminPendingIds.length }})
                  </button>
@@ -933,9 +936,6 @@
                  </button>
                  <button v-if="isAdmin" type="button" class="btn btn-danger btn-sm-78" :disabled="!selectedAdminPendingIds.length" @click="batchAdminReject">
                    ✘ 批次駁回 ({{ selectedAdminPendingIds.length }})
-                 </button>
-                 <button v-if="isAdmin" type="button" class="btn btn-secondary btn-sm-78" :disabled="selectedAdminPendingIds.length < 2" title="把勾選的申請單寫上同一個新的批次ID（併批後一起簽核、一起列印）" @click="mergeSelectedAdminPendingBatch">
-                   🧷 併單（同批次ID）({{ selectedAdminPendingIds.length }})
                  </button>
               </div>
             </div>
