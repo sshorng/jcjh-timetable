@@ -33,7 +33,7 @@ export const useAdminStore = defineStore('admin', () => {
     const showTeacherModal = ref(false);
     const teacherModalMode = ref('add');
     const teacherForm = ref({
-      email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
+      email: '', name: '', subject: '', communities: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
       fixedOvertimeHours: '', fixedOvertimeSlots: ''
     });
     const showExceptionComposer = ref(false);

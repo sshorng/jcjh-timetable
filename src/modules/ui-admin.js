@@ -1566,7 +1566,7 @@ const UiAdmin = (() => {
       teacherModalMode.value = 'add';
       overtimePlanTeacher.value = null;
       teacherForm.value = {
-        email: '', name: '', subject: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
+        email: '', name: '', subject: '', communities: '', jobTitle: '', expensePlan: '', role: 'teacher', baseHours: 16, mutualQuota: 0,
         fixedOvertimeHours: '', fixedOvertimeSlots: ''
       };
       showTeacherModal.value = true;
@@ -1579,7 +1579,7 @@ const UiAdmin = (() => {
         email: t.loginEmail || t.email,
         name: t.name,
         subject: t.subject,
-        jobTitle: t.jobTitle || '',
+        communities: t.communities || '',
         expensePlan: t.expensePlan || '',
          role: t.role,
          baseHours: t.baseHours,
@@ -1807,7 +1807,7 @@ const UiAdmin = (() => {
         '教師Email': email,
         '教師姓名': nextName,
         '授課科目': teacherForm.value.subject.trim(),
-        '職務': String(teacherForm.value.jobTitle || '').trim(),
+        '社群': String(teacherForm.value.communities || '').trim(),
         '鐘點支出計畫': String(teacherForm.value.expensePlan || '').trim(),
         '系統角色': teacherForm.value.role,
         '基本鐘點': (teacherForm.value.baseHours === 0 || teacherForm.value.baseHours === '0')

@@ -52,6 +52,8 @@ const UiSchedule = (() => {
     var parseTeacherSubjects = deps.parseTeacherSubjects;
     var searchQuery = deps.searchQuery;
     var selectedSubject = deps.selectedSubject;
+    var selectedCommunity = deps.selectedCommunity;
+    var parseTeacherCommunities = deps.parseTeacherCommunities;
     var isMutualCover = deps.isMutualCover;
 
 const classList = computed(() => {
@@ -206,25 +208,38 @@ const filteredTeachers = computed(() => {
   }
   const query = searchQuery.value.trim().toLowerCase();
   const subj = selectedSubject.value;
-  // 預設「我的課表」：只顯示自己（有搜尋姓名時改看全校比對）
-  if (subj === 'mine' && !query) {
+  // 社群（雙語社群、閱讀社群…）與科目互相獨立：選了社群就以社群為準，
+  // 科目留「全部」即可單看某社群；兩者都指定時取交集。
+  const community = String((selectedCommunity && selectedCommunity.value) || 'all');
+  const hasCommunity = !!community && community !== 'all';
+  const matchesCommunity = (teacher) => {
+    if (!hasCommunity) return true;
+    const list = typeof parseTeacherCommunities === 'function'
+      ? parseTeacherCommunities(teacher.communities)
+      : [];
+    return list.includes(community);
+  };
+  // 預設「我的課表」：只顯示自己（有搜尋姓名或指定社群時改看全校比對）
+  if (subj === 'mine' && !query && !hasCommunity) {
     const self = lookupTeacher(user.value.email);
     return self ? [self] : teachersList.value.filter(t => String(t.teacherName || t.name || '').toLowerCase() === myName);
   }
-  // all＝全校；指定科目＝該領域；mine+搜尋＝用姓名在全校找
+  // all＝全校；指定科目＝該領域；指定社群＝該社群教師；mine+搜尋＝用姓名在全校找
   let list = teachersList.value.slice();
-  if (query || (subj && subj !== 'all' && subj !== 'mine')) {
+  if (query || hasCommunity || (subj && subj !== 'all' && subj !== 'mine')) {
     list = list.filter(t => {
       const nameVal = t.name || '';
       const matchesName = !query || nameVal.toLowerCase().includes(query);
-      if (subj === 'all' || subj === 'mine') return matchesName;
+      if (!matchesName) return false;
+      if (!matchesCommunity(t)) return false;
+      if (subj === 'all' || subj === 'mine') return true;
       const domains = parseTeacherSubjects(t.subject);
       const matchesSubj = domains.includes(subj) || t.subject === subj;
-      return matchesName && matchesSubj;
+      return matchesSubj;
     });
   }
   // 有搜尋／活動互代看別人：不強制把自己掛最上面
-  if (query || isMutualCover.value) {
+  if (query || hasCommunity || isMutualCover.value) {
     return list;
   }
   // 無搜尋瀏覽全校時：自己置頂

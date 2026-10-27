@@ -19,6 +19,13 @@
               <input type="text" class="form-input" placeholder="國文" v-model="teacherForm.subject">
             </div>
             <div class="form-group">
+              <label class="form-label">社群（可多個，用「、」分隔；只作為課表篩選，不會列進授課科目）</label>
+              <input type="text" class="form-input" list="teacher-community-options" placeholder="例如：雙語社群、閱讀社群" v-model="teacherForm.communities">
+              <datalist id="teacher-community-options">
+                <option v-for="community in communitiesList || []" :key="'teacher-community-' + community" :value="community"></option>
+              </datalist>
+            </div>
+            <div class="form-group">
                 <label class="form-label">職務（含「導師」即列入代導費；「兼課」列入兼課教師鐘點；「教支人員＋本土語」依計畫分表；「共聘」使用預設）</label>
               <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師" v-model="teacherForm.jobTitle">
             </div>
@@ -81,6 +88,7 @@ defineProps({
   getExpensePlanSummary: { type: Function, required: true },
   overtimePlanTeacher: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   accountingPlanOptions: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  communitiesList: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   isExpensePlanSlotConfig: { type: Function, required: true },
   openOvertimePlanModal: { type: Function, required: true },
   fillFixedOvertimeFromCurrentSchedule: { type: Function, required: true },

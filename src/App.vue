@@ -564,6 +564,15 @@
                   <option value="all">全部教師（分頁）</option>
                   <option v-for="subj in subjectsList" :key="subj" :value="subj">{{ subj }}</option>
                 </select>
+                <select
+                  class="form-control"
+                  style="width:auto;min-width:132px;padding:6px 10px;font-size:0.85rem;"
+                  v-model="selectedCommunity"
+                  title="社群（與科目分開篩選）"
+                >
+                  <option value="all">全部社群</option>
+                  <option v-for="community in communitiesOptions()" :key="community" :value="community">{{ community }}</option>
+                </select>
               </div>
 
               <!-- 週次 + 課表（導覽可一併框選） -->
@@ -2495,6 +2504,7 @@
       v-model:teacher-form="teacherForm"
       :overtime-plan-teacher="overtimePlanTeacher"
       :accounting-plan-options="accountingPlanOptions"
+      :communities-list="communitiesOptions()"
       :is-expense-plan-slot-config="isExpensePlanSlotConfig"
       :open-overtime-plan-modal="openOvertimePlanModal"
       :fill-fixed-overtime-from-current-schedule="fillFixedOvertimeFromCurrentSchedule"
@@ -2794,6 +2804,17 @@ installVueErrorHandler(getCurrentInstance().appContext.app, errorReporter.report
 const { canOperateOnTeacherEmail, ensureProxyTargetForTeacher, initMobileDay, loginWithGoogle, persistProxySubmitEmails, reloadGsiLoginButton, setActiveTab, setOnlineSubstitutionEnabled, setProxyTarget, toggleProxySubmitEmail } = sessionStore;
 const { checkMobile, handleAvatarError, isClassAwayOnDate, isSingleWeek, schoolSwapWeekdayText, toLocalDateStr } = sessionStore;
 const { activeAwayBanner, activeTab, adminSubTab, allSchedules, availableSemesters, avatarSrc, canViewAllTimetables, classAwayEvents, currentSemester, currentSemesterName, currentWeekNumber, gasApiUrl, googleClientId, gsiButtonError, gsiButtonReady, gsiLoggingIn, homeroomAssignSelections, homeroomRecords, homeroomRecordsLoading, isAdmin, isMobile, isStaff, loading, loadingMessage, onlineSubstitutionEnabled, originalUser, proxyGrantQuery, proxySubmitEmails, proxySubmitEnabled, proxySubmitEnabledAt, proxySubmitEnabledBy, proxyTargetEmail, proxyTargetQuery, requestsList, schoolSwapForm, schoolSwapModalMode, schoolSwapRows, schoolSwapSaving, schoolSwaps, searchQuery, selectedMobileDay, selectedSubject, selectedWeekDate, semesterEndDate, semesterForm, semesterModalMode, semesterStartDate, semestersList, showMatchModal, showProxyTargetDropdown, showSchoolSwapModal, showSemesterModal, substitutionRecords, teachersList, timetableDisplayMode, user, userRole } = storeToRefs(sessionStore);
+// 社群篩選（與科目分開）：選項由教師名單的社群標籤聚合，不改動 subjectsList。
+const { selectedCommunity } = storeToRefs(sessionStore);
+const { parseTeacherCommunities } = sessionStore;
+const communitiesOptions = () => {
+  const set = new Set();
+  (teachersList.value || []).forEach(t => {
+    (typeof parseTeacherCommunities === 'function' ? parseTeacherCommunities(t.communities) : [])
+      .forEach(c => set.add(c));
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+};
 const { changeMatchMode, deleteSemester, getRealTeacherName, getTeacherTimetableHours, getTriangleGroupRequests, manualRefreshData, saveClientSettings, saveSemester, setDefaultSemester } = dataStore;
 const { changeWeek, clearAllProxySubmitEmails, clearProxyTarget, ensureHistoryMonthLoaded, formatClassName, formatDateMMDD, formatExchangeClassSlot, formatMoney, formatQuickTodoTitle, getClassBadgeStyle, getLeaveTimePresetRange, getPeriodClass, getPeriodLabel, getPeriodTimeSpan, getSubjectStyle, getTeacherIdentityTooltip, getTeacherNameByEmail, getTeacherSubjectByEmail, getWeekDayText, isExchangeClassRestricted, isLeaveClassRestricted, isLunchPeriod, isProxySubmitEmailGranted, openAddSemesterModal, openEditSemesterModal, period8CellsFor, period8StatusLabel, selectClassForView, setCompareWeekSelection, setProxySubmitEnabled, shiftBatchCompareWeek, updatePendingLeaveTime } = dataStore;
 const { accountingExportLoading, accountingPeriod, batchCompareWeekIndex, batchCompareWeekSlotCount, batchCompareWeekTotal, compareDisplayDatesA, compareDisplayDatesB, dataRefreshing, dataUpdatedLabel, devTeacherQuery, directApproveMode, emptySlotForm, filteredDevTeachers, filteredProxyTeachers, filteredTeachers, historyEditForm, historyFullLoaded, historyLoadedMonths, historyLoadingFull, isCrossWeekExchange, isScheduleEditMode, monthlyReportData, monthlyReportLoading, monthlyReportTotals, period8ExportLoading, period8Loading, period8RosterRows, proxyGrantCandidateTeachers, proxyGrantedTeachers, proxyTargetName, reportEndDate, reportMonth, reportStartDate, reportWeeksCount, requestWindowInfo, showEmptySlotModal, showHistoryEditModal, softSyncing, subjectsList, userRoleText } = storeToRefs(dataStore);

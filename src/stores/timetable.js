@@ -376,7 +376,8 @@ const getScheduleApi = () => {
         selectedClass: storeToRefs(useMutualStore()).selectedClass, selectedClassWeekDates: storeToRefs(useMutualStore()).selectedClassWeekDates, classReadonlyMode: storeToRefs(useMutualStore()).classReadonlyMode, userRole: storeToRefs(useSessionStore()).userRole,
         classViewSchoolSwaps: storeToRefs(useMutualStore()).classViewSchoolSwaps, schoolSwaps: storeToRefs(useSessionStore()).schoolSwaps, selectedWeekDate: storeToRefs(useSessionStore()).selectedWeekDate, toLocalDateStr: DateUtils.toLocalDateStr, user: storeToRefs(useSessionStore()).user,
         canViewAllTimetables: storeToRefs(useSessionStore()).canViewAllTimetables, teachersList: storeToRefs(useSessionStore()).teachersList, lookupTeacher: useDataStore().lookupTeacher, parseTeacherSubjects: useSessionStore().parseTeacherSubjects,
-        searchQuery: storeToRefs(useSessionStore()).searchQuery, selectedSubject: storeToRefs(useSessionStore()).selectedSubject, isMutualCover: storeToRefs(useTourStore()).isMutualCover,
+        parseTeacherCommunities: useSessionStore().parseTeacherCommunities,
+        searchQuery: storeToRefs(useSessionStore()).searchQuery, selectedSubject: storeToRefs(useSessionStore()).selectedSubject, selectedCommunity: storeToRefs(useSessionStore()).selectedCommunity, isMutualCover: storeToRefs(useTourStore()).isMutualCover,
         selectedClassDate: storeToRefs(useMutualStore()).selectedClassDate, period8WeekDate: storeToRefs(useMutualStore()).period8WeekDate,
         showMatchModal: storeToRefs(useSessionStore()).showMatchModal, activeCell: storeToRefs(useTourStore()).activeCell, ttPageSize, TT_PAGE_SIZE_DEFAULT, ttPage,
       });

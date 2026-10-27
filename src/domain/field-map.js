@@ -770,6 +770,8 @@ const FieldMap = (() => {
     const loginEmail = String(pick(t, ['教師Email', 'loginEmail', 'email']) || '').trim().toLowerCase();
     const name = pick(t, ['教師姓名', 'teacherName', 'name']) || '';
     const jobTitle = String(pick(t, ['職務', '職稱', 'jobTitle']) || '');
+    // 社群：社團／社群標籤（可多個，以「、」分隔），只作為課表篩選維度，不併入授課科目。
+    const communities = String(pick(t, ['社群', '社群標籤', 'communities']) || '').trim();
     const fixedOvertime = fixedOvertimeSetting(t);
     return {
       loginEmail: loginEmail,
@@ -779,6 +781,7 @@ const FieldMap = (() => {
       name: name,
       subject: pick(t, ['授課科目', '任課科目', 'subject']) || '',
       jobTitle: jobTitle,
+      communities: communities,
       expensePlan: String(pick(t, ['鐘點支出計畫', '鐘點支出來源', '支出計畫', '計畫', 'expensePlan', 'plan']) || '').trim(),
       role: normalizeTeacherRole(pick(t, ['系統角色', 'role']), jobTitle),
       baseHours: asInt(pick(t, ['基本鐘點', 'baseHours']), 16),
@@ -1009,6 +1012,7 @@ const FieldMap = (() => {
       "教師姓名": t.name || t["教師姓名"],
       "授課科目": subject,
       "任課科目": subject,
+      "社群": String(t.communities !== undefined ? t.communities : (t["社群"] || '')).trim(),
       "職務": jobTitle,
       "鐘點支出計畫": expensePlan,
       "系統角色": normalizeTeacherRole(t.role || t["系統角色"], jobTitle),

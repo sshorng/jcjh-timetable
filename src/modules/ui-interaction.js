@@ -25,6 +25,7 @@ const UiInteraction = (() => {
     var mutualActivityEnd = deps.mutualActivityEnd;
     var selectedWeekDate = deps.selectedWeekDate;
     var selectedSubject = deps.selectedSubject;
+    var selectedCommunity = deps.selectedCommunity;
     var searchQuery = deps.searchQuery;
     var displayTimetableTeachers = deps.displayTimetableTeachers;
     var ttPageSize = deps.ttPageSize;
@@ -292,6 +293,7 @@ const jumpToTeacherTimetable = (email, opts) => {
   }
   if (activeTab) activeTab.value = 'timetable';
   if (selectedSubject) selectedSubject.value = 'all';
+  if (selectedCommunity) selectedCommunity.value = 'all';
   if (searchQuery) searchQuery.value = t.name || '';
   nextTick(() => {
     const list = (displayTimetableTeachers && displayTimetableTeachers.value) || [];
