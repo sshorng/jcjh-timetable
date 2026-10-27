@@ -528,6 +528,8 @@ const getAuthApi = () => {
         window.__gsiCredentialHandler = onCredential;
 
         // A：定時檢查 Token，快過期就靜默換票（約每 4 分鐘）
+        // 回分頁對帳節流用（避免切換分頁就重抓）
+        let lastVisibleRefreshAt = 0;
         const tokenKeepAlive = () => {
           try {
             const tok = sessionStorage.getItem('jcjh_google_id_token');
@@ -541,6 +543,16 @@ const getAuthApi = () => {
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') {
             tokenKeepAlive();
+            // 回到分頁順手對帳（只抓申請單、30 秒節流），不用手動重整才看到新資料
+            try {
+              const now = Date.now();
+              if (user.value && now - lastVisibleRefreshAt > 30000) {
+                lastVisibleRefreshAt = now;
+                import('./data.js')
+                  .then((m) => m.useDataStore().softRefreshInBackground({ delay: 300, requestsOnly: true }))
+                  .catch(() => {});
+              }
+            } catch (eVisibleRefresh) { /* ignore */ }
             // 回到登入頁且按鈕不見時補渲染
             if (!user.value && !storeToRefs(useMutualStore()).classReadonlyMode.value && !gsiButtonReady.value) {
               setupGoogleSignInUi();

@@ -808,8 +808,15 @@ const UiApproval = (() => {
       try {
         var res = await callGasApi('mergeRequestBatch', { ids: unique });
         var batchId = String((res && res.batchId) || '');
+        // 立即套用到本地資料：列表馬上按新批次分組，不必重整頁面。
+        if (batchId) {
+          unique.forEach(function (id) {
+            var req = findRequestById(id);
+            if (req) optimisticUpsertRequest(Object.assign({}, req, { batchId: batchId }));
+          });
+        }
         showToast('已併批 ' + unique.length + ' 筆，批次ID：' + (batchId || '（未回傳）'), 'success', 6000);
-        softRefreshInBackground({ delay: 600 });
+        softRefreshInBackground({ delay: 1200, requestsOnly: true });
         return true;
       } catch (error) {
         console.error('併批失敗：', error);
