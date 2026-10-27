@@ -135,22 +135,24 @@ body {
 }
 .btn:active { opacity: 1; transform: scale(0.97); }
 .btn:disabled, .btn[disabled] { transform: none; }
-/* 選中 chip 同時帶 btn-secondary＋btn-primary：用 .btn.btn-primary 提高權重，
-   確保藍底一定配白字（先前只改底色，字色被 btn-secondary 蓋成深色） */
-.btn.btn-primary,
-.btn.btn-secondary.btn-primary {
-  background: linear-gradient(180deg, #4160dc, var(--color-primary));
-  border-color: var(--color-primary);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(42, 69, 176, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
-}
-.btn.btn-primary:hover,
-.btn.btn-secondary.btn-primary:hover {
-  background: linear-gradient(180deg, #3a58d2, var(--color-primary-hover));
-  border-color: var(--color-primary-hover);
-  color: #fff;
-  box-shadow: 0 4px 12px -2px rgba(52, 84, 209, 0.42);
-}
+ /* 選中 chip 同時帶 btn-secondary＋btn-primary：.btn-secondary 用了 !important 黑字，
+    此處必須同樣 !important 白字，否則選中藍底會配深色字（如篩選星期） */
+ .btn.btn-primary,
+ .btn.btn-secondary.btn-primary,
+ .filter-chip.btn-primary {
+   background: linear-gradient(180deg, #4160dc, var(--color-primary));
+   border-color: var(--color-primary);
+   color: #fff !important;
+   box-shadow: 0 1px 2px rgba(42, 69, 176, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+ }
+ .btn.btn-primary:hover,
+ .btn.btn-secondary.btn-primary:hover,
+ .filter-chip.btn-primary:hover {
+   background: linear-gradient(180deg, #3a58d2, var(--color-primary-hover));
+   border-color: var(--color-primary-hover);
+   color: #fff !important;
+   box-shadow: 0 4px 12px -2px rgba(52, 84, 209, 0.42);
+ }
 .btn-secondary {
   box-shadow: 0 1px 1px rgba(18, 22, 43, 0.04);
   color: var(--text-primary) !important;
@@ -171,11 +173,18 @@ body {
   color: var(--text-primary) !important;
   border-color: var(--border-strong) !important;
 }
-.btn-pill.btn-primary {
-  color: #ffffff !important;
-  background: linear-gradient(180deg, #4160dc, var(--color-primary)) !important;
-  border-color: var(--color-primary) !important;
-}
+ .btn-pill.btn-primary {
+   color: #ffffff !important;
+   background: linear-gradient(180deg, #4160dc, var(--color-primary)) !important;
+   border-color: var(--color-primary) !important;
+ }
+ /* 深色底選中態一律配白字（防其他規則蓋掉字色）：篩選星期 chip、範圍/互調 chip、預覽選項 */
+ .dash-scope-btn.active,
+ .mutual-away-chip.active,
+ .batch-exchange-preview-option.is-active,
+ .class-pick-btn-active {
+   color: #fff !important;
+ }
 .btn-success { box-shadow: 0 1px 2px rgba(14, 104, 74, 0.3); }
 .btn-danger { box-shadow: 0 1px 2px rgba(168, 41, 37, 0.3); }
 
