@@ -8088,6 +8088,12 @@ function handlePostMergeRequestBatch_(ctx) {
   });
 
   var batchId = newUniqueBatchId_();
+  // 只與本次要寫入的幾筆比對（資料已在記憶體），不掃全表。
+  for (var guard = 0; guard < 5 && rows.some(function (row) {
+    return String(row["批次ID"] || "").trim() === batchId;
+  }); guard++) {
+    batchId = newUniqueBatchId_();
+  }
   rows.forEach(function (row) { row["批次ID"] = batchId; });
   saveRows("申請單", rows, "申請單ID");
   invalidateSemesterCaches_(semesterId);
@@ -8105,27 +8111,19 @@ function handlePostMergeRequestBatch_(ctx) {
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
-/** 產生全表未使用過的批次ID（不與歷來任何批次重複）。 */
+/**
+ * 批次ID：時間戳（36 進位）＋UUID 前 10 碼。
+ * UUID 帶 122 位隨機，同一毫秒內撞號機率可忽略，故不需要掃表比對歷來批次。
+ */
 function newUniqueBatchId_() {
-  var used = {};
-  var sheet = getSpreadsheet().getSheetByName("申請單");
-  if (sheet) {
-    var headers = getHeadersForSheet("申請單");
-    var col = headers.indexOf("批次ID") + 1;
-    var lastRow = sheet.getLastRow();
-    if (col >= 1 && lastRow >= 2) {
-      var values = sheet.getRange(2, col, lastRow - 1, 1).getValues();
-      for (var i = 0; i < values.length; i++) {
-        var value = String(values[i][0] == null ? "" : values[i][0]).trim();
-        if (value) used[value] = true;
-      }
-    }
+  var rand = "";
+  try {
+    rand = String(Utilities.getUuid() || "").replace(/-/g, "").slice(0, 10);
+  } catch (eUuid) {
+    rand = "";
   }
-  for (var tries = 0; tries < 80; tries++) {
-    var candidate = "bat_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    if (!used[candidate]) return candidate;
-  }
-  throw new Error("無法產生不重複的批次ID，請重試！");
+  if (!rand) rand = Math.random().toString(36).slice(2, 12);
+  return "bat_" + Date.now().toString(36) + "_" + rand;
 }
 
 function handlePostSubmitTriangleRequest_(ctx) {
