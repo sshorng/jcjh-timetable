@@ -11,7 +11,6 @@
             <button type="button" class="btn-close" @click="closeQuotaLedger" aria-label="關閉">&times;</button>
           </div>
           <div class="modal-body">
-            <p class="quota-ledger-hint">資料來自試算表「額度帳本」（發放／扣用／還原／手動調整）。僅管理員可見。</p>
             <div v-if="quotaLedgerLoading" class="quota-ledger-loading">載入中…</div>
             <div v-if="!quotaLedgerLoading && !quotaLedgerRows.length" class="quota-ledger-empty">尚無歷程列</div>
             <div v-if="quotaLedgerRows.length" class="table-responsive quota-ledger-table-wrap" :class="{ 'is-refreshing': quotaLedgerLoading }">

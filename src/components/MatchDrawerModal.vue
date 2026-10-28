@@ -135,12 +135,12 @@
                     {{ formatDateMMDD(s.dateStr) }}({{ getWeekDayText(s.dayOfWeek) }}) {{ formatPeriodText(s.period) }} {{ s.className }}{{ s.subject }}
                   </span>
                 </div>
-                <div class="text-xs-muted-75-mt">
+                <div class="ui-caption">
                   <template v-if="isBatchPerSlotMode">
-                    請點上方節次，再從下方名單為<strong>該節</strong>選代課老師。全部指定後按「確認申請」。
+                    點上方節次，再為<strong>該節</strong>選代課老師。
                   </template>
                   <template v-else>
-                    下列為<strong>全部選定節次皆空堂</strong>的教師（同課／同科／同班標籤為各節聯集）
+                    下列教師在所選節次<strong>皆空堂</strong>
                   </template>
                 </div>
                 <div v-if="isBatchPerSlotMode" style="margin-top:10px;display:flex;justify-content:flex-end;">
@@ -232,7 +232,7 @@
 
                   <!-- 互代模式：未選空堂事件時只能算總額度 -->
                   <div v-if="isMutualCover && !mutualEventId" class="mutual-quota-hint">
-                    未選空堂事件，只顯示總額度（要「事件」額度請先在上方面板選事件）
+                    未選空堂事件，僅顯示總額度
                   </div>
                   <!-- 搜尋列 -->
                   <div class="mb-10">

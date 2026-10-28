@@ -574,3 +574,55 @@ body {
   line-height: 1.55;
   font-size: 0.7rem;
 }
+
+/* ---------- 唯一合法的次級說明：只在空狀態或首次出現使用 ---------- */
+.ui-caption {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ui-caption-inline {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---------- 互代面板：以編號段落讓版面自己說流程 ---------- */
+.mutual-step { margin-bottom: 10px; }
+.mutual-step-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #5b21b6;
+}
+.mutual-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.mutual-step-req {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #b91c1c;
+}
+.mutual-step-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6d28d9;
+}
+.mutual-step .mutual-import-select { width: 100%; }
+.mutual-step .mutual-away-chips { margin-top: 6px; }

@@ -19,9 +19,7 @@
         <p v-if="gsiButtonError" class="login-gsi-status">{{ gsiButtonError }}</p>
       </div>
 
-      <p class="domain-hint">
-        * 注意：本系統僅限本校 G Workspace 網域帳號登入。<br>非本校網域帳號將無法通過身分驗證。
-      </p>
+      <p class="domain-hint">僅限本校 Google Workspace 網域登入</p>
     </div>
   </div>
 </template>

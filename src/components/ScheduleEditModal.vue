@@ -13,7 +13,6 @@
             <div class="form-group">
               <label class="form-label">授課班級</label>
               <input type="text" class="form-input" placeholder="702 或併班 701、702" v-model="scheduleForm.className">
-              <span class="text-xs-muted-70">併班可填多班：701、702 或 701/702（本土語、特教／資優抽離等）</span>
             </div>
             <div class="form-group">
               <label class="form-label">授課科目</label>
@@ -74,7 +73,7 @@
                 <input type="date" class="form-input" v-model="scheduleForm.activeFrom" :min="semesterStartDate || undefined" :max="semesterEndDate || undefined" aria-label="啟用起日">
                 <input type="date" class="form-input" v-model="scheduleForm.activeTo" :min="semesterStartDate || undefined" :max="semesterEndDate || undefined" aria-label="啟用迄日">
               </div>
-              <span class="text-xs-muted-70">起日／迄日皆空白＝整個學期有效。建立新版本時請填啟用起日，舊版本會保留並自動結束於前一天。</span>
+              <span class="ui-caption">空白＝整個學期有效；填起日則開新版本，舊版本自動在前一天結束</span>
             </div>
           </div>
           <div class="modal-footer" style="flex-direction: column; gap: 8px;">

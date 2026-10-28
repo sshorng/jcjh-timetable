@@ -38,7 +38,7 @@
                 <input type="checkbox" class="direct-approve-check" v-model="directApproveMode">
                 <span class="direct-approve-text">
                   <div class="direct-approve-title">⚡ 教學組直接核准</div>
-                  <div class="direct-approve-desc">勾選後送出即生效並更新課表；未勾選則需對方同意後再送行政審核。<span v-if="notificationsSuppressed">紙本模式下不寄送通知信。</span></div>
+                  <div class="direct-approve-desc">勾選後送出即生效；未勾選需對方同意再送審。<span v-if="notificationsSuppressed">紙本模式下不寄送通知信。</span></div>
                 </span>
               </label>
               <label v-if="directApproveMode" class="direct-approve-sub">
@@ -81,7 +81,6 @@
                     @click="setBatchExchangePreviewSlot(s.key)"
                   >{{ index + 1 }}. {{ s.teacherName }} ↔ {{ s.subTeacherName || getTeacherNameByEmail(s.subTeacherEmail) }}</button>
                 </div>
-                <div class="batch-exchange-preview-hint">切換組別檢視調出教師與對調教師的週課表；跨週組別可分別切換來源週與目標週。</div>
               </div>
               <template v-if="isCrossWeekExchange">
                <div class="exchange-cross-week-summary">
@@ -257,7 +256,7 @@
               </div>
               <div class="text-xs-muted-75-mt">
                 <template v-if="pendingRequestData.mode === 'exchange'">
-                   共用批次編號；每組獨立簽核、列印及追蹤。{{ pendingRequestData.batchValidCount }} 組可送出，{{ pendingRequestData.batchInvalidCount }} 組需調整。
+                   {{ pendingRequestData.batchValidCount }} 組可送出，{{ pendingRequestData.batchInvalidCount }} 組需調整。
                 </template>
                 <template v-else-if="pendingRequestData.isPerSlot">
                    共 {{ pendingRequestData.subTeacherCount || '多' }} 位代課老師　·　假別一次套用　·　每節獨立簽核

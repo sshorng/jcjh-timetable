@@ -9,7 +9,7 @@
             <div class="form-group">
               <label class="form-label">學期代號</label>
               <input type="text" class="form-input" placeholder="例如 114-2" v-model="semesterForm.id" :disabled="semesterModalMode === 'edit'">
-              <span class="text-xs-muted-70">用於 Firestore 資料夾命名，設定後不可修改</span>
+              <span class="ui-caption">設定後不可修改</span>
             </div>
             <div class="form-group">
               <label class="form-label">學期名稱（顯示用）</label>

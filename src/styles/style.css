@@ -4604,11 +4604,6 @@ td.table-empty {
   color: #fff;
   font-weight: 700;
 }
-.batch-exchange-preview-hint {
-  color: #64748b;
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
 .batch-exchange-preview-summary {
   max-height: 220px;
   margin-top: 12px;
@@ -4920,10 +4915,6 @@ td.table-empty {
 .text-xs-muted {
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-.text-mutual-hint {
-  font-size: 0.72rem;
-  color: #6d28d9;
 }
 .text-success { color: var(--color-success); }
 .opacity-85 { opacity: 0.85; }
@@ -5540,33 +5531,9 @@ td.table-empty {
   margin-bottom: 8px;
   line-height: 1.45;
 }
-.mutual-import-row {
-  margin-bottom: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-.mutual-import-label {
-  font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 200px;
-}
-.mutual-import-label-text { white-space: nowrap; font-weight: 600; }
 .mutual-import-select { padding: 4px 8px; font-size: 0.78rem; flex: 1; }
-.mutual-hint-soft {
-  margin-bottom: 6px;
-  font-size: 0.72rem;
-  color: #a78bfa;
-}
-.mutual-hint-mt { margin-top: 6px; }
-.mutual-hint-mt2 { margin-top: 8px; }
 .mutual-note-label { font-size: 0.75rem; margin-bottom: 4px; }
 .mutual-note-input { padding: 6px 10px; font-size: 0.8rem; }
-.mutual-section-label { font-size: 0.75rem; font-weight: 600; }
 .mutual-chips-away { max-height: 88px; }
 .mutual-chips-lead { max-height: 72px; }
 .mutual-lead-chip { font-size: 0.7rem; }
@@ -5753,11 +5720,6 @@ td.table-empty {
   color: #5b21b6;
   font-size: 0.78rem;
   font-weight: 700;
-}
-.quota-ledger-hint {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin: 0 0 10px;
 }
 .quota-ledger-loading,
 .quota-ledger-empty {

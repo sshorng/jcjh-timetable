@@ -362,41 +362,37 @@
                   </button>
                 </div>
                 <div class="mutual-panel-lead">
-                  釋出空堂去代 → <strong>扣額度</strong>；本來就空堂去代 → <strong>活動公費</strong>（可領費）；請假老師<strong>一律不扣</strong>鐘點。
+                  釋出空堂代課<strong>扣額度</strong>；本來空堂代課算<strong>活動公費</strong>；請假老師<strong>不扣</strong>鐘點。
                 </div>
-                <div class="mutual-import-row">
-                  <label class="mutual-import-label">
-                    <span class="mutual-import-label-text">空堂事件（必填）</span>
-                    <select
-                      class="form-select mutual-import-select"
-                      :value="mutualImportEventId"
-                      @change="applyClassAwayEventById($event.target.value)"
-                    >
-                       <option value="">請選擇空堂事件</option>
-                      <option v-for="ev in mutualImportableEvents" :key="'imp-'+ev.id" :value="ev.id">
-                         {{ ev.name }}（{{ ev.startDate }}～{{ ev.endDate || '學期結束' }} · {{ classAwayPeriodLabel(ev) }} · {{ (ev.classes || []).length }} 班）
-                      </option>
-                    </select>
-                  </label>
-                </div>
-                <div v-if="!mutualImportableEvents.length" class="mutual-hint-soft">
-                  尚無可進互代的空堂事件（後台「空堂事件」請勾可進互代）
-                </div>
-                <div v-else class="flex-wrap-gap-8-mb">
-                   <span class="text-mutual-hint">期間：{{ mutualCoverStats.rangeLabel || '未設定' }}（{{ mutualCoverStats.rangeDays || 0 }} 天）· 由空堂事件帶入，不可自選</span>
-                </div>
-                <div class="form-group mb-8">
-                  <label class="form-label mutual-note-label">統一備註（寫入本批每筆申請）</label>
-                  <input
-                    type="text"
-                    class="form-control mutual-note-input"
-                    v-model="mutualNote"
-                     placeholder="例：九年級畢旅 4/21～4/22"
+
+                <div class="mutual-step">
+                  <div class="mutual-step-head">
+                    <span class="mutual-step-no">1</span>空堂事件<span class="mutual-step-req">必填</span>
+                  </div>
+                  <select
+                    class="form-select mutual-import-select"
+                    :value="mutualImportEventId"
+                    @change="applyClassAwayEventById($event.target.value)"
                   >
+                     <option value="">請選擇空堂事件</option>
+                    <option v-for="ev in mutualImportableEvents" :key="'imp-'+ev.id" :value="ev.id">
+                       {{ ev.name }}（{{ ev.startDate }}～{{ ev.endDate || '學期結束' }} · {{ classAwayPeriodLabel(ev) }} · {{ (ev.classes || []).length }} 班）
+                    </option>
+                  </select>
+                  <div v-if="!mutualImportableEvents.length" class="ui-caption">
+                    後台「空堂事件」尚無可進互代的項目
+                  </div>
+                  <div v-else-if="mutualImportEventId" class="ui-caption">
+                    期間 {{ mutualCoverStats.rangeLabel || '未設定' }}（{{ mutualCoverStats.rangeDays || 0 }} 天）· 由事件帶入
+                  </div>
                 </div>
-                <div class="mb-8">
+
+                <div class="mutual-step">
+                  <div class="mutual-step-head">
+                    <span class="mutual-step-no">2</span>外出班
+                    <span class="mutual-step-count">已選 {{ mutualAwayClasses.length }} 班</span>
+                  </div>
                   <div class="flex-wrap-gap-6-mb4">
-                    <span class="text-xs">外出班：</span>
                     <button type="button" class="btn btn-secondary btn-xs" @click="selectAwayGrade('7')">七年級</button>
                     <button type="button" class="btn btn-secondary btn-xs" @click="selectAwayGrade('8')">八年級</button>
                     <button type="button" class="btn btn-secondary btn-xs" @click="selectAwayGrade('9')">九年級</button>
@@ -404,7 +400,6 @@
                     <button type="button" class="btn btn-primary btn-xs" @click="recalculateMutualQuotasFromActivity()" title="依期間與外出班寫入「額度帳本」發放紀錄（排除帶隊與小鐘點；同活動不重複）">
                       ＋發放額度
                     </button>
-                    <span class="text-mutual-hint">已選 {{ mutualAwayClasses.length }} 班</span>
                   </div>
                   <div class="mutual-away-chips mutual-chips-away">
                     <button
@@ -417,11 +412,14 @@
                     >{{ c }}</button>
                   </div>
                 </div>
-                <div class="mb-8">
+
+                <div class="mutual-step">
+                  <div class="mutual-step-head">
+                    <span class="mutual-step-no">3</span>帶隊老師
+                    <span class="mutual-step-count">已選 {{ mutualLeadEmails.length }} 人</span>
+                  </div>
                   <div class="flex-wrap-gap-6-mb4">
-                    <span class="mutual-section-label">帶隊老師（不寫入額度）：</span>
                     <button type="button" class="btn btn-secondary btn-xs" @click="mutualLeadEmails = []; persistMutualPanelDraft()">清空帶隊</button>
-                    <span class="text-mutual-hint">已選 {{ mutualLeadEmails.length }} 人</span>
                   </div>
                   <div class="mutual-away-chips mutual-chips-lead">
                     <button
@@ -435,6 +433,17 @@
                     >{{ t.name }}</button>
                   </div>
                 </div>
+
+                <div class="form-group mb-8">
+                  <label class="form-label mutual-note-label" title="會寫入本批每一筆申請">統一備註</label>
+                  <input
+                    type="text"
+                    class="form-control mutual-note-input"
+                    v-model="mutualNote"
+                     placeholder="例：九年級畢旅 4/21～4/22"
+                  >
+                </div>
+
                 <div class="mutual-progress-box">
                   <div>
                     <strong>活動期間進度</strong>
@@ -449,7 +458,7 @@
                     <span>尚缺 <strong class="text-danger-deep">{{ mutualCoverStats.remaining }}</strong></span>
                   </div>
                   <div v-else class="mutual-need-lead">
-                    請先勾選帶隊老師，才會計算：需求／已送出／暫定／尚缺。
+                    勾選帶隊老師後計算需求與尚缺
                   </div>
                   <div v-if="mutualCoverStats.byLeaders && mutualCoverStats.byLeaders.length" class="mutual-leaders-block">
                     <div class="mutual-leaders-title">各帶隊老師課務</div>
@@ -474,7 +483,7 @@
                       <span>尚缺 <strong :class="L.remaining > 0 ? 'text-danger-deep' : 'text-ok-green'">{{ L.remaining }}</strong></span>
                     </div>
                   </div>
-                  <div v-else class="mutual-hint-soft mutual-hint-mt">
+                  <div v-else class="ui-caption">
                     需求＝期間內課表應代節（不含巡堂／外出班）；尚缺＝需求−已送出−暫定。
                   </div>
                   <details class="mutual-quota-note">
