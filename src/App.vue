@@ -341,10 +341,10 @@
                  </div>
                </div>
                  <div v-if="paperMode && !isAdmin && !isProxySubmitActive" class="batch-hint-bar" style="border-color:#f59e0b;background:#fffbeb;color:#92400e;">
-                   🖨️ 目前為紙本審核模式：送出後會建立待教學組核准的申請，並開啟紙本通知供調代課教師簽名。
+                   <span class="status-badge" style="background:#fef3c7;color:#92400e;">紙本簽核</span> 送出後由教學組核准，請列印通知供簽名。
                 </div>
                 <div v-else-if="notificationsSuppressed && isAdmin" class="batch-hint-bar" style="border-color:#f59e0b;background:#fffbeb;color:#92400e;">
-                   🔧 紙本作業模式：可線上提出申請、列印調代課單，但仍需進行紙本簽核程序，請務必提交簽名後調代課單至教學組。
+                   <span class="status-badge" style="background:#fef3c7;color:#92400e;">紙本簽核</span> 線上提出並列印調代課單，簽名後送教學組。
                 </div>
                 <div v-if="batchSelectMode" class="batch-hint-bar">
                   <template v-if="batchFlowMode === 'exchange'">
@@ -356,7 +356,7 @@
                </div>
               <div v-if="isAdmin && isMutualCover" class="batch-hint-bar mutual-away-panel">
                 <div class="mutual-panel-head">
-                   <div class="mutual-panel-title">🔁 活動互代：選空堂事件 → 選外出班 → 媒合優先「釋出空堂」</div>
+                   <div class="mutual-panel-title">🔁 活動互代</div>
                   <button type="button" class="btn btn-secondary mutual-btn-clear" @click="clearMutualPanel" title="清空外出班、帶隊、暫定、備註；期間改回本週">
                     🗑️ 一鍵清空
                   </button>
@@ -372,7 +372,7 @@
                       :value="mutualImportEventId"
                       @change="applyClassAwayEventById($event.target.value)"
                     >
-                       <option value="">請先選擇一個空堂事件（必填）</option>
+                       <option value="">請選擇空堂事件</option>
                       <option v-for="ev in mutualImportableEvents" :key="'imp-'+ev.id" :value="ev.id">
                          {{ ev.name }}（{{ ev.startDate }}～{{ ev.endDate || '學期結束' }} · {{ classAwayPeriodLabel(ev) }} · {{ (ev.classes || []).length }} 班）
                       </option>
@@ -381,9 +381,6 @@
                 </div>
                 <div v-if="!mutualImportableEvents.length" class="mutual-hint-soft">
                   尚無可進互代的空堂事件（後台「空堂事件」請勾可進互代）
-                </div>
-                <div v-else-if="!mutualImportEventId" class="mutual-hint-soft" style="color:#b91c1c;">
-                  請先選擇一個空堂事件，才能暫定與送出；日期與節次由事件帶入，不可自選。
                 </div>
                 <div v-else class="flex-wrap-gap-8-mb">
                    <span class="text-mutual-hint">期間：{{ mutualCoverStats.rangeLabel || '未設定' }}（{{ mutualCoverStats.rangeDays || 0 }} 天）· 由空堂事件帶入，不可自選</span>
@@ -426,7 +423,6 @@
                     <button type="button" class="btn btn-secondary btn-xs" @click="mutualLeadEmails = []; persistMutualPanelDraft()">清空帶隊</button>
                     <span class="text-mutual-hint">已選 {{ mutualLeadEmails.length }} 人</span>
                   </div>
-                  <div class="mutual-lead-tip">點選加入帶隊；再點一次取消。跳課表請用下方「各帶隊老師課務」姓名按鈕。</div>
                   <div class="mutual-away-chips mutual-chips-lead">
                     <button
                       v-for="t in teachersList"
@@ -479,11 +475,14 @@
                     </div>
                   </div>
                   <div v-else class="mutual-hint-soft mutual-hint-mt">
-                    請先勾選「帶隊老師」。需求＝期間內課表應代節（不含巡堂／外出班）；尚缺＝需求−已送出−暫定。
+                    需求＝期間內課表應代節（不含巡堂／外出班）；尚缺＝需求−已送出−暫定。
                   </div>
-                  <div class="mutual-quota-note">
-                     ＊額度寫在「教師名單」；明細在試算表「額度帳本」。同活動不重複發放；扣額度 FIFO。帶隊不發放。早自習／1～7／午休釋出 1 節＝1 額度；代課（小鐘點）不發額度，未授課另扣。早自習／1～7／午休：餘額≥1→扣額度（扣 1）；不足 1→活動公費。第8節不吃額度。
-                  </div>
+                  <details class="mutual-quota-note">
+                    <summary>計費與額度規則</summary>
+                    <div class="mutual-quota-note-body">
+                      額度寫在「教師名單」，明細在試算表「額度帳本」。同活動不重複發放；扣額度 FIFO，帶隊不發放。早自習／1～7／午休釋出 1 節＝1 額度；代課（小鐘點）不發額度，未授課另扣。早自習／1～7／午休：餘額≥1→扣額度（扣 1），不足 1→活動公費。第8節不吃額度。
+                    </div>
+                  </details>
                   <label class="mutual-skip-label">
                     <input type="checkbox" v-model="mutualSkipNotify" class="chk-md">
                     <span>先不寄系統信，排完後用 LINE 手動通知（建議）</span>
@@ -516,9 +515,6 @@
                         <button type="button" class="btn btn-secondary mutual-btn-x" @click="removeMutualDraft(d.key)">清除</button>
                       </div>
                     </div>
-                  </div>
-                  <div v-else class="mutual-hint-soft mutual-hint-mt2">
-                    操作：點帶隊老師課格 → 選代課老師 → 格子顯示「暫定」→ 全部排完按「一次送出」。選取與暫定會自動暫存。
                   </div>
                 </div>
               </div>
@@ -913,7 +909,6 @@
                 v-model="pendingSearchQuery"
                 placeholder="單號／教師／班級／科目／日期／假別"
               >
-              <span v-if="pendingSearchQuery" class="text-xs-muted-78">已套用篩選</span>
             </div>
           </div>
 
@@ -1695,7 +1690,6 @@
                    </template>
                  </div>
                </div>
-               <div class="period8-help-text">點擊有教師的格子即可進入既有調代課媒合；已有異動的格子會開啟異動詳情。</div>
              </div>
            </div>
 
@@ -1737,7 +1731,7 @@
               <div style="margin-top:16px;border-top:1px solid var(--border-color);padding-top:12px;">
                 <div class="flex-wrap-gap-8-mb">
                   <strong style="font-size:0.88rem;">選擇教師</strong>
-                  <span class="text-xs-muted-78">已選 {{ schoolExportSelectedEmails.length }}／{{ teachersList.length }}（課表、監考表皆只匯出勾選列）</span>
+                  <span class="text-xs-muted-78">已選 {{ schoolExportSelectedEmails.length }}／{{ teachersList.length }}</span>
                   <button type="button" class="btn btn-secondary p-3-10-75" @click="selectAllSchoolExportTeachers">全選</button>
                   <button type="button" class="btn btn-secondary p-3-10-75" @click="clearSchoolExportTeachers">全不選</button>
                   <input

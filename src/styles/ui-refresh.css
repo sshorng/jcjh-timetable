@@ -544,3 +544,33 @@ body {
     font-size: 0.75rem !important;
   }
 }
+
+/* ---------- 次級說明收斂：規則類文字改折疊，預設不佔版面 ---------- */
+.mutual-quota-note > summary {
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6d28d9;
+  padding: 2px 0;
+  border-bottom: 1px dashed rgba(139, 92, 246, 0.45);
+}
+.mutual-quota-note > summary::-webkit-details-marker { display: none; }
+.mutual-quota-note > summary::before {
+  content: '▸';
+  font-size: 0.7rem;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.mutual-quota-note[open] > summary::before { transform: rotate(90deg); }
+.mutual-quota-note[open] > summary { border-bottom-style: solid; }
+.mutual-quota-note-body {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  line-height: 1.55;
+  font-size: 0.7rem;
+}

@@ -2620,11 +2620,6 @@ body {
   color: var(--tt-muted, #94a3b8);
   font-size: 0.76rem;
 }
-.period8-help-text {
-  margin-top: 10px;
-  color: var(--tt-muted, var(--text-muted));
-  font-size: 0.76rem;
-}
 
 .period8-grid > :nth-child(6n + 2),
 .period8-grid > :nth-child(6n + 3),
@@ -5572,11 +5567,6 @@ td.table-empty {
 .mutual-note-label { font-size: 0.75rem; margin-bottom: 4px; }
 .mutual-note-input { padding: 6px 10px; font-size: 0.8rem; }
 .mutual-section-label { font-size: 0.75rem; font-weight: 600; }
-.mutual-lead-tip {
-  font-size: 0.7rem;
-  color: #7c3aed;
-  margin-bottom: 4px;
-}
 .mutual-chips-away { max-height: 88px; }
 .mutual-chips-lead { max-height: 72px; }
 .mutual-lead-chip { font-size: 0.7rem; }
