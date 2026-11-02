@@ -415,6 +415,13 @@ const __root = {
       data.summary.amount);
     sheet.getCell(totalRow, columns.noteColumn).value = '';
     applyNoteColumnFit(sheet, columns.noteColumn, DATA_START_ROW, totalRow);
+    // 範本欄寬定義橫跨 16384 欄，spliceColumns 後會超出 Excel 欄數上限而被要求修復，故截斷到實際使用欄。
+    if (Array.isArray(sheet._columns)) sheet._columns = sheet._columns.slice(0, lastColumn);
+    // ExcelJS 讀回的 pageSetup 會帶 4294967295 的 DPI，Excel 視為損毀，移除即可。
+    if (sheet.pageSetup) {
+      delete sheet.pageSetup.horizontalDpi;
+      delete sheet.pageSetup.verticalDpi;
+    }
     if (workbook.calcProperties) {
       workbook.calcProperties.fullCalcOnLoad = true;
       workbook.calcProperties.forceFullCalc = true;
