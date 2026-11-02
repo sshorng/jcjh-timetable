@@ -2380,6 +2380,7 @@ function slimTeacherRows_(rows, fallbackSemesterId) {
       "教師Email": t["教師Email"] || t.email || "",
       "教師姓名": t["教師姓名"] || t.name || "",
       "授課科目": t["授課科目"] || t["任課科目"] || t.subject || "",
+      "社群": t["社群"] != null && t["社群"] !== "" ? t["社群"] : (t["社群標籤"] || t.communities || ""),
       "職務": t["職務"] || t.jobTitle || "",
       "鐘點支出計畫": t["鐘點支出計畫"] || t["鐘點支出來源"] || t["支出計畫"] || t["計畫"] || t.expensePlan || t.plan || "",
       "系統角色": normalizeTeacherRole_(t),
@@ -2403,6 +2404,7 @@ function sanitizeTeacherRowsForReader_(rows, readerEmail, isAdmin, isStaff) {
       "教師Email": t["教師Email"] || "",
       "教師姓名": t["教師姓名"] || "",
       "授課科目": t["授課科目"] || "",
+      "社群": t["社群"] || "",
       // 行政需要角色來顯示授權對象；一般教師一律視為普通教師。
       "系統角色": isStaff ? normalizeTeacherRole_(t) : "teacher",
       "目前登入者": String(t["教師Email"] || "").toLowerCase().trim() === me
