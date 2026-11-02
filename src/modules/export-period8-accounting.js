@@ -48,6 +48,12 @@ const __root = {
     return new Date(parts[0], parts[1] - 1, parts[2]);
   }
 
+  // ExcelJS 以 UTC 寫入日期序號；本地午夜會被換成前一天，故改用 UTC 午夜。
+  function excelDate(dateStr) {
+    var parts = String(dateStr || '').split('-').map(Number);
+    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+  }
+
   function listWeekdays(opts) {
     var billing = root.DomainBilling;
     if (billing && typeof billing.listWeekdaysInRange === 'function') {
@@ -357,7 +363,7 @@ const __root = {
     sheet.getCell(3, 2).value = '星期';
     data.dates.forEach(function (date, index) {
       var col = firstDateColumn + index;
-      sheet.getCell(2, col).value = dateObject(date);
+      sheet.getCell(2, col).value = excelDate(date);
       sheet.getCell(3, col).value = ['日', '星期一', '星期二', '星期三', '星期四', '星期五', '六'][dateObject(date).getDay()];
     });
     sheet.getCell(2, columns.totalColumn).value = '總計';
