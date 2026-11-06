@@ -2538,6 +2538,32 @@ const __root = {
     });
   }
 
+  // 職稱欄會出現「教支人員-臺灣台語」這類長字串，固定縮到 10 級，避免折行後擠爆列高。
+  var TITLE_COLUMN_FONT_SIZE = 10;
+
+  function titleColumnNumber(sheet, config) {
+    var limit = Math.max(Number(config && config.columns) || 0, 2);
+    for (var column = 1; column <= limit; column += 1) {
+      var value = sheet.getCell(2, column).value;
+      if (String(value == null ? '' : value).trim() === '職稱') return column;
+    }
+    return 2;
+  }
+
+  function applyTitleColumnFont(sheet, config, rowCount) {
+    var count = Number(rowCount) || 0;
+    if (!sheet || !config || count <= 0) return;
+    var column = titleColumnNumber(sheet, config);
+    for (var row = config.dataStart; row < config.dataStart + count; row += 1) {
+      var cell = sheet.getCell(row, column);
+      if (cell.value === null || cell.value === undefined || cell.value === '') continue;
+      var font = cell.font ? clone(cell.font) : {};
+      var size = Number(font.size);
+      font.size = Number.isFinite(size) && size > 0 ? Math.min(size, TITLE_COLUMN_FONT_SIZE) : TITLE_COLUMN_FONT_SIZE;
+      cell.font = font;
+    }
+  }
+
   function applyNoteColumnFit(sheet, config, totalRow) {
     if (!sheet || !config || !config.noteColumn) return;
     var noteWidth = noteWidthForColumns(sheet, config.noteColumn, config.noteColumn);
@@ -2626,6 +2652,7 @@ const __root = {
     });
     writeRows(sheet, config.dataStart, values);
     applyWarningRowFont(sheet, config, rows);
+    applyTitleColumnFont(sheet, config, rows.length);
     applyActualAmountFormulas(sheet, config, rows);
     var end = config.dataStart + rows.length - 1;
     if (config.key === 'overtime') {
@@ -2668,6 +2695,7 @@ const __root = {
     writeRows(sheet, config.dataStart, rows.map(function (row) {
       return [row.serial, row.title, row.name, row.hours, row.rate, row.amount, null, null, row.note, null, null, null, null, null, null];
     }));
+    applyTitleColumnFont(sheet, config, rows.length);
     var end = config.dataStart + rows.length - 1;
     sheet.getCell(totalRow, 2).value = '合計';
     sheet.getCell(totalRow, 4).value = sumFormula('D', config.dataStart, end, sumRows(rows, 'hours'));
