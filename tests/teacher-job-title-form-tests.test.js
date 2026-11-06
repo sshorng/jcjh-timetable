@@ -52,4 +52,10 @@ test('教師表單職務帶入與儲存（教支人員自填語言）', async ()
     '儲存教師時應送出職務欄位，否則手動改的職務不會存檔');
   assert.equal(teachersList.value[0].jobTitle, '教支人員-臺灣客語',
     '儲存後教師名單應同步顯示新職務');
+
+  // 教師名單是姓名鍵資料表：payload 少送「教師姓名」後端會直接擋「教師姓名不可空白」。
+  ['教師Email', '教師姓名', '授課科目', '職務', '社群', '鐘點支出計畫', '系統角色', '基本鐘點', '折抵額度']
+    .forEach(key => assert.ok(key in savedPayload, '儲存教師 payload 必須包含 ' + key));
+  assert.equal(savedPayload['教師姓名'], '教支甲', 'payload 的教師姓名應取自表單');
+  assert.equal(teachersList.value[0].name, '教支甲', '儲存後教師名單姓名應保持不變');
 });

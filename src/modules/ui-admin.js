@@ -1806,6 +1806,7 @@ const UiAdmin = (() => {
       }
       var reqPayload = {
         '教師Email': email,
+        '教師姓名': nextName,
         '授課科目': teacherForm.value.subject.trim(),
         '職務': String(teacherForm.value.jobTitle || '').trim(),
         '社群': String(teacherForm.value.communities || '').trim(),
