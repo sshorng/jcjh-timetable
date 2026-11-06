@@ -27,7 +27,8 @@
             </div>
             <div class="form-group">
                 <label class="form-label">職務（含「導師」即列入代導費；「兼課」列入兼課教師鐘點；「教支人員＋本土語」依計畫分表；「共聘」使用預設）</label>
-              <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師" v-model="teacherForm.jobTitle">
+              <input type="text" class="form-input" placeholder="例如：七年級導師、行政教師、教支人員-臺灣台語" v-model="teacherForm.jobTitle">
+              <span style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">教支人員可自行在後面加語言（例如：教支人員-臺灣台語、教支人員-客語）。系統只比對「教支」與語言關鍵字（本土語／閩南語／台語／臺語／客語／原住民族語／族語），分表仍依「鐘點支出計畫」拆分。</span>
             </div>
              <div class="form-group">
                  <label class="form-label">超鐘點／代課（小鐘點）支出計畫（格式：[簡稱]全稱）</label>
