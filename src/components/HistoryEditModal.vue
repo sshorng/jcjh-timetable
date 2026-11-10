@@ -106,9 +106,16 @@
             </div>
              <div class="form-group m-0" v-if="historyEditForm.type !== 'exchange' && historyEditForm.type !== '對調'">
                <label class="form-label">{{ historyEditForm.specialFlow === 'combined_return' ? '被代教師扣減類別' : '經費類別' }}</label>
-               <div v-if="historyEditForm.specialFlow === 'combined_return'" class="form-input" style="background:#f8fafc;color:#0f766e;">
-                 {{ historyEditForm.subFee || '請先選擇假別' }}（依假別自動帶入）
-               </div>
+              <template v-if="historyEditForm.specialFlow === 'combined_return'">
+                <div class="form-input" style="background:#f8fafc;color:#0f766e;">
+                  {{ historyEditForm.subFee || '請先選擇假別' }}（依假別自動帶入）
+                </div>
+                <label class="form-label" style="margin-top:10px;">請假教師鐘點</label>
+                <select class="form-select" v-model="historyEditForm.billingRule">
+                  <option value="reduce">依假別扣鐘點（預設）</option>
+                  <option value="keep">不扣鐘點（併班上課，鐘點照領）</option>
+                </select>
+              </template>
                <select v-else class="form-select" v-model="historyEditForm.subFee">
                   <option value="自費代課">自費代課</option>
                   <option value="公費代課">公費代課</option>

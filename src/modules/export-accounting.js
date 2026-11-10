@@ -833,7 +833,8 @@ const __root = {
     var groups = {};
     var order = [];
     var addRecord = function (record, combined) {
-      if (!record || (!isSelfPaidRecord(record) && !isPublicOvertimeRecord(record))) return;
+      if (!record || isClockKeptRecord(record)
+          || (!isSelfPaidRecord(record) && !isPublicOvertimeRecord(record))) return;
       var fallback = isSelfPaidRecord(record) ? '\u81ea\u4ed8' : '\u516c\u5047';
       var label = deductionReasonLabel(record, fallback);
       var date = shortDate(record.date);
@@ -975,6 +976,17 @@ const __root = {
 
   function isTimetableOnlyRecord(record) {
     return isTimetableOnlyFee(subFee(record));
+  }
+
+  // 申請單「鐘點規則＝不扣鐘點」（併班上課）：不列入請假扣減與扣鐘點備註。
+  function isClockKeptRecord(record) {
+    if (!record) return false;
+    if (root.DomainBilling && typeof root.DomainBilling.isLeaveClockKeptRecord === 'function') {
+      return root.DomainBilling.isLeaveClockKeptRecord(record);
+    }
+    var raw = record.billingRule !== undefined ? record.billingRule : record['鐘點規則'];
+    var text = String(raw == null ? '' : raw).trim();
+    return text.toLowerCase() === 'keep' || text.indexOf('不扣') >= 0;
   }
 
   function reason(record) {
@@ -1514,7 +1526,9 @@ const __root = {
   }
   function publicOvertimeUsed(email, records, schedules, period, schoolSwapIndex, teacher) {
     return chargedSubstitutionRecords(records, schedules, email, period, schoolSwapIndex, teacher)
-      .filter(isPublicOvertimeRecord).length;
+      .filter(function (record) {
+        return isPublicOvertimeRecord(record) && !isClockKeptRecord(record);
+      }).length;
   }
   function buildChargedRecordMap(opts, period, schoolSwapIndex) {
     var result = { byKey: {}, byOriginal: {} };
@@ -1788,12 +1802,15 @@ const __root = {
         });
         var selfPaidLeave = planLeave.filter(function (record) {
           return isSelfPaidRecord(record)
+            && !isClockKeptRecord(record)
             && (config.key !== 'overtime'
               || isOvertimeSubstitution(record, opts.allSchedules || [], schoolSwapIndex, t || sourceRow));
         });
         var selfCount = selfPaidLeave.length;
         var publicUsed = expectedPlan || allocation
-          ? chargedRecordsForSource.filter(isPublicOvertimeRecord).length
+          ? chargedRecordsForSource.filter(function (record) {
+            return isPublicOvertimeRecord(record) && !isClockKeptRecord(record);
+          }).length
           : publicOvertimeUsed(source, records, opts.allSchedules, period, schoolSwapIndex, source);
         // 超鐘點／兼課鐘點不因放假或空堂減少；小鐘點的實際未授課扣減
         // 會在 substituteAttributePlans 依逐日明細處理。
@@ -1849,12 +1866,17 @@ const __root = {
             return isCombinedReturnRecord(record);
           }))
         );
+        // 併班＋不扣鐘點：鐘點照算，備註要寫明原因，否則會計看不出為何沒扣。
+        var clockKeptCount = notePeriodCount(chargedCombinedRecords.filter(isClockKeptRecord));
         var notes = config.key === 'overtime'
           ? joinAccountingNotes(overtimeNotes)
           : summaryNote(opts, sourceRow, period, planLeave, publicUsed, schoolSwapIndex, expectedPlan);
         if (config.key === 'teachingSupport') {
           var teachingSupportDates = teachingSupportDateNote(t || sourceRow, opts.allSchedules || [], period);
           if (teachingSupportDates) notes = [notes, teachingSupportDates].filter(Boolean).join('；');
+        }
+        if (clockKeptCount) {
+          notes = joinAccountingNotes([notes, '併班不扣鐘點' + displayCount(clockKeptCount) + '節']);
         }
         var row = {
           expensePlan: sourcePlan,

@@ -55,6 +55,21 @@
                   {{ candidate.name }}（{{ candidate.className || '併班課' }}{{ candidate.subject ? '／' + candidate.subject : '' }}）
                 </option>
               </select>
+              <div style="margin-top:10px;">
+                <label class="form-label" style="margin-bottom:6px;color:#9a3412;">請假教師鐘點</label>
+                <select class="form-select" v-model="pendingRequestData.billingRule">
+                  <option value="reduce">依假別扣鐘點（預設）</option>
+                  <option value="keep">不扣鐘點（併班上課，請假教師鐘點照領）</option>
+                </select>
+                <div style="margin-top:6px;font-size:0.75rem;color:#7c2d12;line-height:1.45;">
+                  <template v-if="pendingRequestData.billingRule === 'keep'">
+                    不扣鐘點：請假教師這堂仍算自己的鐘點，超鐘點表不扣減；由併班教師上課且不支領代課費。
+                  </template>
+                  <template v-else>
+                    依假別扣鐘點：沿用現行做法，請假教師依所選假別扣減超鐘點。
+                  </template>
+                </div>
+              </div>
                <div style="margin-top:6px;font-size:0.75rem;color:#7c2d12;">請假教師：{{ getTeacherNameByEmail(pendingRequestData.leaveTeacher) }}；核准後由所選併班教師上課，不支領代課費。</div>
             </div>
 
@@ -271,8 +286,11 @@
              <div v-if="!pendingRequestData.isBatchCandidatePreview" class="card" style="background: #f8fafc; padding: 16px; margin: 0; border: 1px solid var(--border-color);">
                 <div v-if="pendingRequestData.specialFlow === 'combined_return'" style="margin-bottom:14px;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
                    <div style="font-size:0.82rem;font-weight:700;color:#9a3412;margin-bottom:6px;">併班上課經費規則</div>
-                   <div style="font-size:0.75rem;color:#7c2d12;line-height:1.45;">併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減，費用類別由系統自動帶入。</div>
-                   <div v-if="pendingRequestData.reason" style="margin-top:6px;font-size:0.75rem;color:#9a3412;">被代教師扣減類別：<strong>{{ pendingRequestData.subFee || '依假別自動帶入' }}</strong></div>
+                  <div style="font-size:0.75rem;color:#7c2d12;line-height:1.45;">
+                    <template v-if="pendingRequestData.billingRule === 'keep'">併班任課教師不支領代課費；請假教師<strong>不扣鐘點</strong>，超鐘點表照原節數計算，經費類別仍由系統自動帶入。</template>
+                    <template v-else>併班任課教師不支領代課費；請假教師仍依所選假別計算鐘點扣減，費用類別由系統自動帶入。</template>
+                  </div>
+                  <div v-if="pendingRequestData.reason" style="margin-top:6px;font-size:0.75rem;color:#9a3412;">被代教師扣減類別：<strong>{{ pendingRequestData.subFee || '依假別自動帶入' }}</strong><span v-if="pendingRequestData.billingRule === 'keep'">（不扣鐘點）</span></div>
                 </div>
                  <div data-tour="compare-form" class="compare-form-grid">
                      <!-- 原因／假別與僅課務調整 -->

@@ -355,6 +355,12 @@ const UiSubmitHelpers = (() => {
        "直接核准": doDirectApprove ? '是' : '',
        "紙本流程": paperFlowActive ? 'TRUE' : 'FALSE',
        "特殊流程": combinedReturn ? 'combined_return' : (pending.specialFlow || ''),
+       // 併班上課可選「不扣鐘點」；其餘一律留空＝依假別扣（舊資料同此）。
+       "鐘點規則": combinedReturn
+         ? ((FieldMap && FieldMap.requestClockRuleSheetValue)
+           ? FieldMap.requestClockRuleSheetValue(pending.billingRule)
+           : (String(pending.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
+         : '',
       directApprove: doDirectApprove,
       isProxySubmit: !!proxyActive,
        paperFlow: paperFlowActive,

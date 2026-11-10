@@ -2397,6 +2397,12 @@ const UiAdmin = (() => {
         note: src.note || rec.note || '',
         printed: !!(src.printed != null ? src.printed : rec.printed)
       };
+      // 鐘點規則：併班上課才作用，其餘一律回 reduce。
+      historyEditForm.value.billingRule = combinedReturn
+        ? ((FieldMap && typeof FieldMap.requestClockRule === 'function')
+          ? FieldMap.requestClockRule(src)
+          : (String(src['鐘點規則'] || src.billingRule || rec['鐘點規則'] || '').indexOf('不扣') >= 0 ? 'keep' : 'reduce'))
+        : 'reduce';
       if (!isEx) syncHistoryEditFee(false);
       showHistoryEditModal.value = true;
     }
@@ -2463,6 +2469,11 @@ const UiAdmin = (() => {
           leaveTime: isEx || combinedReturn ? '' : (form.leaveTime || ''),
           subFee: isEx ? '無' : (form.subFee || '自費代課'),
           specialFlow: combinedReturn ? 'combined_return' : '',
+          "鐘點規則": combinedReturn
+            ? ((FieldMap && FieldMap.requestClockRuleSheetValue)
+              ? FieldMap.requestClockRuleSheetValue(form.billingRule)
+              : (String(form.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
+            : '',
           note: form.note || '',
           printed: !!form.printed
         };

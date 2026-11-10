@@ -333,6 +333,8 @@ const UiExport = (() => {
           base.subFee = Number(period) === 8
             ? '第8節代課'
             : (isPublicReason ? '公費代課' : '自費代課');
+          // 併班上課鐘點規則：不扣鐘點時，紙本與清冊也要看得出原因。
+          base.billingRule = getValue(source, ['鐘點規則', 'billingRule'], '');
         }
         if (isTriangle) {
            const targetDate = getValue(source, ['對調目標日期', 'targetDate']);

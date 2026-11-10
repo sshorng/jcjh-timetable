@@ -39,7 +39,11 @@
                 </div>
                 <div v-if="detailRequest.type !== 'exchange' && detailRequest.type !== '對調' && detailRequest.type !== 'triangle'">
                  <span class="text-muted-block">代課經費</span>
-                  <strong class="text-success">{{ detailRequest.specialFlow === 'combined_return' ? ('併班教師不支領；被代教師依假別扣減（' + (detailRequest.subFee || '待判定') + '）') : (detailRequest.subFee || '自費代課') }}</strong>
+                  <strong class="text-success">{{ detailRequest.specialFlow === 'combined_return'
+                    ? ('併班教師不支領；' + (detailRequest.billingRule === 'keep'
+                      ? ('被代教師不扣鐘點（' + (detailRequest.subFee || '待判定') + '）')
+                      : ('被代教師依假別扣減（' + (detailRequest.subFee || '待判定') + '）')))
+                    : (detailRequest.subFee || '自費代課') }}</strong>
                </div>
 
                  <div v-if="detailRequest && detailRequest.type === 'triangle'" class="tri-box">

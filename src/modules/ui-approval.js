@@ -1461,6 +1461,8 @@ const UiApproval = (() => {
         courseAdjustmentOnly: false,
         leaveReasonBeforeCourseAdjustment: '',
         subFee: parseInt(cell.period, 10) === 8 ? PERIOD8_FEE : '',
+        // 併班上課鐘點規則：預設依假別扣；教學組可改成 keep（不扣鐘點）。
+        billingRule: (FieldMap && FieldMap.REQUEST_CLOCK_RULE_REDUCE) || 'reduce',
         dateB: '',
         timeB: '',
         subB: '',

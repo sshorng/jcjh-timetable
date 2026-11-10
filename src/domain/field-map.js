@@ -36,6 +36,36 @@ const FieldMap = (() => {
     return normalizeSpecialFlow(raw) === SPECIAL_FLOW_COMBINED_RETURN;
   }
 
+  // 申請單「鐘點規則」：併班上課可勾「不扣鐘點」，請假教師的超鐘點不被扣減。
+  // 空白值＝現行行為（依假別扣），舊資料結算結果完全不變。
+  const REQUEST_CLOCK_RULE_REDUCE = 'reduce';
+  const REQUEST_CLOCK_RULE_KEEP = 'keep';
+  const REQUEST_CLOCK_RULE_KEEP_LABEL = '不扣鐘點';
+
+  function normalizeRequestClockRule(raw) {
+    const value = String(raw == null ? '' : raw).trim();
+    const lower = value.toLowerCase();
+    if (lower === REQUEST_CLOCK_RULE_KEEP) return REQUEST_CLOCK_RULE_KEEP;
+    if (!value || lower === REQUEST_CLOCK_RULE_REDUCE) return REQUEST_CLOCK_RULE_REDUCE;
+    if (value.indexOf('不扣') >= 0) return REQUEST_CLOCK_RULE_KEEP;
+    return REQUEST_CLOCK_RULE_REDUCE;
+  }
+
+  function requestClockRule(row) {
+    return normalizeRequestClockRule(pick(row, ['鐘點規則', 'billingRule']));
+  }
+
+  function isRequestClockKept(row) {
+    return requestClockRule(row) === REQUEST_CLOCK_RULE_KEEP;
+  }
+
+  // 前端 → Sheets：只有「不扣鐘點」需要落欄，其餘留空維持舊行為。
+  function requestClockRuleSheetValue(rule) {
+    return normalizeRequestClockRule(rule) === REQUEST_CLOCK_RULE_KEEP
+      ? REQUEST_CLOCK_RULE_KEEP_LABEL
+      : '';
+  }
+
   function pick(row, keys) {
     if (!row) return undefined;
     for (let i = 0; i < keys.length; i++) {
@@ -952,6 +982,8 @@ const FieldMap = (() => {
       targetClassName: String(pick(r, ['對調目標班級', 'targetClassName']) || ''),
       targetSubject: pick(r, ['對調目標科目', 'targetSubject']) || '',
       subFee: pick(r, ['經費來源', 'subFee']) || '',
+      // 鐘點規則：keep＝併班上課不扣鐘點；reduce＝依假別扣（預設，舊資料同此）。
+      billingRule: requestClockRule(r),
       reason: pick(r, ['請假事由', 'reason']) || '',
       courseAdjustmentOnly: isCourseAdjustmentOnly(r),
       leaveTimeType: pick(r, ['請假時間類型', 'leaveTimeType']) || '',
@@ -1213,6 +1245,12 @@ const FieldMap = (() => {
     mapSubstitution,
     mapHomeroomRecord,
     mapRequest,
+    requestClockRule,
+    isRequestClockKept,
+    requestClockRuleSheetValue,
+    REQUEST_CLOCK_RULE_KEEP,
+    REQUEST_CLOCK_RULE_REDUCE,
+    REQUEST_CLOCK_RULE_KEEP_LABEL,
     teacherToSheet,
     substitutionToSheet,
     getStatusText,

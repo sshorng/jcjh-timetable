@@ -566,6 +566,21 @@ const DomainBilling = (() => {
     return isTimetableOnlyFee(recordFee(record));
   }
 
+  /**
+   * 申請單「鐘點規則＝不扣鐘點」（併班上課專用）。
+   * 為真時，請假教師這堂不列入任何請假扣減（超鐘點、公費請假節數）。
+   * 空白值＝沿用舊行為（依假別扣），舊資料結算結果不變。
+   */
+  function isLeaveClockKeptRecord(record) {
+    if (!record) return false;
+    if (FieldMap && typeof FieldMap.isRequestClockKept === 'function') {
+      return FieldMap.isRequestClockKept(record);
+    }
+    var raw = record.billingRule !== undefined ? record.billingRule : record['鐘點規則'];
+    var text = String(raw == null ? '' : raw).trim();
+    return text.toLowerCase() === 'keep' || text.indexOf('不扣') >= 0;
+  }
+
   function isSelfPaidFee(record) {
     var fee = recordFee(record);
     if (isTimetableOnlyFee(fee)) return false;
@@ -1761,6 +1776,23 @@ const DomainBilling = (() => {
         var source = 'own';
         if (sub && isCombinedReturnRecord(sub)
             && emailKey(sub.originalTeacherEmail) === em) {
+          if (isLeaveClockKeptRecord(sub)) {
+            // 併班＋不扣鐘點：原任課教師第8節鐘點照算，只是不另付代課費。
+            details.push({
+              date: dateStr,
+              period: 8,
+              className: className,
+              subject: sub.subject || base.subject || '輔導',
+              originalEmail: email,
+              originalName: getTeacherNameByEmail(email),
+              actualEmail: email,
+              actualName: getTeacherNameByEmail(email),
+              source: 'own',
+              fee: FEE_8TH,
+              note: '合班上課／不扣鐘點'
+            });
+            return;
+          }
           details.push({
             date: dateStr,
             period: 8,
@@ -1932,6 +1964,8 @@ const DomainBilling = (() => {
         return hasCommonKey(originalTeacherKeys(r), teacherIdentity)
           && isSubstitutionRecord(r)
           && !isTimetableOnlyRecord(r)
+          // 鐘點規則＝不扣鐘點（併班上課）：照領鐘點，不列入請假扣減。
+          && !isLeaveClockKeptRecord(r)
           && isWeeklyHoursPeriod(recordPeriod(r))
           && !isSubstituteScheduleRecord(r, allSchedules, schoolSwapIndex);
       });
@@ -2423,6 +2457,7 @@ const DomainBilling = (() => {
     FEE_8TH: FEE_8TH,
     isTimetableOnlyFee: isTimetableOnlyFee,
     isTimetableOnlyRecord: isTimetableOnlyRecord,
+    isLeaveClockKeptRecord: isLeaveClockKeptRecord,
     getWeekKey: getWeekKey,
     listWeekdaysInMonth: listWeekdaysInMonth,
     isWeeklyHoursSlot: isWeeklyHoursSlot,
