@@ -62,7 +62,7 @@ const UiClassAwayAdmin = (() => {
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
       scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-      billingRule: 'keep', forMutual: true, enabled: true, note: ''
+      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: ''
     });
 
     function sanitizeClassNames(list) {
@@ -78,7 +78,7 @@ const UiClassAwayAdmin = (() => {
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
         scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-        billingRule: 'keep', forMutual: true, enabled: true, note: ''
+        billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: ''
       };
       showClassAwayModal.value = true;
     }
@@ -103,7 +103,8 @@ const UiClassAwayAdmin = (() => {
         billingRule: ev.billingRule === 'reduce' ? 'reduce' : 'keep',
         forMutual: !!ev.forMutual,
         enabled: ev.enabled !== false,
-        note: ev.note || ''
+        note: ev.note || '',
+        subject: ev.subject || (Array.isArray(ev.subjects) ? ev.subjects.join('、') : '')
       };
       showClassAwayModal.value = true;
     }
@@ -292,6 +293,7 @@ const UiClassAwayAdmin = (() => {
             : (DomainClassAway && DomainClassAway.normalizePeriod
               ? DomainClassAway.normalizePeriod(selectedPeriods) : selectedPeriods.join(',')),
           "鐘點規則": f.billingRule === 'reduce' ? 'reduce' : 'keep',
+          "科目": String(f.subject || '').trim(),
           "可進互代": forMutual ? 'TRUE' : 'FALSE',
           "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
           "備註": f.note || ''
@@ -457,7 +459,29 @@ const UiMutualBridge = (() => {
           : (dca && dca.eventPeriods ? dca.eventPeriods(ev) : (ev.periods || ['all']));
         mutualActivityStartPeriod.value = String(hasEventRange && ev.startPeriod != null && ev.startPeriod !== '' ? ev.startPeriod : '0');
         mutualActivityEndPeriod.value = String(hasEventRange && ev.endPeriod != null && ev.endPeriod !== '' ? ev.endPeriod : '8');
-       mutualAwayClasses.value = classes.slice().sort();
+       // 科目型空堂：以「課堂（班級::科目）」帶入，只放該科那一格。
+       var courseEntries = [];
+       var courseClasses = [];
+       if (DomainClassAway && typeof DomainClassAway.getAwayCoursesInRange === 'function') {
+         var dacCourses = DomainClassAway.getAwayCoursesInRange(
+           ev.startDate,
+           ev.endDate || (semesterEndDate && semesterEndDate.value) || ev.startDate,
+           [ev],
+           semesterEndDate && semesterEndDate.value,
+           { forMutualOnly: true, allClasses: (classList && classList.value) || [] }
+         ) || [];
+         dacCourses.forEach(function (course) {
+           courseEntries.push(
+             (DomainActivityCover && typeof DomainActivityCover.makeAwayEntry === 'function')
+               ? DomainActivityCover.makeAwayEntry(course.classes, course.subject)
+               : (course.className + '::' + course.subject)
+           );
+           (course.classes || []).forEach(function (name) {
+             if (courseClasses.indexOf(name) < 0) courseClasses.push(name);
+           });
+         });
+       }
+       mutualAwayClasses.value = classes.concat(courseEntries).sort();
        var mutualEventRange = {
           startDate: mutualActivityStart.value,
           endDate: mutualActivityEnd.value,
@@ -467,7 +491,11 @@ const UiMutualBridge = (() => {
           endPeriod: hasEventRange ? mutualActivityEndPeriod.value : ''
        };
        var selectedClassSet = {};
-       classes.forEach(function (c) { selectedClassSet[String(c || '').trim()] = true; });
+       var eventClassList = classes.slice();
+       courseClasses.forEach(function (name) {
+         if (eventClassList.indexOf(name) < 0) eventClassList.push(name);
+       });
+       eventClassList.forEach(function (c) { selectedClassSet[String(c || '').trim()] = true; });
        function slotStaysInImportedEvent(slot) {
          if (!slot) return false;
          var date = String(slot.dateStr || slot.date || '').slice(0, 10);
@@ -503,11 +531,12 @@ const UiMutualBridge = (() => {
        if (removedDraftCount) {
          showToast('已帶入「' + ev.name + '」，並移除 ' + removedDraftCount + ' 筆不在事件班級／時段內的暫定', 'info');
        }
-       if (!classes.length) {
-        showToast('已帶入「' + ev.name + '」的日期，但事件沒有班級清單，請手動勾外出班', 'warning');
-      } else {
-        showToast(
-          '已帶入「' + ev.name + '」：' + classes.length + ' 班 · '
+      if (!eventClassList.length) {
+       showToast('已帶入「' + ev.name + '」的日期，但事件沒有班級清單，請手動勾外出班', 'warning');
+     } else {
+       showToast(
+         '已帶入「' + ev.name + '」：' + eventClassList.length + ' 班'
+           + (courseEntries.length ? '（' + courseEntries.length + ' 堂指定科目）' : '') + ' · '
            + (mutualActivityStart.value || '？') + '～' + (mutualActivityEnd.value || '學期結束')
             + ' · ' + (mutualActivityPeriodMode.value === 'daily'
               ? (DomainClassAway && DomainClassAway.periodLabel

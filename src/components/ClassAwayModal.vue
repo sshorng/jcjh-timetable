@@ -95,6 +95,22 @@
                  </label>
                </div>
              </div>
+            <div class="form-group">
+              <label class="form-label">科目（進階：只停這一堂）</label>
+              <input
+                type="text"
+                class="form-input"
+                list="class-away-subject-options"
+                placeholder="留空＝整班所有課堂；例：本土語-台語"
+                v-model="classAwayForm.subject"
+              >
+              <datalist id="class-away-subject-options">
+                <option v-for="s in (subjectOptions || [])" :key="'cae-subject-' + s" :value="s"></option>
+              </datalist>
+              <small style="display:block;margin-top:5px;color:var(--text-muted);line-height:1.5;">
+                留空＝該班期間所有課堂都空堂（現行行為）。填科目＝只有科目命中的課堂空堂；比對採包含語意，填「本土語」會同時停本土語-客語與本土語-台語，只停台語就填「本土語-台語」。多個科目用「、」分隔。含科目的事件不扣超鐘點。
+              </small>
+            </div>
              <div class="form-group">
               <label class="form-label">鐘點規則</label>
               <select class="form-select" v-model="classAwayForm.billingRule">
@@ -159,6 +175,7 @@ defineProps({
   classAwayModalMode: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   classAwayPeriodOptions: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   classList: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  subjectOptions: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   setClassAwayPeriodMode: { type: Function, required: true },
   setClassAwayPeriodBoundary: { type: Function, required: true },
   isClassAwayPeriodSelected: { type: Function, required: true },

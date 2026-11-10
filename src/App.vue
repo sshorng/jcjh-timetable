@@ -390,7 +390,7 @@
                 <div class="mutual-step">
                   <div class="mutual-step-head">
                     <span class="mutual-step-no">2</span>外出班
-                    <span class="mutual-step-count">已選 {{ mutualAwayClasses.length }} 班</span>
+                    <span class="mutual-step-count">已選 {{ mutualAwayClasses.length }} 項（班級／課堂）</span>
                   </div>
                   <div class="flex-wrap-gap-6-mb4">
                     <button type="button" class="btn btn-secondary btn-xs" @click="selectAwayGrade('7')">七年級</button>
@@ -410,6 +410,17 @@
                       :class="{ active: mutualAwayClasses.includes(c) }"
                       @click="toggleMutualAwayClass(c)"
                     >{{ c }}</button>
+                  </div>
+                  <div v-if="mutualAwayCourseChips.length" class="mutual-away-chips mutual-chips-course" style="margin-top:6px;">
+                    <button
+                      v-for="chip in mutualAwayCourseChips"
+                      :key="'away-course-' + chip.value"
+                      type="button"
+                      class="mutual-away-chip"
+                      :class="{ active: mutualAwayClasses.includes(chip.value) }"
+                      :title="'只停這一堂：' + chip.label"
+                      @click="toggleMutualAwayClass(chip.value)"
+                    >{{ chip.label }}</button>
                   </div>
                 </div>
 
@@ -2012,6 +2023,7 @@
                        <th>起始節次</th>
                        <th>結束節次</th>
                        <th>鐘點</th>
+                      <th title="填科目＝只停該科課堂；空白＝整班">科目</th>
                       <th>互代</th>
                       <th>啟用</th>
                       <th>操作</th>
@@ -2028,6 +2040,7 @@
                          <td>{{ classAwayBoundaryPeriodLabel(ev, 'start') }}</td>
                          <td>{{ classAwayBoundaryPeriodLabel(ev, 'end') }}</td>
                        <td>{{ ev.billingRule === 'reduce' ? '扣超鐘點' : '不扣超鐘點' }}</td>
+                      <td><span :style="{ color: ev.subject ? '#0f766e' : 'var(--text-muted)', fontSize: '0.78rem' }">{{ ev.subject || '整班' }}</span></td>
                       <td>{{ ev.forMutual ? '是' : '否' }}</td>
                       <td>{{ ev.enabled !== false ? '是' : '否' }}</td>
                       <td>
@@ -2039,7 +2052,7 @@
                       </td>
                     </tr>
                     <tr v-if="!classAwayEvents.length">
-                        <td colspan="12" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄</span></td>
+                        <td colspan="13" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄；填科目可只停該科（例：本土語-台語）</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -2583,6 +2596,7 @@
       :toggle-class-away-form-class="toggleClassAwayFormClass"
       :select-class-away-period-range="selectClassAwayPeriodRange"
       :clear-class-away-periods="clearClassAwayPeriods"
+      :subject-options="classAwaySubjectOptions"
       :save-class-away-event="saveClassAwayEvent"
       v-model:class-away-form="classAwayForm"
       @close="showClassAwayModal = false"
@@ -2727,7 +2741,7 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, getCurrentInstance, onMounted, watch } from 'vue';
+import { computed, defineAsyncComponent, getCurrentInstance, onMounted, watch } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
 import LoginCard from './components/LoginCard.vue';
 // 分頁內容（教師名單、班級課表）改成非同步：只在切到該頁時才抓 chunk，不佔首屏主包。
@@ -2860,6 +2874,42 @@ const { applyClassAwayEventById, applyClassAwayToMutualPanel, assignMutualDraftF
 const { copyEditedLineMessage, copyLineBatchPart, copyLineMessage, exchangeWeekdayOptions, getClassChangeTypeLabel, getOriginalRequestClass, getOriginalRequestSubject, getOriginalTargetClass, getOriginalTargetSubject, getTargetClassAndSubject, getTargetSubject, isExchangeLikeRequest, isHistoryExchangeType, onMutualLeadChipClick, openLineMessageEditor, sendEditedLineMessage, sendLineMessage, setExchangeWeekdayFilter } = mutualStore;
 const { askFirstLineDraft, askFirstLineText, classChangeSummary, classList, classReadonlyMode, classSubstitutionMap, classWeekNumber, combinedReturnCandidates, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, exchangePeriodId, exchangeTargetDate, exchangeTeacherClasses, exchangeTeacherEmail, exchangeWeekOffset, exchangeWeekdayFilter, hasLineTemplate, historyFilterMode, historyRangeEnd, historyRangeStart, historyPage, historyPageSize, historySearchQuery, historyTypeFilter, isSubmitting, lineBatchParts, lineCopyText, lineMessageText, lineMessageTitle, matchDisplayCount, matchEmptyReasons, matchSearchQuery, matchShowNoTeacherWarning, mutualCoverStats, mutualImportEventId, mutualImportableEvents, paperPrintDraft, paperSignatureByTeacher, pendingRequestData, period8WeekDate, period8WeekDates, period8WeekNumber, printPreview, printPreviewImageBusy, selectedClass, selectedClassDate, selectedClassWeekDates, selectedRecordIds, showCompareModal, showDetailModal, showDevDropdown, showLineMessageModal, showPrintPreviewModal, showSuccessModal, showTriangleTimetablePreview, successActionRequests, successFlowMode, successModalMessage, successModalTitle } = storeToRefs(mutualStore);
 const { activeCell, adminPendingRequests, allPendingRequests, batchActiveSlotKey, batchAssignMode, batchFlowMode, batchNote, batchReason, batchSelectMode, batchSlots, batchSubFee, batchSubTeacher, directApproveSkipNotify, inputRequestDate, isMutualCover, matchMode, matchPreview, mutualActivityEnd, mutualActivityEndPeriod, mutualActivityPeriodMode, mutualActivityPeriods, mutualActivityStart, mutualActivityStartPeriod, mutualAwayClasses, mutualDrafts, mutualLeadEmails, mutualNote, mutualSkipNotify, myPendingRequests, mySentRequests, onboardingStep, recommendationLoading, recommendedTeachers, showBatchConfirmModal, showOnboarding, tourDemoInvite, triangleNote, trianglePickB, trianglePickC, triangleReason, triangleSubmitting } = storeToRefs(tourStore);
+
+// 空堂事件「科目」選項：直接取課表科目，避免打錯字
+const classAwaySubjectOptions = computed(() => {
+  const set = new Set();
+  (allSchedules.value || []).forEach((s) => {
+    const subject = String(s.subject || '').trim();
+    if (subject && subject !== '巡堂') set.add(subject);
+  });
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+});
+
+// 活動互代：科目型空堂以「課堂」出現一顆 chip（802・805・806 本土語-台語）
+const mutualAwayCourseChips = computed(() => {
+  if (!isMutualCover.value) return [];
+  const events = (classAwayEvents.value || []).filter((ev) => ev && ev.enabled !== false && ev.forMutual
+    && Array.isArray(ev.subjects) && ev.subjects.length);
+  if (!events.length) return [];
+  const out = [];
+  const seen = new Set();
+  events.forEach((ev) => {
+    const evClasses = (ev.classes || []).map((c) => String(c || '').trim()).filter(Boolean);
+    (allSchedules.value || []).forEach((s) => {
+      const subject = String(s.subject || '').trim();
+      if (!subject) return;
+      if (!ev.subjects.some((w) => subject === w || subject.indexOf(w) >= 0)) return;
+      const tokens = String(s.className || '').split(/[,，、/／\s]+/).map((x) => x.trim()).filter(Boolean);
+      if (!tokens.length) return;
+      if (evClasses.length && !tokens.some((t) => evClasses.indexOf(t) >= 0)) return;
+      const value = tokens.join('、') + '::' + subject;
+      if (seen.has(value)) return;
+      seen.add(value);
+      out.push({ value: value, label: tokens.join('、') + ' ' + subject });
+    });
+  });
+  return out.sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));
+});
 const { ACTIVITY_PUBLIC_FEE, MUTUAL_COVER_FEE, PERIOD8_FEE, QUOTA_DEDUCT_FEE, TIMETABLE_ONLY_FEE, nextOnboardingStep, onboardingSteps, prevOnboardingStep } = tourStore;
 const { skipOnboarding, startOnboarding, tourDemoInviteRespond } = tourStore;
 const { formatLeaveClassSlot, formatTriangleSlot, getCellPlainStatus, getRequestRiskTags, getRequestTypeTags, getScheduleSpecialTags, hasScheduleSpecialTag, isTimetablePullout, isTimetableRestricted } = UiLineTemplate;

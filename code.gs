@@ -994,7 +994,7 @@ function getHeadersForSheet(sheetName) {
     "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "社群", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度", "超鐘點節數", "超鐘點節次"],
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
     "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "鐘點規則", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
-    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註", "起始節次", "結束節次"],
+    "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註", "起始節次", "結束節次", "科目"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "全校對調": ["學期代號", "對調ID", "事件名稱", "日期A", "星期A", "節次A", "日期B", "星期B", "節次B", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     // Ledger truth: index = semester|teacher name; roster quota remains a cache.
@@ -5516,7 +5516,8 @@ function buildPublicClassPayload_(semesterId, className) {
       "可進互代": event["可進互代"] || "",
       "啟用": event["啟用"] || "",
       "起始節次": event["起始節次"] || "",
-      "結束節次": event["結束節次"] || ""
+      "結束節次": event["結束節次"] || "",
+      "科目": event["科目"] || ""
     };
   });
   var schoolSwaps = getActiveSchoolSwapRows_(sid).map(schoolSwapPublicRow_).filter(function (row) { return !!row; });
@@ -5853,6 +5854,8 @@ function samePeriodExchangeClassIsAway_(className, dateStr, period, semesterId) 
   if (!targetClasses.length) return false;
   var events = getSemesterClassAwayCached_(semesterId) || [];
   return events.some(function (event) {
+    // 科目型空堂只停單一課堂，不當整班停課（對調／衝堂判定不比對）。
+    if (String(event["科目"] || "").trim() !== "") return false;
     if (!event || !schoolSwapEnabled_(event)) return false;
     var start = String(event["起日"] || "").slice(0, 10);
     var end = String(event["迄日"] || "").slice(0, 10);

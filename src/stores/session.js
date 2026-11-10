@@ -187,12 +187,12 @@ export const useSessionStore = defineStore('session', () => {
       const sem = semestersList.value.find(s => s.id === currentSemester.value);
       return sem ? (sem.endDate || '') : '';
     });
-    const isClassAwayOnDate = (className, dateStr, period) => {
+    const isClassAwayOnDate = (className, dateStr, period, subject) => {
       if (!className || !DomainClassAway) return false;
       const d = dateStr || DateUtils.getTodayString();
       const events = getClassAwayEventsForView();
       return DomainClassAway.isClassAwayOnDate(
-        className, d, events, semesterEndDate.value, period
+        className, d, events, semesterEndDate.value, period, subject
       );
     };
     const getClassAwayEventsForView = () => {

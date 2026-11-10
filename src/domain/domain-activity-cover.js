@@ -66,6 +66,60 @@ const DomainActivityCover = (() => {
       .filter(Boolean);
   }
 
+  // ── 外出單位：整班（預設）或課堂（班級 × 科目）─────────────────
+  // 課堂寫法：`802・805・806::本土語-台語`；不含分隔符者一律視為整班。
+  var AWAY_COURSE_SEP = '::';
+
+  function normalizeSubjectText(value) {
+    return String(value == null ? '' : value).replace(/\s+/g, '');
+  }
+
+  function makeAwayEntry(classes, subject) {
+    var list = (Array.isArray(classes) ? classes : [classes])
+      .map(function (c) { return String(c == null ? '' : c).trim(); })
+      .filter(Boolean);
+    var subjectText = String(subject == null ? '' : subject).trim();
+    if (!subjectText) return list.join('、');
+    return list.join('、') + AWAY_COURSE_SEP + subjectText;
+  }
+
+  function parseAwayEntry(entry) {
+    var raw = String(entry == null ? '' : entry).trim();
+    if (!raw) return { classes: [], subject: '', text: '' };
+    var idx = raw.indexOf(AWAY_COURSE_SEP);
+    var classPart = idx >= 0 ? raw.slice(0, idx) : raw;
+    var subject = idx >= 0 ? raw.slice(idx + AWAY_COURSE_SEP.length).trim() : '';
+    return { classes: classTokens(classPart), subject: subject, text: raw };
+  }
+
+  function awayEntries(awayClasses) {
+    return (Array.isArray(awayClasses) ? awayClasses : [])
+      .map(parseAwayEntry)
+      .filter(function (entry) { return entry.classes.length > 0; });
+  }
+
+  /** 科目比對：外出課堂空白＝整班；有值採包含語意（本土語 涵蓋 本土語-台語） */
+  function awaySubjectMatches(entrySubject, cellSubject) {
+    var wanted = normalizeSubjectText(entrySubject);
+    if (!wanted) return true;
+    var cell = normalizeSubjectText(cellSubject);
+    if (!cell) return false;
+    return cell === wanted || cell.indexOf(wanted) >= 0;
+  }
+
+  function awayEntryMatchesCell(entry, cell) {
+    if (!entry || !cell) return false;
+    var cellClasses = classTokens(cell.className || cell['班級']);
+    if (!cellClasses.length) return false;
+    var hitClass = entry.classes.some(function (name) { return cellClasses.indexOf(name) >= 0; });
+    if (!hitClass) return false;
+    return awaySubjectMatches(entry.subject, cell.subject || cell['科目']);
+  }
+
+  function isAnyAwayEntryMatch(entries, cell) {
+    return (entries || []).some(function (entry) { return awayEntryMatchesCell(entry, cell); });
+  }
+
   function normalizeDate(d) {
     var s = String(d || '').trim().slice(0, 10).replace(/\//g, '-');
     var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -163,14 +217,23 @@ const DomainActivityCover = (() => {
   function toAwaySet(awayClasses) {
     var set = {};
     (awayClasses || []).forEach(function (c) {
+      // 課堂型外出（班級::科目）只作用在該科，不併入整班集合。
+      if (String(c == null ? '' : c).indexOf(AWAY_COURSE_SEP) >= 0) return;
       classTokens(c).forEach(function (k) { set[k] = true; });
     });
     return set;
   }
 
-  function isAnyClassAway(value, awaySet) {
-    return classTokens(value).some(function (token) { return !!awaySet[token]; });
+  /** 外出清單涉及的班級（含課堂型），去重排序；供「已選 N 班」與統計用 */
+  function toAwayClassList(awayClasses) {
+    var set = {};
+    awayEntries(awayClasses).forEach(function (entry) {
+      entry.classes.forEach(function (name) { set[name] = true; });
+    });
+    return Object.keys(set).sort();
   }
+
+  // 課堂型外出改由 awayEntryMatchesCell 比對（見上方 awayEntries 系列）
 
   function toAwayList(awayClasses) {
     return Object.keys(toAwaySet(awayClasses)).sort();
@@ -184,8 +247,8 @@ const DomainActivityCover = (() => {
   function isCellAwayReleased(cell, awayClasses, dateStr, period, rangeOpts) {
     if (!cell || cell.isSubstituted) return false;
     if (cell.isClassAway) return true;
-    var set = toAwaySet(awayClasses);
-    if (!isAnyClassAway(cell.className, set)) return false;
+    // 整班或課堂（班級::科目）都比對：課堂型只命中該科那一格。
+    if (!isAnyAwayEntryMatch(awayEntries(awayClasses), cell)) return false;
     if (dateStr !== undefined && period !== undefined && rangeOpts) {
       return isActivitySlotInRange(dateStr, period, rangeOpts);
     }
@@ -219,8 +282,8 @@ const DomainActivityCover = (() => {
     opts = opts || {};
     var em = emailKey(teacherEmail);
     if (!em) return 0;
-    var away = toAwaySet(opts.awayClasses);
-    if (!Object.keys(away).length) return 0;
+    var entries = awayEntries(opts.awayClasses);
+    if (!entries.length) return 0;
     var startDate = normalizeDate(opts.startDate);
     var endDate = normalizeDate(opts.endDate);
     var rangeDates = listDatesInRange(startDate, endDate);
@@ -244,7 +307,7 @@ const DomainActivityCover = (() => {
     }
     var n = 0;
     slots.forEach(function (s) {
-      if (!s || !isAnyClassAway(s.className, away)) return;
+      if (!s || !isAnyAwayEntryMatch(entries, s)) return;
       // 小鐘點未授課會在月報另行扣除，不重複發放折抵額度。
       if (s.isSubstitute === true || String(s.attr || s['課堂屬性'] || '').trim() === '代課') return;
       var p = parseInt(s.period, 10);
@@ -1055,12 +1118,25 @@ const DomainActivityCover = (() => {
    * @returns {string[]} 新的 awayClasses
    */
   function toggleAwayClass(awayClasses, cls) {
-    var c = normalizeClass(cls);
-    if (!c) return toAwayList(awayClasses);
-    var set = toAwaySet(awayClasses);
-    if (set[c]) delete set[c];
-    else set[c] = true;
-    return Object.keys(set).sort();
+    var c = String(cls == null ? '' : cls).trim();
+    var list = (Array.isArray(awayClasses) ? awayClasses : []).slice();
+    if (!c) return list;
+    var idx = list.indexOf(c);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+      return list;
+    }
+    // 課堂型外出（班級::科目）以原文加入，不動既有整班項目。
+    if (c.indexOf(AWAY_COURSE_SEP) >= 0) {
+      list.push(c);
+      return list;
+    }
+    var target = normalizeClass(c);
+    var exists = awayEntries(list).some(function (entry) {
+      return !entry.subject && entry.classes.indexOf(target) >= 0;
+    });
+    if (!exists) list.push(target);
+    return list;
   }
 
   /**
@@ -1088,14 +1164,27 @@ const DomainActivityCover = (() => {
       // 用「包含」比對會讓 907 被七年級按鈕選中
       return String(c || '').trim().charAt(0) === g;
     });
-    var set = toAwaySet(awayClasses);
-    var allSelected = all.length > 0 && all.every(function (c) { return !!set[normalizeClass(c)]; });
+    var list = (Array.isArray(awayClasses) ? awayClasses : []).slice();
+    var selectedSet = {};
+    list.forEach(function (entry) {
+      // 課堂項目（班級::科目）不受年級快捷影響
+      if (String(entry == null ? '' : entry).indexOf(AWAY_COURSE_SEP) >= 0) return;
+      selectedSet[normalizeClass(entry)] = true;
+    });
+    var allSelected = all.length > 0 && all.every(function (c) { return !!selectedSet[normalizeClass(c)]; });
     if (allSelected) {
-      all.forEach(function (c) { delete set[normalizeClass(c)]; });
-    } else {
-      all.forEach(function (c) { set[normalizeClass(c)] = true; });
+      var removeSet = {};
+      all.forEach(function (c) { removeSet[normalizeClass(c)] = true; });
+      return list.filter(function (entry) {
+        if (String(entry == null ? '' : entry).indexOf(AWAY_COURSE_SEP) >= 0) return true;
+        return !removeSet[normalizeClass(entry)];
+      });
     }
-    return Object.keys(set).sort();
+    all.forEach(function (c) {
+      var key = normalizeClass(c);
+      if (!selectedSet[key]) list.push(key);
+    });
+    return list;
   }
 
   function emailKey(e) {
@@ -1166,8 +1255,9 @@ const DomainActivityCover = (() => {
     var rangeSet = {};
     rangeDates.forEach(function (d) { rangeSet[String(d)] = true; });
 
-    var away = toAwaySet(opts.awayClasses);
-    var awayCount = Object.keys(away).length;
+    var awayList = toAwayClassList(opts.awayClasses);
+    var awayCount = awayList.length;
+    var awayEntryList = awayEntries(opts.awayClasses);
 
     // 釋出空堂：外出班 × 期間平日 × 節次（同班同時段只算 1，避免多師重計）
     var released = 0;
@@ -1178,15 +1268,15 @@ const DomainActivityCover = (() => {
         if (!dow) return;
         (opts.allSchedules || []).forEach(function (s) {
           if (!s || !s.className) return;
-           var cn = normalizeClass(s.className);
-            if (!isAnyClassAway(cn, away)) return;
+          var cn = normalizeClass(s.className);
+          if (!isAnyAwayEntryMatch(awayEntryList, s)) return;
            if (parseInt(s.dayOfWeek, 10) !== dow) return;
            if (DomainSchedule && DomainSchedule.isActiveOnDate
                 && !DomainSchedule.isActiveOnDate(s, dateStr)) return;
            var per = parseInt(s.period, 10);
            if (!(per === 0 || per === 45 || (per >= 1 && per <= 7))) return; // 釋出額度算早自習、1–7與午休
            if (!isActivitySlotInRange(dateStr, per, opts)) return;
-          var rk = cn + '|' + dateStr + '|' + per;
+          var rk = cn + '|' + dateStr + '|' + per + '|' + normalizeSubjectText(s.subject || s['科目']);
           if (releasedKeys[rk]) return;
           releasedKeys[rk] = true;
           released++;
@@ -1287,7 +1377,7 @@ const DomainActivityCover = (() => {
       var cn = normalizeClass(cell.className);
       if (!cn) return false;
       if (cn === '巡堂') return false;
-        if (awayCount && isAnyClassAway(cn, away)
+        if (awayCount && isAnyAwayEntryMatch(awayEntryList, cell)
             && isActivitySlotInRange(dateStr, period, opts)) return false;
       if (cell.isClassAway) return false;
       return true;
@@ -1348,7 +1438,7 @@ const DomainActivityCover = (() => {
           if (!cn || cn === '巡堂') return;
           // 後備迴路同主路徑：只算活動時段內（事件 5–8 節時，之外不算需求）
           if (!isActivitySlotInRange(dateStr, per, opts)) return;
-            if (awayCount && isAnyClassAway(cn, away)
+            if (awayCount && isAnyAwayEntryMatch(awayEntryList, s)
                 && isActivitySlotInRange(dateStr, per, opts)) return;
           slotKeys[dateStr + '|' + per] = true;
         });
@@ -1600,6 +1690,12 @@ const DomainActivityCover = (() => {
     isLeaveNonDeductible: isLeaveNonDeductible,
     isPublicSubPayout: isPublicSubPayout,
     toggleAwayClass: toggleAwayClass,
+    AWAY_COURSE_SEP: AWAY_COURSE_SEP,
+    makeAwayEntry: makeAwayEntry,
+    parseAwayEntry: parseAwayEntry,
+    awayEntries: awayEntries,
+    awayEntryMatchesCell: awayEntryMatchesCell,
+    toAwayClassList: toAwayClassList,
     isSingleClassOption: isSingleClassOption,
     toggleAwayGrade: toggleAwayGrade,
     buildStats: buildStats,

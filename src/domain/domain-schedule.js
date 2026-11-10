@@ -443,7 +443,7 @@ const DomainSchedule = (() => {
           subRecord: combinedOwn,
           isSubstituted: false,
           isSubstitutionDuty: false,
-           isClassAway: !!(h.isClassAway && h.isClassAway(combinedClass, dateStr, period))
+           isClassAway: !!(h.isClassAway && h.isClassAway(combinedClass, dateStr, period, combinedSubject))
         });
       }
       const forwardMap = {};
@@ -598,7 +598,7 @@ const DomainSchedule = (() => {
           isMutualCover: incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結',
           subText: subTextIn,
           subRecord: incomingEdge,
-           isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr, period))
+           isClassAway: !!(h.isClassAway && h.isClassAway(finalClassIn, dateStr, period, finalSubjIn))
         });
       }
 
@@ -776,7 +776,7 @@ const DomainSchedule = (() => {
             isMutualCover: !!multiPrimaryDuty.isMutualCover,
             subText: multiPrimaryDuty.subText,
             subRecord: multiPrimary,
-            isClassAway: !!(h.isClassAway && h.isClassAway(multiPrimaryDuty.className, dateStr, period))
+            isClassAway: !!(h.isClassAway && h.isClassAway(multiPrimaryDuty.className, dateStr, period, multiPrimaryDuty.subject))
           });
         }
       }
@@ -908,7 +908,7 @@ const DomainSchedule = (() => {
             isMutualCover: firstEdge.subFee === '扣額度' || firstEdge.subFee === '互代不結',
             subText: subText,
             subRecord: firstEdge,
-             isClassAway: !!(h.isClassAway && h.isClassAway(ownOutClass || outBase.className, dateStr, period))
+             isClassAway: !!(h.isClassAway && h.isClassAway(ownOutClass || outBase.className, dateStr, period, ownOutSubj || outBase.subject || ''))
           });
           var incomingAlongside = buildIncomingCell(findIncomingInfo(firstEdge));
           var sameCourse = incomingAlongside
@@ -964,7 +964,7 @@ const DomainSchedule = (() => {
       className: patrol ? (baseCn && baseCn !== '巡堂' ? baseCn : '巡堂') : base.className,
       subject: patrol ? '巡堂' : base.subject,
       attr: patrol ? (base.attr || '巡堂') : base.attr,
-       isClassAway: !!(h.isClassAway && h.isClassAway(base.className, dateStr, period))
+       isClassAway: !!(h.isClassAway && h.isClassAway(base.className, dateStr, period, patrol ? '巡堂' : base.subject))
     });
   }
 

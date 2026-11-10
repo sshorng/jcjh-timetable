@@ -309,6 +309,11 @@ const FieldMap = (() => {
     let rule = String(pick(e, ['鐘點規則', 'billingRule']) || 'keep').toLowerCase();
     if (rule === '調降' || rule === 'reduce') rule = 'reduce';
     else rule = 'keep';
+    // 科目條件（課堂層空堂）：空白＝整班；多個以「、」分隔
+    const subjectRaw = String(pick(e, ['科目', 'subject']) || '').trim();
+    const subjects = dca && typeof dca.parseSubjectList === 'function'
+      ? dca.parseSubjectList(subjectRaw)
+      : subjectRaw.split(/[,，、;；|｜/／]+/).map(function (v) { return String(v || '').trim(); }).filter(Boolean);
     // 日期欄若被 Sheets 轉成 Date，轉回 YYYY-MM-DD
     function asDateStr(v) {
       if (v === undefined || v === null || v === '') return '';
@@ -333,6 +338,8 @@ const FieldMap = (() => {
       period: period,
       periods: periods,
       billingRule: rule,
+      subject: subjectRaw,
+      subjects: subjects,
       forMutual: asBool(pick(e, ['可進互代', 'forMutual'])),
       enabled: pick(e, ['啟用', 'enabled']) === undefined || pick(e, ['啟用', 'enabled']) === null || pick(e, ['啟用', 'enabled']) === ''
         ? true

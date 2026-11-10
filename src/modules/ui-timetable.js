@@ -149,7 +149,7 @@ const UiTimetable = (() => {
           schoolSwapSourcePeriod: baseSlot.period
         });
       }
-       if (merged && merged.className && !merged.isClassAway && isClassAwayOnDate(merged.className, dateStr, period)) {
+       if (merged && merged.className && !merged.isClassAway && isClassAwayOnDate(merged.className, dateStr, period, merged.subject)) {
         merged = Object.assign({}, merged, { isClassAway: true });
       }
        _scheduleCache.set(memoKey, merged);
@@ -1903,7 +1903,7 @@ const UiTimetable = (() => {
             var cell = getScheduleForDate(t.email, dateStr, period, day);
             var draft = mutualOn ? draftAt(t.email, dateStr, period) : null;
             var batchOn = batchSelectMode.value && isBatchSlotSelected(t.email, dateStr, period);
-             var awayLabel = !!(cell && cell.className && (isAwayClassCell(cell.className, dateStr, period) || cell.isClassAway) && !draft);
+             var awayLabel = !!(cell && cell.className && (isAwayClassCell(cell.className, dateStr, period, cell.subject) || cell.isClassAway) && !draft);
             var cls = cellClassFromCell(cell, !!draft, batchOn, awayLabel);
             var feeShort = '';
             if (draft) {
@@ -1981,13 +1981,23 @@ const UiTimetable = (() => {
       return 'has-class' + batchCls;
     }
 
-     function isAwayClassCell(className, dateStr, period) {
+     function isAwayClassCell(className, dateStr, period, subject) {
       if (!className) return false;
       var cls = String(className).trim();
       if (!cls) return false;
-       if (isClassAwayOnDate(cls, dateStr, period)) return true;
+       if (isClassAwayOnDate(cls, dateStr, period, subject)) return true;
       if (!isMutualCover.value) return false;
-       if (!(mutualAwayClasses.value || []).includes(cls)) return false;
+       var awayList = mutualAwayClasses.value || [];
+       var subjectKey = String(subject == null ? '' : subject).replace(/\s+/g, '');
+       var matchedAway = awayList.some(function (entry) {
+         var parsed = (DAC() && typeof DAC().parseAwayEntry === 'function')
+           ? DAC().parseAwayEntry(entry)
+           : { classes: [String(entry || '').trim()], subject: '' };
+         if (parsed.classes.indexOf(cls) < 0) return false;
+         if (!parsed.subject) return true;
+         return !!subjectKey && subjectKey.indexOf(parsed.subject) >= 0;
+       });
+       if (!matchedAway) return false;
        var start = mutualActivityStart.value;
        var end = mutualActivityEnd.value;
        if (DAC() && DAC().isDateInRange) {
@@ -2007,7 +2017,7 @@ const UiTimetable = (() => {
       var draftOn = isMutualCover.value && !!draftAt(teacherEmail, dateStr, period);
       var batchOn = batchSelectMode.value && isBatchSlotSelected(teacherEmail, dateStr, period);
       var cls = cellClassFromCell(cell, draftOn, batchOn);
-       if (cell && (isAwayClassCell(cell.className, dateStr, period) || cell.isClassAway) && !draftOn && !cell.isPending && !cell.isSubstituted && !cell.isSubstitutionDuty) {
+       if (cell && (isAwayClassCell(cell.className, dateStr, period, cell.subject) || cell.isClassAway) && !draftOn && !cell.isPending && !cell.isSubstituted && !cell.isSubstitutionDuty) {
         return 'is-away-class' + (batchOn ? ' is-batch-selected' : '');
       }
       return cls;
@@ -2553,9 +2563,16 @@ const UiTimetable = (() => {
         });
         var slotAwaySet = isMutualCover.value && isMutualActivitySlotInRange
           && !isMutualActivitySlotInRange(slot.dateStr, slot.period) ? {} : awaySet;
+        var awayEntryList = (isMutualCover.value && DAC() && typeof DAC().awayEntries === 'function')
+          ? DAC().awayEntries(mutualAwayClasses.value || []) : [];
         var freeTeachers = (teachersList.value || []).filter(function (t) {
           if (!t.email || String(t.email).toLowerCase() === String(leaveEmail).toLowerCase()) return false;
           var cell = getScheduleForDate(t.email, slot.dateStr, slot.period, slot.dayOfWeek);
+          if (awayEntryList.length && DAC() && typeof DAC().awayEntryMatchesCell === 'function'
+              && (!isMutualActivitySlotInRange || isMutualActivitySlotInRange(slot.dateStr, slot.period))
+              && awayEntryList.some(function (entry) { return DAC().awayEntryMatchesCell(entry, cell); })) {
+            return true;
+          }
           if (DomainMatch && DomainMatch.isSlotFreeForMatch) {
             return DomainMatch.isSlotFreeForMatch(cell, slotAwaySet);
           }
@@ -2671,12 +2688,19 @@ const UiTimetable = (() => {
           var k = String(c || '').trim();
           if (k) awaySet[k] = true;
         });
+        var awayEntryList = (isMutualCover.value && DAC() && typeof DAC().awayEntries === 'function')
+          ? DAC().awayEntries(mutualAwayClasses.value || []) : [];
         var freeTeachers = (teachersList.value || []).filter(function (t) {
           if (!t.email || String(t.email).toLowerCase() === String(leaveEmail).toLowerCase()) return false;
           return batchSlots.value.every(function (s) {
             var cell = getScheduleForDate(t.email, s.dateStr, s.period, s.dayOfWeek);
             var slotAwaySet = isMutualCover.value && isMutualActivitySlotInRange
               && !isMutualActivitySlotInRange(s.dateStr, s.period) ? {} : awaySet;
+            if (awayEntryList.length && DAC() && typeof DAC().awayEntryMatchesCell === 'function'
+                && (!isMutualActivitySlotInRange || isMutualActivitySlotInRange(s.dateStr, s.period))
+                && awayEntryList.some(function (entry) { return DAC().awayEntryMatchesCell(entry, cell); })) {
+              return true;
+            }
             if (DomainMatch && DomainMatch.isSlotFreeForMatch) {
               return DomainMatch.isSlotFreeForMatch(cell, slotAwaySet);
             }
