@@ -136,3 +136,24 @@ test('合併：兼普通班依區段合併，純特教整列合併', () => {
   assert.equal(values['9:4'], '特教監考', '第二段起點要寫標籤');
   assert.equal(values['10:2'], '特教監考', '純特教整列起點要寫標籤');
 });
+
+test('抽離課＝特教班的課：寫原班班名也不算普通班監考', () => {
+  const matrix = ExportInvigilation.buildTeacherMatrix(
+    [SE_TEACHER], SPEC,
+    cellMap({
+      [D + '#1']: { className: '701', subject: '英文', attr: '抽離' },
+      [D + '#2']: { className: '701', subject: '英文' }
+    }),
+    38, null, []
+  );
+  const entry = matrix.left[0];
+  assert.equal(slotTexts(entry)[0], '特教監考', '抽離在資源班上課，算特教班的課');
+  assert.equal(slotTexts(entry)[1], '701', '同一位老師在 701 的一般課仍要標出班名');
+
+  const classMatrix = ExportInvigilationClass.buildClassMatrix(
+    matrix, [{ date: D, period: 1 }, { date: D, period: 2 }], ['701'], () => '特教'
+  );
+  const row701 = classMatrix.rows.find(r => r.className === '701');
+  assert.equal(row701.cells[0].text, '', '抽離那一節不可記成 701 的監考');
+  assert.equal(row701.cells[1].text, '特教師', '一般課那一節才是 701 的監考');
+});

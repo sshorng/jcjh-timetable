@@ -484,6 +484,25 @@ const ExportInvigilation = (() => {
     return /特教/.test(jobTitle) || /特教/.test(subject);
   }
 
+  /**
+   * 這一格是不是「抽離」課（資源班上課）：
+   * 抽離是特教班的課，即使課表上寫的是原班班名（例：701 英文（抽離）），
+   * 也不算該班的普通班監考。
+   */
+  function isPullOutCell(cell) {
+    if (!cell) return false;
+    if (cell.isPullOut === true) return true;
+    if (DomainSchedule && typeof DomainSchedule.isPullOutCell === 'function') {
+      try {
+        if (DomainSchedule.isPullOutCell(cell)) return true;
+      } catch (ePullOut) { /* ignore */ }
+    }
+    var attr = String(cell.attr || '');
+    var subject = String(cell.subject != null ? cell.subject : (cell['科目'] || ''));
+    var cn = String(cell.className != null ? cell.className : (cell['班級'] || ''));
+    return /抽離/.test(normText(attr + subject + cn));
+  }
+
   /** 這一格是不是特教班課（特教老師的特教班合併成「特教監考」用） */
   function isSpecialEducationCell(cell) {
     if (!cell) return false;
@@ -759,6 +778,7 @@ const ExportInvigilation = (() => {
       var slots = [];
       var s;
       var seFlags = [];
+      var pullOutFlags = [];
       var specialEducationTeacher = isSpecialEducationTeacher(t);
 
       for (s = 0; s < EXAM_SLOTS_PER_SIDE; s++) {
@@ -769,7 +789,7 @@ const ExportInvigilation = (() => {
         // 特教老師教特教班：該格仍以「特教監考」呈現（普通班課照常列班名）
         var seCell = !!specialEducationTeacher && !slot.changed && isSpecialEducationCell(raw);
         if (seCell) slot = { text: SPECIAL_EDUCATION_LABEL, changed: false, specialEducation: true };
-        // 段考時虛擬分組回原班上課；基礎虛擬班課不列監考，明確排入的勤務仍保留。
+        var pullOutCell = !!specialEducationTeacher && !slot.changed && isPullOutCell(raw);
         if (!seCell && raw && !slot.changed && !isBasePatrol(raw)) {
           var scheduleClassName = raw.className || raw['班級'] || '';
           var classNames = splitCoverageClassNames(scheduleClassName);
@@ -803,11 +823,13 @@ const ExportInvigilation = (() => {
         if (slot.text === '巡堂' && !slot.changed) patrolCount += 1;
         if (slot.changed) changedCount += 1;
         seFlags.push(!!seCell);
+        pullOutFlags.push(!!pullOutCell);
         slots.push(slot);
       }
       // 特教老師整列都是「特教監考」，只有他在普通班的課要單獨標出班名
-      var physicalFlags = slots.map(function (item) {
-        if (!item) return false;
+      // （抽離課＝資源班上課，屬於特教班，不算普通班）
+      var physicalFlags = slots.map(function (item, idx) {
+        if (!item || pullOutFlags[idx]) return false;
         var text = String(item.text || '').trim();
         if (!text || text === SPECIAL_EDUCATION_LABEL) return false;
         return splitCoverageClassNames(text).some(isPhysicalClassName);
