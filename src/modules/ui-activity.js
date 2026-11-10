@@ -62,7 +62,7 @@ const UiClassAwayAdmin = (() => {
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
       scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: ''
+      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '', rules: []
     });
 
     function sanitizeClassNames(list) {
@@ -78,7 +78,7 @@ const UiClassAwayAdmin = (() => {
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
         scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-        billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: ''
+        billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '', rules: []
       };
       showClassAwayModal.value = true;
     }
@@ -104,7 +104,16 @@ const UiClassAwayAdmin = (() => {
         forMutual: !!ev.forMutual,
         enabled: ev.enabled !== false,
         note: ev.note || '',
-        subject: ev.subject || (Array.isArray(ev.subjects) ? ev.subjects.join('、') : '')
+        subject: ev.subject || (Array.isArray(ev.subjects) ? ev.subjects.join('、') : ''),
+        rules: (Array.isArray(ev.rules) ? ev.rules : []).map(function (rule) {
+          return {
+            scope: rule.scope === 'all' ? 'all' : 'classes',
+            classesText: (rule.classes || []).join('、'),
+            subjectsText: (rule.subjects || []).join('、'),
+            periods: (rule.periods && rule.periods.length ? rule.periods : ['all']).slice(),
+            billingRule: rule.billingRule === 'reduce' ? 'reduce' : 'keep'
+          };
+        })
       };
       showClassAwayModal.value = true;
     }
@@ -274,6 +283,28 @@ const UiClassAwayAdmin = (() => {
         return;
       }
       if (scope === 'all') cleanClasses = [];
+      // 多規則（聯集）：有加規則才寫 JSON；只改主表單時不寫，維持舊資料形狀。
+      var extraRules = (f.rules || []).map(function (rule) {
+        return {
+          scope: rule.scope === 'all' ? 'all' : 'classes',
+          classes: rule.scope === 'all' ? [] : (DomainClassAway && DomainClassAway.parseClassList
+            ? DomainClassAway.parseClassList(rule.classesText || '')
+            : String(rule.classesText || '').split(/[,，、;；\s]+/).filter(Boolean)),
+          subjects: DomainClassAway && DomainClassAway.parseSubjectList
+            ? DomainClassAway.parseSubjectList(rule.subjectsText || '')
+            : String(rule.subjectsText || '').split(/[,，、;；\s]+/).filter(Boolean),
+          periods: DomainClassAway && DomainClassAway.normalizePeriods
+            ? DomainClassAway.normalizePeriods((rule.periods && rule.periods.length) ? rule.periods : ['all'])
+            : (rule.periods || ['all']),
+          billingRule: rule.billingRule === 'reduce' ? 'reduce' : 'keep'
+        };
+      });
+      for (var ri = 0; ri < extraRules.length; ri++) {
+        if (extraRules[ri].scope === 'classes' && !extraRules[ri].classes.length) {
+          showToast('第 ' + (ri + 2) + ' 條規則沒填班級', 'info');
+          return;
+        }
+      }
       loading.value = true;
       try {
         var id = f.id || ('cae_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
@@ -286,6 +317,7 @@ const UiClassAwayAdmin = (() => {
           "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
           "起始節次": periodMode === 'range' ? String(f.startPeriod) : '',
           "結束節次": periodMode === 'range' ? String(f.endPeriod) : '',
+          "規則清單": extraRules.length ? JSON.stringify(extraRules) : '',
           "適用範圍": scope === 'all' ? '全校' : '指定班級',
           "班級清單": scope === 'all' ? '' : ("'" + classListStr),
           "停課節次": periodMode === 'range'

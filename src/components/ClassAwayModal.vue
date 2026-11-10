@@ -118,6 +118,72 @@
                   <option value="reduce">扣超鐘點（依事件期間未授課調降）</option>
               </select>
             </div>
+            <div class="form-group">
+              <label class="form-label">其他停課規則（選填；任一規則命中即停）</label>
+              <div class="ui-caption" style="margin-bottom:6px;line-height:1.5;">
+                上方主表單＝規則 1。這裡再加的規則共用同一組起迄日期，但可各自指定範圍、科目與節次。例：規則 1＝全校第8節、規則 2＝英資班全部節次、規則 3＝七八年級本土語（客、手）。
+              </div>
+              <div
+                v-for="(rule, idx) in (classAwayForm.rules || [])"
+                :key="'cae-rule-' + idx"
+                style="border:1px solid var(--border-color);border-radius:8px;padding:10px;margin-bottom:8px;background:#f8fafc;"
+              >
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                  <strong style="font-size:0.82rem;color:#0f766e;">規則 {{ idx + 2 }}</strong>
+                  <button type="button" class="btn btn-secondary btn-xs" @click="removeClassAwayRule(idx)">刪除</button>
+                </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
+                  <label class="label-check-sm">
+                    <input type="radio" class="chk-box-15" value="all" v-model="rule.scope"> 全校
+                  </label>
+                  <label class="label-check-sm">
+                    <input type="radio" class="chk-box-15" value="classes" v-model="rule.scope"> 指定班級
+                  </label>
+                </div>
+                <input
+                  v-if="rule.scope !== 'all'"
+                  type="text"
+                  class="form-input"
+                  style="margin-bottom:6px;"
+                  placeholder="班名（、分隔），例：901、902、9英A"
+                  v-model="rule.classesText"
+                >
+                <input
+                  type="text"
+                  class="form-input"
+                  style="margin-bottom:6px;"
+                  list="class-away-subject-options"
+                  placeholder="科目（留空＝全部課堂），例：本土語-客語、本土語-手語"
+                  v-model="rule.subjectsText"
+                >
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:4px;border:1px solid var(--border-color);border-radius:8px;padding:6px;margin-bottom:6px;background:#fff;">
+                  <label class="label-check-sm" style="margin:0;">
+                    <input type="checkbox" class="chk-box-15" :checked="isRuleAllPeriods(idx)" @change="toggleRuleAllPeriods(idx)">
+                    全部
+                  </label>
+                  <label
+                    v-for="option in classAwayPeriodOptions"
+                    :key="'cae-rule-period-' + idx + '-' + option.value"
+                    class="label-check-sm"
+                    style="margin:0;"
+                  >
+                    <input
+                      type="checkbox"
+                      class="chk-box-15"
+                      :checked="isRulePeriodSelected(idx, option.value)"
+                      :disabled="isRuleAllPeriods(idx)"
+                      @change="toggleRulePeriod(idx, option.value)"
+                    >
+                    {{ option.label }}
+                  </label>
+                </div>
+                <select class="form-select" v-model="rule.billingRule">
+                  <option value="keep">鐘點：不扣超鐘點</option>
+                  <option value="reduce">鐘點：扣超鐘點</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-secondary btn-xs" @click="addClassAwayRule">＋ 新增規則</button>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px;">
               <label class="label-check-sm">
                 <input type="checkbox" v-model="classAwayForm.forMutual" class="chk-box-15">
@@ -189,4 +255,60 @@ defineProps({
 });
 defineEmits(['close']);
 const classAwayForm = defineModel('classAwayForm');
+
+// 多規則編輯（規則 2 以後；規則 1 就是上方主表單）
+const ruleList = () => (classAwayForm.value && Array.isArray(classAwayForm.value.rules))
+  ? classAwayForm.value.rules
+  : [];
+
+function commitRules(next) {
+  classAwayForm.value = Object.assign({}, classAwayForm.value, { rules: next });
+}
+
+function addClassAwayRule() {
+  const next = ruleList().slice();
+  next.push({ scope: 'classes', classesText: '', subjectsText: '', periods: ['all'], billingRule: 'keep' });
+  commitRules(next);
+}
+
+function removeClassAwayRule(index) {
+  const next = ruleList().slice();
+  next.splice(index, 1);
+  commitRules(next);
+}
+
+function isRuleAllPeriods(index) {
+  const rule = ruleList()[index];
+  if (!rule || !Array.isArray(rule.periods) || !rule.periods.length) return true;
+  return rule.periods.indexOf('all') >= 0;
+}
+
+function isRulePeriodSelected(index, value) {
+  const rule = ruleList()[index];
+  if (!rule || !Array.isArray(rule.periods)) return false;
+  return rule.periods.indexOf(String(value)) >= 0;
+}
+
+function patchRulePeriods(index, periods) {
+  const next = ruleList().slice();
+  const rule = Object.assign({}, next[index]);
+  rule.periods = periods.length ? periods : ['all'];
+  next[index] = rule;
+  commitRules(next);
+}
+
+function toggleRuleAllPeriods(index) {
+  patchRulePeriods(index, isRuleAllPeriods(index) ? [] : ['all']);
+}
+
+function toggleRulePeriod(index, value) {
+  const key = String(value);
+  const rule = ruleList()[index] || {};
+  const current = (Array.isArray(rule.periods) ? rule.periods : [])
+    .filter(function (item) { return item !== 'all'; });
+  const idx = current.indexOf(key);
+  if (idx >= 0) current.splice(idx, 1);
+  else current.push(key);
+  patchRulePeriods(index, current);
+}
 </script>

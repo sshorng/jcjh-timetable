@@ -336,6 +336,12 @@ const FieldMap = (() => {
       classes: classes,
       scope: scope,
       period: period,
+      // 多規則（聯集）：空白＝沿用事件層單一規則
+      rules: (dca && typeof dca.parseRules === 'function')
+        ? dca.parseRules(pick(e, ['規則清單', 'rules'])).map(function (rule) {
+          return dca.normalizeRule ? dca.normalizeRule(rule) : rule;
+        })
+        : [],
       periods: periods,
       billingRule: rule,
       subject: subjectRaw,

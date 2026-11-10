@@ -2040,7 +2040,11 @@
                          <td>{{ classAwayBoundaryPeriodLabel(ev, 'start') }}</td>
                          <td>{{ classAwayBoundaryPeriodLabel(ev, 'end') }}</td>
                        <td>{{ ev.billingRule === 'reduce' ? '扣超鐘點' : '不扣超鐘點' }}</td>
-                      <td><span :style="{ color: ev.subject ? '#0f766e' : 'var(--text-muted)', fontSize: '0.78rem' }">{{ ev.subject || '整班' }}</span></td>
+                      <td>
+                        <span :style="{ color: (ev.subject || (ev.rules || []).length) ? '#0f766e' : 'var(--text-muted)', fontSize: '0.78rem' }">
+                          {{ (ev.rules || []).length ? ((ev.rules || []).length + 1) + ' 條規則' : (ev.subject || '整班') }}
+                        </span>
+                      </td>
                       <td>{{ ev.forMutual ? '是' : '否' }}</td>
                       <td>{{ ev.enabled !== false ? '是' : '否' }}</td>
                       <td>
@@ -2885,27 +2889,35 @@ const classAwaySubjectOptions = computed(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 });
 
-// 活動互代：科目型空堂以「課堂」出現一顆 chip（802・805・806 本土語-台語）
+// 活動互代：科目型空堂以「課堂」出現一顆 chip（802、805、806 本土語-台語）
+// 一個事件可能含多條規則（規則清單），逐條取科目條件與範圍。
 const mutualAwayCourseChips = computed(() => {
   if (!isMutualCover.value) return [];
-  const events = (classAwayEvents.value || []).filter((ev) => ev && ev.enabled !== false && ev.forMutual
-    && Array.isArray(ev.subjects) && ev.subjects.length);
+  const events = (classAwayEvents.value || []).filter((ev) => ev && ev.enabled !== false && ev.forMutual);
   if (!events.length) return [];
   const out = [];
   const seen = new Set();
   events.forEach((ev) => {
-    const evClasses = (ev.classes || []).map((c) => String(c || '').trim()).filter(Boolean);
-    (allSchedules.value || []).forEach((s) => {
-      const subject = String(s.subject || '').trim();
-      if (!subject) return;
-      if (!ev.subjects.some((w) => subject === w || subject.indexOf(w) >= 0)) return;
-      const tokens = String(s.className || '').split(/[,，、/／\s]+/).map((x) => x.trim()).filter(Boolean);
-      if (!tokens.length) return;
-      if (evClasses.length && !tokens.some((t) => evClasses.indexOf(t) >= 0)) return;
-      const value = tokens.join('、') + '::' + subject;
-      if (seen.has(value)) return;
-      seen.add(value);
-      out.push({ value: value, label: tokens.join('、') + ' ' + subject });
+    const rules = (Array.isArray(ev.rules) && ev.rules.length)
+      ? ev.rules
+      : [{ scope: ev.scope, classes: ev.classes || [], subjects: ev.subjects || [] }];
+    rules.forEach((rule) => {
+      const subjects = (rule && Array.isArray(rule.subjects)) ? rule.subjects : [];
+      if (!subjects.length) return;
+      const ruleClasses = (rule.scope === 'all' ? [] : (rule.classes || []))
+        .map((c) => String(c || '').trim()).filter(Boolean);
+      (allSchedules.value || []).forEach((s) => {
+        const subject = String(s.subject || '').trim();
+        if (!subject) return;
+        if (!subjects.some((w) => subject === w || subject.indexOf(w) >= 0)) return;
+        const tokens = String(s.className || '').split(/[,，、/／\s]+/).map((x) => x.trim()).filter(Boolean);
+        if (!tokens.length) return;
+        if (ruleClasses.length && !tokens.some((t) => ruleClasses.indexOf(t) >= 0)) return;
+        const value = tokens.join('、') + '::' + subject;
+        if (seen.has(value)) return;
+        seen.add(value);
+        out.push({ value: value, label: tokens.join('、') + ' ' + subject });
+      });
     });
   });
   return out.sort((a, b) => a.label.localeCompare(b.label, 'zh-Hant'));

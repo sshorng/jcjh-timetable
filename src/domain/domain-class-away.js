@@ -307,11 +307,90 @@ const DomainClassAway = (() => {
     return eventClasses(ev).indexOf(normClass(className)) >= 0;
   }
 
-  function classesForEvent(ev, allClasses) {
-    if (eventScope(ev) === SCOPE_ALL && Array.isArray(allClasses)) {
-      return parseClassList(allClasses);
+
+  // ── 多規則（聯集）────────────────────────────────────────────
+  // 一個空堂事件可含多條規則，任一規則命中即視為空堂；沒有 `規則清單` 的舊事件
+  // 會合成「單一規則」，行為與改版前完全相同。
+  function parseRules(raw) {
+    if (Array.isArray(raw)) return raw;
+    var text = String(raw == null ? '' : raw).trim();
+    if (!text) return [];
+    try {
+      var parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
     }
-    return eventClasses(ev);
+  }
+
+  function normalizeRule(raw) {
+    raw = raw || {};
+    return {
+      scope: normalizeScope(raw.scope || raw['適用範圍']),
+      classes: parseClassList(raw.classes || raw.classList || raw['班級清單']),
+      subjects: parseSubjectList(raw.subjects || raw.subject || raw['科目']),
+      periods: normalizePeriods(raw.periods || raw.period || raw['停課節次']),
+      startPeriod: normalizeBoundaryPeriod(raw.startPeriod || raw['起始節次']),
+      endPeriod: normalizeBoundaryPeriod(raw.endPeriod || raw['結束節次']),
+      billingRule: getRule({ billingRule: raw.billingRule, '鐘點規則': raw['鐘點規則'] })
+    };
+  }
+
+  /** 事件 → 規則清單（沒有規則清單者合成單一規則，沿用事件層欄位） */
+  function eventRuleList(ev) {
+    var rules = parseRules(ev && (ev.rules || ev['規則清單'])).map(normalizeRule);
+    if (rules.length) return rules;
+    var range = eventPeriodRange(ev);
+    return [{
+      scope: eventScope(ev),
+      classes: eventClasses(ev),
+      subjects: eventSubjects(ev),
+      periods: range ? [] : eventPeriods(ev),
+      startPeriod: range ? range.startPeriod : '',
+      endPeriod: range ? range.endPeriod : '',
+      billingRule: getRule(ev)
+    }];
+  }
+
+  function isCourseScopedRule(rule) {
+    return !!(rule && rule.subjects && rule.subjects.length);
+  }
+
+  function ruleAppliesToSubject(rule, subject) {
+    var wanted = (rule && rule.subjects) || [];
+    if (!wanted.length) return true;
+    var cell = normalizeSubject(subject);
+    if (!cell) return false;
+    return wanted.some(function (value) { return cell === value || cell.indexOf(value) >= 0; });
+  }
+
+  function ruleAppliesToClass(rule, className) {
+    if (!rule) return false;
+    if (rule.scope === SCOPE_ALL) return true;
+    return (rule.classes || []).indexOf(normClass(className)) >= 0;
+  }
+
+  function ruleClasses(rule, allClasses) {
+    if (!rule) return [];
+    if (rule.scope === SCOPE_ALL && Array.isArray(allClasses)) return parseClassList(allClasses);
+    return (rule.classes || []).slice();
+  }
+
+  function ruleAppliesToPeriod(rule, period, dateStr, semesterEndDate, ev) {
+    if (!rule) return false;
+    if (rule.startPeriod && rule.endPeriod) {
+      return eventAppliesToPeriod({
+        startPeriod: rule.startPeriod,
+        endPeriod: rule.endPeriod,
+        startDate: eventStart(ev || {}),
+        endDate: normDate((ev || {}).endDate || (ev || {})['迄日'])
+      }, period, dateStr, semesterEndDate);
+    }
+    if (period === undefined || period === null || String(period).trim() === '') return true;
+    var list = rule.periods || [];
+    if (!list.length || list[0] === PERIOD_ALL) return true;
+    var requested = normalizePeriodKey(period);
+    return !!requested && list.indexOf(requested) >= 0;
   }
 
   /**
@@ -359,12 +438,16 @@ const DomainClassAway = (() => {
     for (var i = 0; i < list.length; i++) {
       var ev = list[i];
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) continue;
-      if (!eventAppliesToPeriod(ev, period, dateStr, semesterEndDate)) continue;
-      if (isCourseScopedEvent(ev)) {
-        if (!wantsSubject || !subjectMatchesEvent(ev, subject)) continue;
-      }
-      for (var j = 0; j < candidates.length; j++) {
-        if (eventAppliesToClass(ev, candidates[j])) return true;
+      var rules = eventRuleList(ev);
+      for (var r = 0; r < rules.length; r++) {
+        var rule = rules[r];
+        if (!ruleAppliesToPeriod(rule, period, dateStr, semesterEndDate, ev)) continue;
+        if (isCourseScopedRule(rule)) {
+          if (!wantsSubject || !ruleAppliesToSubject(rule, subject)) continue;
+        }
+        for (var j = 0; j < candidates.length; j++) {
+          if (ruleAppliesToClass(rule, candidates[j])) return true;
+        }
       }
     }
     return false;
@@ -378,21 +461,18 @@ const DomainClassAway = (() => {
     opts = opts || {};
     var set = {};
     (events || []).forEach(function (ev) {
-      // 科目型事件只停單一課堂，不列入「整班空堂」清單。
-      if (isCourseScopedEvent(ev)) return;
       if (!isDateInEvent(dateStr, ev, semesterEndDate)) return;
-      if (!isDateInEvent(dateStr, ev, semesterEndDate)) return;
-      if (!eventAppliesToPeriod(ev, period, dateStr, semesterEndDate)) return;
-      classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
+      eventRuleList(ev).forEach(function (rule) {
+        // 科目型規則只停單一課堂，不列入「整班空堂」清單。
+        if (isCourseScopedRule(rule)) return;
+        if (!ruleAppliesToPeriod(rule, period, dateStr, semesterEndDate, ev)) return;
+        ruleClasses(rule, opts.allClasses).forEach(function (c) { set[c] = 1; });
+      });
     });
     return Object.keys(set).sort();
   }
 
-  /**
-   * 期間內有交集的外出班（活動互代帶入用）
-   * @param {{ forMutualOnly?: boolean }} opts
-   */
-  /** 事件與查詢期間是否有交集（含節次條件） */
+  /** 事件與查詢期間是否有交集（只看日期與啟用／可進互代） */
   function eventOverlapsRange(ev, a, b, semesterEndDate, opts) {
     opts = opts || {};
     if (!isEnabled(ev)) return false;
@@ -400,10 +480,17 @@ const DomainClassAway = (() => {
     var s = eventStart(ev);
     var e = effectiveEnd(ev, semesterEndDate);
     if (!s || s > b || e < a) return false;
+    return true;
+  }
+
+  /** 規則在查詢期間內是否命中指定節次（opts.period 空白＝不比對節次） */
+  function ruleOverlapsRange(ev, rule, a, b, semesterEndDate, opts) {
+    opts = opts || {};
     if (opts.period === undefined || opts.period === null || String(opts.period).trim() === '') return true;
     var requestedPeriods = normalizePeriods(opts.period);
-    var anyRequestedPeriod = !requestedPeriods.length || requestedPeriods[0] === PERIOD_ALL;
-    if (anyRequestedPeriod) return true;
+    if (!requestedPeriods.length || requestedPeriods[0] === PERIOD_ALL) return true;
+    var s = eventStart(ev);
+    var e = effectiveEnd(ev, semesterEndDate);
     var overlapStart = s > a ? s : a;
     var overlapEnd = e < b ? e : b;
     var cursorParts = overlapStart.split('-').map(Number);
@@ -414,13 +501,14 @@ const DomainClassAway = (() => {
       var candidateDate = cursor.getUTCFullYear() + '-' + String(cursor.getUTCMonth() + 1).padStart(2, '0')
         + '-' + String(cursor.getUTCDate()).padStart(2, '0');
       for (var pi = 0; pi < requestedPeriods.length; pi++) {
-        if (eventAppliesToPeriod(ev, requestedPeriods[pi], candidateDate, semesterEndDate)) return true;
+        if (ruleAppliesToPeriod(rule, requestedPeriods[pi], candidateDate, semesterEndDate, ev)) return true;
       }
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
     return false;
   }
 
+  /** 期間內有交集的外出班（活動互代帶入用） */
   function getAwayClassesInRange(startDate, endDate, events, semesterEndDate, opts) {
     opts = opts || {};
     var a = normDate(startDate);
@@ -428,18 +516,20 @@ const DomainClassAway = (() => {
     if (!a) return [];
     var set = {};
     (events || []).forEach(function (ev) {
-      // 科目型事件只停單一課堂，班級層清單不列。
-      if (isCourseScopedEvent(ev)) return;
       if (!eventOverlapsRange(ev, a, b, semesterEndDate, opts)) return;
-      classesForEvent(ev, opts.allClasses).forEach(function (c) { set[c] = 1; });
+      eventRuleList(ev).forEach(function (rule) {
+        // 科目型規則只停單一課堂，班級層清單不列。
+        if (isCourseScopedRule(rule)) return;
+        if (!ruleOverlapsRange(ev, rule, a, b, semesterEndDate, opts)) return;
+        ruleClasses(rule, opts.allClasses).forEach(function (c) { set[c] = 1; });
+      });
     });
     return Object.keys(set).sort();
   }
 
   /**
-   * 期間內有交集的「課堂」清單（科目型事件用，活動互代以課堂為單位）
+   * 期間內有交集的「課堂」清單（科目型規則用，活動互代以課堂為單位）
    * @returns {Array<{className: string, classes: string[], subject: string, eventId: string, eventName: string}>}
-   *   className 為併班合併寫法（802・805・806），可直接當互代外出單位字串的班級段。
    */
   function getAwayCoursesInRange(startDate, endDate, events, semesterEndDate, opts) {
     opts = opts || {};
@@ -449,21 +539,24 @@ const DomainClassAway = (() => {
     var out = [];
     var seen = {};
     (events || []).forEach(function (ev) {
-      if (!isCourseScopedEvent(ev)) return;
       if (!eventOverlapsRange(ev, a, b, semesterEndDate, opts)) return;
-      var classes = classesForEvent(ev, opts.allClasses);
-      if (!classes.length) return;
-      var className = classes.join('、');
-      eventSubjects(ev).forEach(function (subject) {
-        var key = className + '|' + subject;
-        if (seen[key]) return;
-        seen[key] = true;
-        out.push({
-          className: className,
-          classes: classes.slice(),
-          subject: subject,
-          eventId: String(ev.id || ev['事件ID'] || ''),
-          eventName: String(ev.name || ev['事件名稱'] || '')
+      eventRuleList(ev).forEach(function (rule) {
+        if (!isCourseScopedRule(rule)) return;
+        if (!ruleOverlapsRange(ev, rule, a, b, semesterEndDate, opts)) return;
+        var classes = ruleClasses(rule, opts.allClasses);
+        if (!classes.length) return;
+        var className = classes.join('、');
+        rule.subjects.forEach(function (subject) {
+          var key = className + '|' + subject;
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push({
+            className: className,
+            classes: classes.slice(),
+            subject: subject,
+            eventId: String(ev.id || ev['事件ID'] || ''),
+            eventName: String(ev.name || ev['事件名稱'] || '')
+          });
         });
       });
     });
@@ -550,18 +643,6 @@ const DomainClassAway = (() => {
     return out;
   }
 
-  /**
-   * 某週一是否落在 reduce 事件生效後（monday >= start 且 monday <= end）
-   */
-  function mondayInReduceWindow(monday, ev, semesterEndDate) {
-    if (getRule(ev) !== RULE_REDUCE) return false;
-    if (!isEnabled(ev)) return false;
-    var mon = normDate(monday);
-    var s = eventStart(ev);
-    var e = effectiveEnd(ev, semesterEndDate);
-    if (!mon || !s) return false;
-    return mon >= s && mon <= e;
-  }
 
   /**
    * 教師基礎課表中，屬於「reduce 空堂班」的週鐘點節數
@@ -575,9 +656,11 @@ const DomainClassAway = (() => {
     return !!value[normalizePeriodKey(period)];
   }
 
-  function addEventToReduceSet(awayClassSet, ev) {
-    var targets = eventScope(ev) === SCOPE_ALL ? ['*'] : eventClasses(ev);
-    var periods = eventPeriods(ev);
+  /** 把一條規則的「班級 × 節次」併入 reduce 扣減集合 */
+  function addRuleToReduceSet(awayClassSet, rule) {
+    if (!rule || isCourseScopedRule(rule)) return;
+    var targets = rule.scope === SCOPE_ALL ? ['*'] : (rule.classes || []);
+    var periods = rule.periods || [];
     targets.forEach(function (target) {
       if (!awayClassSet[target]) awayClassSet[target] = {};
       if (!periods.length || periods[0] === PERIOD_ALL) {
@@ -612,12 +695,12 @@ const DomainClassAway = (() => {
             && !DomainSchedule.isActiveOnDate(s, activeDate)) continue;
         var legacyHit = periodSetMatches(awayClassSet[classes[i]], period)
           || periodSetMatches(awayClassSet['*'], period);
-        var rangeHit = !!activeDate && (rangeEvents || []).some(function (ev) {
-          // 科目型事件（只停單一課堂）不列入鐘點扣減，避免只停本土語卻扣整班。
-          if (isCourseScopedEvent(ev)) return false;
-          return isDateInEvent(activeDate, ev, semesterEndDate)
-            && eventAppliesToPeriod(ev, period, activeDate, semesterEndDate)
-            && eventAppliesToClass(ev, classes[i]);
+        var rangeHit = !!activeDate && (rangeEvents || []).some(function (item) {
+          // 科目型規則（只停單一課堂）不列入鐘點扣減，避免只停本土語卻扣整班。
+          if (!item || !item.rule || isCourseScopedRule(item.rule)) return false;
+          return isDateInEvent(activeDate, item.ev, semesterEndDate)
+            && ruleAppliesToPeriod(item.rule, period, activeDate, semesterEndDate, item.ev)
+            && ruleAppliesToClass(item.rule, classes[i]);
         });
         if (legacyHit || rangeHit) {
           n++;
@@ -658,22 +741,26 @@ const DomainClassAway = (() => {
         weekDates.push(weekDate.getFullYear() + '-' + String(weekDate.getMonth() + 1).padStart(2, '0')
           + '-' + String(weekDate.getDate()).padStart(2, '0'));
       }
-      var rangeEvents = [];
+      var rangeRules = [];
       events.forEach(function (ev) {
-        // 科目型事件只影響課表與互代，不計入 reduce 超鐘點。
-        if (isCourseScopedEvent(ev)) return;
-        if (eventPeriodRange(ev)) {
-          if (getRule(ev) !== RULE_REDUCE || !isEnabled(ev)) return;
-          var rangeStart = eventStart(ev);
-          var rangeEnd = effectiveEnd(ev, semesterEnd);
-          if (rangeStart && rangeStart <= weekDates[4] && rangeEnd >= weekDates[0]) rangeEvents.push(ev);
-          return;
-        }
-        if (!mondayInReduceWindow(mon, ev, semesterEnd)) return;
-        addEventToReduceSet(awaySet, ev);
+        if (!isEnabled(ev)) return;
+        var s = eventStart(ev);
+        var e = effectiveEnd(ev, semesterEnd);
+        if (!s || s > weekDates[4] || e < weekDates[0]) return;
+        eventRuleList(ev).forEach(function (rule) {
+          // 科目型規則只影響課表與互代，不計入 reduce 超鐘點。
+          if (isCourseScopedRule(rule)) return;
+          if (rule.billingRule !== RULE_REDUCE) return;
+          if (rule.startPeriod && rule.endPeriod) {
+            rangeRules.push({ ev: ev, rule: rule });
+            return;
+          }
+          if (!(mon >= s && mon <= e)) return;
+          addRuleToReduceSet(awaySet, rule);
+        });
       });
-      if (!Object.keys(awaySet).length && !rangeEvents.length) return;
-      total += countReduceSlotsForTeacher(email, allSchedules, awaySet, weekDates, rangeEvents, semesterEnd);
+      if (!Object.keys(awaySet).length && !rangeRules.length) return;
+      total += countReduceSlotsForTeacher(email, allSchedules, awaySet, weekDates, rangeRules, semesterEnd);
     });
     return total;
   }
@@ -743,6 +830,14 @@ const DomainClassAway = (() => {
     eventSubjects: eventSubjects,
     isCourseScopedEvent: isCourseScopedEvent,
     subjectMatchesEvent: subjectMatchesEvent,
+    parseRules: parseRules,
+    normalizeRule: normalizeRule,
+    eventRuleList: eventRuleList,
+    isCourseScopedRule: isCourseScopedRule,
+    ruleAppliesToClass: ruleAppliesToClass,
+    ruleAppliesToSubject: ruleAppliesToSubject,
+    ruleAppliesToPeriod: ruleAppliesToPeriod,
+    ruleClasses: ruleClasses,
     eventScope: eventScope,
     eventPeriods: eventPeriods,
     eventPeriod: eventPeriod,
