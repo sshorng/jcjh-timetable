@@ -2019,9 +2019,7 @@
                        <th>迄日</th>
                        <th>範圍</th>
                        <th>班級</th>
-                       <th>停課節次（每天）</th>
-                       <th>起始節次</th>
-                       <th>結束節次</th>
+                       <th title="連續起迄會顯示起～迄；＋N 條表示另有 N 條規則，詳見編輯">節次</th>
                        <th>鐘點</th>
                       <th title="填科目＝只停該科課堂；空白＝整班">科目</th>
                       <th>互代</th>
@@ -2036,9 +2034,11 @@
                        <td>{{ ev.endDate || '學期結束' }}</td>
                        <td>{{ ev.scope === 'all' ? '全校' : '指定班級' }}</td>
                         <td style="max-width:180px;font-size:0.78rem;">{{ (ev.classes || []).join('、') || '無' }}</td>
-                         <td>{{ classAwayDailyPeriodLabel(ev) }}</td>
-                         <td>{{ classAwayBoundaryPeriodLabel(ev, 'start') }}</td>
-                         <td>{{ classAwayBoundaryPeriodLabel(ev, 'end') }}</td>
+                         <td>
+                           <template v-if="isClassAwayRangeEvent(ev)">{{ classAwayBoundaryPeriodLabel(ev, 'start') }}～{{ classAwayBoundaryPeriodLabel(ev, 'end') }}</template>
+                           <template v-else>{{ classAwayDailyPeriodLabel(ev) }}</template>
+                           <span v-if="(ev.rules || []).length" style="color:var(--text-muted);"> ＋{{ (ev.rules || []).length }} 條</span>
+                         </td>
                        <td>{{ ev.billingRule === 'reduce' ? '扣超鐘點' : '不扣超鐘點' }}</td>
                       <td>
                         <span :style="{ color: (ev.subject || (ev.rules || []).length) ? '#0f766e' : 'var(--text-muted)', fontSize: '0.78rem' }">
@@ -2056,7 +2056,7 @@
                       </td>
                     </tr>
                     <tr v-if="!classAwayEvents.length">
-                        <td colspan="13" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄；填科目可只停該科（例：本土語-台語）</span></td>
+                        <td colspan="11" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄；填科目可只停該科（例：本土語-台語）</span></td>
                     </tr>
                   </tbody>
                 </table>
