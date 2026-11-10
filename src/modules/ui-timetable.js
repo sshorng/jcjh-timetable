@@ -2842,26 +2842,38 @@ const UiTimetable = (() => {
     }
 
     // DI：測試顯式注入 getScheduleForDate 時優先採用（正式環境 app.js 不傳，沿用內部實作）
-const getClassAwayEventName = (className, dateStr, period) => {
+const getClassAwayEventName = (className, dateStr, period, subject) => {
   if (!className || !DomainClassAway) return '';
   const parseClasses = typeof DomainClassAway.parseClassList === 'function'
     ? DomainClassAway.parseClassList
     : value => String(value || '').split(/[,，、/／\s]+/).map(item => item.trim()).filter(Boolean);
   const classNames = parseClasses(className);
-  if (!classNames.length || typeof DomainClassAway.eventsActiveOnDate !== 'function') return '';
+  if (!classNames.length) return '';
   if (typeof getTodayString !== 'function' || typeof getClassAwayEventsForView !== 'function') return '';
-  const activeEvents = DomainClassAway.eventsActiveOnDate(
-    dateStr || getTodayString(), getClassAwayEventsForView(), (typeof semesterEndDate !== 'undefined' && semesterEndDate && semesterEndDate.value) || '', period
-  );
+  const date = dateStr || getTodayString();
+  const end = (typeof semesterEndDate !== 'undefined' && semesterEndDate && semesterEndDate.value) || '';
+  const wantedSubject = String(subject == null ? '' : subject).replace(/\s+/g, '');
   const names = [];
-  activeEvents.forEach(event => {
-    const eventClasses = typeof DomainClassAway.eventClasses === 'function'
-      ? DomainClassAway.eventClasses(event)
-      : parseClasses(event && (event.classes || event.classList || event['班級清單']));
-    const matchesClass = typeof DomainClassAway.eventAppliesToClass === 'function'
-      ? classNames.some(classValue => DomainClassAway.eventAppliesToClass(event, classValue))
-      : classNames.some(classValue => eventClasses.includes(classValue));
-    if (!matchesClass) return;
+  (getClassAwayEventsForView() || []).forEach(event => {
+    if (!event) return;
+    if (typeof DomainClassAway.isDateInEvent === 'function'
+        && !DomainClassAway.isDateInEvent(date, event, end)) return;
+    // 以規則為單位比對：科目型規則要科目命中，整班規則不受科目影響
+    const rules = typeof DomainClassAway.eventRuleList === 'function'
+      ? DomainClassAway.eventRuleList(event)
+      : [DomainClassAway.normalizeRule(event)];
+    const hit = (rules || []).some(rule => {
+      if (!rule) return false;
+      if (typeof DomainClassAway.ruleAppliesToPeriod === 'function'
+          && !DomainClassAway.ruleAppliesToPeriod(rule, period, date, end, event)) return false;
+      if (typeof DomainClassAway.isCourseScopedRule === 'function'
+          && DomainClassAway.isCourseScopedRule(rule)) {
+        if (!wantedSubject) return false;
+        if (!DomainClassAway.ruleAppliesToSubject(rule, wantedSubject)) return false;
+      }
+      return classNames.some(classValue => DomainClassAway.ruleAppliesToClass(rule, classValue));
+    });
+    if (!hit) return;
     const name = String(event && (event.name || event['事件名稱']) || '').trim();
     if (name && !names.includes(name)) names.push(name);
   });
@@ -2898,7 +2910,6 @@ const getClassAwayEventName = (className, dateStr, period) => {
        resolveBaseSlot: resolveBaseSlot,
       getApprovedScheduleForDate: getApprovedScheduleForDate,
       activeAwayBanner: activeAwayBanner,
-      getClassAwayEventName: getClassAwayEventName,
       getClassAwayEventName: getClassAwayEventName,
       getScheduleForDate: getScheduleForDate,
       findBaseScheduleSlot: findBaseScheduleSlot,
@@ -3097,10 +3108,15 @@ const getClassAwayEventName = (className, dateStr, period) => {
         if (dateForDay && classSubstitutionMap.value[className + '|' + dateForDay + '|' + period]) {
           return 'has-substitution';
         }
-        if (dateForDay && typeof isClassAwayOnDate === 'function'
-            && isClassAwayOnDate(className, dateForDay, period)) {
-          return 'is-away-class';
+        if (dateForDay && typeof isClassAwayOnDate === 'function') {
+          // 單科空堂：該班該節每一堂課都停才算整格空堂；
+          // 只要還有一堂照常上課（例：本土語只停台語，客語照上）就仍算上課。
+          var allAway = entries.every(function (entry) {
+            return isClassAwayOnDate(className, dateForDay, period, entry && entry.subject);
+          });
+          if (allAway) return 'is-away-class';
         }
+
         if (entries.some(function (e) { return e.attr === '巡堂' || e.isPatrol; })) return 'is-patrol';
         // 超鐘點：外觀與一般課相同，僅課名後標（超）
         if (entries.some(function (e) { return e.attr === '實支'; })) return 'is-elastic';
@@ -3156,7 +3172,7 @@ const getClassAwayEventName = (className, dateStr, period) => {
            return;
          }
          if (typeof isClassAwayOnDate === 'function'
-             && isClassAwayOnDate(cls, dateForDay, period)) {
+             && isClassAwayOnDate(cls, dateForDay, period, cellData.subject)) {
            if (deps.showToast) deps.showToast('此班本節為空堂事件，不需申請代課。', 'info');
            return;
          }

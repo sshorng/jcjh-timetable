@@ -77,3 +77,15 @@ downstream: self
 - 每張卡左側色條、卡片內分隔線，收合只看摘要；班級改「選擇班級（已選 N 班）」展開勾選器，各卡獨立。
 - 表單模型改以 `rules[]` 為準（規則 1 = rules[0]，事件層欄位僅鏡射）；存檔 1 條規則仍寫舊欄位、2 條以上寫 `規則清單`。
 - 測試：`tests/class-away-ui-tests.test.js` 改走新模型；全套 81 檔／195 條全綠。
+
+## 🔧 追加：監考表與班級課表讀單科空堂（2026-11-10）
+
+夫子的話：「監考表沒有正確讀到科目空堂。另外班級課表也是，沒有讀到單科設定空堂」
+
+- 病根：科目空堂只在「教師課表」與互代生效；監考表（教師版／班級版）的班級檢查完全沒讀空堂事件，班級課表也只用班級層判定，於是只停單科時仍被要求監考，停課的兩門分組課又被算成同班兩位監考（重複）。
+- 監考表：`validateClassCoverage` 新增第 5 個參數 `opts { awayEvents, semesterEndDate }`；該班該節整班空堂，或該班該節在基礎課表上的每一門課都被停課 → 該班該節不列入缺少／重複（`awaySkipped` 回報）。只要還有一門課照常上課（例：只停台語、客語照上）就仍要監考。
+- 監考表：`buildTeacherMatrix` 新增第 7 個參數，空堂科目的格留白，不再當成監考勤務（重複因此消失）；手動排入的勤務（`changed`，例：空堂排班派去監考）一律保留。
+- 匯出提示：新增 `coverageAwayNote`，成功訊息會寫明「已依空堂事件略過 N 個班級節次（M 節）不必監考」。
+- 班級課表：`getClassCellClassForClass` 改為逐堂判定，該班該節每一堂都停才標整格空堂；`getClassAwayEventName` 與空堂標籤都帶科目，客語不會再掛台語的停課標籤。
+- 未帶 `awayEvents`／舊事件（無科目）行為完全不變。
+- 測試：新增 `tests/invigilation-class-away-tests.test.js`（6 條）、`tests/class-timetable-away-subject-tests.test.js`（5 條）；全套 89 檔／219 條全綠，`npm run lint`、`npm run build` 通過。

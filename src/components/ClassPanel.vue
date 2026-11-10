@@ -82,7 +82,7 @@
                                      <span v-if="entry.restriction === 'restricted' || hasScheduleSpecialTag(entry, '綁課')" class="cell-badge tag-restricted">綁課</span>
                                       <span v-if="hasScheduleSpecialTag(entry, '預排')" class="cell-badge tag-preplanned">預排</span>
                                      <span v-if="entry._schoolSwap" class="cell-badge tag-warning" :title="entry._schoolSwap.name">全校對調</span>
-                                       <span v-if="isClassAwayOnDate(selectedClass, dateStr, period)" class="away-class-badge">{{ getClassAwayEventName(selectedClass, dateStr, period) || '空堂事件' }}</span>
+                                       <span v-if="isClassAwayOnDate(selectedClass, dateStr, period, entry.subject)" class="away-class-badge">{{ getClassAwayEventName(selectedClass, dateStr, period, entry.subject) || '空堂事件' }}</span>
                                   </div>
                                   <div class="cell-class-name">
                                     {{ getRealTeacherName(entry) }}

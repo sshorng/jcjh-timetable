@@ -532,6 +532,8 @@ const UiExport = (() => {
            ledgerRows: ledgerRows,
            ledgerHistoryComplete: true,
            allSchedules: allSchedules.value || [],
+           awayEvents: (classAwayEvents && classAwayEvents.value) || [],
+           semesterEndDate: (semesterEndDate && semesterEndDate.value) || '',
            classNames: classList.value || [],
            onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
@@ -643,6 +645,8 @@ const UiExport = (() => {
           getCell: getCellFn,
           requests: requestsList.value || [],
           allSchedules: allSchedules.value || [],
+          awayEvents: (classAwayEvents && classAwayEvents.value) || [],
+          semesterEndDate: (semesterEndDate && semesterEndDate.value) || '',
           classNames: classList.value || [],
           onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;

@@ -533,13 +533,15 @@ const ExportInvigilationClass = (() => {
     var teacherMatrix = ExportInvigilation.buildTeacherMatrix(
       teachers, periodSpec, opts.getCell, 38,
       function (c, t) { progress('讀取課表 ' + c + '／' + t + '…', c, t); },
-      opts.allSchedules || []
+      opts.allSchedules || [],
+      { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
     var coverage = ExportInvigilation.validateClassCoverage(
       teacherMatrix,
       periodSpec,
       opts.classNames || [],
-      opts.allSchedules || []
+      opts.allSchedules || [],
+      { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
     if (!coverage.ok) {
       var lines = ['監考表（班級版）班級檢查未通過，已停止匯出。'];
@@ -608,6 +610,10 @@ const ExportInvigilationClass = (() => {
     var warn = range.warning || '';
     var tip = 'Row2 考科欄（空欄）請依段考範圍手填；自習欄已帶入「自習」。巡堂列僅考試節填值。';
     warn = warn ? (warn + '；' + tip) : tip;
+    var awayNote = typeof ExportInvigilation.coverageAwayNote === 'function'
+      ? ExportInvigilation.coverageAwayNote(coverage)
+      : '';
+    if (awayNote) warn = warn ? (warn + '；' + awayNote + '。') : (awayNote + '。');
     var pstats = (classMatrix && classMatrix.patrolStats) || null;
     if (pstats) {
       if (pstats.gradedSlots > 0) {

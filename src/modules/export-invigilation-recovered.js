@@ -5,6 +5,7 @@
 import DateUtils from '../domain/date-utils.js';
 import DomainActivityCover from '../domain/domain-activity-cover.js';
 import DomainSchedule from '../domain/domain-schedule.js';
+import DomainClassAway from '../domain/domain-class-away.js';
 import { TemplateBuffer } from './template-buffer.js';
 import {
   normalizeExamSubject,
@@ -620,10 +621,11 @@ const ExportInvigilation = (() => {
     return true;
   }
 
-  function buildTeacherMatrix(teachers, periodSpec, getCell, slotsPerSide, onProgress, allSchedules) {
+  function buildTeacherMatrix(teachers, periodSpec, getCell, slotsPerSide, onProgress, allSchedules, awayOpts) {
     var cap = slotsPerSide || TEACHER_SLOTS_FALLBACK;
     var cache = Object.create(null);
     var baseList = allSchedules || [];
+    var awayQuery = buildAwayQuery(awayOpts);
 
     // 基礎課表索引：email|dow|period → 巡堂課表列；查詢時再依日期判斷有效性。
     var basePatrolMap = Object.create(null);
@@ -720,8 +722,18 @@ const ExportInvigilation = (() => {
               : { text: '', changed: false };
           }
         }
+        // 空堂（整班停課／該班該科停課）不是監考勤務：該格留白。
+        // 明確排入的勤務（changed，例：空堂排班派去監考）一律保留。
+        var awayHit = false;
+        if (!slot.changed && raw && slot.text && !isBasePatrol(raw)) {
+          var awayClassName = raw.className != null ? raw.className : (raw['班級'] || '');
+          var awaySubject = String(raw.subject != null ? raw.subject : (raw['科目'] || ''));
+          if (raw.isClassAway === true) awayHit = true;
+          else if (awayQuery) awayHit = awayQuery(awayClassName, sp.date, sp.period, awaySubject);
+          if (awayHit) slot = { text: '', changed: false };
+        }
         // 雙重保險：基礎巡堂一定寫「巡堂」
-        if (!slot || (!slot.changed && (!slot.text || !String(slot.text).trim()))) {
+        if (!awayHit && (!slot || (!slot.changed && (!slot.text || !String(slot.text).trim())))) {
           if (hasBasePatrolAt(t.email, sp.date, sp.period, day)
               || (raw && (raw.isPatrol || isPatrolWord(raw.attr)
                 || isPatrolWord(raw.className) || isPatrolWord(raw.subject)))) {
@@ -811,11 +823,97 @@ const ExportInvigilation = (() => {
     return result;
   }
 
+  /**
+   * 空堂查詢器（監考需求判定用）
+   * - 帶 awayEvents 時由本模組自行判定，不依賴外部 getCell 是否已標 isClassAway。
+   * - subject 省略＝班級層判定（科目型事件不算整班空堂，只停該科）。
+   * @returns {Function|null} fn(className, dateStr, period, subject) → boolean
+   */
+  function buildAwayQuery(opts) {
+    opts = opts || {};
+    var events = opts.awayEvents || [];
+    if (!events.length || !DomainClassAway
+        || typeof DomainClassAway.isClassAwayOnDate !== 'function') {
+      return null;
+    }
+    var end = opts.semesterEndDate || '';
+    return function (className, dateStr, period, subject) {
+      try {
+        if (subject === undefined || subject === null) {
+          return DomainClassAway.isClassAwayOnDate(className, dateStr, events, end, period) === true;
+        }
+        return DomainClassAway.isClassAwayOnDate(
+          className, dateStr, events, end, period, subject
+        ) === true;
+      } catch (eAway) {
+        return false;
+      }
+    };
+  }
+
+  function scheduleClassNames(schedule) {
+    return splitCoverageClassNames(
+      schedule && (schedule.className != null ? schedule.className : schedule['班級'])
+    );
+  }
+
+  /**
+   * 該班該節在基礎課表上的所有任課科目（不含巡堂、虛擬分組）。
+   * 併班只取含該班的課；本土語分組（802 台語／802 客語）會回傳多個科目。
+   */
+  function slotSubjectsOf(className, dateStr, period, baseSchedules) {
+    var wantedPeriod = parseInt(period, 10);
+    var wantedDay = dayOfWeekMon1(dateStr);
+    var subjects = [];
+    (baseSchedules || []).forEach(function (schedule) {
+      if (!schedule || isBasePatrol(schedule)) return;
+      var day = parseInt(schedule.dayOfWeek != null ? schedule.dayOfWeek : schedule['星期'], 10);
+      var p = parseInt(schedule.period != null ? schedule.period : schedule['節次'], 10);
+      if (day !== wantedDay || p !== wantedPeriod) return;
+      if (!isScheduleActiveOnDate(schedule, dateStr)) return;
+      var names = scheduleClassNames(schedule);
+      if (names.indexOf(className) < 0) return;
+      // 虛擬分組（英資、數資、特教…）段考回原班，不是該班這一節的考科
+      if (names.some(isVirtualClassName)) return;
+      var subject = String(
+        schedule.subject != null ? schedule.subject : (schedule['科目'] || '')
+      ).trim();
+      if (subjects.indexOf(subject) < 0) subjects.push(subject);
+    });
+    return subjects;
+  }
+
+  /**
+   * 該班該節是否整節不必監考。
+   * - 整班空堂（事件未指定科目）→ 'class'
+   * - 單科空堂：該班該節每一門課都被指定停課 → 'course'；只要有一門照常上課 → ''
+   * @returns {'class'|'course'|''}
+   */
+  function slotAwayKind(className, dateStr, period, baseSchedules, isAway) {
+    if (!isAway) return '';
+    if (isAway(className, dateStr, period)) return 'class';
+    var subjects = slotSubjectsOf(className, dateStr, period, baseSchedules);
+    if (!subjects.length) return '';
+    var allAway = subjects.every(function (subject) {
+      return isAway(className, dateStr, period, subject);
+    });
+    return allAway ? 'course' : '';
+  }
+
+  /** 匯出提示用：說明有幾個班級節次因空堂事件不必監考 */
+  function coverageAwayNote(coverage) {
+    var skipped = (coverage && coverage.awaySkipped) || [];
+    if (!skipped.length) return '';
+    var cells = 0;
+    skipped.forEach(function (item) { cells += (item.classNames || []).length; });
+    return '已依空堂事件略過 ' + cells + ' 個班級節次（' + skipped.length
+      + ' 節）不必監考';
+  }
   /** 每一個考試日／節次，每個實體班級必須恰好出現一次。 */
-  function validateClassCoverage(matrix, periodSpec, classNames, baseSchedules) {
+  function validateClassCoverage(matrix, periodSpec, classNames, baseSchedules, opts) {
     var expected = collectCoverageClassNames(classNames, baseSchedules, periodSpec);
     if (!expected.length) {
-      return { ok: true, skipped: true, expected: [], missing: [], duplicates: [] };
+      return { ok: true, skipped: true, expected: [], missing: [], duplicates: [], awaySkipped: [] };
     }
     var expectedSet = Object.create(null);
     expected.forEach(function (name) { expectedSet[name] = true; });
@@ -823,8 +921,24 @@ const ExportInvigilation = (() => {
     var duplicates = [];
     var sides = [matrix && matrix.left || [], matrix && matrix.right || []];
     var slots = periodSpec || [];
+    var awayQuery = buildAwayQuery(opts);
+    var awaySkipped = [];
 
     slots.forEach(function (spec, slotIndex) {
+      // 空堂（整班停課，或該班該節每一門課都停）不必監考：
+      // 不列入缺漏與重複，讓只停單科的班級不再被誤判。
+      var skippedHere = Object.create(null);
+      if (awayQuery) {
+        expected.forEach(function (name) {
+          var kind = slotAwayKind(name, spec.date, spec.period, baseSchedules, awayQuery);
+          if (kind) skippedHere[name] = kind;
+        });
+      }
+      var slotExpected = expected.filter(function (name) { return !skippedHere[name]; });
+      var skippedNames = Object.keys(skippedHere);
+      if (skippedNames.length) {
+        awaySkipped.push({ date: spec.date, period: spec.period, classNames: skippedNames });
+      }
       var counts = Object.create(null);
       var assignedTo = Object.create(null);
       sides.forEach(function (side) {
@@ -843,11 +957,11 @@ const ExportInvigilation = (() => {
         });
       });
 
-      var missingHere = expected.filter(function (name) { return !counts[name]; });
+      var missingHere = slotExpected.filter(function (name) { return !counts[name]; });
       if (missingHere.length) {
         missing.push({ date: spec.date, period: spec.period, classNames: missingHere });
       }
-      var duplicateHere = expected.filter(function (name) { return counts[name] > 1; }).map(function (name) {
+      var duplicateHere = slotExpected.filter(function (name) { return counts[name] > 1; }).map(function (name) {
         return {
           className: name,
           count: counts[name],
@@ -864,7 +978,8 @@ const ExportInvigilation = (() => {
       skipped: false,
       expected: expected,
       missing: missing,
-      duplicates: duplicates
+      duplicates: duplicates,
+      awaySkipped: awaySkipped
     };
   }
 
@@ -1188,13 +1303,15 @@ const ExportInvigilation = (() => {
     var matrix = buildTeacherMatrix(
       teachers, periodSpec, opts.getCell, layout.slots,
       function (c, t) { progress('讀取課表 ' + c + '／' + t + '…', c, t); },
-      opts.allSchedules || []
+      opts.allSchedules || [],
+      { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
     var coverage = validateClassCoverage(
       matrix,
       periodSpec,
       opts.classNames || [],
-      opts.allSchedules || []
+      opts.allSchedules || [],
+      { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
     if (!coverage.ok) {
       return { ok: false, error: formatCoverageError(coverage), coverage: coverage };
@@ -1310,6 +1427,8 @@ const ExportInvigilation = (() => {
     }
     var masterTip = '各分發表 A1:X47 已公式連動主表（含 B4:X6 考科），A48 保留個人額度備註。';
     warn = warn ? (warn + '；' + masterTip) : masterTip;
+    var awayNote = coverageAwayNote(coverage);
+    if (awayNote) warn = warn ? (warn + '；' + awayNote + '。') : (awayNote + '。');
     var subjFills = (masterSubjects && masterSubjects.fills) || [];
     var subjUnplaced = (masterSubjects && masterSubjects.unplaced) || 0;
     if (subjFills.length) {
@@ -1358,7 +1477,8 @@ const ExportInvigilation = (() => {
     linkMasterRange: linkMasterRange,
     fillExamSubjects: fillExamSubjects,
     exportWorkbook: exportWorkbook,
-    loadTemplateBuffer: loadTemplateBuffer
+    loadTemplateBuffer: loadTemplateBuffer,
+    coverageAwayNote: coverageAwayNote
   };
 })();
 
