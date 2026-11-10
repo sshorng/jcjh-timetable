@@ -521,24 +521,38 @@ const UiExport = (() => {
           }
           return cell;
         };
-        const res = await ExportInvigilation.exportWorkbook({
+        const exportOpts = {
           title: title,
           startDate: schoolExportStart.value,
           endDate: schoolExportEnd.value,
           teachers: teachers,
           recipients: recipients,
           getCell: getCellFn,
-           requests: requestsList.value || [],
-           ledgerRows: ledgerRows,
-           ledgerHistoryComplete: true,
-           allSchedules: allSchedules.value || [],
-           awayEvents: (classAwayEvents && classAwayEvents.value) || [],
-           semesterEndDate: (semesterEndDate && semesterEndDate.value) || '',
-           classNames: classList.value || [],
-           onProgress: (p) => {
+          requests: requestsList.value || [],
+          ledgerRows: ledgerRows,
+          ledgerHistoryComplete: true,
+          allSchedules: allSchedules.value || [],
+          awayEvents: (classAwayEvents && classAwayEvents.value) || [],
+          semesterEndDate: (semesterEndDate && semesterEndDate.value) || '',
+          classNames: classList.value || [],
+          onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
           }
-        });
+        };
+        let res = await ExportInvigilation.exportWorkbook(exportOpts);
+        if (res && res.needsCoverageConfirm) {
+          // 不硬擋：把問題列出來，讓教學組自己決定要不要照目前排法強制匯出
+          const forceExport = await showConfirm(
+            (res.error || '監考表班級檢查未通過')
+            + '\n\n仍要匯出嗎？\n按「確認」照目前排法匯出（缺漏與重複會原樣留在表上，請自行核對）；按「取消」回去補排。',
+            '監考表檢查未通過'
+          );
+          if (!forceExport) {
+            showToast('已停止匯出，請先補齊監考安排', 'info');
+            return;
+          }
+          res = await ExportInvigilation.exportWorkbook(Object.assign({}, exportOpts, { forceCoverage: true }));
+        }
         if (!res || !res.ok) {
           showToast((res && res.error) || '匯出失敗', 'warning');
           return;
@@ -637,7 +651,7 @@ const UiExport = (() => {
           }
           return cell;
         };
-        const res = await ExportInvigilationClass.exportWorkbook({
+        const exportOpts = {
           title: defaultTitle,
           startDate: schoolExportStart.value,
           endDate: schoolExportEnd.value,
@@ -651,7 +665,24 @@ const UiExport = (() => {
           onProgress: (p) => {
             if (p && p.message) loadingMessage.value = p.message;
           }
-        });
+        };
+        let res = await ExportInvigilationClass.exportWorkbook(exportOpts);
+        if (res && res.needsCoverageConfirm) {
+          // 不硬擋：列出缺少／重複，讓教學組決定要不要照目前排法強制匯出
+          const forceExport = await showConfirm(
+            (res.error || '監考表班級檢查未通過')
+            + '\n\n仍要匯出嗎？\n按「確認」照目前排法匯出（缺漏與重複會原樣留在表上，請自行核對）；按「取消」回去補排。',
+            '監考表檢查未通過'
+          );
+          if (!forceExport) {
+            showToast('已停止匯出，請先補齊監考安排', 'info');
+            return;
+          }
+          res = await ExportInvigilationClass.exportWorkbook(
+            Object.assign({}, exportOpts, { forceCoverage: true })
+          );
+        }
+        // 強制匯出後續走同一段成功流程
         if (!res || !res.ok) {
           showToast((res && res.error) || '匯出失敗', 'warning');
           return;

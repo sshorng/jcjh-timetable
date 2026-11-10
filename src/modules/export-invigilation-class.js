@@ -163,13 +163,14 @@ const ExportInvigilationClass = (() => {
     var subjectOfFn = (typeof subjectOf === 'function') ? subjectOf : function () { return ''; };
     allTeachers.forEach(function (t) {
       if (!t || !t.slots) return;
-      if (t.specialEducation) return;
       var teacherName = t.name || t.email || '';
       var teacherSubject = '';
       try { teacherSubject = normalizeExamSubject(subjectOfFn(t), 'class'); } catch (eSubj) { teacherSubject = ''; }
       for (var s = 0; s < slotCount; s++) {
         var slot = t.slots[s];
         if (!slot || typeof slot !== 'object') continue;
+        // 特教班不是實體考場：只跳過「特教監考」那一格，特教老師的普通班照常寫入
+        if (slot.specialEducation === true) continue;
         var text = String(slot.text || '').trim();
         if (!text) continue;
         var kind = detectPatrolKind(text);
@@ -544,7 +545,7 @@ const ExportInvigilationClass = (() => {
       { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
     if (!coverage.ok) {
-      var lines = ['監考表（班級版）班級檢查未通過，已停止匯出。'];
+      var lines = ['監考表（班級版）班級檢查未通過。'];
       var maxItems = 8;
       if (coverage.missing && coverage.missing.length) {
         lines.push('缺少：' + coverage.missing.slice(0, maxItems).map(function (item) {
@@ -557,7 +558,15 @@ const ExportInvigilationClass = (() => {
             + item.classes.map(function (e) { return e.className + '（' + e.count + '人）'; }).join('、');
         }).join('；'));
       }
-      return { ok: false, error: lines.join('　'), coverage: coverage };
+      // forceCoverage（使用者按「確認」強制匯出）時往下照做，缺漏與重複原樣留在表上並寫進提示
+      if (opts.forceCoverage !== true) {
+        return {
+          ok: false,
+          needsCoverageConfirm: true,
+          error: lines.join('　'),
+          coverage: coverage
+        };
+      }
     }
     var expected = coverage.expected && coverage.expected.length
       ? coverage.expected.slice()
@@ -614,6 +623,11 @@ const ExportInvigilationClass = (() => {
       ? ExportInvigilation.coverageAwayNote(coverage)
       : '';
     if (awayNote) warn = warn ? (warn + '；' + awayNote + '。') : (awayNote + '。');
+    if (!coverage.ok) {
+      warn = warn ? (warn + '；') : '';
+      warn += '已強制匯出：監考表仍有 ' + ((coverage.missing || []).length)
+        + ' 組缺少、' + ((coverage.duplicates || []).length) + ' 組重複未處理，請自行核對。';
+    }
     var pstats = (classMatrix && classMatrix.patrolStats) || null;
     if (pstats) {
       if (pstats.gradedSlots > 0) {

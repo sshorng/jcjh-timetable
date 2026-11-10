@@ -139,19 +139,36 @@ test('invigilation export contract tests（v1 移植）', () => {
   assert.equal(isSpecialEducationTeacher({ subject: '特教' }), true);
   assert.equal(isSpecialEducationTeacher({ jobTitle: '國文教師', subject: '國文' }), false);
 
+  // 2026-11-10 契約變更：特教老師要讀課表，才分得出哪幾節是特教班、哪幾節是普通班。
   let specialScheduleLookups = 0;
   const specialMatrix = buildTeacherMatrix(
     [{ email: 'special@example.com', name: '特教老師', jobTitle: '特教教師' }],
     ExportInvigilation.buildPeriodSpec(['2026-09-21']),
-    () => { specialScheduleLookups += 1; return { className: '901' }; },
+    () => { specialScheduleLookups += 1; return { className: '特教', subject: '特教' }; },
     38,
     null,
     []
   );
-  assert.equal(specialScheduleLookups, 0, '特教教師不應逐節讀取一般課表');
+  assert.equal(specialScheduleLookups > 0, true, '特教教師要讀課表，才知道哪幾節是特教班');
   assert.equal(specialMatrix.left[0].specialEducation, true);
   assert.equal(specialMatrix.left[0].slots[0].text, '特教監考');
   assert.ok(specialMatrix.left[0].slots.slice(1).every(slot => slot.text === '' && slot.changed === false));
+  assert.equal(specialMatrix.left[0].specialEducationRuns, undefined, '純特教整列合併，不切段');
+
+  // 特教老師兼普通班：特教班仍標「特教監考」，普通班照列班名（該班還是要監考）。
+  const mixedMatrix = buildTeacherMatrix(
+    [{ email: 'mixed@example.com', name: '兼課特教師', jobTitle: '特教教師' }],
+    ExportInvigilation.buildPeriodSpec(['2026-09-21', '2026-09-22']),
+    (email, dateStr, period) => (dateStr === '2026-09-21' && parseInt(period, 10) === 1
+      ? { className: '特教', subject: '特教' }
+      : { className: '901', subject: '國文' }),
+    38,
+    null,
+    []
+  );
+  assert.equal(mixedMatrix.left[0].slots[0].text, '特教監考');
+  assert.equal(mixedMatrix.left[0].slots[1].text, '901', '普通班不可被特教標籤吃掉');
+  assert.deepEqual(mixedMatrix.left[0].specialEducationRuns, [{ start: 0, end: 0 }]);
 
   const specialWorksheet = makeWorksheet();
   const specialMergeCalls = [];

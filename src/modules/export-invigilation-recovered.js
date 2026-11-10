@@ -484,6 +484,33 @@ const ExportInvigilation = (() => {
     return /特教/.test(jobTitle) || /特教/.test(subject);
   }
 
+  /** 這一格是不是特教班課（特教老師的特教班合併成「特教監考」用） */
+  function isSpecialEducationCell(cell) {
+    if (!cell) return false;
+    var cn = String(cell.className != null ? cell.className : (cell['班級'] || ''));
+    var sub = String(cell.subject != null ? cell.subject : (cell['科目'] || ''));
+    var attr = String(cell.attr || '');
+    return /特教/.test(normText(cn + sub + attr));
+  }
+
+  /** 把特教格旗標收成連續區段（供合併儲存格）：[{ start: 0, end: 2 }] */
+  function specialEducationRuns(flags) {
+    var runs = [];
+    var start = -1;
+    (flags || []).forEach(function (flag, index) {
+      if (flag) {
+        if (start < 0) start = index;
+        return;
+      }
+      if (start >= 0) {
+        runs.push({ start: start, end: index - 1 });
+        start = -1;
+      }
+    });
+    if (start >= 0) runs.push({ start: start, end: (flags || []).length - 1 });
+    return runs;
+  }
+
   function mergeWithoutStyle(ws, range) {
     if (!ws || !range) return;
     try {
@@ -504,12 +531,30 @@ const ExportInvigilation = (() => {
         if (!teacher || !teacher.specialEducation) return;
         var row = layout.teacherRowStart + index;
         if (row > layout.teacherRowEnd) return;
-        var start = columnName(dataColStart) + row;
-        var end = columnName(dataColStart + EXAM_SLOTS_PER_SIDE - 1) + row;
-        var anchor = ws.getCell(row, dataColStart);
-        if (anchor) anchor.value = SPECIAL_EDUCATION_LABEL;
-        mergeWithoutStyle(ws, start + ':' + end);
-        merged += 1;
+        var runs = teacher.specialEducationRuns;
+        if (!runs || !runs.length) {
+          // 純特教（課表上沒有普通班）：整列合併成一格「特教監考」，與改版前一致
+          var start = columnName(dataColStart) + row;
+          var end = columnName(dataColStart + EXAM_SLOTS_PER_SIDE - 1) + row;
+          var anchor = ws.getCell(row, dataColStart);
+          if (anchor) anchor.value = SPECIAL_EDUCATION_LABEL;
+          mergeWithoutStyle(ws, start + ':' + end);
+          merged += 1;
+          return;
+        }
+        // 兼普通班：只把特教班那幾段合併，普通班的格子保留班名
+        runs.forEach(function (run) {
+          var anchorCell = ws.getCell(row, dataColStart + run.start);
+          if (anchorCell) anchorCell.value = SPECIAL_EDUCATION_LABEL;
+          if (run.end > run.start) {
+            mergeWithoutStyle(
+              ws,
+              columnName(dataColStart + run.start) + row + ':'
+                + columnName(dataColStart + run.end) + row
+            );
+          }
+          merged += 1;
+        });
       });
     }
 
@@ -559,6 +604,23 @@ const ExportInvigilation = (() => {
     var left = teacherIdentityKeys(a);
     var right = teacherIdentityKeys(b);
     return left.some(function (value) { return right.indexOf(value) >= 0; });
+  }
+
+  /**
+   * 個人表是否移除額度三欄說明：只有「純特教」（整段監考都是特教班、沒有普通班課）
+   * 才移除；特教老師兼普通班課時仍看得到自己的監考額度。
+   */
+  function shouldHideQuotaBracket(matrix, teacher) {
+    var list = ((matrix && matrix.left) || []).concat((matrix && matrix.right) || []);
+    var entry = null;
+    for (var i = 0; i < list.length; i++) {
+      if (teachersMatch(list[i], teacher)) { entry = list[i]; break; }
+    }
+    if (!entry) return isSpecialEducationTeacher(teacher);
+    if (!entry.specialEducation) return false;
+    return !(entry.slots || []).some(function (slot) {
+      return slot && slot.specialEducation !== true && String(slot.text || '').trim();
+    });
   }
 
   /** 個人分發頁：只標示收件教師所在的半邊整列，黑白列印仍可辨識。 */
@@ -691,27 +753,19 @@ const ExportInvigilation = (() => {
       }
       var slots = [];
       var s;
-      if (isSpecialEducationTeacher(t)) {
-        slots.push({ text: SPECIAL_EDUCATION_LABEL, changed: false });
-        for (s = 1; s < EXAM_SLOTS_PER_SIDE; s++) {
-          slots.push({ text: '', changed: false });
-        }
-        return {
-          name: t.name || t.email || '',
-          email: t.email,
-          subject: teacherSubjectOf(t),
-          specialEducation: true,
-          slots: slots
-        };
-      }
+      var seFlags = [];
+      var specialEducationTeacher = isSpecialEducationTeacher(t);
 
       for (s = 0; s < EXAM_SLOTS_PER_SIDE; s++) {
         var sp = periodSpec[s];
         var day = dayOfWeekMon1(sp.date);
         var raw = getCached(t.email, sp.date, sp.period, day);
         var slot = cellTextFromSchedule(raw);
+        // 特教老師教特教班：該格仍以「特教監考」呈現（普通班課照常列班名）
+        var seCell = !!specialEducationTeacher && !slot.changed && isSpecialEducationCell(raw);
+        if (seCell) slot = { text: SPECIAL_EDUCATION_LABEL, changed: false, specialEducation: true };
         // 段考時虛擬分組回原班上課；基礎虛擬班課不列監考，明確排入的勤務仍保留。
-        if (raw && !slot.changed && !isBasePatrol(raw)) {
+        if (!seCell && raw && !slot.changed && !isBasePatrol(raw)) {
           var scheduleClassName = raw.className || raw['班級'] || '';
           var classNames = splitCoverageClassNames(scheduleClassName);
           var hasVirtualClass = classNames.some(isVirtualClassName);
@@ -725,7 +779,7 @@ const ExportInvigilation = (() => {
         // 空堂（整班停課／該班該科停課）不是監考勤務：該格留白。
         // 明確排入的勤務（changed，例：空堂排班派去監考）一律保留。
         var awayHit = false;
-        if (!slot.changed && raw && slot.text && !isBasePatrol(raw)) {
+        if (!seCell && !slot.changed && raw && slot.text && !isBasePatrol(raw)) {
           var awayClassName = raw.className != null ? raw.className : (raw['班級'] || '');
           var awaySubject = String(raw.subject != null ? raw.subject : (raw['科目'] || ''));
           if (raw.isClassAway === true) awayHit = true;
@@ -743,9 +797,34 @@ const ExportInvigilation = (() => {
         if (!slot) slot = { text: '', changed: false };
         if (slot.text === '巡堂' && !slot.changed) patrolCount += 1;
         if (slot.changed) changedCount += 1;
+        seFlags.push(!!seCell);
         slots.push(slot);
       }
-      return { name: t.name || t.email || '', email: t.email, subject: teacherSubjectOf(t), slots: slots };
+      // 特教老師兼普通班：特教班合併成一格「特教監考」，普通班仍要列班名（要監考）
+      var hasPhysicalClass = slots.some(function (item, idx) {
+        return item && String(item.text || '').trim() && !seFlags[idx];
+      });
+      var hasSpecialCells = seFlags.some(Boolean);
+      var entry = {
+        name: t.name || t.email || '',
+        email: t.email,
+        subject: teacherSubjectOf(t),
+        slots: slots
+      };
+      if (specialEducationTeacher) {
+        if (!hasPhysicalClass) {
+          entry.specialEducation = true;
+          entry.slots = [{ text: SPECIAL_EDUCATION_LABEL, changed: false, specialEducation: true }];
+          for (s = 1; s < EXAM_SLOTS_PER_SIDE; s++) {
+            entry.slots.push({ text: '', changed: false });
+          }
+        } else if (hasSpecialCells) {
+          entry.specialEducation = true;
+          entry.specialEducationRuns = specialEducationRuns(seFlags);
+        }
+        // 兼普通班但這段期間沒有特教班課：當一般監考列處理，不再吃掉普通班監考
+      }
+      return entry;
     }
 
     var all = (teachers || []).slice();
@@ -1313,9 +1392,15 @@ const ExportInvigilation = (() => {
       opts.allSchedules || [],
       { awayEvents: opts.awayEvents, semesterEndDate: opts.semesterEndDate }
     );
-    if (!coverage.ok) {
-      return { ok: false, error: formatCoverageError(coverage), coverage: coverage };
+    if (!coverage.ok && opts.forceCoverage !== true) {
+      return {
+        ok: false,
+        needsCoverageConfirm: true,
+        error: formatCoverageError(coverage),
+        coverage: coverage
+      };
     }
+
     if (!recipients.length) return { ok: false, error: '請選擇要分發的教師' };
     total = recipients.length;
 
@@ -1389,7 +1474,7 @@ const ExportInvigilation = (() => {
         quotaStats.before,
         quotaStats.used,
         quotaStats.remaining,
-        isSpecialEducationTeacher(rec)
+        shouldHideQuotaBracket(matrix, rec)
       );
 
       try {
@@ -1428,6 +1513,12 @@ const ExportInvigilation = (() => {
     var masterTip = '各分發表 A1:X47 已公式連動主表（含 B4:X6 考科），A48 保留個人額度備註。';
     warn = warn ? (warn + '；' + masterTip) : masterTip;
     var awayNote = coverageAwayNote(coverage);
+    if (!coverage.ok) {
+      // 強制匯出：把還沒處理的缺漏／重複寫進提示，檔案照出但責任在你
+      warn = warn ? (warn + '；') : '';
+      warn += '已強制匯出：監考表仍有 ' + ((coverage.missing || []).length)
+        + ' 組缺少、' + ((coverage.duplicates || []).length) + ' 組重複未處理，請自行核對。';
+    }
     if (awayNote) warn = warn ? (warn + '；' + awayNote + '。') : (awayNote + '。');
     var subjFills = (masterSubjects && masterSubjects.fills) || [];
     var subjUnplaced = (masterSubjects && masterSubjects.unplaced) || 0;
