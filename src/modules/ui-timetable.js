@@ -1877,6 +1877,33 @@ const UiTimetable = (() => {
       return mutualDraftIndex.value[key] || null;
     }
 
+
+    // 衝堂偵測：同一位老師同一節被排了多筆課時，findBaseScheduleSlot 只會取一筆，另一筆等於被蓋掉。
+    // 這裡把被蓋掉的列留下來，讓格子可以顯示成多列、各自可點，才看得出來要去調整。
+    function getSlotConflicts(teacherEmail, dateStr, dayOfWeek, period, primaryCell) {
+      var email = String(teacherEmail || '').toLowerCase();
+      var idx = scheduleIndex.value;
+      if (!idx || !DomainSchedule || !DomainSchedule.getCandidates) return [];
+      var rows = DomainSchedule.getCandidates(idx, email, dayOfWeek, period, allSchedules.value, dateStr) || [];
+      if (rows.length < 2) return [];
+      var base = findBaseScheduleSlot(email, dayOfWeek, period, dateStr) || null;
+      function rowKey(row) {
+        if (!row) return '';
+        var cls = String(row.className || row['班級'] || '').trim();
+        var subj = String(row.subject || row['科目'] || '').trim();
+        return cls + '|' + subj + '|' + String(row.attr || '').trim();
+      }
+      var baseKey = rowKey(base);
+      var primaryKey = rowKey(primaryCell);
+      return rows.filter(function (row) {
+        if (!row) return false;
+        var attr = String(row.attr || '').trim();
+        if (attr === '單週' || attr === '雙週') return false;
+        if (!String(row.className || row['班級'] || row.subject || row['科目'] || '').trim()) return false;
+        var k = rowKey(row);
+        return k !== baseKey && k !== primaryKey;
+      });
+    }
     var weekScheduleGrid = computed(function () {
       // 明確依賴索引／lookup，避免 memo 命中時漏追蹤、異動後不重畫
       void pendingIndex.value;
@@ -1919,7 +1946,8 @@ const UiTimetable = (() => {
               draft: draft,
               draftSubName: draft ? (draft.subName || '') : '',
               draftFeeShort: feeShort,
-              isAwayLabel: awayLabel && !!(mutualOn || cell.isClassAway)
+              isAwayLabel: awayLabel && !!(mutualOn || cell.isClassAway),
+              conflicts: getSlotConflicts(t.email, dateStr, day, period, cell)
             };
           }
         }
@@ -2946,6 +2974,7 @@ const getClassAwayEventName = (className, dateStr, period) => {
       isRequestExchangeRechanged: isRequestExchangeRechanged,
       clearScheduleCache: clearScheduleCache,
       weekScheduleGrid: weekScheduleGrid,
+      getSlotConflicts: getSlotConflicts,
       cellFromGrid: cellFromGrid,
       slotFromGrid: slotFromGrid,
       isAwayClassCell: isAwayClassCell,

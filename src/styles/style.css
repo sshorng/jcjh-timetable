@@ -940,6 +940,42 @@ body {
   min-height: 0 !important;
 }
 
+/* 衝堂列：同一老師同一節被排多筆時，被蓋掉的列也要顯示出來，各自可點。 */
+.cell-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 3px;
+  width: 100%;
+}
+.cell-conflict-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 1px 4px;
+  border: 1px dashed #dc2626;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+}
+.cell-conflict-row:hover {
+  background: #fee2e2;
+}
+.cell-conflict-tag {
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.cell-conflict-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 申請中/待辦預覽虛線樣式與動畫 */
 .grid-cell-class.is-pending-sub-out,
 .grid-cell-class.is-pending-sub-in,

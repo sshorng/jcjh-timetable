@@ -670,6 +670,19 @@
                           :title="getCellPlainStatus(((weekScheduleGrid[teacher.email] || {})[day + '-' + period] || {}).cell)"
                           @click="handleCellClick(teacher.email, day, period, currentWeekDates[day-1])"
                         >
+                          <div v-if="cellConflicts(teacher.email, day, period).length" class="cell-conflict">
+                            <button
+                              v-for="(cf, ci) in cellConflicts(teacher.email, day, period)"
+                              :key="'cf' + ci"
+                              type="button"
+                              class="cell-conflict-row"
+                              title="本節衝堂，點一下可進排課編輯調整"
+                              @click.stop="handleConflictSlotClick(teacher.email, day, period, currentWeekDates[day-1], cf)"
+                            >
+                              <span class="cell-conflict-tag">衝堂</span>
+                              <span class="cell-conflict-text">{{ formatClassName(cf.className) || cf.className || '未填班級' }} · {{ cf.subject || '未填科目' }}</span>
+                            </button>
+                          </div>
                            <template v-for="slot in [((weekScheduleGrid[teacher.email] || {})[day + '-' + period] || null)]" :key="'s'+day+period">
                              <template v-if="slot && slot.cell">
                                <span v-if="timetableDisplayMode === 'clean' && isTimetablePullout(slot.cell)" class="tt-cell-marker tt-cell-marker-pullout" aria-hidden="true"></span>
@@ -2733,6 +2746,7 @@
 <script setup>
 import { computed, defineAsyncComponent, getCurrentInstance, onMounted, watch } from 'vue';
 import LoadingOverlay from './components/LoadingOverlay.vue';
+import { showToast } from './ui/toast.js';
 import LoginCard from './components/LoginCard.vue';
 // 分頁內容（教師名單、班級課表）改成非同步：只在切到該頁時才抓 chunk，不佔首屏主包。
 const TeachersTable = defineAsyncComponent(() => import('./components/TeachersTable.vue'));
@@ -2846,6 +2860,27 @@ const { dashboardStats } = storeToRefs(historyStore);
 /** 套用歷史紀錄的明確日期區間（起日大於迄日時自動對調）。 */
 const applyHistoryRangeFilter = () => {
   setHistoryRangeFilter(historyRangeStart.value, historyRangeEnd.value);
+};
+
+/** 取某格的衝堂列（同一老師同一節被排多筆時，findBaseScheduleSlot 只會顯示一筆）。 */
+const cellConflicts = (teacherEmail, day, period) => {
+  const grid = weekScheduleGrid && weekScheduleGrid.value ? weekScheduleGrid.value : null;
+  if (!grid) return [];
+  const row = grid[teacherEmail] || grid[String(teacherEmail || '').toLowerCase()];
+  const slot = row ? row[day + '-' + period] : null;
+  return (slot && slot.conflicts) || [];
+};
+
+/** 點衝堂列：先提示撞到哪一筆，教學組可直接進排課編輯調整。 */
+const handleConflictSlotClick = (teacherEmail, day, period, dateStr, conflict) => {
+  const cf = conflict || {};
+  const clsName = formatClassName(cf.className) || cf.className || '未填班級';
+  const subject = cf.subject || '未填科目';
+  const teacherName = getTeacherNameByEmail(teacherEmail) || teacherEmail;
+  showToast(`本節衝堂：${teacherName} 同時排在 ${clsName} · ${subject}，請調整排課`, 'warning');
+  if (isAdmin && isAdmin.value && openScheduleEditModal) {
+    openScheduleEditModal(teacherEmail, day, period);
+  }
 };
 const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayEventRuleSummary, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
