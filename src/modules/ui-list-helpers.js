@@ -397,12 +397,46 @@ const UiListHelpers = (() => {
     return raw;
   }
 
+  // —— 類型標籤：空堂排班（空堂任務）不是代課 ——
+  // 空堂排班紀錄的型別仍是 substitution，只能靠 reason／備註／旗標辨識。
+  function isEmptySlotTaskRow(row) {
+    if (!row) return false;
+    if (row.isEmptySlotAssign === true) return true;
+    if (String(row.reason || row['請假事由'] || '').trim() === '空堂排班') return true;
+    return String(row.note || row['備註'] || '').indexOf('[空堂排班]') >= 0;
+  }
+
+  function isExchangeTypeRow(row) {
+    const type = String((row && row.type) || '').trim().toLowerCase();
+    return type === 'exchange' || type === '對調' || type === '調課'
+      || type === 'triangle' || type === '三角調';
+  }
+
+  function requestTypeLabel(row) {
+    if (!row) return '';
+    if (String(row.type || '').trim() === 'triangle') return '三角調';
+    if (isExchangeTypeRow(row)) return '調課';
+    if (isEmptySlotTaskRow(row)) return '空堂任務';
+    return '代課';
+  }
+
+  function requestTypeBadgeClass(row) {
+    const label = requestTypeLabel(row);
+    if (label === '調課' || label === '三角調') return 'tag-blue';
+    if (label === '空堂任務') return 'tag-purple';
+    return 'tag-red';
+  }
+
   return {
     requestTimestampText: requestTimestampText,
     firstRequestTimestamp: firstRequestTimestamp,
     getRequestApplicationStamp: getRequestApplicationStamp,
     getRequestApprovalStamp: getRequestApprovalStamp,
     formatRequestApplicationDate: formatRequestApplicationDate,
+    isEmptySlotTaskRow: isEmptySlotTaskRow,
+    isExchangeTypeRow: isExchangeTypeRow,
+    requestTypeLabel: requestTypeLabel,
+    requestTypeBadgeClass: requestTypeBadgeClass,
     serialRoot: serialRoot,
     parseTimeMs: parseTimeMs,
     requestGroupKey: requestGroupKey,

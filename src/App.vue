@@ -1015,9 +1015,7 @@
                       <td>{{ formatRequestApplicationDate(row.items[0]) }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="row.items[0].type === 'triangle'">三角調</span>
-                          <span class="status-badge tag-blue" v-else-if="row.items[0].type === 'exchange'">調課</span>
-                          <span class="status-badge tag-red" v-else>代課</span>
+                          <span class="status-badge" :class="requestTypeBadgeClass(row.items[0])">{{ requestTypeLabel(row.items[0]) }}</span>
                           <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
@@ -1041,10 +1039,8 @@
                       <td>{{ formatRequestApplicationDate(row) }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                            <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
+                            <span class="status-badge" :class="requestTypeBadgeClass(row)">{{ requestTypeLabel(row) }}</span>
                           <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替（每一位教師各一筆）">{{ triangleLegLabel(row) }}</span>
-                            <span class="status-badge tag-blue" v-if="row.type === 'exchange'">調課</span>
-                            <span class="status-badge tag-red" v-if="row.type !== 'triangle' && row.type !== 'exchange'">代課</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag" :class="'risk-'+tag.key">{{ tag.label }}</span>
                           <span
                              v-for="rf in getApproveRiskFlags(row).filter(f => (f.level === 'warn' || f.level === 'danger') && f.key !== 'chain')"
@@ -1169,9 +1165,7 @@
                     <td>{{ formatRequestApplicationDate(req) }}</td>
                     <td>
                       <div class="flex-wrap-gap">
-                         <span class="status-badge tag-blue" v-if="req.type === 'triangle'">三角調</span>
-                         <span class="status-badge tag-blue" v-else-if="req.type === 'exchange'">調課</span>
-                         <span class="status-badge tag-red" v-else>代課</span>
+                         <span class="status-badge" :class="requestTypeBadgeClass(req)">{{ requestTypeLabel(req) }}</span>
                          <span v-if="req.batchId && req.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次可全部同意">批次</span>
                          <span v-if="req.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(req) }}</span>
                         <span v-for="tag in getRequestTypeTags(req)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
@@ -1261,9 +1255,7 @@
                       <td>{{ formatRequestApplicationDate(row.items[0]) }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="row.items[0].type === 'triangle'">三角調</span>
-                          <span class="status-badge tag-blue" v-else-if="row.items[0].type === 'exchange'">調課</span>
-                          <span class="status-badge tag-red" v-else>代課</span>
+                          <span class="status-badge" :class="requestTypeBadgeClass(row.items[0])">{{ requestTypeLabel(row.items[0]) }}</span>
                           <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
@@ -1284,9 +1276,7 @@
                       <td>{{ formatRequestApplicationDate(row) }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                             <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
-                            <span class="status-badge tag-blue" v-else-if="row.type === 'exchange'">調課</span>
-                            <span class="status-badge tag-red" v-else>代課</span>
+                            <span class="status-badge" :class="requestTypeBadgeClass(row)">{{ requestTypeLabel(row) }}</span>
                             <span v-if="row.batchId && row.type !== 'triangle'" class="status-badge tag-gray fs-65" title="同批次">批次</span>
                             <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替，三位教師全部同意後才送教學組">{{ triangleLegLabel(row) }}</span>
                           <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag badge-micro" :class="'risk-'+tag.key">{{ tag.label }}</span>
@@ -1514,9 +1504,7 @@
                       <td>{{ row.items[0].createdDate }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="row.isTriangle">三角調</span>
-                          <span class="status-badge tag-blue" v-else-if="isHistoryExchangeType(row.items[0])">調課</span>
-                          <span class="status-badge tag-red" v-else>代課</span>
+                          <span class="status-badge" :class="requestTypeBadgeClass(row.items[0])">{{ requestTypeLabel(row.items[0]) }}</span>
                           <span class="status-badge tag-gray fs-65">{{ row.isTriangle ? '整組' : '批次' }} {{ row.items.length }} 筆</span>
                         </div>
                       </td>
@@ -1545,9 +1533,7 @@
                       <td>{{ row.createdDate }}</td>
                       <td>
                         <div class="flex-wrap-gap">
-                          <span class="status-badge tag-blue" v-if="row.type === 'triangle'">三角調</span>
-                          <span class="status-badge tag-blue" v-else-if="isHistoryExchangeType(row)">調課</span>
-                          <span class="status-badge tag-red" v-else>代課</span>
+                          <span class="status-badge" :class="requestTypeBadgeClass(row)">{{ requestTypeLabel(row) }}</span>
                           <span v-if="row.type === 'triangle'" class="status-badge tag-gray fs-65" title="三角調整組：共 3 筆輪替">{{ triangleLegLabel(row) }}</span>
                            <span v-for="tag in getRequestTypeTags(row)" :key="tag.key" class="risk-tag risk-tag-xs" :class="'risk-'+tag.key">{{ tag.label }}</span>
                         </div>
@@ -2882,6 +2868,8 @@ const handleConflictSlotClick = (teacherEmail, day, period, dateStr, conflict) =
     openScheduleEditModal(teacherEmail, day, period);
   }
 };
+// 類型標籤（三角調／調課／空堂任務／代課）集中在 ui-list-helpers，這裡只取用。
+const { requestTypeLabel, requestTypeBadgeClass } = UiListHelpers;
 const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayEventRuleSummary, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
 const { classAwayForm, classAwayModalMode, isSimulating, showClassAwayModal } = storeToRefs(backofficeStore);

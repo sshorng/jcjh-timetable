@@ -91,5 +91,6 @@ test('三角子列只顯示「第 N 筆」徽章，且不會多印「代課」',
   expect(appSource).not.toMatch(/triangleLegLabel\([^)]*\) \/ 共 3 筆/);
   expect(appSource).not.toMatch(/共 3 筆<\/span>/);
   expect((appSource.match(/\{\{ triangleLegLabel\((row|req)\) \}\}/g) || []).length).toBe(4);
-  expect(appSource).toMatch(/v-if="row\.type !== 'triangle' && row\.type !== 'exchange'">代課/);
+  expect(appSource).toMatch(/requestTypeLabel\((row|req)/);
+  expect(appSource).not.toMatch(/tag-red" v-else>代課/);
 });
