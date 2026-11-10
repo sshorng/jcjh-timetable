@@ -200,7 +200,7 @@ const getPrintApi = () => {
       }
       _printApi = UiPrint.create({
         getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, getTeacherSubjectByEmail: useDataStore().getTeacherSubjectByEmail, getTeacherJobTitleByEmail: useHomeroomStore().getTeacherJobTitleByEmail,
-        getWeekDayText: DateUtils.getWeekDayText, allSchedules: storeToRefs(useSessionStore()).allSchedules, isAdmin: storeToRefs(useSessionStore()).isAdmin, getScheduleForDate: useTimetableStore().getScheduleForDate, selectedRecordIds: storeToRefs(useMutualStore()).selectedRecordIds,
+        getWeekDayText: DateUtils.getWeekDayText, allSchedules: storeToRefs(useSessionStore()).allSchedules, isAdmin: storeToRefs(useSessionStore()).isAdmin, isStaff: storeToRefs(useSessionStore()).isStaff, getScheduleForDate: useTimetableStore().getScheduleForDate, selectedRecordIds: storeToRefs(useMutualStore()).selectedRecordIds,
         substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords, requestsList: storeToRefs(useSessionStore()).requestsList, markLocalPrinted, loading: storeToRefs(useSessionStore()).loading, loadingMessage: storeToRefs(useSessionStore()).loadingMessage,
         printPreview: storeToRefs(useMutualStore()).printPreview, showPrintPreviewModal: storeToRefs(useMutualStore()).showPrintPreviewModal, printPreviewImageBusy: storeToRefs(useMutualStore()).printPreviewImageBusy, showDetailModal: storeToRefs(useMutualStore()).showDetailModal,
         showCompareModal: storeToRefs(useMutualStore()).showCompareModal, syncHistorySelectionFromDom: useBackofficeStore().syncHistorySelectionFromDom, buildPaperRecordsForSubmittedRequests,

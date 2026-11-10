@@ -68,6 +68,13 @@ const UiPrint = (() => {
     var mutualNote = deps.mutualNote;
     var ensurePrintReady = deps.ensurePrintReady;
     var addEventToCalendar = deps.addEventToCalendar;
+    var isStaff = deps.isStaff;
+
+/**
+ * 寫入後端「是否已印」的權限與 code.gs 的 batchMarkPrinted 一致：
+ * 教學組或行政才可以標記，其他身分按列印只留本機狀態（避免出現同步失敗警告）。
+ */
+const canPersistPrinted = () => (!!(isAdmin && isAdmin.value === true) || !!(isStaff && isStaff.value === true));
 
 const generateFormHtml = (g, currentType) => {
   // R-v2接線：print-helper 靜態 import，常駐可用（v1 需等 script 懶載）
@@ -267,7 +274,11 @@ const openBatchRequestsPrintPreview = async (requests, options = {}) => {
   // 三角調只勾到其中一腿時自動帶出整組三腿，避免少印教師與課程。
   const expanded = expandPrintRequestsForBatch(seeds, opts.allRequests || (requestsList.value || []));
   const records = buildPaperRecordsForSubmittedRequests(expanded.length ? expanded : seeds);
-  return openPrintPreviewForRecords(records, Object.assign({ source: 'batch', skipMarkPrinted: true }, opts));
+  // 教學組在代辦／待核准列印後才核審：確認列印就該落地「是否已印」，
+  // 否則核准後產生的歷史紀錄會全部掛「未列印」。
+  // 僅教學組／行政寫後端已印標記（與後端權限一致），其他身分維持原行為，避免出現同步失敗警告。
+  const canMarkPrinted = canPersistPrinted();
+  return openPrintPreviewForRecords(records, Object.assign({ source: 'batch', skipMarkPrinted: !canMarkPrinted }, opts));
 };
 
 const closePrintPreview = (returnToSource = true) => {
@@ -654,15 +665,20 @@ const printPaperDraft = async (copyKinds) => {
     signatureByTeacher: signatureMap
   }));
   const previous = substitutionRecords.value;
+  // 教學組在代辦列印後才核審：已送出的真實申請單，確認列印就落地「是否已印」。
+  // 草稿／教學示範（canPrint 不為 true）與其他身分維持原行為，不寫後端標記。
+  const canMarkPrinted = canPersistPrinted();
   substitutionRecords.value = previous.concat(records);
   selectedRecordIds.value = ids.slice();
   try {
-    await printSelectedForms('Notice', null, { skipMarkPrinted: true, records, copyKinds: normalizePrintCopyKinds(copyKinds) });
+    await printSelectedForms('Notice', null, { skipMarkPrinted: !canMarkPrinted, records, copyKinds: normalizePrintCopyKinds(copyKinds) });
   } finally {
     substitutionRecords.value = previous;
     selectedRecordIds.value = [];
     paperPrintDraft.value = null;
     paperSignatureByTeacher.value = {};
+    // 預覽用的臨時紀錄已還原，補一次本地標記讓歷史紀錄立刻顯示「已列印」。
+    if (canMarkPrinted) markLocalPrinted(ids);
   }
 };
 
@@ -683,7 +699,8 @@ const openPaperDraftPreview = async () => {
     source: draft.source || 'paperDraft',
     canPrint: draft.canPrint === true,
     returnTo: draft.returnTo || '',
-    skipMarkPrinted: true
+    // 只有教學組、且是已送出的真實申請單，確認列印才標記已印。
+    skipMarkPrinted: !(canPersistPrinted() && draft.canPrint === true)
   });
 };
 
