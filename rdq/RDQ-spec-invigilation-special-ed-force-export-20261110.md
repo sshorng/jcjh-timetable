@@ -49,3 +49,13 @@ downstream: self
 - 特教：`buildTeacherMatrix` 不再把特教老師整列換掉，改為逐格判定 `isSpecialEducationCell`（班名／科目／屬性含「特教」）；同列連續特教格以 `specialEducationRuns` 記錄，`applySpecialEducationRows` 只合併這些區段，純特教仍整列合併。`buildClassMatrix` 改為只跳過特教格、不再跳過整個老師。`shouldHideQuotaBracket` 讓兼普通班者保留額度說明。
 - 強制匯出：兩支 `exportWorkbook` 在 `coverage.ok === false` 時回傳 `needsCoverageConfirm`（帶問題清單），`forceCoverage: true` 時照做並在 `warning` 註明「已強制匯出：仍有 N 組缺少、M 組重複未處理」。`ui-export.js` 兩條匯出流程都改成「先試一般匯出 → 跳出確認 → 需要時帶 `forceCoverage` 重跑」。
 - 測試：新增 `tests/invigilation-special-education-tests.test.js` 5 條、`tests/invigilation-export-force-confirm-tests.test.js` 4 條；`tests/invigilation-export-contract-tests.test.js` 的特教契約改為新版（要讀課表、兼普通班保留班名）。全套 91 檔／228 條全綠，`npm run lint`、`npm run build` 通過。
+
+## 🔁 修正：整列特教監考，只有普通班的課凸顯（2026-11-11）
+
+夫子的話：「應該說特教老師還是整列特教監考，只有普通班的課才特別標出」
+
+- 前一版只把「特教班那幾格」合併、其餘留白，畫面看起來不像原本的整列特教監考。改成反向：**非普通班的格全部併成「特教監考」**，只有普通班（實體班名）那幾格跳過不合併、顯示班名。
+- 判定：`physicalFlags` 逐格看文字是否是實體班名（`splitCoverageClassNames` ＋ `isPhysicalClassName`）；`specialEducationRuns` 改取「非普通班」的連續區段，`applySpecialEducationRows` 只合併這些區段，區段內非起點格先清空再合併。
+- 純特教（整段沒有普通班）仍整列合併成一格，與改版前一致。
+- 巡堂、沒課、特教班的格都算在「特教監考」裡（與改版前相同，不會另外凸顯）。
+- 測試改寫：兼普通班時 `specialEducationRuns` 為 `[{0,0},{2,10}]` 這種「補集」形狀；全套 91 檔／228 條全綠，`npm run lint`、`npm run build` 通過。

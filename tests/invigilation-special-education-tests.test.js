@@ -3,9 +3,9 @@ import { test } from 'vitest';
 import { ExportInvigilation } from '../src/modules/export-invigilation-recovered.js';
 import { ExportInvigilationClass } from '../src/modules/export-invigilation-class.js';
 
-// 特教老師兼普通班契約：
-// 1. 特教班的格仍然合併成「特教監考」（同一列連續段合併）。
-// 2. 他在普通班的課照常列班名，班級版也要算到那班的監考，不能被整個人跳過。
+// 特教老師契約：
+// 1. 整列都是「特教監考」（沒課、特教班、巡堂都算在裡面）。
+// 2. 只有他在普通班的課要單獨標出班名，那幾格不併入「特教監考」。
 // 3. 純特教（課表上沒有普通班）維持原樣：整列合併成一格「特教監考」。
 
 const D = '2026-12-02';
@@ -24,7 +24,7 @@ function slotTexts(entry) {
   return (entry.slots || []).map(s => String((s && s.text) || ''));
 }
 
-test('特教老師兼普通班：特教班標「特教監考」、普通班照列班名', () => {
+test('特教老師兼普通班：整列特教監考，普通班那格單獨標班名', () => {
   const matrix = ExportInvigilation.buildTeacherMatrix(
     [SE_TEACHER], SPEC,
     cellMap({
@@ -36,13 +36,15 @@ test('特教老師兼普通班：特教班標「特教監考」、普通班照�
   );
   const entry = matrix.left[0];
   assert.equal(entry.specialEducation, true, '仍標記為特教老師（個人表備註用）');
-  assert.deepEqual(slotTexts(entry).slice(0, 4), ['特教監考', '701', '特教監考', ''],
-    '特教班合併成一格、普通班保留班名');
-  assert.deepEqual(entry.specialEducationRuns, [{ start: 0, end: 0 }, { start: 2, end: 2 }],
-    '只有特教班那幾格要合併');
+  const texts = slotTexts(entry);
+  assert.equal(texts[0], '特教監考', '沒課的節次也算在「特教監考」裡');
+  assert.equal(texts[1], '701', '只有普通班的課要單獨標出班名');
+  assert.ok(texts.slice(2).every(t => t === '特教監考'), '其餘整列都是「特教監考」');
+  assert.deepEqual(entry.specialEducationRuns, [{ start: 0, end: 0 }, { start: 2, end: 10 }],
+    '普通班那一格跳過不合併，其餘分段合併');
 });
 
-test('特教老師的特教班連續兩節：合併成一段', () => {
+test('特教老師連續兩節特教班＋一節普通班：三種區段各自正確', () => {
   const matrix = ExportInvigilation.buildTeacherMatrix(
     [SE_TEACHER], SPEC,
     cellMap({
@@ -52,8 +54,10 @@ test('特教老師的特教班連續兩節：合併成一段', () => {
     }),
     38, null, []
   );
-  assert.deepEqual(matrix.left[0].specialEducationRuns, [{ start: 0, end: 1 }]);
-  assert.deepEqual(slotTexts(matrix.left[0]).slice(0, 3), ['特教監考', '特教監考', '702']);
+  const entry = matrix.left[0];
+  assert.deepEqual(entry.specialEducationRuns, [{ start: 0, end: 1 }, { start: 3, end: 10 }]);
+  assert.equal(slotTexts(entry)[2], '702', '普通班那一節不併入特教監考');
+  assert.equal(slotTexts(entry)[9], '特教監考', '後段沒課的節次仍算特教監考');
 });
 
 test('純特教老師：整列合併成一格「特教監考」，與改版前一致', () => {
@@ -98,7 +102,7 @@ test('班級版監考表：特教老師的普通班照常算在該班', () => {
   assert.equal(texts.some(t => /特教監考/.test(t)), false, '特教監考字樣不可流入班級版');
 });
 
-test('合併：兼普通班只合併特教班那幾段，純特教整列合併', () => {
+test('合併：兼普通班依區段合併，純特教整列合併', () => {
   const merges = [];
   const values = {};
   const ws = {

@@ -542,10 +542,15 @@ const ExportInvigilation = (() => {
           merged += 1;
           return;
         }
-        // 兼普通班：只把特教班那幾段合併，普通班的格子保留班名
+        // 兼普通班：只有普通班那幾格保留班名，其餘依區段合併成「特教監考」
         runs.forEach(function (run) {
           var anchorCell = ws.getCell(row, dataColStart + run.start);
           if (anchorCell) anchorCell.value = SPECIAL_EDUCATION_LABEL;
+          // 合併區段內的非起點格先清空（Excel 只看主格，留字會讓某些檢視器重複顯示）
+          for (var k = run.start + 1; k <= run.end; k++) {
+            var slaveCell = ws.getCell(row, dataColStart + k);
+            if (slaveCell) slaveCell.value = null;
+          }
           if (run.end > run.start) {
             mergeWithoutStyle(
               ws,
@@ -800,11 +805,14 @@ const ExportInvigilation = (() => {
         seFlags.push(!!seCell);
         slots.push(slot);
       }
-      // 特教老師兼普通班：特教班合併成一格「特教監考」，普通班仍要列班名（要監考）
-      var hasPhysicalClass = slots.some(function (item, idx) {
-        return item && String(item.text || '').trim() && !seFlags[idx];
+      // 特教老師整列都是「特教監考」，只有他在普通班的課要單獨標出班名
+      var physicalFlags = slots.map(function (item) {
+        if (!item) return false;
+        var text = String(item.text || '').trim();
+        if (!text || text === SPECIAL_EDUCATION_LABEL) return false;
+        return splitCoverageClassNames(text).some(isPhysicalClassName);
       });
-      var hasSpecialCells = seFlags.some(Boolean);
+      var hasPhysicalClass = physicalFlags.some(Boolean);
       var entry = {
         name: t.name || t.email || '',
         email: t.email,
@@ -812,17 +820,23 @@ const ExportInvigilation = (() => {
         slots: slots
       };
       if (specialEducationTeacher) {
+        entry.specialEducation = true;
         if (!hasPhysicalClass) {
-          entry.specialEducation = true;
+          // 課表上沒有普通班：整列合併成一格「特教監考」，與改版前一致
           entry.slots = [{ text: SPECIAL_EDUCATION_LABEL, changed: false, specialEducation: true }];
           for (s = 1; s < EXAM_SLOTS_PER_SIDE; s++) {
             entry.slots.push({ text: '', changed: false });
           }
-        } else if (hasSpecialCells) {
-          entry.specialEducation = true;
-          entry.specialEducationRuns = specialEducationRuns(seFlags);
+        } else {
+          // 只有普通班那幾格保留班名；其餘（特教班、巡堂、沒課）整列併成「特教監考」
+          entry.slots = slots.map(function (item, idx) {
+            if (physicalFlags[idx]) return item;
+            return { text: SPECIAL_EDUCATION_LABEL, changed: false, specialEducation: true };
+          });
+          entry.specialEducationRuns = specialEducationRuns(
+            physicalFlags.map(function (isPhysical) { return !isPhysical; })
+          );
         }
-        // 兼普通班但這段期間沒有特教班課：當一般監考列處理，不再吃掉普通班監考
       }
       return entry;
     }
