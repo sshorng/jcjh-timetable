@@ -27,8 +27,10 @@ test('class away ui tests（v1 移植）', () => {
     admin.openAddClassAwayModal();
     assert.deepEqual(admin.classAwayPeriodOptions.map(option => option.value), ['0', '1', '2', '3', '4', '45', '5', '6', '7', '8']);
     admin.classAwayForm.value = Object.assign({}, admin.classAwayForm.value, {
-      name: '一天半事件', startDate: '2026-10-05', endDate: '2026-10-06',
-      startPeriod: '0', endPeriod: '4', scope: 'all', forMutual: true
+      name: '一天半事件', startDate: '2026-10-05', endDate: '2026-10-06', forMutual: true,
+      rules: [Object.assign({}, admin.classAwayForm.value.rules[0], {
+        scope: 'all', periodMode: 'range', startPeriod: '0', endPeriod: '4'
+      })]
     });
     await admin.saveClassAwayEvent();
 
@@ -80,7 +82,10 @@ test('class away ui tests（v1 移植）', () => {
 
     admin.openAddClassAwayModal();
     admin.classAwayForm.value = Object.assign({}, admin.classAwayForm.value, {
-      name: '全天事件', startDate: '2026-10-06', scope: 'all'
+      name: '全天事件', startDate: '2026-10-06',
+      rules: [Object.assign({}, admin.classAwayForm.value.rules[0], {
+        scope: 'all', periodMode: 'range', startPeriod: '0', endPeriod: '8'
+      })]
     });
     await admin.saveClassAwayEvent();
     assert.equal(savedRows[1]['停課節次'], '全部節次', '原本的全部節次設定仍可使用');
@@ -95,7 +100,9 @@ test('class away ui tests（v1 移植）', () => {
     admin.openAddClassAwayModal();
     admin.classAwayForm.value = Object.assign({}, admin.classAwayForm.value, {
       name: '跨日端點', startDate: '2026-10-07', endDate: '2026-10-08',
-      startPeriod: '8', endPeriod: '0', scope: 'all'
+      rules: [Object.assign({}, admin.classAwayForm.value.rules[0], {
+        scope: 'all', periodMode: 'range', startPeriod: '8', endPeriod: '0'
+      })]
     });
     await admin.saveClassAwayEvent();
     assert.equal(savedRows[2]['起始節次'], '8', '跨日區間起點可晚於終點節次');
@@ -104,7 +111,9 @@ test('class away ui tests（v1 移植）', () => {
     admin.openAddClassAwayModal();
     admin.classAwayForm.value = Object.assign({}, admin.classAwayForm.value, {
       name: '錯誤區間', startDate: '2026-10-07', endDate: '2026-10-07',
-      startPeriod: '5', endPeriod: '4', scope: 'all'
+      rules: [Object.assign({}, admin.classAwayForm.value.rules[0], {
+        scope: 'all', periodMode: 'range', startPeriod: '5', endPeriod: '4'
+      })]
     });
     await admin.saveClassAwayEvent();
     assert.equal(savedRows.length, 3, '同日終點早於起點時不可送出');
@@ -113,7 +122,9 @@ test('class away ui tests（v1 移植）', () => {
     admin.openAddClassAwayModal();
     admin.classAwayForm.value = Object.assign({}, admin.classAwayForm.value, {
       name: '兩天第八節', startDate: '2026-10-07', endDate: '2026-10-08',
-      periodMode: 'daily', periods: ['8'], scope: 'all'
+      rules: [Object.assign({}, admin.classAwayForm.value.rules[0], {
+        scope: 'all', periodMode: 'daily', periods: ['8']
+      })]
     });
     await admin.saveClassAwayEvent();
     assert.equal(savedRows[3]['起始節次'], '', '每日指定節次不應寫入起點');

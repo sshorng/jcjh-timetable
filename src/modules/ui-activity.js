@@ -59,10 +59,27 @@ const UiClassAwayAdmin = (() => {
       }).filter(function (value, index, list) { return value && list.indexOf(value) === index; });
     }
 
+    // 規則表單形狀（規則 1 也走這個結構；事件層欄位僅鏡射，供舊路徑讀取）
+    function makeFormRule(patch) {
+      return Object.assign({
+        scope: 'classes',
+        classes: [],
+        subjectsText: '',
+        periodMode: 'daily',
+        periods: ['all'],
+        startPeriod: '0',
+        endPeriod: '8',
+        billingRule: 'keep',
+        expanded: true,
+        pickerOpen: false
+      }, patch || {});
+    }
+
     var classAwayForm = ref({
       id: '', name: '', startDate: '', endDate: '',
       scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '', rules: []
+      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '',
+      rules: [makeFormRule({ periodMode: 'range' })]
     });
 
     function sanitizeClassNames(list) {
@@ -78,7 +95,8 @@ const UiClassAwayAdmin = (() => {
       classAwayForm.value = {
         id: '', name: '', startDate: '', endDate: '',
         scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
-        billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '', rules: []
+        billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '',
+        rules: [makeFormRule({ periodMode: 'range' })]
       };
       showClassAwayModal.value = true;
     }
@@ -89,6 +107,36 @@ const UiClassAwayAdmin = (() => {
       var hasPeriodRange = !!(DomainClassAway && DomainClassAway.eventPeriodRange
         ? DomainClassAway.eventPeriodRange(ev)
         : (ev.startPeriod != null && ev.startPeriod !== '' && ev.endPeriod != null && ev.endPeriod !== ''));
+      var savedRules = Array.isArray(ev.rules) ? ev.rules : [];
+      var formRules;
+      if (savedRules.length) {
+        formRules = savedRules.map(function (rule, idx) {
+          return makeFormRule({
+            scope: rule.scope === 'all' ? 'all' : 'classes',
+            classes: (rule.classes || []).slice(),
+            subjectsText: (rule.subjects || []).join('、'),
+            periodMode: (idx === 0 && hasPeriodRange) ? 'range' : 'daily',
+            periods: (rule.periods && rule.periods.length) ? rule.periods.slice() : ['all'],
+            startPeriod: String(rule.startPeriod || ev.startPeriod || '0'),
+            endPeriod: String(rule.endPeriod || ev.endPeriod || '8'),
+            billingRule: rule.billingRule === 'reduce' ? 'reduce' : 'keep',
+            expanded: idx === 0,
+            pickerOpen: false
+          });
+        });
+      } else {
+        formRules = [makeFormRule({
+          scope: ev.scope === 'all' ? 'all' : 'classes',
+          classes: clean.slice(),
+          subjectsText: ev.subject || (Array.isArray(ev.subjects) ? ev.subjects.join('、') : ''),
+          periodMode: hasPeriodRange ? 'range' : 'daily',
+          periods: hasPeriodRange ? ['all'] : normalizeClassAwayPeriods(ev.periods !== undefined ? ev.periods : ev.period),
+          startPeriod: String(ev.startPeriod == null || ev.startPeriod === '' ? '0' : ev.startPeriod),
+          endPeriod: String(ev.endPeriod == null || ev.endPeriod === '' ? '8' : ev.endPeriod),
+          billingRule: ev.billingRule === 'reduce' ? 'reduce' : 'keep',
+          expanded: true
+        })];
+      }
       classAwayForm.value = {
         id: ev.id,
         name: ev.name || '',
@@ -105,15 +153,7 @@ const UiClassAwayAdmin = (() => {
         enabled: ev.enabled !== false,
         note: ev.note || '',
         subject: ev.subject || (Array.isArray(ev.subjects) ? ev.subjects.join('、') : ''),
-        rules: (Array.isArray(ev.rules) ? ev.rules : []).map(function (rule) {
-          return {
-            scope: rule.scope === 'all' ? 'all' : 'classes',
-            classesText: (rule.classes || []).join('、'),
-            subjectsText: (rule.subjects || []).join('、'),
-            periods: (rule.periods && rule.periods.length ? rule.periods : ['all']).slice(),
-            billingRule: rule.billingRule === 'reduce' ? 'reduce' : 'keep'
-          };
-        })
+        rules: formRules
       };
       showClassAwayModal.value = true;
     }
@@ -262,14 +302,16 @@ const UiClassAwayAdmin = (() => {
       if (!String(f.name || '').trim()) { showToast('請填事件名稱', 'info'); return; }
       if (!f.startDate) { showToast('請填起日', 'info'); return; }
       if (f.endDate && f.endDate < f.startDate) { showToast('迄日不可早於起日', 'info'); return; }
-      var scope = f.scope === 'all' ? 'all' : 'classes';
-      var periodMode = f.periodMode === 'daily' ? 'daily' : 'range';
-      var selectedPeriods = normalizeClassAwayPeriods(f.periods || []);
+      var formRules = (Array.isArray(f.rules) && f.rules.length) ? f.rules : [{}];
+      var primary = formRules[0] || {};
+      var scope = primary.scope === 'all' ? 'all' : 'classes';
+      var periodMode = primary.periodMode === 'range' ? 'range' : 'daily';
+      var selectedPeriods = normalizeClassAwayPeriods(primary.periods || ['all']);
       if (periodMode === 'daily') {
-        if (!selectedPeriods.length) { showToast('每日指定節次至少選一個節次', 'info'); return; }
+        if (!selectedPeriods.length) { showToast('規則 1 的每日節次至少選一個', 'info'); return; }
       } else {
-        var startPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(f.startPeriod); });
-        var endPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(f.endPeriod); });
+        var startPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(primary.startPeriod); });
+        var endPeriodIndex = classAwayPeriodOptions.findIndex(function (option) { return option.value === String(primary.endPeriod); });
         if (startPeriodIndex < 0 || endPeriodIndex < 0
             || (f.endDate && f.endDate === f.startDate && endPeriodIndex < startPeriodIndex)) {
           showToast('同一天的終點節次不可早於起點節次', 'info');
@@ -277,34 +319,43 @@ const UiClassAwayAdmin = (() => {
         }
       }
       var forMutual = !!f.forMutual;
-      var cleanClasses = sanitizeClassNames(f.classes || []);
+      var cleanClasses = sanitizeClassNames(primary.classes || []);
       if (scope === 'classes' && !cleanClasses.length) {
-        showToast('請至少勾選一個有效班級（勿含 000）', 'info');
+        showToast('規則 1 請至少勾選一個有效班級（勿含 000）', 'info');
         return;
       }
       if (scope === 'all') cleanClasses = [];
-      // 多規則（聯集）：有加規則才寫 JSON；只改主表單時不寫，維持舊資料形狀。
-      var extraRules = (f.rules || []).map(function (rule) {
+      // 規則清單：兩條以上才寫 JSON（含規則 1）；只有一條時沿用事件層欄位，維持舊資料形狀。
+      var rulePayload = formRules.map(function (rule, idx) {
+        var isPrimary = idx === 0;
+        var ruleScope = rule.scope === 'all' ? 'all' : 'classes';
+        var ruleClasses = isPrimary
+          ? cleanClasses
+          : sanitizeClassNames(rule.classes || []);
+        var ruleSubjects = DomainClassAway && DomainClassAway.parseSubjectList
+          ? DomainClassAway.parseSubjectList(rule.subjectsText || '')
+          : String(rule.subjectsText || '').split(/[,，、;；\s]+/).filter(Boolean);
+        var isRange = isPrimary && rule.periodMode === 'range';
+        var rulePeriods = isRange ? [] : (DomainClassAway && DomainClassAway.normalizePeriods
+          ? DomainClassAway.normalizePeriods((rule.periods && rule.periods.length) ? rule.periods : ['all'])
+          : (rule.periods || ['all']));
         return {
-          scope: rule.scope === 'all' ? 'all' : 'classes',
-          classes: rule.scope === 'all' ? [] : (DomainClassAway && DomainClassAway.parseClassList
-            ? DomainClassAway.parseClassList(rule.classesText || '')
-            : String(rule.classesText || '').split(/[,，、;；\s]+/).filter(Boolean)),
-          subjects: DomainClassAway && DomainClassAway.parseSubjectList
-            ? DomainClassAway.parseSubjectList(rule.subjectsText || '')
-            : String(rule.subjectsText || '').split(/[,，、;；\s]+/).filter(Boolean),
-          periods: DomainClassAway && DomainClassAway.normalizePeriods
-            ? DomainClassAway.normalizePeriods((rule.periods && rule.periods.length) ? rule.periods : ['all'])
-            : (rule.periods || ['all']),
+          scope: ruleScope,
+          classes: ruleScope === 'all' ? [] : ruleClasses,
+          subjects: ruleSubjects,
+          periods: rulePeriods,
+          startPeriod: isRange ? String(rule.startPeriod || '') : '',
+          endPeriod: isRange ? String(rule.endPeriod || '') : '',
           billingRule: rule.billingRule === 'reduce' ? 'reduce' : 'keep'
         };
       });
-      for (var ri = 0; ri < extraRules.length; ri++) {
-        if (extraRules[ri].scope === 'classes' && !extraRules[ri].classes.length) {
-          showToast('第 ' + (ri + 2) + ' 條規則沒填班級', 'info');
+      for (var ri = 0; ri < rulePayload.length; ri++) {
+        if (rulePayload[ri].scope === 'classes' && !rulePayload[ri].classes.length) {
+          showToast('規則 ' + (ri + 1) + ' 沒選班級', 'info');
           return;
         }
       }
+      var rulesJson = rulePayload.length > 1 ? JSON.stringify(rulePayload) : '';
       loading.value = true;
       try {
         var id = f.id || ('cae_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
@@ -315,17 +366,17 @@ const UiClassAwayAdmin = (() => {
           "事件名稱": String(f.name).trim(),
           "起日": String(f.startDate || '').slice(0, 10),
           "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
-          "起始節次": periodMode === 'range' ? String(f.startPeriod) : '',
-          "結束節次": periodMode === 'range' ? String(f.endPeriod) : '',
-          "規則清單": extraRules.length ? JSON.stringify(extraRules) : '',
+          "起始節次": periodMode === 'range' ? String(primary.startPeriod) : '',
+          "結束節次": periodMode === 'range' ? String(primary.endPeriod) : '',
+          "規則清單": rulesJson,
           "適用範圍": scope === 'all' ? '全校' : '指定班級',
           "班級清單": scope === 'all' ? '' : ("'" + classListStr),
           "停課節次": periodMode === 'range'
             ? '全部節次'
             : (DomainClassAway && DomainClassAway.normalizePeriod
               ? DomainClassAway.normalizePeriod(selectedPeriods) : selectedPeriods.join(',')),
-          "鐘點規則": f.billingRule === 'reduce' ? 'reduce' : 'keep',
-          "科目": String(f.subject || '').trim(),
+          "鐘點規則": primary.billingRule === 'reduce' ? 'reduce' : 'keep',
+          "科目": String(primary.subjectsText || '').trim(),
           "可進互代": forMutual ? 'TRUE' : 'FALSE',
           "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
           "備註": f.note || ''
