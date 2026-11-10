@@ -1577,6 +1577,8 @@ const DomainActivityCover = (() => {
     if (cell.isSubstitutionDuty) return false;
     // 調出／請假被代：本人該節已釋出，可排巡堂等空堂任務
     if (cell.isSubstituted) return true;
+    // 空堂事件（該班本節停課）：這位老師本節沒課，可排空堂任務
+    if (cell.isClassAway) return true;
     if (DomainSchedule && DomainSchedule.isPatrolCell
         && DomainSchedule.isPatrolCell(cell)) {
       return true;

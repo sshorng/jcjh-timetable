@@ -14,7 +14,7 @@ import DomainBilling from '../src/domain/domain-billing.js';
  * v1 tests/domain-tests.html 移植（port-domain-tests.cjs 生成）：
  * body 與 v1 逐字一致；window 由區域 shim 解析；計數邏輯不變。
  */
-test('domain 領域測試（173 項）', () => {
+test('domain 領域測試（179 項）', () => {
   const window = {
     DateUtils, FeeUtils, DomainTriangle, FieldMap, DomainSchoolSwap,
     DomainSchedule, DomainMatch, DomainClassAway, DomainActivityCover, DomainBilling
@@ -1124,6 +1124,7 @@ test('domain 領域測試（173 項）', () => {
         assert('空堂可排：調開／被代', DAC.isEmptySlotAssignable({ isSubstituted: true, className: '701', subject: '國文' }) === true);
         assert('空堂不可：有班', DAC.isEmptySlotAssignable({ className: '701', subject: '國文' }) === false);
         assert('空堂不可：已代義務', DAC.isEmptySlotAssignable({ isSubstitutionDuty: true }) === false);
+        assert('空堂可排：空堂事件停課', DAC.isEmptySlotAssignable({ isClassAway: true, className: '802', subject: '本土語-台語' }) === true);
         assert('額度0需還節', DAC.quotaZeroNeedsRepay(0) === true);
         assert('額度不足1需還節', DAC.quotaZeroNeedsRepay(0.99) === true);
         assert('額度1不需還節', DAC.quotaZeroNeedsRepay(1) === false);
@@ -1241,5 +1242,5 @@ test('domain 領域測試（173 項）', () => {
         for (const l of log) { if (l.indexOf('✗') === 0) console.log(l); }
   console.log('全部通過 ' + passed + ' 項（失敗 ' + failed + '）');
   expect(failed).toBe(0);
-  expect(passed).toBe(178);
+  expect(passed).toBe(179);
 });

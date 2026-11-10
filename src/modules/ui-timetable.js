@@ -2293,10 +2293,15 @@ const UiTimetable = (() => {
          return;
        }
 
-       // 一般／批次模式下，空堂事件代表該班本節停課，不應再建立代課需求。
+       // 一般／批次模式下，空堂事件代表該班本節停課，不建立代課需求；
+       // 但這位老師本節確實空著，教學組可直接走空堂排班把他派出去（巡堂、支援等）。
        if (cell.isClassAway && !isMutualCover.value && !cell.isPending
            && !cell.isSubstituted && !cell.isSubstitutionDuty) {
-         showToast('此班本節為空堂事件，不需申請代課。若要安排活動互代，請切換至活動模式。', 'info');
+         if (isAdmin && isAdmin.value && clickDeps.openEmptySlotAssign) {
+           clickDeps.openEmptySlotAssign(teacherEmail, dayOfWeek, period, dateStr, cell);
+           return;
+         }
+         showToast('此班本節為空堂事件：教學組可點格安排空堂排班，導師與一般教師不需申請代課。', 'info');
          return;
        }
 
