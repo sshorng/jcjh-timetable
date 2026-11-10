@@ -139,12 +139,8 @@
                       </template>
                       <template v-else>
                         <div class="cae-inline" style="margin-bottom:6px;">
-                          <label class="label-check-sm">
-                            <input type="checkbox" class="chk-box-15" :checked="isRuleAllPeriods(idx)" @change="toggleRuleAllPeriods(idx)">
-                            全部節次
-                          </label>
                           <button type="button" class="btn btn-secondary btn-xs" @click="selectRulePeriodRange(idx)">全選早自習至第8節</button>
-                          <button type="button" class="btn btn-secondary btn-xs" @click="clearRulePeriods(idx)">清空</button>
+                          <span class="cae-help">可只勾部分節次；全部勾選即記為全部節次</span>
                         </div>
                         <div class="cae-period-grid">
                           <label v-for="option in classAwayPeriodOptions" :key="'cae-rule-period-' + idx + '-' + option.value" class="label-check-sm" style="margin:0;">
@@ -152,7 +148,6 @@
                               type="checkbox"
                               class="chk-box-15"
                               :checked="isRulePeriodSelected(idx, option.value)"
-                              :disabled="isRuleAllPeriods(idx)"
                               @change="toggleRulePeriod(idx, option.value)"
                             >
                             {{ option.label }}
@@ -344,25 +339,36 @@ function isRuleAllPeriods(index) {
   return rule.periods.indexOf('all') >= 0;
 }
 
+function rulePeriodValues() {
+  return (props.classAwayPeriodOptions || []).map(function (option) { return String(option.value); });
+}
+
+function sortRulePeriods(list) {
+  const order = rulePeriodValues();
+  return list.slice().sort(function (a, b) { return order.indexOf(a) - order.indexOf(b); });
+}
+
 function isRulePeriodSelected(index, value) {
   const rule = rules.value[index];
-  if (!rule || !Array.isArray(rule.periods)) return false;
-  return rule.periods.indexOf(String(value)) >= 0;
+  const periods = rule && Array.isArray(rule.periods) ? rule.periods : [];
+  if (!periods.length || periods.indexOf('all') >= 0) return true;
+  return periods.indexOf(String(value)) >= 0;
 }
 
 function patchRulePeriods(index, periods) {
-  patchRule(index, { periods: periods.length ? periods : ['all'] });
-}
-
-function toggleRuleAllPeriods(index) {
-  patchRulePeriods(index, isRuleAllPeriods(index) ? [] : ['all']);
+  const options = rulePeriodValues();
+  const list = (periods || []).map(String).filter(function (item) { return item !== 'all'; });
+  const coversAll = options.length > 0
+    && options.every(function (item) { return list.indexOf(item) >= 0; });
+  patchRule(index, { periods: (!list.length || coversAll) ? ['all'] : sortRulePeriods(list) });
 }
 
 function toggleRulePeriod(index, value) {
   const key = String(value);
   const rule = rules.value[index] || {};
-  const current = (Array.isArray(rule.periods) ? rule.periods : [])
+  let current = (Array.isArray(rule.periods) ? rule.periods : [])
     .filter(function (item) { return item !== 'all'; });
+  if (!current.length) current = rulePeriodValues();
   const pos = current.indexOf(key);
   if (pos >= 0) current.splice(pos, 1);
   else current.push(key);
@@ -370,12 +376,7 @@ function toggleRulePeriod(index, value) {
 }
 
 function selectRulePeriodRange(index) {
-  const all = (props.classAwayPeriodOptions || []).map(function (option) { return String(option.value); });
-  patchRulePeriods(index, all);
-}
-
-function clearRulePeriods(index) {
-  patchRulePeriods(index, []);
+  patchRulePeriods(index, rulePeriodValues());
 }
 </script>
 
