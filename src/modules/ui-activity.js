@@ -264,6 +264,25 @@ const UiClassAwayAdmin = (() => {
       }).join('、');
     }
 
+    // 規則數：2 條以上時「規則清單」含規則 1，故長度即實際條數（不可再加 1）
+    function classAwayRuleCount(ev) {
+      var rules = ev && Array.isArray(ev.rules) ? ev.rules : [];
+      return rules.length || 1;
+    }
+
+    // 列表用摘要：多規則只給條數（各規則欄位不同，不適合攤在列表）；單一規則給一行摘要
+    function classAwayEventRuleSummary(ev) {
+      var count = classAwayRuleCount(ev);
+      if (count > 1) return count + ' 條規則';
+      var parts = [ev && ev.scope === 'all' ? '全校' : '指定班級'];
+      parts.push(isClassAwayRangeEvent(ev)
+        ? classAwayBoundaryPeriodLabel(ev, 'start') + '～' + classAwayBoundaryPeriodLabel(ev, 'end')
+        : classAwayDailyPeriodLabel(ev));
+      parts.push(String((ev && ev.subject) || '').trim() || '整班');
+      if (ev && ev.billingRule === 'reduce') parts.push('扣超鐘點');
+      return parts.join(' · ');
+    }
+
     function toggleClassAwayFormClass(cls) {
       var c = (DomainClassAway && DomainClassAway.normClass)
         ? DomainClassAway.normClass(cls)
@@ -443,6 +462,8 @@ const UiClassAwayAdmin = (() => {
       classAwayDailyPeriodLabel: classAwayDailyPeriodLabel,
       classAwayBoundaryPeriodLabel: classAwayBoundaryPeriodLabel,
       isClassAwayRangeEvent: isClassAwayRangeEvent,
+      classAwayRuleCount: classAwayRuleCount,
+      classAwayEventRuleSummary: classAwayEventRuleSummary,
       toggleClassAwayFormClass: toggleClassAwayFormClass,
       isClassAwayFormClassSelected: isClassAwayFormClassSelected,
       selectClassAwayGrade: selectClassAwayGrade,

@@ -2017,11 +2017,7 @@
                       <th>名稱</th>
                        <th>起日</th>
                        <th>迄日</th>
-                       <th>範圍</th>
-                       <th>班級</th>
-                       <th title="連續起迄會顯示起～迄；＋N 條表示另有 N 條規則，詳見編輯">節次</th>
-                       <th>鐘點</th>
-                      <th title="填科目＝只停該科課堂；空白＝整班">科目</th>
+                      <th title="多條規則只顯示條數；逐條的範圍、班級、節次、科目、鐘點請按「編輯」查看">停課規則</th>
                       <th>互代</th>
                       <th>啟用</th>
                       <th>操作</th>
@@ -2032,19 +2028,7 @@
                       <td><strong>{{ ev.name }}</strong></td>
                        <td>{{ ev.startDate || '未設定' }}</td>
                        <td>{{ ev.endDate || '學期結束' }}</td>
-                       <td>{{ ev.scope === 'all' ? '全校' : '指定班級' }}</td>
-                        <td style="max-width:180px;font-size:0.78rem;">{{ (ev.classes || []).join('、') || '無' }}</td>
-                         <td>
-                           <template v-if="isClassAwayRangeEvent(ev)">{{ classAwayBoundaryPeriodLabel(ev, 'start') }}～{{ classAwayBoundaryPeriodLabel(ev, 'end') }}</template>
-                           <template v-else>{{ classAwayDailyPeriodLabel(ev) }}</template>
-                           <span v-if="(ev.rules || []).length" style="color:var(--text-muted);"> ＋{{ (ev.rules || []).length }} 條</span>
-                         </td>
-                       <td>{{ ev.billingRule === 'reduce' ? '扣超鐘點' : '不扣超鐘點' }}</td>
-                      <td>
-                        <span :style="{ color: (ev.subject || (ev.rules || []).length) ? '#0f766e' : 'var(--text-muted)', fontSize: '0.78rem' }">
-                          {{ (ev.rules || []).length ? ((ev.rules || []).length + 1) + ' 條規則' : (ev.subject || '整班') }}
-                        </span>
-                      </td>
+                       <td style="font-size:0.78rem;line-height:1.4;">{{ classAwayEventRuleSummary(ev) }}</td>
                       <td>{{ ev.forMutual ? '是' : '否' }}</td>
                       <td>{{ ev.enabled !== false ? '是' : '否' }}</td>
                       <td>
@@ -2056,7 +2040,7 @@
                       </td>
                     </tr>
                     <tr v-if="!classAwayEvents.length">
-                        <td colspan="11" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄；填科目可只停該科（例：本土語-台語）</span></td>
+                        <td colspan="7" style="text-align:center;padding:20px;color:var(--text-secondary);"><span class="empty-state-title">尚無空堂事件</span><span class="empty-state-hint">畢業／畢旅可新增事件並勾選班級；段考可設定每日指定節次或連續起迄；填科目可只停該科（例：本土語-台語）</span></td>
                     </tr>
                   </tbody>
                 </table>
@@ -2861,7 +2845,7 @@ const { dashboardStats } = storeToRefs(historyStore);
 const applyHistoryRangeFilter = () => {
   setHistoryRangeFilter(historyRangeStart.value, historyRangeEnd.value);
 };
-const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
+const { changeHistoryPage, classAwayBoundaryPeriodLabel, classAwayDailyPeriodLabel, classAwayEventRuleSummary, classAwayPeriodLabel, classAwayPeriodOptions, clearClassAwayPeriods, deleteClassAwayEvent, devSwitchUser, isAdminPendingPageFullySelected, isClassAwayFormClassSelected, isClassAwayFullDaySelected, isClassAwayPeriodSelected, isClassAwayRangeEvent, isHistoryBatchGroupSelected, isHistoryRecordSelected, logout, onLeaveReasonChange, openAddClassAwayModal, openBatchPendingPrintPreview, openEditClassAwayModal, openEmptySlotAssign, openEmptySlotFromDetail, openManualQuotaAdjust, previewMutualDraft, restoreAdmin, saveClassAwayEvent, saveManualQuotaAdjust, selectClassAwayGrade, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, submitAllMutualDrafts, toggleClassAwayFormClass, toggleClassAwayPeriod, toggleHistoryBatchGroupSelection, toggleMutualCover, toggleSelectAllRecords } = backofficeStore;
 const { changePendingPage, closeEmptySlotModal, closeSuccessCopyLine, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, defaultSubFeeForReason } = backofficeStore;
 const { classAwayForm, classAwayModalMode, isSimulating, showClassAwayModal } = storeToRefs(backofficeStore);
 const { clearScheduleCell, deleteTeacher, downloadCurrentSchedules, downloadScheduleTemplate, fillFixedOvertimeForAllTeachers, fillFixedOvertimeFromCurrentSchedule, handleFileChange, handleTeacherExcelChange, importSchedules, importTeachersBatch, migrateNameKeySchema, normalizeScheduleFormFlags, normalizeTeacherExpenseData, onHistoryEditDateChange, onHistoryEditPeriodChange, onHistoryEditReasonChange, onHistoryEditTypeChange, openAddTeacherModal, openEditTeacherModal, openExceptionComposer, openHistoryEditModal, openOvertimePlanModal, openQuotaLedger, openScheduleEditModal, openTeacherExpenseAuditModal, pickScheduleAttr, runImportPreview, runTeacherImportPreview, saveHistoryEdit, saveOvertimePlan, saveScheduleCell, saveTeacher, submitAdminException, updateTeacherBaseHours } = adminStore;
