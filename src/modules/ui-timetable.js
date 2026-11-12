@@ -1936,7 +1936,7 @@ const UiTimetable = (() => {
             var cls = cellClassFromCell(cell, !!draft, batchOn, awayLabel);
             var feeShort = '';
             if (draft) {
-              if (draft.fee === '扣額度' || draft.fee === '互代不結') feeShort = '互代';
+              if (draft.fee === '扣額度' || draft.fee === '互代不結') feeShort = '額度';
               else if (draft.fee === '第8節代課') feeShort = '第8節';
               else if (FeeUtils && FeeUtils.isTimetableOnlyFee
                 && FeeUtils.isTimetableOnlyFee(draft.fee)) feeShort = '課表';

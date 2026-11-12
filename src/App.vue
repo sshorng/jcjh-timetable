@@ -735,9 +735,9 @@
                                     <span v-if="slot.cell.isSubstituted"
                                     class="cell-badge"
                                     :class="slot.cell.subType === 'exchange' ? 'tag-warning' : (slot.cell.isMutualCover ? 'tag-purple' : 'tag-red')"
-                                  >{{ slot.cell.subType === 'exchange' ? '調出' : (slot.cell.isMutualCover ? '互代/外出' : '被代') }}</span>
+                                  >{{ slot.cell.subType === 'exchange' ? '調出' : (slot.cell.isMutualCover ? '額度/外出' : '被代') }}</span>
                                   <span v-if="slot.cell.isSubstitutionDuty" class="cell-badge" :class="slot.cell.isEmptySlotAssign ? 'tag-purple' : (slot.cell.isMutualCover ? 'tag-purple' : 'tag-green')">
-                                    {{ slot.cell.subType === 'exchange' ? '調入' : (slot.cell.isEmptySlotAssign ? '空堂任務' : (slot.cell.isMutualCover ? '互代' : '代課')) }}
+                                    {{ slot.cell.subType === 'exchange' ? '調入' : (slot.cell.isEmptySlotAssign ? '空堂任務' : (slot.cell.isMutualCover ? '額度' : '代課')) }}
                                   </span>
                                     <span v-if="timetableDisplayMode === 'detail' && slot.cell.isElastic" class="cell-badge tag-green badge-elastic">實支</span>
                                     <span v-if="timetableDisplayMode === 'detail' && (slot.cell.isSubstitute || slot.cell.attr === '代課')" class="cell-badge tag-amber">代課</span>
