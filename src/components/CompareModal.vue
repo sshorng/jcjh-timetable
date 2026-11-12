@@ -375,6 +375,28 @@
                       <span v-if="isMutualCover && !isPeriod8FeeLocked" style="font-size:0.72rem; color:#5b21b6; display:block; margin-top:4px;">
                         ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
                       </span>
+
+                      <!-- 代課費來源：結算方式的下層設定，僅管理員或代申請可指定，一般教師一律公付 -->
+                      <div
+                        v-if="(isAdmin || isProxySubmitActive) && pendingRequestData.mode === 'substitution'"
+                        style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border-color);"
+                      >
+                        <label class="form-label" style="margin-bottom:4px;">代課費來源</label>
+                        <select class="form-select" v-model="pendingRequestData.subsidySource">
+                          <option value="">公付（預設）</option>
+                          <option
+                            v-for="plan in (subsidyProjectPlans || [])"
+                            :key="'subsidy-plan-' + plan"
+                            :value="plan"
+                          >{{ plan }}</option>
+                        </select>
+                        <span v-if="!(subsidyProjectPlans || []).length" style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
+                          專案清單由「系統設定 → 代課費專案清單」維護。
+                        </span>
+                        <span v-else style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
+                          選專案者，節數從公付代課表移到該專案清冊；超鐘點扣減規則不變。
+                        </span>
+                      </div>
                       <div
                         v-if="quotaDeductPreview && quotaDeductPreview.length"
                         style="margin-top:8px;padding:8px 10px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;font-size:0.78rem;color:#5b21b6;line-height:1.55;"
@@ -419,28 +441,6 @@
                           </template>
                         </div>
                       </div>
-                    </div>
-
-                    <!-- 代課費來源：僅管理員或代申請可指定，一般教師一律公付 -->
-                    <div
-                      v-if="(isAdmin || isProxySubmitActive) && pendingRequestData.mode === 'substitution' && pendingRequestData.specialFlow !== 'combined_return'"
-                      class="form-group"
-                    >
-                      <label class="form-label">代課費來源</label>
-                      <select class="form-select" v-model="pendingRequestData.subsidySource">
-                        <option value="">公付（預設）</option>
-                        <option
-                          v-for="plan in (subsidyProjectPlans || [])"
-                          :key="'subsidy-plan-' + plan"
-                          :value="plan"
-                        >{{ plan }}</option>
-                      </select>
-                      <span v-if="!(subsidyProjectPlans || []).length" style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
-                        專案清單由「系統設定 → 代課費專案清單」維護。
-                      </span>
-                      <span v-else style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
-                        選專案者，節數從公付代課表移到該專案清冊；超鐘點扣減規則不變。
-                      </span>
                     </div>
                   </div>
 
