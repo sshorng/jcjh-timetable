@@ -8629,6 +8629,11 @@ function handlePostSubmitRequestBatch_(ctx) {
        if (list.some(function (row) { return isCombinedReturnRequest_(row); })) {
          throw new Error("合班回原班目前只能建立單筆申請，不可使用批次申請！");
        }
+      // 代課費來源：批次比照單筆，僅教學組可指定；其餘一律清空（＝公付）。
+      if (!isAdmin) {
+        list.forEach(function (row) { row["代課費來源"] = ""; });
+      }
+
        var batchId = String(reqData.batchId || ("bat_" + Date.now())).trim();
       if (!batchId) throw new Error("缺少批次 ID！");
       var staffCanProxyBatch = canUserProxySubmit_(userEmail, teachers);

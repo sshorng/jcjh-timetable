@@ -219,3 +219,15 @@ test('編輯調代課紀錄也能改代課費來源（表單、前端帶值、�
   const gas = read('code.gs');
   assert.match(gas, /targetReq\["代課費來源"\] = String\(histSubsidyRaw/, '後端歷史編輯要落欄');
 });
+
+test('批次代課逐列帶入代課費來源，後端對非教學組清空', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const read = (rel) => fs.readFileSync(path.join(here, '..', rel), 'utf8');
+
+  const activity = read('src/modules/ui-activity.js');
+  assert.match(activity, /"代課費來源": String\(\(pendingRequestData/, '批次每一列都要帶代課費來源');
+
+  const gas = read('code.gs');
+  assert.match(gas, /list\.forEach\(function \(row\) \{ row\["代課費來源"\] = ""; \}\);/,
+    '批次也要套用「僅教學組可指定」的規則');
+});

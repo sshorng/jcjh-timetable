@@ -1259,6 +1259,9 @@ const UiBatchSubmit = (() => {
           "請假時間類型": leaveTimeType,
            "請假時間": leaveTime,
           "經費來源": slotFee,
+          // 代課費來源：批次逐列帶入（教學組在對照視窗選的專案），空白＝公付。
+          "代課費來源": String((pendingRequestData && pendingRequestData.value
+            && pendingRequestData.value.subsidySource) || '').trim(),
            "備註": noteOut,
             "狀態": batchStatus,
             "直接核准": doDirectApprove ? '是' : '',
