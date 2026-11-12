@@ -31,6 +31,7 @@ const UiProxy = (() => {
     // 儲存類動作改走背景泡泡（ui/save-bubble.js），不再使用全域 loading 遮罩
     var onlineSubstitutionEnabled = deps.onlineSubstitutionEnabled;
     var proxyGrantQuery = deps.proxyGrantQuery;
+    var subsidyProjectPlans = deps.subsidyProjectPlans;
     var lookupTeacher = deps.lookupTeacher;
     var parseTeacherSubjects = deps.parseTeacherSubjects;
     var searchQuery = deps.searchQuery;
@@ -191,6 +192,35 @@ const setOnlineSubstitutionEnabled = async (enabled) => {
   });
 };
 
+/** 維護「代課費專案清單」（系統設定 subsidyProjectPlans，以「、」分隔） */
+const saveSubsidyProjectPlans = async (nextList) => {
+  if (!isAdmin.value) {
+    showToast('僅教學組可維護代課費專案清單', 'warning');
+    return false;
+  }
+  const prev = (subsidyProjectPlans.value || []).slice();
+  const uniq = [];
+  String(Array.isArray(nextList) ? nextList.join('、') : (nextList == null ? '' : nextList))
+    .split(/[、,，;；\n]+/)
+    .forEach(raw => {
+      const name = String(raw || '').trim();
+      if (!name || uniq.indexOf(name) >= 0) return;
+      uniq.push(name);
+    });
+  subsidyProjectPlans.value = uniq;
+  const saveResult = await runBackgroundSave({
+    key: 'subsidy-project-plans',
+    label: '代課費專案清單',
+    successMessage: uniq.length
+      ? ('已更新 ' + uniq.length + ' 個代課費專案')
+      : '已清空專案清單（所有代課費皆為公付）',
+    errorMessage: '儲存代課費專案清單失敗',
+    rollback: () => { subsidyProjectPlans.value = prev; },
+    apiCall: () => callGasApi('saveMailSettings', { subsidyProjectPlans: uniq.join('、') })
+  });
+  return !!(saveResult && saveResult.ok);
+};
+
 const filteredProxyTeachers = computed(() => {
   const q = String(proxyTargetQuery.value || '').trim().toLowerCase();
   const list = teachersList.value || [];
@@ -247,6 +277,7 @@ const isProxySubmitGranted = computed(() => {
       persistProxySubmitEmails: persistProxySubmitEmails,
       toggleProxySubmitEmail: toggleProxySubmitEmail,
       setOnlineSubstitutionEnabled: setOnlineSubstitutionEnabled,
+      saveSubsidyProjectPlans: saveSubsidyProjectPlans,
       filteredProxyTeachers: filteredProxyTeachers,
       proxyGrantCandidateTeachers: proxyGrantCandidateTeachers,
       userRoleText: userRoleText,      isProxySubmitGranted: isProxySubmitGranted,

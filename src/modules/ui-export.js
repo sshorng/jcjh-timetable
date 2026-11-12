@@ -320,6 +320,8 @@ const UiExport = (() => {
            reason: reasonValue,
            courseAdjustmentOnly: courseAdjustmentOnly,
           subFee: getValue(source, ['經費來源', 'subFee'], '自費代課'),
+         // 代課費來源：空白＝公付（舊資料同此），有值＝匯出時列入該專案分表。
+         subsidySource: String(getValue(source, ['代課費來源', 'subsidySource'], '') || '').trim(),
           note: getValue(source, ['備註', 'note']),
           printed: printed,
           isPaperDraft: true,

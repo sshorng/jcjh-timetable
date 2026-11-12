@@ -37,6 +37,8 @@ export const useSessionStore = defineStore('session', () => {
     const proxySubmitEnabledBy = ref('');
     const proxySubmitEnabledAt = ref('');
     const onlineSubstitutionEnabled = ref(true);
+    // 代課費專案清單（系統設定 subsidyProjectPlans 的解析結果；空白＝僅公付）
+    const subsidyProjectPlans = ref([]);
     const showProxyTargetDropdown = ref(false);
     const proxyTargetQuery = ref('');
     const proxyGrantQuery = ref('');
@@ -260,7 +262,7 @@ const getProxyApi = () => {
       _proxyApi = UiProxy.create({
         computed, callGasApi: useGasStore().callGasApi, user, getTeacherNameByEmail: useDataStore().getTeacherNameByEmail, isAdmin, canStaffProxySubmit: storeToRefs(useSubmitStore()).canStaffProxySubmit,
         proxyTargetEmail, showProxyTargetDropdown, proxyTargetQuery, isStaff, teachersList,
-        proxySubmitEmails, proxySubmitEnabledBy, proxySubmitEnabledAt,
+        proxySubmitEmails, proxySubmitEnabledBy, proxySubmitEnabledAt, subsidyProjectPlans,
         PROXY_SUBMIT_EMAILS_LS_KEY, loading, loadingMessage, onlineSubstitutionEnabled,
         proxyGrantQuery, lookupTeacher: useDataStore().lookupTeacher, parseTeacherSubjects, searchQuery, selectedSubject,
         canViewAllTimetables, isMutualCover: storeToRefs(useTourStore()).isMutualCover, proxySubmitEnabled
@@ -279,7 +281,7 @@ const getAuthApi = () => {
         gsiButtonReady, selectedMobileDay, activeTab, adminSubTab, TAB_LS_KEY,
         ADMIN_SUBTAB_LS_KEY, VALID_TABS, VALID_ADMIN_SUBTABS, allowedHdList,
         parseAllowedHd: useGasStore().parseAllowedHd, proxySubmitEmails, PROXY_SUBMIT_EMAILS_LS_KEY,
-        proxySubmitEnabledBy, proxySubmitEnabledAt, onlineSubstitutionEnabled,
+        proxySubmitEnabledBy, proxySubmitEnabledAt, onlineSubstitutionEnabled, subsidyProjectPlans,
         isEmailDomainAllowed: useGasStore().isEmailDomainAllowed, resetAppState: useBackofficeStore().resetAppState, loading, loadingMessage, isTokenExpired: useGasStore().isTokenExpired
       });
       return _authApi;
@@ -312,6 +314,7 @@ const getAuthApi = () => {
     const setProxyTarget = (...args) => getProxyApi().setProxyTarget(...args);
     const filterStaffEmailsOnly = (...args) => getProxyApi().filterStaffEmailsOnly(...args);
     const persistProxySubmitEmails = (...args) => getProxyApi().persistProxySubmitEmails(...args);
+    const saveSubsidyProjectPlans = (...args) => getProxyApi().saveSubsidyProjectPlans(...args);
     const toggleProxySubmitEmail = (...args) => getProxyApi().toggleProxySubmitEmail(...args);
     const setOnlineSubstitutionEnabled = (...args) => getProxyApi().setOnlineSubstitutionEnabled(...args);
     function initImmediateSession1() {
@@ -581,5 +584,5 @@ const getAuthApi = () => {
     });
     }
     const VALID_ADMIN_SUBTABS = ['billing', 'period8', 'teachers', 'classAway', 'schoolSwap', 'settings', 'schoolExport'];
-  return { user, userRole, originalUser, proxyTargetEmail, PROXY_SUBMIT_EMAILS_LS_KEY, proxySubmitEmails, proxySubmitEnabledBy, proxySubmitEnabledAt, onlineSubstitutionEnabled, showProxyTargetDropdown, proxyTargetQuery, proxyGrantQuery, avatarLoadFailed, avatarSrc, handleAvatarError, googleClientId, gasApiUrl, gsiButtonReady, gsiButtonError, gsiLoggingIn, renderGsiLoginButton, callGasApiWithProgress, allowedHdList, selectedMobileDay, isMobile, showMatchModal, checkMobile, loading, loadingMessage, TAB_LS_KEY, ADMIN_SUBTAB_LS_KEY, VALID_TABS, readHashTab, readHashAdminSub, readStoredTab, readStoredAdminSubTab, activeTab, adminSubTab, _navPersistReady, currentSemester, semestersList, availableSemesters, currentSemesterName, showSemesterModal, semesterModalMode, semesterForm, toLocalDateStr, selectedWeekDate, searchQuery, selectedSubject, selectedCommunity, timetableDisplayMode, teachersList, allSchedules, schoolSwaps, substitutionRecords, homeroomRecords, homeroomAssignSelections, homeroomRecordsLoading, isCourseAdjustmentOnlyRequest, isEmptySlotAssignmentRequest, requestsList, semesterStartDate, getWeekNumber, currentWeekNumber, isSingleWeek, classAwayEvents, semesterEndDate, isClassAwayOnDate, getClassAwayEventsForView, activeAwayBanner, showSchoolSwapModal, schoolSwapModalMode, schoolSwapSaving, schoolSwapForm, schoolSwapRows, schoolSwapWeekdayNumber, schoolSwapWeekdayText, isAdmin, isStaff, canViewAllTimetables, proxySubmitEnabled, parseTeacherSubjects, parseTeacherCommunities, getProxyApi, getAuthApi, isGoogleGsiReady, waitForGoogleGsi, gsiCredentialBridge, isSecureHttpsOrigin, isGsiInitialized, suppressGsiAutoLogin, ensureGsiInitialized, setupGoogleSignInUi, reloadGsiLoginButton, getOAuthRedirectUri, makeOAuthNonce, clearOAuthUrlResidue, parseOAuthReturnParams, consumeOAuthRedirectToken, loginWithGoogle, refreshGoogleIdToken, gasProgressHandler, applySettings, assertSchoolDomain, initMobileDay, persistNavPosition, setActiveTab, canOperateOnTeacherEmail, ensureProxyTargetForTeacher, setProxyTarget, filterStaffEmailsOnly, persistProxySubmitEmails, toggleProxySubmitEmail, setOnlineSubstitutionEnabled, initImmediateSession1, initImmediateSession2, initImmediateSession3, initImmediateSession4, initImmediateSession5, initImmediateSession6, initImmediateSession7, initImmediateSession8, initImmediateSession9, initImmediateSession10, initSession1, initImmediateSession11 };
+  return { user, userRole, originalUser, proxyTargetEmail, PROXY_SUBMIT_EMAILS_LS_KEY, proxySubmitEmails, proxySubmitEnabledBy, proxySubmitEnabledAt, subsidyProjectPlans, saveSubsidyProjectPlans, onlineSubstitutionEnabled, showProxyTargetDropdown, proxyTargetQuery, proxyGrantQuery, avatarLoadFailed, avatarSrc, handleAvatarError, googleClientId, gasApiUrl, gsiButtonReady, gsiButtonError, gsiLoggingIn, renderGsiLoginButton, callGasApiWithProgress, allowedHdList, selectedMobileDay, isMobile, showMatchModal, checkMobile, loading, loadingMessage, TAB_LS_KEY, ADMIN_SUBTAB_LS_KEY, VALID_TABS, readHashTab, readHashAdminSub, readStoredTab, readStoredAdminSubTab, activeTab, adminSubTab, _navPersistReady, currentSemester, semestersList, availableSemesters, currentSemesterName, showSemesterModal, semesterModalMode, semesterForm, toLocalDateStr, selectedWeekDate, searchQuery, selectedSubject, selectedCommunity, timetableDisplayMode, teachersList, allSchedules, schoolSwaps, substitutionRecords, homeroomRecords, homeroomAssignSelections, homeroomRecordsLoading, isCourseAdjustmentOnlyRequest, isEmptySlotAssignmentRequest, requestsList, semesterStartDate, getWeekNumber, currentWeekNumber, isSingleWeek, classAwayEvents, semesterEndDate, isClassAwayOnDate, getClassAwayEventsForView, activeAwayBanner, showSchoolSwapModal, schoolSwapModalMode, schoolSwapSaving, schoolSwapForm, schoolSwapRows, schoolSwapWeekdayNumber, schoolSwapWeekdayText, isAdmin, isStaff, canViewAllTimetables, proxySubmitEnabled, parseTeacherSubjects, parseTeacherCommunities, getProxyApi, getAuthApi, isGoogleGsiReady, waitForGoogleGsi, gsiCredentialBridge, isSecureHttpsOrigin, isGsiInitialized, suppressGsiAutoLogin, ensureGsiInitialized, setupGoogleSignInUi, reloadGsiLoginButton, getOAuthRedirectUri, makeOAuthNonce, clearOAuthUrlResidue, parseOAuthReturnParams, consumeOAuthRedirectToken, loginWithGoogle, refreshGoogleIdToken, gasProgressHandler, applySettings, assertSchoolDomain, initMobileDay, persistNavPosition, setActiveTab, canOperateOnTeacherEmail, ensureProxyTargetForTeacher, setProxyTarget, filterStaffEmailsOnly, persistProxySubmitEmails, toggleProxySubmitEmail, setOnlineSubstitutionEnabled, initImmediateSession1, initImmediateSession2, initImmediateSession3, initImmediateSession4, initImmediateSession5, initImmediateSession6, initImmediateSession7, initImmediateSession8, initImmediateSession9, initImmediateSession10, initSession1, initImmediateSession11 };
 });

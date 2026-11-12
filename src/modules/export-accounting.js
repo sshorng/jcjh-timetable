@@ -508,10 +508,11 @@ const __root = {
     return planFullLabel(expensePlan) + '印領清冊';
   }
 
-  function titleFor(config, reportMonth, period, expensePlan) {
+  function titleFor(config, reportMonth, period, expensePlan, plan) {
     var parts = reportPartsForPeriod(reportMonth, period);
     var monthLabel = monthLabelForPeriod(reportMonth, period);
     var dateRange = titleDateRange(period);
+    var planName = String(plan == null ? '' : plan).trim();
     var suffix = config.titleSuffix;
     if (config.key === 'overtime') {
       suffix = overtimeTitleSuffix(expensePlan);
@@ -522,7 +523,15 @@ const __root = {
     if (config.key === 'teachingSupport') {
       suffix = '教支人員鐘點費印領清冊（' + teachingSupportPlanLabel(expensePlan) + '）';
     }
-    if (config.key === 'overtime' || config.key === 'selfSub' || config.key === 'mentor') {
+    // 代課費專案分表：只有指定專案（plan 有值）才改寫標題，舊資料（plan 空）輸出完全不變。
+    if (planName && config.key === 'publicSub') {
+      suffix = '公付代課鐘點費（' + planName + '）印領清冊';
+    }
+    if (planName && config.key === 'publicSubAdjustment') {
+      suffix = '公付代課-身心調適假鐘點費（' + planName + '）印領清冊';
+    }
+    if (config.key === 'overtime' || config.key === 'selfSub' || config.key === 'mentor'
+        || (planName && config.key === 'publicSubAdjustment')) {
       return '臺北市立建成國民中學' + rocYear(parts.year) + '年' + monthLabel + '月' + dateRange + suffix;
     }
     return '臺北市立建成國中' + rocYear(parts.year) + '年' + monthLabel + '月' + dateRange + suffix;
@@ -532,16 +541,24 @@ const __root = {
     return outputExpensePlan(value).replace(/[\\/:*?\[\]]/g, '-').trim();
   }
 
-  function sheetName(config, reportMonth, period, expensePlan) {
+  function safeSubsidyPlanPart(value) {
+    return String(value == null ? '' : value).trim().replace(/[\\/:*?\[\]]/g, '-').trim();
+  }
+
+  function sheetName(config, reportMonth, period, expensePlan, plan) {
     var parts = reportParts(reportMonth);
     var a = dateObj(period.start);
     var b = dateObj(period.end);
     var prefix = rocYear(parts.year) + '.' + (a ? (a.getMonth() + 1) : parts.month) + '.' + (a ? a.getDate() : 1)
       + '-' + (b ? (b.getMonth() + 1) : parts.month) + '.' + (b ? b.getDate() : 31);
-    var planSuffix = (config.key === 'overtime' || config.key === 'substituteAttribute'
-      || config.key === 'teachingSupport') && outputExpensePlan(expensePlan)
-      ? '-' + safeSheetPart(expensePlan)
-      : '';
+    var isPublicSubPlan = config.key === 'publicSub' || config.key === 'publicSubAdjustment';
+    var planName = isPublicSubPlan ? String(plan == null ? '' : plan).trim() : '';
+    var planSuffix = isPublicSubPlan
+      ? (planName ? '-' + safeSubsidyPlanPart(planName) : '')
+      : ((config.key === 'overtime' || config.key === 'substituteAttribute'
+        || config.key === 'teachingSupport') && outputExpensePlan(expensePlan)
+        ? '-' + safeSheetPart(expensePlan)
+        : '');
     var name = prefix + config.suffix + planSuffix;
     return name.slice(0, 31);
   }
@@ -1928,7 +1945,17 @@ const __root = {
     return cls + subj;
   }
 
-  function publicRows(opts, period, chargedMap, adjustmentOnly, schoolSwapIndex) {
+  // 申請單「代課費來源」：空白＝公付；有值＝該筆代課費由指定專案支應。
+  function subsidySourceOf(record) {
+    if (root.FieldMap && typeof root.FieldMap.requestSubsidySource === 'function') {
+      return String(root.FieldMap.requestSubsidySource(record) || '').trim();
+    }
+    var raw = record && (record['代課費來源'] !== undefined ? record['代課費來源'] : record.subsidySource);
+    return String(raw == null ? '' : raw).trim();
+  }
+
+  function publicRows(opts, period, chargedMap, adjustmentOnly, schoolSwapIndex, plan) {
+    var planKey = String(plan == null ? '' : plan).trim();
     var teacherMap = {};
     var teacherOrder = teacherOrderMap(opts.teachers || []);
     (opts.teachers || []).forEach(function (t) { addTeacherToMap(teacherMap, t); });
@@ -1939,6 +1966,7 @@ const __root = {
         && dateInPeriod(r.date, period) && isPublicPayoutRecord(r) && r.actualTeacherEmail
         && !isSubstituteAttributePayoutRecord(r, opts.allSchedules || [], schoolSwapIndex)
         && Boolean(adjustmentOnly) === isAdjustment
+        && subsidySourceOf(r) === planKey
         && (!chargedMap || !chargedMap.byKey[substitutionKey(r)]
           || chargedMap.byKey[substitutionKey(r)].charged === false
           || chargedMap.byKey[substitutionKey(r)].routeToSubstituteSheet);
@@ -2275,6 +2303,8 @@ const __root = {
       overtimePlans: [],
       teachingSupportPlans: [],
       substituteAttributePlans: [],
+      publicSubPlans: [],
+      publicSubAdjustmentPlans: [],
       summary: [],
       warnings: [],
       blocking: []
@@ -2418,11 +2448,38 @@ const __root = {
          data.sheets[config.key] = buildSummaryRows(config, opts, period, '', periodChargedMap, schoolSwapIndex);
          appendSelfPaidOverdrawWarnings(data.warnings, data.sheets[config.key], '');
        }
-      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false, schoolSwapIndex);
-      if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true, schoolSwapIndex);
+      if (config.key === 'publicSub') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, false, schoolSwapIndex, '');
+      if (config.key === 'publicSubAdjustment') data.sheets[config.key] = publicRows(opts, period, periodChargedMap, true, schoolSwapIndex, '');
       if (config.key === 'selfSub') data.sheets[config.key] = selfRows(opts, period, periodChargedMap, schoolSwapIndex);
       if (config.key === 'mentor') data.sheets[config.key] = mentorRows(opts, period);
       summaryFor(config.key, config.label, data.sheets[config.key]);
+    });
+    // 代課費專案分表：只影響「公付代課」與「公付代課-身心調適假」；空白來源仍留在原表（與改版前一致）。
+    var publicSubPeriodForPlans = getPeriod(periods, 'publicSub', opts.reportMonth);
+    var publicSubChargedMapForPlans = chargedMapFor(publicSubPeriodForPlans);
+    var publicSubPlanKeys = [];
+    (opts.substitutionRecords || []).forEach(function (r) {
+      var usableForPublicSub = isUsableSubstitution(r) && !isCombinedReturnRecord(r)
+        && dateInPeriod(r.date, publicSubPeriodForPlans) && isPublicPayoutRecord(r) && r.actualTeacherEmail
+        && !isSubstituteAttributePayoutRecord(r, opts.allSchedules || [], schoolSwapIndex);
+      if (!usableForPublicSub) return;
+      var plan = subsidySourceOf(r);
+      if (plan && publicSubPlanKeys.indexOf(plan) < 0) publicSubPlanKeys.push(plan);
+    });
+    publicSubPlanKeys.sort(function (a, b) {
+      return a.localeCompare(b, 'zh-Hant', { numeric: true });
+    });
+    publicSubPlanKeys.forEach(function (plan) {
+      var rows = publicRows(opts, publicSubPeriodForPlans, publicSubChargedMapForPlans, false, schoolSwapIndex, plan);
+      if (rows.length) {
+        data.publicSubPlans.push({ plan: plan, rows: rows });
+        summaryFor('publicSub:' + plan, '公付代課-' + plan, rows);
+      }
+      var adjustmentRows = publicRows(opts, publicSubPeriodForPlans, publicSubChargedMapForPlans, true, schoolSwapIndex, plan);
+      if (adjustmentRows.length) {
+        data.publicSubAdjustmentPlans.push({ plan: plan, rows: adjustmentRows });
+        summaryFor('publicSubAdjustment:' + plan, '公付代課-身心調適假-' + plan, adjustmentRows);
+      }
     });
     var substituteAttributePeriod = getPeriod(periods, 'publicSub', opts.reportMonth);
     data.substituteAttributePlans = substituteAttributePlans(opts, substituteAttributePeriod);
@@ -2449,9 +2506,14 @@ const __root = {
     return sheet.getCell(1, 1);
   }
 
-  function titleForSheet(sheet, config, reportMonth, period, expensePlan) {
+  function titleForSheet(sheet, config, reportMonth, period, expensePlan, plan) {
     var titleCell = firstTitleCell(sheet, config.columns);
     var templateTitle = titleFromTemplate(titleCell.value, reportMonth, period, expensePlan);
+    var planName = String(plan == null ? '' : plan).trim();
+    // 只有「指定專案」的公付代課分表才重生標題；無 plan 的既有兩張表仍沿用範本標題（輸出零變化）。
+    if (planName && (config.key === 'publicSub' || config.key === 'publicSubAdjustment')) {
+      return titleFor(config, reportMonth, period, expensePlan, planName);
+    }
     if (templateTitle && config.key !== 'overtime'
         && config.key !== 'substituteAttribute' && config.key !== 'teachingSupport') {
       return templateTitle;
@@ -2826,6 +2888,26 @@ const __root = {
         sheet: cloneWorksheet(overtimeTemplate, workbook, '__substitute_attribute_' + index, substituteAttributeConfig.columns)
       };
     });
+    // 代課費專案分表：沿用公付代課（含身心調適假）版型動態複製，不新增範本工作表。
+    var publicSubAdjustmentTemplate = workbook.worksheets[SHEET_CONFIG.publicSubAdjustment.index];
+    if (!publicSubAdjustmentTemplate) throw new Error('範本缺少工作表：' + SHEET_CONFIG.publicSubAdjustment.label);
+    var publicSubPlanSheets = (data.publicSubPlans || []).map(function (group, index) {
+      return {
+        group: group,
+        sheet: cloneWorksheet(publicSubTemplate, workbook, '__public_sub_plan_' + index, SHEET_CONFIG.publicSub.columns)
+      };
+    });
+    var publicSubAdjustmentPlanSheets = (data.publicSubAdjustmentPlans || []).map(function (group, index) {
+      return {
+        group: group,
+        sheet: cloneWorksheet(
+          publicSubAdjustmentTemplate,
+          workbook,
+          '__public_sub_adjustment_plan_' + index,
+          SHEET_CONFIG.publicSubAdjustment.columns
+        )
+      };
+    });
     [SHEET_CONFIG.adjunct, SHEET_CONFIG.publicSub, SHEET_CONFIG.publicSubAdjustment, SHEET_CONFIG.selfSub, SHEET_CONFIG.mentor].forEach(function (config) {
       var sheet = workbook.worksheets[config.index];
       if (!sheet) throw new Error('範本缺少工作表：' + config.label);
@@ -2900,17 +2982,57 @@ const __root = {
       applySummaryHeaderLabels(sheet, substituteAttributeConfig);
       writeSummarySheet(sheet, substituteAttributeConfig, group.rows);
     });
+    publicSubPlanSheets.forEach(function (entry) {
+      var group = entry.group;
+      var sheet = entry.sheet;
+      var config = SHEET_CONFIG.publicSub;
+      var period = getPeriod(data.periods, 'publicSub', opts.reportMonth);
+      var titleCell = firstTitleCell(sheet, config.columns);
+      titleCell.value = titleForSheet(sheet, config, opts.reportMonth, period, null, group.plan);
+      var name = sheetName(config, opts.reportMonth, period, null, group.plan);
+      var base = name;
+      var suffix = 2;
+      while (usedNames[name]) {
+        name = (base.slice(0, 28) + '_' + suffix).slice(0, 31);
+        suffix += 1;
+      }
+      usedNames[name] = true;
+      sheet.name = name;
+      writePublicSheet(sheet, config, group.rows);
+    });
+    publicSubAdjustmentPlanSheets.forEach(function (entry) {
+      var group = entry.group;
+      var sheet = entry.sheet;
+      var config = SHEET_CONFIG.publicSubAdjustment;
+      var period = getPeriod(data.periods, 'publicSub', opts.reportMonth);
+      var titleCell = firstTitleCell(sheet, config.columns);
+      titleCell.value = titleForSheet(sheet, config, opts.reportMonth, period, null, group.plan);
+      var name = sheetName(config, opts.reportMonth, period, null, group.plan);
+      var base = name;
+      var suffix = 2;
+      while (usedNames[name]) {
+        name = (base.slice(0, 28) + '_' + suffix).slice(0, 31);
+        suffix += 1;
+      }
+      usedNames[name] = true;
+      sheet.name = name;
+      writePublicSheet(sheet, config, group.rows);
+    });
     if (!planSheets.length && typeof workbook.removeWorksheet === 'function') {
       workbook.removeWorksheet(overtimeTemplate.id);
     }
+    var publicSubPlanSheetEntries = publicSubPlanSheets.concat(publicSubAdjustmentPlanSheets);
     var baseSheets = baseSheetRefs.filter(function (sheet) {
       return planSheets.every(function (entry) { return entry.sheet !== sheet; })
-        && substituteAttributeSheets.every(function (entry) { return entry.sheet !== sheet; });
+        && substituteAttributeSheets.every(function (entry) { return entry.sheet !== sheet; })
+        && publicSubPlanSheetEntries.every(function (entry) { return entry.sheet !== sheet; });
     });
-    if (planSheets.length || teachingSupportSheets.length || substituteAttributeSheets.length || baseSheets.length) {
+    if (planSheets.length || teachingSupportSheets.length || substituteAttributeSheets.length
+        || publicSubPlanSheetEntries.length || baseSheets.length) {
       var orderedSheets = planSheets.map(function (entry) { return entry.sheet; })
         .concat(substituteAttributeSheets.map(function (entry) { return entry.sheet; }))
         .concat(teachingSupportSheets.map(function (entry) { return entry.sheet; }))
+        .concat(publicSubPlanSheetEntries.map(function (entry) { return entry.sheet; }))
         .concat(baseSheets);
       orderedSheets.forEach(function (sheet, index) {
         sheet.orderNo = index;

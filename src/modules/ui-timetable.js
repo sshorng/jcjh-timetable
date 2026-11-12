@@ -1325,6 +1325,8 @@ const UiTimetable = (() => {
              triangleLegIndex: req.triangleLegIndex,
             printed: req.printed,
             subFee: req.subFee,
+            // 代課費來源：空白＝公付（舊資料同此），有值＝匯出時列入該專案分表。
+            subsidySource: req.subsidySource || '',
             reason: req.reason,
             leaveTimeType: req.leaveTimeType || '',
             leaveTime: req.leaveTime || '',

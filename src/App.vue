@@ -2182,6 +2182,31 @@
               </ul>
             </div>
 
+            <!-- 代課費專案清單：申請單「代課費來源」下拉的唯一來源 -->
+            <div class="card mb-16">
+              <div class="card-title">
+                <span>🧾 代課費專案清單</span>
+                <span
+                  class="status-badge"
+                  :class="(subsidyProjectPlans || []).length ? 'status-approved' : 'status-pending-teacher'"
+                  style="font-size:0.75rem;padding:2px 8px;"
+                >{{ (subsidyProjectPlans || []).length ? ((subsidyProjectPlans || []).length + ' 個專案') : '僅公付' }}</span>
+              </div>
+              <p style="font-size:0.8rem;color:var(--text-secondary);line-height:1.55;margin:0 0 10px;">
+                申請單「代課費來源」只從這裡取值。填了專案的代課節數，匯出時會從<strong>公付代課</strong>移到專案自己的印領清冊（每個專案一張）；空白一律視為公付。
+              </p>
+              <input
+                class="form-input"
+                type="text"
+                :value="(subsidyProjectPlans || []).join('、')"
+                placeholder="例：深耕計畫、雙語計畫（以「、」分隔；清空＝全部公付）"
+                @change="saveSubsidyProjectPlans($event.target.value)"
+              >
+              <small style="display:block;margin-top:6px;color:var(--text-muted);">
+                改名不回溯：既有紀錄仍列在原本的專案名稱表，不會跳到新名稱。
+              </small>
+            </div>
+
             <!-- 學期管理 -->
             <div class="card mb-16">
               <div class="card-title">
@@ -2351,6 +2376,7 @@
       :has-sub-teacher-conflict="hasSubTeacherConflict"
       :is-admin="isAdmin"
       :is-proxy-submit-active="isProxySubmitActive"
+      :subsidy-project-plans="subsidyProjectPlans"
       :user="user"
       :notifications-suppressed="notificationsSuppressed"
       :batch-compare-week-total="batchCompareWeekTotal"
@@ -2812,9 +2838,9 @@ installVueErrorHandler(getCurrentInstance().appContext.app, errorReporter.report
     } catch (e) { return ''; }
   }
 });
-const { canOperateOnTeacherEmail, ensureProxyTargetForTeacher, initMobileDay, loginWithGoogle, persistProxySubmitEmails, reloadGsiLoginButton, setActiveTab, setOnlineSubstitutionEnabled, setProxyTarget, toggleProxySubmitEmail } = sessionStore;
+const { canOperateOnTeacherEmail, ensureProxyTargetForTeacher, initMobileDay, loginWithGoogle, persistProxySubmitEmails, reloadGsiLoginButton, saveSubsidyProjectPlans, setActiveTab, setOnlineSubstitutionEnabled, setProxyTarget, toggleProxySubmitEmail } = sessionStore;
 const { checkMobile, handleAvatarError, isClassAwayOnDate, isSingleWeek, schoolSwapWeekdayText, toLocalDateStr } = sessionStore;
-const { activeAwayBanner, activeTab, adminSubTab, allSchedules, availableSemesters, avatarSrc, canViewAllTimetables, classAwayEvents, currentSemester, currentSemesterName, currentWeekNumber, gasApiUrl, googleClientId, gsiButtonError, gsiButtonReady, gsiLoggingIn, homeroomAssignSelections, homeroomRecords, homeroomRecordsLoading, isAdmin, isMobile, isStaff, loading, loadingMessage, onlineSubstitutionEnabled, originalUser, proxyGrantQuery, proxySubmitEmails, proxySubmitEnabled, proxySubmitEnabledAt, proxySubmitEnabledBy, proxyTargetEmail, proxyTargetQuery, requestsList, schoolSwapForm, schoolSwapModalMode, schoolSwapRows, schoolSwapSaving, schoolSwaps, searchQuery, selectedMobileDay, selectedSubject, selectedWeekDate, semesterEndDate, semesterForm, semesterModalMode, semesterStartDate, semestersList, showMatchModal, showProxyTargetDropdown, showSchoolSwapModal, showSemesterModal, substitutionRecords, teachersList, timetableDisplayMode, user, userRole } = storeToRefs(sessionStore);
+const { activeAwayBanner, activeTab, adminSubTab, allSchedules, availableSemesters, avatarSrc, canViewAllTimetables, classAwayEvents, currentSemester, currentSemesterName, currentWeekNumber, gasApiUrl, googleClientId, gsiButtonError, gsiButtonReady, gsiLoggingIn, homeroomAssignSelections, homeroomRecords, homeroomRecordsLoading, isAdmin, isMobile, isStaff, loading, loadingMessage, onlineSubstitutionEnabled, originalUser, proxyGrantQuery, proxySubmitEmails, proxySubmitEnabled, proxySubmitEnabledAt, proxySubmitEnabledBy, proxyTargetEmail, proxyTargetQuery, requestsList, schoolSwapForm, schoolSwapModalMode, schoolSwapRows, schoolSwapSaving, schoolSwaps, searchQuery, selectedMobileDay, selectedSubject, selectedWeekDate, semesterEndDate, semesterForm, semesterModalMode, semesterStartDate, semestersList, showMatchModal, showProxyTargetDropdown, showSchoolSwapModal, showSemesterModal, substitutionRecords, subsidyProjectPlans, teachersList, timetableDisplayMode, user, userRole } = storeToRefs(sessionStore);
 // 社群篩選（與科目分開）：選項由教師名單的社群標籤聚合，不改動 subjectsList。
 const { selectedCommunity } = storeToRefs(sessionStore);
 const { parseTeacherCommunities } = sessionStore;

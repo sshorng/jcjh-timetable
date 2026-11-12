@@ -31,6 +31,7 @@ const UiAuth = (() => {
     var PROXY_SUBMIT_EMAILS_LS_KEY = deps.PROXY_SUBMIT_EMAILS_LS_KEY;
     var proxySubmitEnabledBy = deps.proxySubmitEnabledBy;
     var proxySubmitEnabledAt = deps.proxySubmitEnabledAt;
+    var subsidyProjectPlans = deps.subsidyProjectPlans;
     var onlineSubstitutionEnabled = deps.onlineSubstitutionEnabled;
     var isEmailDomainAllowed = deps.isEmailDomainAllowed;
     var resetAppState = deps.resetAppState;
@@ -406,6 +407,14 @@ const applySettings = (settings) => {
       || String(rawOnline).trim() === '否'
       || String(rawOnline).trim().toLowerCase() === 'off'
     );
+  }
+  // 代課費專案清單（系統設定維護）：申請單只取值，不自行新增。
+  if (Object.prototype.hasOwnProperty.call(settings, 'subsidyProjectPlans') && subsidyProjectPlans) {
+    const rawPlans = settings.subsidyProjectPlans;
+    subsidyProjectPlans.value = String(rawPlans == null ? '' : rawPlans)
+      .split(/[、,，;；\n]+/)
+      .map(s => s.trim())
+      .filter((s, i, list) => !!s && list.indexOf(s) === i);
   }
 };
 

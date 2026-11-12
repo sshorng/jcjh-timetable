@@ -66,6 +66,18 @@ const FieldMap = (() => {
       : '';
   }
 
+  // 申請單「代課費來源」：空白＝公付（舊資料行為完全不變）；有值＝該筆代課費由指定專案支應。
+  function requestSubsidySource(row) {
+    return String(pick(row, ['代課費來源', 'subsidySource']) == null
+      ? ''
+      : pick(row, ['代課費來源', 'subsidySource'])).trim();
+  }
+
+  // 前端 → Sheets：空白維持空白（＝公付），有值去頭尾空白後落欄。
+  function requestSubsidySourceSheetValue(value) {
+    return String(value == null ? '' : value).trim();
+  }
+
   function pick(row, keys) {
     if (!row) return undefined;
     for (let i = 0; i < keys.length; i++) {
@@ -997,6 +1009,8 @@ const FieldMap = (() => {
       subFee: pick(r, ['經費來源', 'subFee']) || '',
       // 鐘點規則：keep＝併班上課不扣鐘點；reduce＝依假別扣（預設，舊資料同此）。
       billingRule: requestClockRule(r),
+      // 代課費來源：空白＝公付（舊資料同此）；有值＝該筆代課費由指定專案支應。
+      subsidySource: requestSubsidySource(r),
       reason: pick(r, ['請假事由', 'reason']) || '',
       courseAdjustmentOnly: isCourseAdjustmentOnly(r),
       leaveTimeType: pick(r, ['請假時間類型', 'leaveTimeType']) || '',
@@ -1261,6 +1275,8 @@ const FieldMap = (() => {
     requestClockRule,
     isRequestClockKept,
     requestClockRuleSheetValue,
+    requestSubsidySource,
+    requestSubsidySourceSheetValue,
     REQUEST_CLOCK_RULE_KEEP,
     REQUEST_CLOCK_RULE_REDUCE,
     REQUEST_CLOCK_RULE_KEEP_LABEL,

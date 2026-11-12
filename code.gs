@@ -303,6 +303,31 @@ function getProxySubmitEmails_() {
   }
 }
 
+/** 代課費專案清單正規化：去空白、去重、去空字串（清單本身用「、」分隔） */
+function normalizeSubsidyProjectPlans_(value) {
+  if (!value) return [];
+  var out = [];
+  var seen = {};
+  String(value).split(/[、,，;；\n]+/).forEach(function (name) {
+    var plan = String(name || "").trim();
+    if (!plan || seen[plan]) return;
+    seen[plan] = 1;
+    out.push(plan);
+  });
+  return out;
+}
+
+/** 系統設定：代課費專案清單（以「、」分隔；空白＝僅公付） */
+function getSubsidyProjectPlans_() {
+  try {
+    var settings = buildSettingsMap_();
+    var raw = settings.subsidyProjectPlans != null ? settings.subsidyProjectPlans : settings.SUBSIDY_PROJECT_PLANS;
+    return normalizeSubsidyProjectPlans_(raw);
+  } catch (e) {
+    return [];
+  }
+}
+
 /** 指定 Email 是否獲行政代申請授權（須另驗證 role=staff） */
 function isProxySubmitEmailGranted_(email) {
   var em = String(email || "").toLowerCase();
@@ -726,7 +751,7 @@ function prepareNameKeyRequestRow_(row, semesterId, teacherRows) {
 function nameKeyCanonicalHeaders_(sheetName) {
   var map = {
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
-    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "鐘點規則", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
+    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "鐘點規則", "代課費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "額度帳本": ["學期代號", "流水ID", "時間", "教師姓名", "異動", "餘額後", "類型", "包ID", "事件ID", "事件名稱", "起日", "迄日", "申請單ID", "操作者", "備註", "索引鍵"]
   };
@@ -993,7 +1018,7 @@ function getHeadersForSheet(sheetName) {
     // Teacher roster keeps login Email; the four domain sheets use names as relation keys.
     "教師名單": ["學期代號", "教師Email", "教師姓名", "授課科目", "社群", "職務", "鐘點支出計畫", "系統角色", "基本鐘點", "折抵額度", "超鐘點節數", "超鐘點節次"],
     "教師課表": ["學期代號", "課表ID", "教師姓名", "星期", "節次", "班級", "科目", "課堂屬性", "調課限制", "特殊標記", "啟用起日", "啟用迄日"],
-    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "鐘點規則", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
+    "申請單": ["學期代號", "申請單ID", "單號", "批次ID", "狀態", "直接核准", "紙本流程", "申請人姓名", "受邀人姓名", "代申請人姓名", "班級", "科目", "異動日期", "異動星期", "異動節次", "異動類型", "特殊流程", "對調目標日期", "對調目標星期", "對調目標節次", "對調目標班級", "對調目標科目", "三角調ID", "三角腳次", "三角同意狀態", "三角同意時間", "三角組狀態", "經費來源", "鐘點規則", "代課費來源", "請假事由", "僅課務調整", "請假時間類型", "請假時間", "是否已印", "備註", "建立時間", "更新時間"],
     "空堂事件": ["學期代號", "事件ID", "事件名稱", "起日", "迄日", "適用範圍", "班級清單", "停課節次", "鐘點規則", "可進互代", "啟用", "備註", "起始節次", "結束節次", "科目", "規則清單"],
     "代導紀錄": ["學期代號", "代導紀錄ID", "來源申請單ID", "原導師姓名", "班級", "代導日期", "請假時間類型", "請假時間", "代導教師姓名", "代導節數", "鐘點費", "狀態", "啟用", "建立時間", "更新時間", "操作者", "備註"],
     "全校對調": ["學期代號", "對調ID", "事件名稱", "日期A", "星期A", "節次A", "日期B", "星期B", "節次B", "啟用", "建立時間", "更新時間", "操作者", "備註"],
@@ -2424,7 +2449,9 @@ function sanitizeSettingsForReader_(settings, readerEmail, isAdmin, isStaff, tea
   }
   var out = {
     allowedHd: raw.allowedHd || raw.ALLOWED_HD || "",
-    onlineSubstitutionEnabled: onlineEnabled
+    onlineSubstitutionEnabled: onlineEnabled,
+    // 代課費專案清單非機密：所有可填申請單的角色都需要它做下拉選項。
+    subsidyProjectPlans: getSubsidyProjectPlans_().join("、")
   };
   if (isAdmin) {
     var granted = parseEmailList_(raw.proxySubmitEmails || raw.PROXY_SUBMIT_EMAILS || "");
@@ -8080,8 +8107,11 @@ function handlePostSaveMailSettings_(ctx) {
         };
         Object.keys(reqData).forEach(function (k) {
           if (skipKeys[k]) return;
-          if (k === "gasMailApiUrl" || k === "allowedHd" || k === "superAdminEmails") {
-            upsertSystemSetting_(k, reqData[k]);
+          if (k === "gasMailApiUrl" || k === "allowedHd" || k === "superAdminEmails"
+              || k === "subsidyProjectPlans") {
+            upsertSystemSetting_(k, k === "subsidyProjectPlans"
+              ? normalizeSubsidyProjectPlans_(reqData[k]).join("、")
+              : reqData[k]);
           }
         });
       }
@@ -8320,6 +8350,11 @@ function handlePostSubmitRequest_(ctx) {
         } else if (staffCanProxy || isAdmin) {
           isProxyOne = true;
         }
+      }
+      // 代課費來源：僅教學組或被授權代申請者能指定；其餘一律空白（＝公付），避免教師自行改動經費來源。
+      if (!isAdmin && !isProxyOne) {
+        reqData.request["代課費來源"] = "";
+        reqData.request.subsidySource = "";
       }
       // 扣額度／活動公費／第8節代課：僅管理員（活動互代）
        var feeOne = String(reqData.request["經費來源"] || "");

@@ -361,6 +361,10 @@ const UiSubmitHelpers = (() => {
            ? FieldMap.requestClockRuleSheetValue(pending.billingRule)
            : (String(pending.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
          : '',
+      // 代課費來源：空白＝公付（舊資料同此）；只有管理員／代申請會填入專案名稱。
+      "代課費來源": (FieldMap && FieldMap.requestSubsidySourceSheetValue)
+        ? FieldMap.requestSubsidySourceSheetValue(pending.subsidySource)
+        : String(pending.subsidySource || '').trim(),
       directApprove: doDirectApprove,
       isProxySubmit: !!proxyActive,
        paperFlow: paperFlowActive,

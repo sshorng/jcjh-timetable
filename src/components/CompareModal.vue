@@ -420,6 +420,28 @@
                         </div>
                       </div>
                     </div>
+
+                    <!-- 代課費來源：僅管理員或代申請可指定，一般教師一律公付 -->
+                    <div
+                      v-if="(isAdmin || isProxySubmitActive) && pendingRequestData.mode === 'substitution' && pendingRequestData.specialFlow !== 'combined_return'"
+                      class="form-group"
+                    >
+                      <label class="form-label">代課費來源</label>
+                      <select class="form-select" v-model="pendingRequestData.subsidySource">
+                        <option value="">公付（預設）</option>
+                        <option
+                          v-for="plan in (subsidyProjectPlans || [])"
+                          :key="'subsidy-plan-' + plan"
+                          :value="plan"
+                        >{{ plan }}</option>
+                      </select>
+                      <span v-if="!(subsidyProjectPlans || []).length" style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
+                        專案清單由「系統設定 → 代課費專案清單」維護。
+                      </span>
+                      <span v-else style="font-size:0.72rem;color:var(--text-muted);display:block;margin-top:4px;">
+                        選專案者，節數從公付代課表移到該專案清冊；超鐘點扣減規則不變。
+                      </span>
+                    </div>
                   </div>
 
               <!-- 舊的管理員簽核模式已移至最上方顯眼處 -->
@@ -512,6 +534,7 @@ defineProps({
   hasSubTeacherConflict: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   isAdmin: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   isProxySubmitActive: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  subsidyProjectPlans: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   user: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   notificationsSuppressed: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   batchCompareWeekTotal: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
