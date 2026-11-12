@@ -573,7 +573,7 @@ const DomainSchedule = (() => {
         } else if (isTimetableOnlyFee(incomingEdge.subFee || incomingEdge['經費來源'])) {
           subTextIn = '📋 僅課表：' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         } else if (incomingEdge.subFee === '扣額度' || incomingEdge.subFee === '互代不結') {
-          subTextIn = '🔁 互代: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
+          subTextIn = '🔁 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         } else {
           subTextIn = '👤 代課: ' + h.getTeacherNameByEmail(incomingEdge.originalTeacherEmail);
         }
@@ -741,7 +741,7 @@ const DomainSchedule = (() => {
             } else if (isTimetableOnlyFee(oFee)) {
               oText = '📋 僅課表：' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
             } else if (oFee === '扣額度' || oFee === '互代不結') {
-              oText = '🔁 互代: ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
+              oText = '🔁 代課: ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
             } else {
               oText = '👤 代課: ' + (h.getTeacherNameByEmail ? h.getTeacherNameByEmail(o.actualTeacherEmail) : '');
             }
@@ -887,7 +887,7 @@ const DomainSchedule = (() => {
         } else if (isTimetableOnlyFee(firstEdge.subFee || firstEdge['經費來源'])) {
           subText = '📋 僅課表：' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
         } else if (firstEdge.subFee === '扣額度' || firstEdge.subFee === '互代不結') {
-          subText = '🔁 互代: ' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
+          subText = '🔁 代課: ' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
         } else {
           subText = '👤 代課: ' + h.getTeacherNameByEmail(firstEdge.actualTeacherEmail);
         }

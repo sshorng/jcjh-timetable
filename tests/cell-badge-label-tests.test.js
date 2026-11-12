@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const app = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
 const tt = fs.readFileSync(path.join(here, '../src/modules/ui-timetable.js'), 'utf8');
-
+const sched = fs.readFileSync(path.join(here, '../src/domain/domain-schedule.js'), 'utf8');
 // 夫子 2026-11-12：「互代」改成「額度」——課表格內只看得出這件事吃的是額度，
 // 「互代」是流程名詞，老師在課表上讀不出意思。
 test('課表格內徽章：扣額度的互代一律標「額度」', () => {
@@ -23,4 +23,10 @@ test('互代暫定列的經費簡寫：扣額度顯示「額度」', () => {
     /draft\.fee === '扣額度' \|\| draft\.fee === '互代不結'\) feeShort = '額度'/,
     '暫定列經費簡寫應為「額度」'
   );
+});
+
+test('格內小字：扣額度的互代寫「代課：王老師」', () => {
+  assert.equal(sched.includes('🔁 互代'), false, '不可留舊字樣「🔁 互代」');
+  const hits = sched.match(/🔁 代課: /g) || [];
+  assert.equal(hits.length, 3, '三處互代小字都要改成代課');
 });
