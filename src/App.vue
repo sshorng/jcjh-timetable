@@ -2624,6 +2624,7 @@
       :teachers-list="teachersList"
       :class-list="classList"
       :timetable-periods="timetablePeriods"
+      :subsidy-project-plans="subsidyProjectPlans"
       :leave-reason-options="leaveReasonOptions"
       :-t-i-m-e-t-a-b-l-e_-o-n-l-y_-f-e-e="TIMETABLE_ONLY_FEE"
       :on-history-edit-date-change="onHistoryEditDateChange"

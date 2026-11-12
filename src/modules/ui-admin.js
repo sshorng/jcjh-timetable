@@ -2467,6 +2467,11 @@ const UiAdmin = (() => {
           ? FieldMap.requestClockRule(src)
           : (String(src['鐘點規則'] || src.billingRule || rec['鐘點規則'] || '').indexOf('不扣') >= 0 ? 'keep' : 'reduce'))
         : 'reduce';
+      // 代課費來源：空白＝公付；有值＝該筆代課費由指定專案支應。
+      historyEditForm.value.subsidySource = (FieldMap && typeof FieldMap.requestSubsidySource === 'function')
+        ? FieldMap.requestSubsidySource(src || rec)
+        : String((src && (src['代課費來源'] || src.subsidySource))
+          || (rec && (rec['代課費來源'] || rec.subsidySource)) || '').trim();
       if (!isEx) syncHistoryEditFee(false);
       showHistoryEditModal.value = true;
     }
@@ -2536,6 +2541,10 @@ const UiAdmin = (() => {
             ? FieldMap.requestClockRuleSheetValue(form.billingRule)
             : (String(form.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
           : '',
+        // 代課費來源：空白＝公付；未帶此欄時後端保留原值。
+        "代課費來源": (FieldMap && typeof FieldMap.requestSubsidySourceSheetValue === 'function')
+          ? FieldMap.requestSubsidySourceSheetValue(form.subsidySource)
+          : String(form.subsidySource || '').trim(),
         note: form.note || '',
         printed: !!form.printed
       };
@@ -2567,6 +2576,7 @@ const UiAdmin = (() => {
             leaveTimeType: reqPayload.leaveTimeType,
             leaveTime: reqPayload.leaveTime,
             subFee: reqPayload.subFee,
+            subsidySource: reqPayload['代課費來源'] || '',
             note: reqPayload.note,
             printed: reqPayload.printed
           });

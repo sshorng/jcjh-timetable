@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import FieldMap from '../src/domain/field-map.js';
 import ExportAccounting from '../src/modules/export-accounting.js';
 
@@ -198,4 +201,21 @@ test('代課費來源指定專案時，經費徽章顯示「計畫」而非「�
     [],
     '自費代課不會因為填了專案就變成計畫'
   );
+});
+
+test('編輯調代課紀錄也能改代課費來源（表單、前端帶值、後端落欄）', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const read = (rel) => fs.readFileSync(path.join(here, '..', rel), 'utf8');
+
+  const modal = read('src/components/HistoryEditModal.vue');
+  assert.match(modal, /v-model="historyEditForm\.subsidySource"/, '歷史編輯表單要有代課費來源下拉');
+
+  const admin = read('src/modules/ui-admin.js');
+  assert.match(admin, /historyEditForm\.value\.subsidySource/, '開窗要帶入目前代課費來源');
+  assert.match(admin, /"代課費來源":\s*\(FieldMap[\s\S]{0,140}requestSubsidySourceSheetValue/,
+    '儲存時要送出代課費來源');
+  assert.match(admin, /subsidySource: reqPayload\['代課費來源'\]/, '本機清單要即時套用');
+
+  const gas = read('code.gs');
+  assert.match(gas, /targetReq\["代課費來源"\] = String\(histSubsidyRaw/, '後端歷史編輯要落欄');
 });

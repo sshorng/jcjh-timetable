@@ -128,6 +128,16 @@
                  <option v-if="historyEditForm.subFee === '互代不結'" value="互代不結">互代不結（舊）</option>
                  <option v-if="historyEditForm.subFee === '學校移撥'" value="學校移撥">學校移撥（舊）</option>
                </select>
+              <template v-if="historyEditForm.specialFlow !== 'combined_return'">
+                <label class="form-label" style="margin-top:10px;">代課費來源</label>
+                <select class="form-select" v-model="historyEditForm.subsidySource">
+                  <option value="">公付（預設）</option>
+                  <option v-for="plan in (subsidyProjectPlans || [])" :key="'hist-plan-' + plan" :value="plan">{{ plan }}</option>
+                </select>
+                <small style="display:block;margin-top:4px;color:var(--text-muted);font-size:0.72rem;">
+                  選專案者，匯出時列在該專案的印領清冊；清單在「後台 → 系統設定 → 代課費專案清單」維護。
+                </small>
+              </template>
              </div>
             <div class="form-group m-0">
               <label class="form-label">備註</label>
@@ -154,6 +164,7 @@ defineProps({
   timetablePeriods: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   leaveReasonOptions: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   TIMETABLE_ONLY_FEE: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
+  subsidyProjectPlans: { type: [Array, Number, Boolean, Object, Function, String], default: undefined },
   onHistoryEditDateChange: { type: Function, required: true },
   formatPeriodText: { type: Function, required: true },
   onHistoryEditTypeChange: { type: Function, required: true },

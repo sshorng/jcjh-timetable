@@ -8034,6 +8034,13 @@ function handlePostSaveHistoryEdit_(ctx) {
           }
            validateCombinedReturnRequest_(targetReq, semesterId);
          }
+        // 代課費來源（計畫）：有送才改，未送保留原值；空白＝公付。
+        var histSubsidyRaw = reqData["代課費來源"] !== undefined
+          ? reqData["代課費來源"]
+          : (reqData.subsidySource !== undefined ? reqData.subsidySource : undefined);
+        if (histSubsidyRaw !== undefined) {
+          targetReq["代課費來源"] = String(histSubsidyRaw == null ? "" : histSubsidyRaw).trim();
+        }
 
         assertNoExchangeIncomingConflict_(targetReq, (getSemesterRequestsCached_(semesterId, true).rows || []));
         saveRows("申請單", [targetReq], "申請單ID");
