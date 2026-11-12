@@ -152,10 +152,10 @@ const periodOptions = [
   { value: 2, label: '第2節' },
   { value: 3, label: '第3節' },
   { value: 4, label: '第4節' },
+  { value: 45, label: '午休' },
   { value: 5, label: '第5節' },
   { value: 6, label: '第6節' },
   { value: 7, label: '第7節' },
-  { value: 45, label: '午休' },
   { value: 8, label: '第8節' }
 ];
 const feeOptions = ['自費代課', '公費代課', '僅課表呈現（不結算）', '扣額度', '活動公費', '第8節代課'];

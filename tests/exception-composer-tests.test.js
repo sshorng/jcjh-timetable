@@ -173,3 +173,20 @@ test('composer：真的查無課程時明講查無課程，且不得送出', asy
   app.unmount();
   expect(warnings).toEqual([]);
 });
+
+test('composer：節次下拉的午休排在第4節與第5節之間', async () => {
+  const { app, el, warnings } = mountComposer();
+  await nextTick();
+  const selects = [...el.querySelectorAll('select.form-select')];
+  // 版面順序：[0]=類型、[1]=A 節次、[2]=B 節次
+  for (const idx of [1, 2]) {
+    const labels = [...selects[idx].querySelectorAll('option')].map((o) => o.textContent.trim());
+    expect(labels[0], '第一項應為早自習').toBe('早自習');
+    expect(labels[labels.length - 1], '最後一項應為第8節').toBe('第8節');
+    const lunch = labels.indexOf('午休');
+    expect(lunch, '午休應緊接在第4節之後：' + labels.join('／')).toBe(labels.indexOf('第4節') + 1);
+    expect(labels[lunch + 1], '午休下一項應為第5節').toBe('第5節');
+  }
+  app.unmount();
+  expect(warnings).toEqual([]);
+});
