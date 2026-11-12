@@ -8351,8 +8351,8 @@ function handlePostSubmitRequest_(ctx) {
           isProxyOne = true;
         }
       }
-      // 代課費來源：僅教學組或被授權代申請者能指定；其餘一律空白（＝公付），避免教師自行改動經費來源。
-      if (!isAdmin && !isProxyOne) {
+      // 代課費來源：僅教學組可指定（代申請不用選專案）；教師與代申請一律空白（＝公付）。
+      if (!isAdmin) {
         reqData.request["代課費來源"] = "";
         reqData.request.subsidySource = "";
       }

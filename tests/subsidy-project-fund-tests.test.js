@@ -173,3 +173,29 @@ test('專案表的標題與頁籤名稱只在有專案時加上專案名稱', ()
     '身心調適假專案表標題沿用原校名寫法'
   );
 });
+
+test('代課費來源指定專案時，經費徽章顯示「計畫」而非「公費」', async () => {
+  const { UiLineTemplate } = await import('../src/modules/ui-line-template.js');
+  const tagsOf = (req) => UiLineTemplate.getRequestTypeTags(req).map((tag) => tag.label);
+
+  assert.deepEqual(
+    tagsOf({ type: 'substitution', subFee: '公費代課', subsidySource: '深耕計畫' }),
+    ['計畫'],
+    '指定專案＝計畫經費'
+  );
+  assert.deepEqual(
+    tagsOf({ type: 'substitution', subFee: '公費代課' }),
+    ['公費'],
+    '未指定專案維持公費'
+  );
+  assert.deepEqual(
+    tagsOf({ type: 'substitution', subFee: '公費代課', '代課費來源': '  雙語計畫  ' }),
+    ['計畫'],
+    'Sheets 原欄名與前後空白都要認得'
+  );
+  assert.deepEqual(
+    tagsOf({ type: 'substitution', subFee: '自費代課', subsidySource: '深耕計畫' }),
+    [],
+    '自費代課不會因為填了專案就變成計畫'
+  );
+});

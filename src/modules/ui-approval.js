@@ -1630,7 +1630,9 @@ const UiApproval = (() => {
         const q = t ? (parseFloat(t.mutualQuota) || 0) : 0;
         if (q <= 0) flags.push({ key: 'quota0', label: '額度不足', level: 'danger' });
        } else if (!isEx && (requestFee === '公費代課' || requestFee === '學校移撥' || requestFee === ACTIVITY_PUBLIC_FEE || requestFee === '活動公費')) {
-        flags.push({ key: 'public', label: '公費', level: 'info' });
+        // 代課費來源指定專案＝計畫經費，旗標與列表徽章一致顯示「計畫」
+        const subsidyPlan = String(req.subsidySource || req['代課費來源'] || '').trim();
+        flags.push({ key: 'public', label: subsidyPlan ? '計畫' : '公費', level: 'info' });
       }
       if (isEx && req.targetDate && req.requestDate && String(req.targetDate) !== String(req.requestDate)) {
         flags.push({ key: 'crossday', label: '跨日', level: 'info' });

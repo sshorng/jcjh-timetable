@@ -376,9 +376,9 @@
                         ＊1～7節：額度足夠時扣額度，不足時改活動公費；第8節固定使用計畫經費。
                       </span>
 
-                      <!-- 代課費來源：結算方式的下層設定，僅管理員或代申請可指定，一般教師一律公付 -->
+                      <!-- 代課費來源：結算方式的下層設定，僅教學組可指定（代申請不用選專案） -->
                       <div
-                        v-if="(isAdmin || isProxySubmitActive) && pendingRequestData.mode === 'substitution'"
+                        v-if="isAdmin"
                         style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border-color);"
                       >
                         <label class="form-label" style="margin-bottom:4px;">代課費來源</label>

@@ -57,8 +57,10 @@ const UiLineTemplate = (() => {
       tags.push({ key: 'quota', label: '扣額度' });
      } else if (req.type !== 'exchange' && requestFee === FeeUtils.ACTIVITY_PUBLIC) {
       tags.push({ key: 'actpub', label: '活動公費' });
-     } else if (req.type !== 'exchange' && (requestFee === '公費代課' || requestFee === '學校移撥' || requestFee === '活動公費')) {
-      tags.push({ key: 'public', label: '公費' });
+    } else if (req.type !== 'exchange' && (requestFee === '公費代課' || requestFee === '學校移撥' || requestFee === '活動公費')) {
+      // 代課費來源指定專案時這筆是計畫經費，徽章改顯示「計畫」（沿用同一個 public 樣式）
+      const subsidySource = String(req.subsidySource || req['代課費來源'] || '').trim();
+      tags.push({ key: 'public', label: subsidySource ? '計畫' : '公費' });
     }
     if (period === 8) tags.push({ key: 'p8', label: '第8節' });
     return tags;
