@@ -26,7 +26,12 @@ const zlib = require('zlib');
 // 故上調 4 KiB 並在此明文記錄，不假裝是「瘦身」成果。
 // 2026-10-20 再 re-baseline 為 725 KiB：ee06e85「歷史篩選補依賴」進主包（實測 723.97 → 724.03 KiB，
 // gzip 213.47 → 213.48 KiB），屬功能成長而非閘門退化，故上調 1 KiB 並在此明文記錄。
-const RAW_LIMIT_KIB = 725;
+// 2026-11-12 再 re-baseline 為 730 KiB：兩批功能一起進主包（實測 721.78 → 729.30 KiB，
+// gzip 213.52 → 215.94 KiB），分屬 49f1424「儲存類動作改走背景泡泡」（+4.69 KiB，
+// 新增 ui/save-bubble.js 並接入六個模組）與 68b2912～5d768a9「代課費專案款項分表」
+// （+2.83 KiB，申請單欄位、專案分表、專案清單設定）。屬功能成長而非閘門退化，
+// 故上調 5 KiB 並在此明文記錄；餘裕僅 0.7 KiB，後續若再成長應優先真的瘦身。
+const RAW_LIMIT_KIB = 730;
 const GZIP_LIMIT_KIB = 220;
 const DIST = path.resolve(__dirname, '..', 'dist', 'assets');
 
