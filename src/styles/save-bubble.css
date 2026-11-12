@@ -1,0 +1,153 @@
+/* save-bubble.css：背景儲存泡泡（左下角小膠囊）
+ * 用途：取代「儲存類」動作的全螢幕載入遮罩（.loading-overlay）。
+ *   存檔改成先在本地寫入、GAS 在背景跑，完成或失敗才在角落跳一顆泡泡。
+ * 設計：沿用 ui-refresh.css 的冷靛藍工作台語言（細邊框、雙層細陰影、膠囊化，
+ *       動效只動 transform／opacity，reduced-motion 由 ui-refresh 統一處理，
+ *       轉圈沿用 .spinner 這個「進度指示例外」）。
+ * 位置：左下角，避免和右下角的 toast（#toast-container）打架。
+ */
+
+.save-bubble-stack {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 10250; /* 高於 modal(10050)、低於 toast(10300)／確認框(10200) */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.save-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(430px, calc(100vw - 32px));
+  padding: 9px 15px 9px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 1px rgba(30, 41, 90, 0.08),
+    0 2px 4px rgba(18, 22, 43, 0.05),
+    0 14px 30px -14px rgba(18, 22, 43, 0.32);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  color: var(--text-secondary, #3b4260);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity var(--dur-base, 220ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              transform var(--dur-base, 220ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              box-shadow var(--dur-base, 220ms) var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.save-bubble.is-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── 圖示：儲存中＝轉圈，完成＝勾，失敗＝驚嘆號 ── */
+.save-bubble-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* 轉圈沿用全域 .spinner，只在這裡縮成泡泡尺寸 */
+.save-bubble-icon.spinner {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 2px solid rgba(52, 84, 209, 0.18);
+  border-left-color: var(--color-primary, #3454d1);
+  background: transparent;
+  box-shadow: none;
+}
+
+.save-bubble.is-done .save-bubble-icon {
+  background: var(--color-success-glow, rgba(18, 128, 92, 0.10));
+  color: var(--color-success, #12805c);
+  border: 1px solid rgba(18, 128, 92, 0.24);
+}
+
+.save-bubble.is-error .save-bubble-icon {
+  background: var(--color-danger-glow, rgba(200, 51, 47, 0.10));
+  color: var(--color-danger, #c8332f);
+  border: 1px solid rgba(200, 51, 47, 0.26);
+}
+
+.save-bubble-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.save-bubble.is-done {
+  color: var(--color-success, #12805c);
+}
+
+.save-bubble.is-error {
+  color: var(--color-danger, #c8332f);
+  box-shadow:
+    0 0 0 1px rgba(200, 51, 47, 0.16),
+    0 2px 4px rgba(18, 22, 43, 0.05),
+    0 14px 30px -14px rgba(200, 51, 47, 0.28);
+}
+
+/* ── 重試：只在失敗態出現，維持細邊框膠囊 ── */
+.save-bubble-retry {
+  flex: 0 0 auto;
+  margin-left: 2px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 51, 47, 0.32);
+  background: rgba(200, 51, 47, 0.06);
+  color: var(--color-danger, #c8332f);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color var(--dur-fast, 140ms) ease,
+              border-color var(--dur-fast, 140ms) ease;
+}
+
+.save-bubble-retry:hover {
+  background: rgba(200, 51, 47, 0.12);
+  border-color: rgba(200, 51, 47, 0.48);
+}
+
+.save-bubble-retry:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── 手機：貼齊左右、抬到 toast 之上，不遮內容 ── */
+@media (max-width: 768px) {
+  .save-bubble-stack {
+    left: 10px;
+    right: 10px;
+    bottom: 72px;
+    align-items: stretch;
+  }
+
+  .save-bubble {
+    max-width: none;
+    width: 100%;
+    border-radius: 14px;
+  }
+}

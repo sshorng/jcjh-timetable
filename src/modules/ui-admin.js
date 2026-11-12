@@ -7,6 +7,7 @@ import DateUtils from '../domain/date-utils.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import FieldMap from '../domain/field-map.js';
 import { UiSubmitHelpers } from './ui-request.js';
+import { runBackgroundSave } from '../ui/save-bubble.js';
 
 /**
  * ui-admin.js：後台匯入／教師 CRUD／課表格編輯／歷史編輯（方案甲殼瘦身 B）
@@ -1343,27 +1344,40 @@ const UiAdmin = (() => {
           ? 0 : (parseInt(teacher.baseHours, 10) || 16),
         '折抵額度': isNaN(quota) || quota < 0 ? 0 : Math.round(quota * 1000) / 1000
       };
-      loading.value = true;
-      try {
-        await backupTeacherExpenseData(teacher);
-        await callGasApi('saveTeacher', reqPayload);
-        var mapped = FieldMap.mapTeacher(reqPayload);
-        var list = teachersList.value.slice();
-        var index = list.findIndex(function (item) {
-          return String(item.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase()
-            || item.email === mapped.email;
-        });
-        if (index >= 0) list[index] = Object.assign({}, list[index], mapped);
-        teachersList.value = list;
-        showOvertimePlanModal.value = false;
-        showToast('超鐘點經費來源已儲存', 'success');
-        softRefreshInBackground({ force: true, delay: 800 });
-      } catch (e) {
-        console.error(e);
-        showToast('儲存超鐘點經費來源失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+      // 本地先寫入：先套用經費來源到本機名單並關窗，GAS 在背景存，完成再跳泡泡
+      showOvertimePlanModal.value = false;
+      await runBackgroundSave({
+        key: 'overtime-plan:' + (teacher.loginEmail || teacher.email || teacher['教師Email'] || ''),
+        label: '超鐘點經費來源',
+        optimistic: function () {
+          var mapped = FieldMap.mapTeacher(reqPayload);
+          var list = teachersList.value.slice();
+          var index = list.findIndex(function (item) {
+            return String(item.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase()
+              || item.email === mapped.email;
+          });
+          if (index < 0) return null;
+          var prev = list[index];
+          list[index] = Object.assign({}, prev, mapped);
+          teachersList.value = list;
+          return { index: index, prev: prev };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot || !teachersList.value) return;
+          var list = teachersList.value.slice();
+          if (list[snapshot.index]) {
+            list[snapshot.index] = snapshot.prev;
+            teachersList.value = list;
+          }
+        },
+        apiCall: async function () {
+          await backupTeacherExpenseData(teacher);
+          return callGasApi('saveTeacher', reqPayload);
+        },
+        successMessage: '經費來源已儲存',
+        errorMessage: '儲存超鐘點經費來源失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 800 }); }
+      });
     }
 
     async function saveScheduleCell() {
@@ -1377,99 +1391,109 @@ const UiAdmin = (() => {
         showToast('啟用起日不可晚於啟用迄日', 'warning');
         return;
       }
-      loading.value = true;
-      try {
-        var currentPeriod = parseInt(scheduleForm.value.period, 10);
-        var localPreviousEnd = '';
-        if (isNewVersion && scheduleForm.value.activeFrom) {
-          var previousDate = new Date(String(scheduleForm.value.activeFrom).replace(/-/g, '/'));
-          if (!isNaN(previousDate.getTime())) {
-            previousDate.setDate(previousDate.getDate() - 1);
-            localPreviousEnd = previousDate.getFullYear() + '-'
-              + String(previousDate.getMonth() + 1).padStart(2, '0') + '-'
-              + String(previousDate.getDate()).padStart(2, '0');
-          }
+      var currentPeriod = parseInt(scheduleForm.value.period, 10);
+      var localPreviousEnd = '';
+      if (isNewVersion && scheduleForm.value.activeFrom) {
+        var previousDate = new Date(String(scheduleForm.value.activeFrom).replace(/-/g, '/'));
+        if (!isNaN(previousDate.getTime())) {
+          previousDate.setDate(previousDate.getDate() - 1);
+          localPreviousEnd = previousDate.getFullYear() + '-'
+            + String(previousDate.getMonth() + 1).padStart(2, '0') + '-'
+            + String(previousDate.getDate()).padStart(2, '0');
         }
-        var attr = normSchedAttr(scheduleForm.value.attr || '一般');
-        // 本校 1～7 節無單雙週；誤選時改回一般
-        if (currentPeriod !== 8 && (attr === '單週' || attr === '雙週' || attr === '課輔')) {
-          attr = '一般';
-           scheduleForm.value.attr = '一般';
-           showToast('1～7 節不使用單雙週／課輔屬性，已改為一般', 'info');
-         }
-         var overtime = !!scheduleForm.value.overtime
-           && isOvertimePeriod(currentPeriod)
-           && attr !== '巡堂'
-           && attr !== '代課';
-         var specialTags = specialTagList(scheduleForm.value.specialTags || '');
-         if (attr === '抽離') addSpecialTag(specialTags, '抽離');
-         else specialTags = removeSpecialTag(specialTags, '抽離');
-         if (overtime) addSpecialTag(specialTags, '超鐘點');
-         else specialTags = removeSpecialTag(specialTags, '超鐘點');
-         if (attr === '預排') addSpecialTag(specialTags, '預排');
-         else specialTags = removeSpecialTag(specialTags, '預排');
-         if (scheduleForm.value.restriction === 'restricted') addSpecialTag(specialTags, '綁課');
-         else specialTags = removeSpecialTag(specialTags, '綁課');
-         if (attr === '巡堂') specialTags = [];
-         scheduleForm.value.overtime = overtime;
-         scheduleForm.value.specialTags = specialTags.join('、');
-         var docId = isNewVersion ? '' : scheduleForm.value.id;
-         if (!docId && !isNewVersion) {
-          var dup = allSchedules.value.find(function (s) {
-            return s.teacherEmail === scheduleForm.value.teacherEmail &&
-              parseInt(s.dayOfWeek, 10) === parseInt(scheduleForm.value.dayOfWeek, 10) &&
-              parseInt(s.period, 10) === currentPeriod &&
-               normSchedAttr(s.attr) === attr;
-          });
-          if (dup) docId = dup.id;
-        }
-          var reqPayload = {
-           '課表ID': docId || ('sched_' + scheduleForm.value.teacherEmail.split('@')[0] + '_' +
-             scheduleForm.value.dayOfWeek + '_' + currentPeriod + '_' +
-             (scheduleForm.value.className.trim() || 'any') + '_' +
-             Math.random().toString(36).substr(2, 5)),
-           '教師姓名': scheduleForm.value.teacherName,
-          '星期': parseInt(scheduleForm.value.dayOfWeek, 10),
-          '節次': currentPeriod,
-            '班級': scheduleForm.value.className.trim(),
-            '科目': scheduleForm.value.subject.trim(),
-            '課堂屬性': attr,
-            '調課限制': scheduleForm.value.restriction === 'restricted' ? 'restricted' : '',
-            '特殊標記': specialTags.join('、'),
-            '啟用起日': String(scheduleForm.value.activeFrom || '').trim(),
-           '啟用迄日': String(scheduleForm.value.activeTo || '').trim(),
-           '前課表ID': isNewVersion ? (scheduleForm.value._previousId || '') : ''
-         };
-        await callGasApi('saveScheduleCell', reqPayload);
-        showScheduleEditModal.value = false;
-        var mapped = FieldMap.mapSchedule(reqPayload);
-         var list = allSchedules.value.slice();
-         if (isNewVersion && scheduleForm.value._previousId && localPreviousEnd) {
-           var previousLocal = list.find(function (row) {
-             return row.id === scheduleForm.value._previousId;
-           });
-           var previousExistingEnd = previousLocal && (previousLocal.activeTo || previousLocal.activationEndDate || '');
-           if (previousExistingEnd && String(previousExistingEnd) < localPreviousEnd) {
-             localPreviousEnd = previousExistingEnd;
-           }
-           list = list.map(function (row) {
-             return row.id === scheduleForm.value._previousId
-               ? Object.assign({}, row, { activeTo: localPreviousEnd })
-               : row;
-           });
-         }
-         var idx = list.findIndex(function (s) { return s.id === mapped.id; });
-        if (idx >= 0) list[idx] = mapped;
-        else list.push(mapped);
-        allSchedules.value = list;
-        clearScheduleCache();
-        softRefreshInBackground({ force: true, delay: 600 });
-      } catch (e) {
-        console.error(e);
-        showToast('儲存課堂失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
       }
+      var attr = normSchedAttr(scheduleForm.value.attr || '一般');
+      // 本校 1～7 節無單雙週；誤選時改回一般
+      if (currentPeriod !== 8 && (attr === '單週' || attr === '雙週' || attr === '課輔')) {
+        attr = '一般';
+        scheduleForm.value.attr = '一般';
+        showToast('1～7 節不使用單雙週／課輔屬性，已改為一般', 'info');
+      }
+      var overtime = !!scheduleForm.value.overtime
+        && isOvertimePeriod(currentPeriod)
+        && attr !== '巡堂'
+        && attr !== '代課';
+      var specialTags = specialTagList(scheduleForm.value.specialTags || '');
+      if (attr === '抽離') addSpecialTag(specialTags, '抽離');
+      else specialTags = removeSpecialTag(specialTags, '抽離');
+      if (overtime) addSpecialTag(specialTags, '超鐘點');
+      else specialTags = removeSpecialTag(specialTags, '超鐘點');
+      if (attr === '預排') addSpecialTag(specialTags, '預排');
+      else specialTags = removeSpecialTag(specialTags, '預排');
+      if (scheduleForm.value.restriction === 'restricted') addSpecialTag(specialTags, '綁課');
+      else specialTags = removeSpecialTag(specialTags, '綁課');
+      if (attr === '巡堂') specialTags = [];
+      scheduleForm.value.overtime = overtime;
+      scheduleForm.value.specialTags = specialTags.join('、');
+      var docId = isNewVersion ? '' : scheduleForm.value.id;
+      if (!docId && !isNewVersion) {
+        var dup = allSchedules.value.find(function (s) {
+          return s.teacherEmail === scheduleForm.value.teacherEmail &&
+            parseInt(s.dayOfWeek, 10) === parseInt(scheduleForm.value.dayOfWeek, 10) &&
+            parseInt(s.period, 10) === currentPeriod &&
+            normSchedAttr(s.attr) === attr;
+        });
+        if (dup) docId = dup.id;
+      }
+      var reqPayload = {
+        '課表ID': docId || ('sched_' + scheduleForm.value.teacherEmail.split('@')[0] + '_' +
+          scheduleForm.value.dayOfWeek + '_' + currentPeriod + '_' +
+          (scheduleForm.value.className.trim() || 'any') + '_' +
+          Math.random().toString(36).substr(2, 5)),
+        '教師姓名': scheduleForm.value.teacherName,
+        '星期': parseInt(scheduleForm.value.dayOfWeek, 10),
+        '節次': currentPeriod,
+        '班級': scheduleForm.value.className.trim(),
+        '科目': scheduleForm.value.subject.trim(),
+        '課堂屬性': attr,
+        '調課限制': scheduleForm.value.restriction === 'restricted' ? 'restricted' : '',
+        '特殊標記': specialTags.join('、'),
+        '啟用起日': String(scheduleForm.value.activeFrom || '').trim(),
+        '啟用迄日': String(scheduleForm.value.activeTo || '').trim(),
+        '前課表ID': isNewVersion ? (scheduleForm.value._previousId || '') : ''
+      };
+
+      // 本地先寫入：課表先套進本機、關窗，GAS 在背景存，完成再跳泡泡
+      showScheduleEditModal.value = false;
+      await runBackgroundSave({
+        key: 'schedule-cell:' + reqPayload['課表ID'],
+        label: '課堂設定',
+        optimistic: function () {
+          var prevList = allSchedules.value;
+          var mapped = FieldMap.mapSchedule(reqPayload);
+          var list = allSchedules.value.slice();
+          if (isNewVersion && scheduleForm.value._previousId && localPreviousEnd) {
+            var previousLocal = list.find(function (row) {
+              return row.id === scheduleForm.value._previousId;
+            });
+            var previousExistingEnd = previousLocal && (previousLocal.activeTo || previousLocal.activationEndDate || '');
+            var previousEnd = localPreviousEnd;
+            if (previousExistingEnd && String(previousExistingEnd) < previousEnd) {
+              previousEnd = previousExistingEnd;
+            }
+            list = list.map(function (row) {
+              return row.id === scheduleForm.value._previousId
+                ? Object.assign({}, row, { activeTo: previousEnd })
+                : row;
+            });
+          }
+          var idx = list.findIndex(function (s) { return s.id === mapped.id; });
+          if (idx >= 0) list[idx] = mapped;
+          else list.push(mapped);
+          allSchedules.value = list;
+          clearScheduleCache();
+          return { prevList: prevList };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          allSchedules.value = snapshot.prevList;
+          clearScheduleCache();
+        },
+        apiCall: function () { return callGasApi('saveScheduleCell', reqPayload); },
+        successMessage: '課堂已儲存',
+        errorMessage: '儲存課堂失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 600 }); }
+      });
     }
 
     async function clearScheduleCell() {
@@ -1497,69 +1521,89 @@ const UiAdmin = (() => {
         return;
       }
       if (!await showConfirm('確定要刪除這節課堂設定嗎？')) return;
-      loading.value = true;
-      try {
-        await callGasApi('clearScheduleCell', { id: clearedId });
-        allSchedules.value = allSchedules.value.filter(function (s) {
-          return s.id !== clearedId;
-        });
-        clearScheduleCache();
-        // 同格若還有其他筆（單／雙週），繼續編輯剩餘；否則關窗
-        var rest = allSchedules.value.filter(function (s) {
-          return s.teacherEmail === scheduleForm.value.teacherEmail &&
-            parseInt(s.dayOfWeek, 10) === parseInt(scheduleForm.value.dayOfWeek, 10) &&
-            parseInt(s.period, 10) === parseInt(scheduleForm.value.period, 10);
-        });
-        if (rest.length) {
-          applyEntryToForm(rest[0], rest);
-          showToast('已刪除一筆，此節尚有 ' + rest.length + ' 筆', 'info');
-        } else {
-          showScheduleEditModal.value = false;
-          showToast('已清空為空堂', 'success');
-        }
-        softRefreshInBackground({ force: true, delay: 600 });
-      } catch (e) {
-        console.error(e);
-        showToast('刪除失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+      // 本地先寫入：先在畫面上清掉這一節（含同格剩餘處理），GAS 在背景刪
+      var restCount = 0;
+      await runBackgroundSave({
+        key: 'schedule-cell:' + clearedId,
+        label: '清空課堂',
+        optimistic: function () {
+          var prevList = allSchedules.value;
+          allSchedules.value = allSchedules.value.filter(function (s) {
+            return s.id !== clearedId;
+          });
+          clearScheduleCache();
+          // 同格若還有其他筆（單／雙週），繼續編輯剩餘；否則關窗
+          var rest = allSchedules.value.filter(function (s) {
+            return s.teacherEmail === scheduleForm.value.teacherEmail &&
+              parseInt(s.dayOfWeek, 10) === parseInt(scheduleForm.value.dayOfWeek, 10) &&
+              parseInt(s.period, 10) === parseInt(scheduleForm.value.period, 10);
+          });
+          restCount = rest.length;
+          if (rest.length) applyEntryToForm(rest[0], rest);
+          else showScheduleEditModal.value = false;
+          return { prevList: prevList };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          allSchedules.value = snapshot.prevList;
+          clearScheduleCache();
+        },
+        apiCall: function () { return callGasApi('clearScheduleCell', { id: clearedId }); },
+        successMessage: function () {
+          return restCount ? ('已刪除一筆，此節尚有 ' + restCount + ' 筆') : '已清空為空堂';
+        },
+        errorMessage: '清空課堂失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 600 }); }
+      });
     }
 
     async function updateTeacherBaseHours(email, hours) {
-      loading.value = true;
-      try {
-         var teacher = teachersList.value.find(function (t) { return t.email === email || t.loginEmail === email; });
-         if (!teacher) throw new Error('找不到該教師');
-         var reqPayload = {
-           '教師Email': teacher.loginEmail || email,
-          '教師姓名': teacher.name,
-          '授課科目': teacher.subject,
-          '鐘點支出計畫': teacher.expensePlan || '',
-          '基本鐘點': (hours === 0 || hours === '0') ? 0 : (parseInt(hours, 10) || 16),
-          '系統角色': teacher.role || 'teacher',
-          '折抵額度': (function () {
-            var n = parseFloat(teacher.mutualQuota);
-            return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
-          })(),
-          '超鐘點節數': teacher.fixedOvertimeConfigured ? teacher.fixedOvertimeHours : '',
-          '超鐘點節次': teacher.fixedOvertimeConfigured ? (teacher.fixedOvertimeSlotsText || teacher.fixedOvertimeSlots || '') : ''
-        };
-        await callGasApi('saveTeacher', reqPayload);
-         var i = teachersList.value.findIndex(function (t) { return t.email === email || t.loginEmail === email; });
-        if (i >= 0) {
-          var copy = teachersList.value.slice();
-          var bh = (hours === 0 || hours === '0') ? 0 : (parseInt(hours, 10) || 16);
-          copy[i] = Object.assign({}, copy[i], { baseHours: bh });
-          teachersList.value = copy;
-        }
-        softRefreshInBackground({ force: true, delay: 800 });
-      } catch (e) {
-        console.error(e);
-        showToast('更新失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
+      var teacher = teachersList.value.find(function (t) { return t.email === email || t.loginEmail === email; });
+      if (!teacher) {
+        showToast('找不到該教師', 'warning');
+        return;
       }
+      var reqPayload = {
+        '教師Email': teacher.loginEmail || email,
+        '教師姓名': teacher.name,
+        '授課科目': teacher.subject,
+        '鐘點支出計畫': teacher.expensePlan || '',
+        '基本鐘點': (hours === 0 || hours === '0') ? 0 : (parseInt(hours, 10) || 16),
+        '系統角色': teacher.role || 'teacher',
+        '折抵額度': (function () {
+          var n = parseFloat(teacher.mutualQuota);
+          return isNaN(n) || n < 0 ? 0 : Math.round(n * 1000) / 1000;
+        })(),
+        '超鐘點節數': teacher.fixedOvertimeConfigured ? teacher.fixedOvertimeHours : '',
+        '超鐘點節次': teacher.fixedOvertimeConfigured ? (teacher.fixedOvertimeSlotsText || teacher.fixedOvertimeSlots || '') : ''
+      };
+      var baseHours = (hours === 0 || hours === '0') ? 0 : (parseInt(hours, 10) || 16);
+      // 本地先寫入：基本鐘點先改在畫面上，GAS 在背景存
+      await runBackgroundSave({
+        key: 'teacher-base-hours:' + (teacher.loginEmail || email),
+        label: '基本鐘點',
+        optimistic: function () {
+          var i = teachersList.value.findIndex(function (t) { return t.email === email || t.loginEmail === email; });
+          if (i < 0) return null;
+          var copy = teachersList.value.slice();
+          var prev = copy[i];
+          copy[i] = Object.assign({}, prev, { baseHours: baseHours });
+          teachersList.value = copy;
+          return { index: i, prev: prev };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot || !teachersList.value) return;
+          var copy = teachersList.value.slice();
+          if (copy[snapshot.index]) {
+            copy[snapshot.index] = snapshot.prev;
+            teachersList.value = copy;
+          }
+        },
+        apiCall: function () { return callGasApi('saveTeacher', reqPayload); },
+        successMessage: '基本鐘點已更新',
+        errorMessage: '更新基本鐘點失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 800 }); }
+      });
     }
 
     function openAddTeacherModal() {
@@ -1776,13 +1820,12 @@ const UiAdmin = (() => {
     }
 
     async function saveTeacher() {
-      loading.value = true;
+
       var email = teacherForm.value.email.trim();
       var nextName = teacherForm.value.name.trim();
       var fixedSetting = normalizeFixedOvertimeForm();
       if (fixedSetting.configured && !fixedSetting.valid) {
         showToast(fixedSetting.error || '固定超鐘點設定不完整', 'warning');
-        loading.value = false;
         return;
       }
       var existingTeacher = (teachersList.value || []).find(function (teacher) {
@@ -1800,7 +1843,6 @@ const UiAdmin = (() => {
           '教師姓名連動更新'
         );
         if (!renameOk) {
-          loading.value = false;
           return;
         }
       }
@@ -1829,53 +1871,75 @@ const UiAdmin = (() => {
         })()
       };
       var teacherProfileSaved = false;
-      try {
-        if (existingTeacher) await backupTeacherExpenseData(existingTeacher);
-        await callGasApi('saveTeacher', reqPayload);
-        teacherProfileSaved = true;
-        if (desiredQuota !== previousQuota) {
-          var quotaResult = await callGasApi('updateMutualQuotas', {
-            list: [{ email: email, mutualQuota: desiredQuota, note: '教師管理表單手動調整額度' }]
+      // 本地先寫入：名單先套用表單內容並關窗，GAS 在背景存
+      showTeacherModal.value = false;
+      await runBackgroundSave({
+        key: 'teacher:' + email.toLowerCase(),
+        label: '教師資料',
+        optimistic: function () {
+          var mapped = FieldMap.mapTeacher(Object.assign({}, reqPayload, { '折抵額度': desiredQuota }));
+          var list = teachersList.value.slice();
+          var prevList = teachersList.value;
+          var i = list.findIndex(function (x) {
+            return String(x.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase()
+              || x.email === mapped.email;
           });
-          if (quotaResult && quotaResult.success === false) {
-            throw new Error(quotaResult.message || '額度帳本更新失敗');
+          if (i >= 0) list[i] = Object.assign({}, list[i], mapped);
+          else list.push(mapped);
+          teachersList.value = list;
+          return { prevList: prevList, index: i };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          teachersList.value = snapshot.prevList;
+        },
+        apiCall: async function () {
+          if (existingTeacher) await backupTeacherExpenseData(existingTeacher);
+          await callGasApi('saveTeacher', reqPayload);
+          teacherProfileSaved = true;
+          if (desiredQuota !== previousQuota) {
+            var quotaResult = await callGasApi('updateMutualQuotas', {
+              list: [{ email: email, mutualQuota: desiredQuota, note: '教師管理表單手動調整額度' }]
+            });
+            if (quotaResult && quotaResult.success === false) {
+              throw new Error(quotaResult.message || '額度帳本更新失敗');
+            }
+            try {
+              if (typeof window.__quotaLedgerCacheBust === 'function') window.__quotaLedgerCacheBust();
+            } catch (eQuotaCache) { /* ignore */ }
           }
-          try {
-            if (typeof window.__quotaLedgerCacheBust === 'function') window.__quotaLedgerCacheBust();
-          } catch (eQuotaCache) { /* ignore */ }
-        }
-        reqPayload['折抵額度'] = desiredQuota;
-        showTeacherModal.value = false;
-         var mapped = FieldMap.mapTeacher(reqPayload);
-        var list = teachersList.value.slice();
-         var i = list.findIndex(function (x) {
-           return String(x.loginEmail || '').toLowerCase() === String(mapped.loginEmail || '').toLowerCase()
-             || x.email === mapped.email;
-         });
-        if (i >= 0) list[i] = Object.assign({}, list[i], mapped);
-        else list.push(mapped);
-        teachersList.value = list;
-        softRefreshInBackground({ force: true, delay: 800 });
-      } catch (e) {
-        console.error(e);
-        showToast((teacherProfileSaved ? '教師資料已儲存，但額度調整失敗：' : '儲存失敗：') + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+          reqPayload['折抵額度'] = desiredQuota;
+        },
+        successMessage: '教師資料已儲存',
+        errorMessage: function () {
+          return teacherProfileSaved ? '教師資料已儲存，但額度調整失敗' : '儲存教師資料失敗';
+        },
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 800 }); }
+      });
     }
 
     async function deleteTeacher(email, name) {
       if (!await showConfirm('確定要刪除 ' + name + ' 老師的帳號與所有關聯資料嗎？')) return;
-      loading.value = true;
-      try {
-        await callGasApi('deleteTeacher', { email: email });
-        await loadWeeklyData();
-      } catch (e) {
-        console.error(e);
-        showToast('刪除失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+      // 本地先寫入：先從名單移除，GAS 在背景刪，完成再跳泡泡
+      await runBackgroundSave({
+        key: 'teacher-delete:' + String(email || '').toLowerCase(),
+        label: '刪除教師',
+        optimistic: function () {
+          var prevList = teachersList.value;
+          teachersList.value = (teachersList.value || []).filter(function (t) {
+            return String(t.loginEmail || t.email || '').toLowerCase() !== String(email || '').toLowerCase();
+          });
+          return { prevList: prevList };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          teachersList.value = snapshot.prevList;
+        },
+        apiCall: function () { return callGasApi('deleteTeacher', { email: email }); },
+        successMessage: '已刪除教師',
+        errorMessage: '刪除教師失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 600 }); }
+      });
     }
 
     function handleTeacherExcelChange(e) {
@@ -2444,49 +2508,87 @@ const UiAdmin = (() => {
       }
       var leaveName = getTeacherNameByEmail(form.requesterEmail) || '';
        var subName = getTeacherNameByEmail(form.targetTeacherEmail) || '';
-      loading.value = true;
-      loadingMessage.value = '儲存歷史紀錄中...';
-      try {
-        var reqPayload = {
-          id: rid,
-          type: isEx ? 'exchange' : 'substitution',
-          requesterEmail: form.requesterEmail,
-          requesterName: leaveName,
-           targetTeacherEmail: form.targetTeacherEmail,
-           targetTeacherName: subName,
-          className: form.className || '',
-          subject: form.subject || '',
-          requestDate: form.requestDate,
-          requestPeriodDay: form.requestPeriodDay || dayOfWeekFromDateStr(form.requestDate),
-          requestPeriod: parseInt(form.requestPeriod, 10),
-          targetDate: isEx ? (form.targetDate || '') : '',
-          targetDayOfWeek: isEx ? (form.targetDayOfWeek || dayOfWeekFromDateStr(form.targetDate)) : '',
-          targetPeriod: isEx ? (parseInt(form.targetPeriod, 10) || 1) : '',
-           reason: form.reason || '',
-           courseAdjustmentOnly: !!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整',
-           "僅課務調整": (!!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整') ? '是' : '',
-           leaveTimeType: isEx || combinedReturn ? '' : (form.leaveTimeType || ''),
-          leaveTime: isEx || combinedReturn ? '' : (form.leaveTime || ''),
-          subFee: isEx ? '無' : (form.subFee || '自費代課'),
-          specialFlow: combinedReturn ? 'combined_return' : '',
-          "鐘點規則": combinedReturn
-            ? ((FieldMap && FieldMap.requestClockRuleSheetValue)
-              ? FieldMap.requestClockRuleSheetValue(form.billingRule)
-              : (String(form.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
-            : '',
-          note: form.note || '',
-          printed: !!form.printed
-        };
-        await callGasApi('saveHistoryEdit', reqPayload);
-        showToast('✅ 修改已儲存！', 'success');
-        showHistoryEditModal.value = false;
-        await loadWeeklyData({ force: true });
-      } catch (e) {
-        console.error('儲存編輯失敗：', e);
-        showToast('❌ 儲存失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+      // ── 本地先寫入＋背景同步（不再用全螢幕遮罩擋住畫面）────────────
+      var reqPayload = {
+        id: rid,
+        type: isEx ? 'exchange' : 'substitution',
+        requesterEmail: form.requesterEmail,
+        requesterName: leaveName,
+        targetTeacherEmail: form.targetTeacherEmail,
+        targetTeacherName: subName,
+        className: form.className || '',
+        subject: form.subject || '',
+        requestDate: form.requestDate,
+        requestPeriodDay: form.requestPeriodDay || dayOfWeekFromDateStr(form.requestDate),
+        requestPeriod: parseInt(form.requestPeriod, 10),
+        targetDate: isEx ? (form.targetDate || '') : '',
+        targetDayOfWeek: isEx ? (form.targetDayOfWeek || dayOfWeekFromDateStr(form.targetDate)) : '',
+        targetPeriod: isEx ? (parseInt(form.targetPeriod, 10) || 1) : '',
+        reason: form.reason || '',
+        courseAdjustmentOnly: !!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整',
+        "僅課務調整": (!!form.courseAdjustmentOnly || String(form.reason || '').trim() === '課務調整') ? '是' : '',
+        leaveTimeType: isEx || combinedReturn ? '' : (form.leaveTimeType || ''),
+        leaveTime: isEx || combinedReturn ? '' : (form.leaveTime || ''),
+        subFee: isEx ? '無' : (form.subFee || '自費代課'),
+        specialFlow: combinedReturn ? 'combined_return' : '',
+        "鐘點規則": combinedReturn
+          ? ((FieldMap && FieldMap.requestClockRuleSheetValue)
+            ? FieldMap.requestClockRuleSheetValue(form.billingRule)
+            : (String(form.billingRule || '') === 'keep' ? '不扣鐘點' : ''))
+          : '',
+        note: form.note || '',
+        printed: !!form.printed
+      };
+
+      // 關窗＋把編輯結果套回本機清單，GAS 在背景跑，完成再跳泡泡
+      showHistoryEditModal.value = false;
+      await runBackgroundSave({
+        key: 'history-edit:' + rid,
+        label: '編輯歷史紀錄',
+        optimistic: function () {
+          var list = (requestsList && requestsList.value) ? requestsList.value.slice() : null;
+          if (!list) return null;
+          var index = list.findIndex(function (row) { return row && row.id === rid; });
+          if (index < 0) return null;
+          var prev = list[index];
+          list[index] = Object.assign({}, prev, {
+            requesterEmail: reqPayload.requesterEmail,
+            requesterName: reqPayload.requesterName,
+            targetTeacherEmail: reqPayload.targetTeacherEmail,
+            targetTeacherName: reqPayload.targetTeacherName,
+            className: reqPayload.className,
+            subject: reqPayload.subject,
+            requestDate: reqPayload.requestDate,
+            requestPeriod: reqPayload.requestPeriod,
+            targetDate: reqPayload.targetDate,
+            targetPeriod: reqPayload.targetPeriod,
+            reason: reqPayload.reason,
+            courseAdjustmentOnly: reqPayload.courseAdjustmentOnly,
+            leaveTimeType: reqPayload.leaveTimeType,
+            leaveTime: reqPayload.leaveTime,
+            subFee: reqPayload.subFee,
+            note: reqPayload.note,
+            printed: reqPayload.printed
+          });
+          requestsList.value = list;
+          return { index: index, prev: prev };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot || !requestsList || !requestsList.value) return;
+          var list = requestsList.value.slice();
+          if (list[snapshot.index] && snapshot.prev && list[snapshot.index].id === snapshot.prev.id) {
+            list[snapshot.index] = snapshot.prev;
+            requestsList.value = list;
+          }
+        },
+        apiCall: function () { return callGasApi('saveHistoryEdit', reqPayload); },
+        successMessage: '修改已儲存',
+        errorMessage: '歷史紀錄儲存失敗',
+        onSuccess: function () {
+          // 背景軟重整，把伺服器算好的欄位補回來（不鎖畫面）
+          softRefreshInBackground({ force: true, delay: 400 });
+        }
+      });
     }
 
     async function openQuotaLedger(t) {

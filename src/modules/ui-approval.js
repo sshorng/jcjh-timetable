@@ -7,6 +7,7 @@ import FeeUtils from '../domain/fee-utils.js';
 import FieldMap from '../domain/field-map.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
  import { buildHistoryPrintRecords } from './print-helper.js';
+import { runBackgroundSave } from '../ui/save-bubble.js';
 
 /**
  * ui-approval.js — 簽核／行政核准／撤回撤銷（方案甲殼瘦身 A）
@@ -1067,49 +1068,75 @@ const UiApproval = (() => {
 
     async function cancelRequest(id) {
       if (!await showConfirm('確定要撤回此申請單嗎？')) return;
-      loading.value = true;
-      try {
-        var reqBefore = findRequestById(id);
-        await callGasApi('cancelRequest', { requestId: id });
-        bustQuotaLedgerCache();
-        showToast('已成功撤回！', 'success');
-        if (reqBefore) restoreMutualQuotaForRows(reqBefore);
-         if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');
-         else optimisticPatchRequestStatus(id, 'cancelled');
-        showDetailModal.value = false;
-        if (detailRequest.value && detailRequest.value.id === id) {
-          detailRequest.value = null;
-          detailSubRecord.value = null;
-        }
-        softRefreshInBackground({ delay: 2500 });
-      } catch (e) {
-        console.error(e);
-        showToast('撤回失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
+      var reqBefore = findRequestById(id);
+      var prevStatus = reqBefore ? reqBefore.status : '';
+      var quotaRestored = false;
+      // 本地先寫入：先把申請標記撤回並關詳情，GAS 在背景跑，完成再跳泡泡
+      showDetailModal.value = false;
+      if (detailRequest.value && detailRequest.value.id === id) {
+        detailRequest.value = null;
+        detailSubRecord.value = null;
       }
+      await runBackgroundSave({
+        key: 'cancel-request:' + id,
+        label: '撤回申請',
+        optimistic: function () {
+          if (reqBefore && !quotaRestored) {
+            restoreMutualQuotaForRows(reqBefore);
+            quotaRestored = true;
+          }
+          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');
+          else optimisticPatchRequestStatus(id, 'cancelled');
+          return { status: prevStatus };
+        },
+        rollback: function () {
+          // 後端沒收下撤回：把狀態還原，等背景軟重整對回伺服器
+          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, prevStatus || 'pending');
+          else optimisticPatchRequestStatus(id, prevStatus || 'pending');
+          bustQuotaLedgerCache();
+        },
+        apiCall: function () {
+          bustQuotaLedgerCache();
+          return callGasApi('cancelRequest', { requestId: id });
+        },
+        successMessage: '已成功撤回',
+        errorMessage: '撤回失敗',
+        onSuccess: function () { softRefreshInBackground({ delay: 2500 }); }
+      });
     }
 
     async function deleteSubstitutionRecord(subId, requestId) {
       if (!await showConfirm('確定要撤銷此筆異動並還原課表嗎？')) return;
-      loading.value = true;
-      loadingMessage.value = '還原課表中...';
-      try {
-        var reqId = (requestId && requestId !== 'N/A') ? requestId : String(subId).replace(/_[12]$/, '');
-        var reqBefore = findRequestById(reqId);
-        await callGasApi('deleteSubstitutionRecord', { id: subId, requestId: requestId });
-        bustQuotaLedgerCache();
-        showToast('已成功撤銷，課表已恢復原狀！', 'success');
-        if (reqBefore) restoreMutualQuotaForRows(reqBefore);
-         if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');
-         else optimisticPatchRequestStatus(reqId, 'cancelled');
-        softRefreshInBackground({ delay: 2000, requestsOnly: true });
-      } catch (e) {
-        console.error('撤銷失敗：', e);
-        showToast('撤銷失敗：' + e.message, 'error');
-      } finally {
-        loading.value = false;
-      }
+      var reqId = (requestId && requestId !== 'N/A') ? requestId : String(subId).replace(/_[12]$/, '');
+      var reqBefore = findRequestById(reqId);
+      var prevStatus = reqBefore ? reqBefore.status : '';
+      var quotaRestored = false;
+      // 本地先寫入：先標記撤銷，課表還原交給背景軟重整，GAS 在背景跑
+      await runBackgroundSave({
+        key: 'delete-sub-record:' + subId,
+        label: '撤銷異動',
+        optimistic: function () {
+          if (reqBefore && !quotaRestored) {
+            restoreMutualQuotaForRows(reqBefore);
+            quotaRestored = true;
+          }
+          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, 'cancelled');
+          else optimisticPatchRequestStatus(reqId, 'cancelled');
+          return { status: prevStatus };
+        },
+        rollback: function () {
+          if (isTriangleRequest(reqBefore)) optimisticPatchTriangleGroup(reqBefore, prevStatus || 'pending');
+          else optimisticPatchRequestStatus(reqId, prevStatus || 'pending');
+          bustQuotaLedgerCache();
+        },
+        apiCall: function () {
+          bustQuotaLedgerCache();
+          return callGasApi('deleteSubstitutionRecord', { id: subId, requestId: requestId });
+        },
+        successMessage: '已成功撤銷，課表已恢復原狀',
+        errorMessage: '撤銷失敗',
+        onSuccess: function () { softRefreshInBackground({ delay: 2000, requestsOnly: true }); }
+      });
     }
 
     // 2A：以下紙本判定＋進度步驟自 app.js verbatim 搬移（僅 notificationsSuppressed 走 deps）

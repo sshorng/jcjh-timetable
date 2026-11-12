@@ -7,6 +7,7 @@ import DomainActivityCover from '../domain/domain-activity-cover.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import FieldMap from '../domain/field-map.js';
+import { runBackgroundSave } from '../ui/save-bubble.js';
 
 /**
  * ui-activity.js — 空堂事件 + 批次送出（首屏 eager）
@@ -27,7 +28,7 @@ const UiClassAwayAdmin = (() => {
     var classAwayEvents = deps.classAwayEvents; // ref
     var classList = deps.classList; // computed/ref
     var currentSemester = deps.currentSemester; // ref
-    var loading = deps.loading; // ref
+    var _loading = deps.loading; // ref（儲存類動作改走背景泡泡，不再切換全螢幕遮罩）
     var clearScheduleCache = deps.clearScheduleCache || function () {};
     var softRefreshInBackground = deps.softRefreshInBackground || function () {};
 
@@ -375,73 +376,91 @@ const UiClassAwayAdmin = (() => {
         }
       }
       var rulesJson = rulePayload.length > 1 ? JSON.stringify(rulePayload) : '';
-      loading.value = true;
-      try {
-        var id = f.id || ('cae_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
-        var classListStr = cleanClasses.join(',');
-        var sheetRow = {
-          "事件ID": String(id),
-          "學期代號": currentSemester.value,
-          "事件名稱": String(f.name).trim(),
-          "起日": String(f.startDate || '').slice(0, 10),
-          "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
-          "起始節次": periodMode === 'range' ? String(primary.startPeriod) : '',
-          "結束節次": periodMode === 'range' ? String(primary.endPeriod) : '',
-          "規則清單": rulesJson,
-          "適用範圍": scope === 'all' ? '全校' : '指定班級',
-          "班級清單": scope === 'all' ? '' : ("'" + classListStr),
-          "停課節次": periodMode === 'range'
-            ? '全部節次'
-            : (DomainClassAway && DomainClassAway.normalizePeriod
-              ? DomainClassAway.normalizePeriod(selectedPeriods) : selectedPeriods.join(',')),
-          "鐘點規則": primary.billingRule === 'reduce' ? 'reduce' : 'keep',
-          "科目": String(primary.subjectsText || '').trim(),
-          "可進互代": forMutual ? 'TRUE' : 'FALSE',
-          "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
-          "備註": f.note || ''
-        };
-        await callGasApi('saveClassAwayEvent', sheetRow);
-        var mapped = FieldMap.mapClassAwayEvent(
-          Object.assign({}, sheetRow, { "班級清單": classListStr })
-        );
-        mapped.classes = cleanClasses.slice();
-        mapped.period = DomainClassAway.eventPeriod(mapped);
-        mapped.periods = DomainClassAway.eventPeriods(mapped);
-        var list = classAwayEvents.value.slice();
-        var idx = list.findIndex(function (x) { return x.id === id; });
-        if (idx >= 0) list[idx] = mapped;
-        else list.push(mapped);
-        classAwayEvents.value = list;
-        showClassAwayModal.value = false;
-        showToast(
-          '空堂事件已儲存（' + (mapped.scope === 'all' ? '全校' : mapped.classes.length + ' 班')
-            + '／' + classAwayPeriodLabel(mapped) + '）',
-          'success'
-        );
-        clearScheduleCache();
-        softRefreshInBackground({ force: true, delay: 700 });
-      } catch (e) {
-        showToast('儲存失敗：' + (e && e.message ? e.message : String(e)), 'error');
-      } finally {
-        loading.value = false;
-      }
+      var id = f.id || ('cae_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+      var classListStr = cleanClasses.join(',');
+      var sheetRow = {
+        "事件ID": String(id),
+        "學期代號": currentSemester.value,
+        "事件名稱": String(f.name).trim(),
+        "起日": String(f.startDate || '').slice(0, 10),
+        "迄日": f.endDate ? String(f.endDate).slice(0, 10) : '',
+        "起始節次": periodMode === 'range' ? String(primary.startPeriod) : '',
+        "結束節次": periodMode === 'range' ? String(primary.endPeriod) : '',
+        "規則清單": rulesJson,
+        "適用範圍": scope === 'all' ? '全校' : '指定班級',
+        "班級清單": scope === 'all' ? '' : ("'" + classListStr),
+        "停課節次": periodMode === 'range'
+          ? '全部節次'
+          : (DomainClassAway && DomainClassAway.normalizePeriod
+            ? DomainClassAway.normalizePeriod(selectedPeriods) : selectedPeriods.join(',')),
+        "鐘點規則": primary.billingRule === 'reduce' ? 'reduce' : 'keep',
+        "科目": String(primary.subjectsText || '').trim(),
+        "可進互代": forMutual ? 'TRUE' : 'FALSE',
+        "啟用": f.enabled !== false ? 'TRUE' : 'FALSE',
+        "備註": f.note || ''
+      };
+      var mappedEvent = null;
+      // 本地先寫入：事件先套進本機清單並關窗，GAS 在背景存，完成再跳泡泡
+      showClassAwayModal.value = false;
+      await runBackgroundSave({
+        key: 'class-away:' + id,
+        label: '空堂事件',
+        optimistic: function () {
+          var mapped = FieldMap.mapClassAwayEvent(
+            Object.assign({}, sheetRow, { "班級清單": classListStr })
+          );
+          mapped.classes = cleanClasses.slice();
+          mapped.period = DomainClassAway.eventPeriod(mapped);
+          mapped.periods = DomainClassAway.eventPeriods(mapped);
+          mappedEvent = mapped;
+          var prevList = classAwayEvents.value;
+          var list = classAwayEvents.value.slice();
+          var idx = list.findIndex(function (x) { return x.id === id; });
+          if (idx >= 0) list[idx] = mapped;
+          else list.push(mapped);
+          classAwayEvents.value = list;
+          clearScheduleCache();
+          return { prevList: prevList };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          classAwayEvents.value = snapshot.prevList;
+          clearScheduleCache();
+        },
+        apiCall: function () { return callGasApi('saveClassAwayEvent', sheetRow); },
+        successMessage: function () {
+          var m = mappedEvent || { scope: scope, classes: cleanClasses };
+          return '空堂事件已儲存（' + (scope === 'all' ? '全校' : cleanClasses.length + ' 班')
+            + '／' + classAwayPeriodLabel(m) + '）';
+        },
+        errorMessage: '儲存空堂事件失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 700 }); }
+      });
     }
 
     async function deleteClassAwayEvent(ev) {
       if (!ev || !ev.id) return;
       if (!await showConfirm('確定刪除空堂事件「' + (ev.name || ev.id) + '」？')) return;
-      loading.value = true;
-      try {
-        await callGasApi('deleteClassAwayEvent', { id: ev.id });
-        classAwayEvents.value = classAwayEvents.value.filter(function (x) { return x.id !== ev.id; });
-        showToast('已刪除', 'success');
-        clearScheduleCache();
-        softRefreshInBackground({ force: true, delay: 700 });
-      } catch (e) {
-        showToast('刪除失敗：' + (e && e.message ? e.message : String(e)), 'error');
-      } finally {
-        loading.value = false;
-      }
+      // 本地先寫入：先從本機清單移除，GAS 在背景刪，完成再跳泡泡
+      await runBackgroundSave({
+        key: 'class-away:' + ev.id,
+        label: '空堂事件',
+        optimistic: function () {
+          var prevList = classAwayEvents.value;
+          classAwayEvents.value = classAwayEvents.value.filter(function (x) { return x.id !== ev.id; });
+          clearScheduleCache();
+          return { prevList: prevList };
+        },
+        rollback: function (snapshot) {
+          if (!snapshot) return;
+          classAwayEvents.value = snapshot.prevList;
+          clearScheduleCache();
+        },
+        apiCall: function () { return callGasApi('deleteClassAwayEvent', { id: ev.id }); },
+        successMessage: '空堂事件已刪除',
+        errorMessage: '刪除空堂事件失敗',
+        onSuccess: function () { softRefreshInBackground({ force: true, delay: 700 }); }
+      });
     }
 
     return {

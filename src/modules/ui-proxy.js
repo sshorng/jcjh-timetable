@@ -9,6 +9,7 @@
  * Eager 載入（setup 內委派，需先於 app.js）。create(deps) 注入 refs／回呼。
  */
 import { showToast } from '../ui/toast.js';
+import { runBackgroundSave } from '../ui/save-bubble.js';
 const UiProxy = (() => {
   function create(deps) {
     deps = deps || {};
@@ -27,8 +28,7 @@ const UiProxy = (() => {
     var proxySubmitEnabledBy = deps.proxySubmitEnabledBy;
     var proxySubmitEnabledAt = deps.proxySubmitEnabledAt;
     var PROXY_SUBMIT_EMAILS_LS_KEY = deps.PROXY_SUBMIT_EMAILS_LS_KEY;
-    var loading = deps.loading;
-    var loadingMessage = deps.loadingMessage;
+    // 儲存類動作改走背景泡泡（ui/save-bubble.js），不再使用全域 loading 遮罩
     var onlineSubstitutionEnabled = deps.onlineSubstitutionEnabled;
     var proxyGrantQuery = deps.proxyGrantQuery;
     var lookupTeacher = deps.lookupTeacher;
@@ -104,7 +104,7 @@ const filterStaffEmailsOnly = (emails) => {
   return out;
 };
 
-const persistProxySubmitEmails = async (nextList, toastOk) => {
+const persistProxySubmitEmails = async (nextList, _toastOk) => {
   if (!isAdmin.value) {
     showToast('僅教學組可設定代申請行政', 'warning');
     return false;
@@ -119,37 +119,37 @@ const persistProxySubmitEmails = async (nextList, toastOk) => {
   proxySubmitEnabledBy.value = by;
   proxySubmitEnabledAt.value = at;
   try { localStorage.setItem(PROXY_SUBMIT_EMAILS_LS_KEY, uniq.join(',')); } catch (e) { /* ignore */ }
-  try {
-    loading.value = true;
-    loadingMessage.value = '儲存代申請授權…';
-    await callGasApi('saveMailSettings', {
+  // 本地先寫入（上面已套用）；GAS 在背景同步，完成再跳泡泡
+  const saveResult = await runBackgroundSave({
+    key: 'proxy-submit-emails',
+    label: '代申請授權',
+    successMessage: uniq.length
+      ? ('已授權 ' + uniq.length + ' 位行政可代申請')
+      : '已清空授權（所有行政皆不可代申請）',
+    errorMessage: '儲存代申請授權失敗',
+    rollback: () => {
+      proxySubmitEmails.value = prev;
+      try { localStorage.setItem(PROXY_SUBMIT_EMAILS_LS_KEY, prev.join(',')); } catch (e2) { /* ignore */ }
+    },
+    apiCall: () => callGasApi('saveMailSettings', {
       proxySubmitEmails: uniq.join(','),
       proxySubmitEnabled: uniq.length > 0,
       proxySubmitEnabledBy: by,
       proxySubmitEnabledAt: at
-    });
-    if (toastOk !== false) {
-      showToast(
-        uniq.length
-          ? ('已授權 ' + uniq.length + ' 位行政可代申請')
-          : '已清空授權（所有行政皆不可代申請）',
-        'success'
-      );
-    }
+    })
+  });
+  if (saveResult.ok) return true;
+  const msg = saveResult.error && saveResult.error.message
+    ? String(saveResult.error.message)
+    : String(saveResult.error || '');
+  if (/未定義|不支援|not support|Unknown action/i.test(msg)) {
+    // 後端還沒這個 action：保留本機授權名單，等 GAS 更新後再同步
+    proxySubmitEmails.value = uniq;
+    try { localStorage.setItem(PROXY_SUBMIT_EMAILS_LS_KEY, uniq.join(',')); } catch (e3) { /* ignore */ }
+    showToast('已寫入本機授權名單（後端尚未同步，請更新 GAS）', 'warning', 4500);
     return true;
-  } catch (err) {
-    const msg = err && err.message ? String(err.message) : String(err || '');
-    if (/未定義|不支援|not support|Unknown action/i.test(msg)) {
-      showToast('已寫入本機授權名單（後端尚未同步，請更新 GAS）', 'warning', 4500);
-      return true;
-    }
-    proxySubmitEmails.value = prev;
-    try { localStorage.setItem(PROXY_SUBMIT_EMAILS_LS_KEY, prev.join(',')); } catch (e2) { /* ignore */ }
-    showToast('儲存失敗：' + msg, 'error');
-    return false;
-  } finally {
-    loading.value = false;
   }
+  return false;
 };
 
 const toggleProxySubmitEmail = async (email) => {
@@ -176,22 +176,19 @@ const setOnlineSubstitutionEnabled = async (enabled) => {
   }
   const previous = onlineSubstitutionEnabled.value;
   onlineSubstitutionEnabled.value = !!enabled;
-  loading.value = true;
-  loadingMessage.value = onlineSubstitutionEnabled.value ? '開啟線上調代課…' : '切換紙本模式…';
-  try {
-    await callGasApi('saveMailSettings', {
+  // 本地先寫入（上方已切換）；GAS 在背景同步，完成再跳泡泡
+  await runBackgroundSave({
+    key: 'online-substitution-mode',
+    label: '調代課模式',
+    successMessage: onlineSubstitutionEnabled.value
+      ? '已開啟線上調代課'
+      : '已切換為紙本模式，媒合與模擬仍可使用',
+    errorMessage: '切換調代課模式失敗',
+    rollback: () => { onlineSubstitutionEnabled.value = previous; },
+    apiCall: () => callGasApi('saveMailSettings', {
       onlineSubstitutionEnabled: onlineSubstitutionEnabled.value
-    });
-    showToast(
-      onlineSubstitutionEnabled.value ? '已開啟線上調代課' : '已切換為紙本模式，媒合與模擬仍可使用',
-      'success'
-    );
-  } catch (err) {
-    onlineSubstitutionEnabled.value = previous;
-    showToast('切換調代課模式失敗：' + (err && err.message ? err.message : err), 'error');
-  } finally {
-    loading.value = false;
-  }
+    })
+  });
 };
 
 const filteredProxyTeachers = computed(() => {

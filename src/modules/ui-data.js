@@ -14,6 +14,7 @@ import FieldMap from '../domain/field-map.js';
  * _dataLoadSeq／_requestsWatermark 留守 app.js（logout／水位讀者共用），經 accessor deps 存取。
  */
 import { showToast, showConfirm } from '../ui/toast.js';
+import { runBackgroundSave } from '../ui/save-bubble.js';
 const UiData = (() => {
   function create(deps) {
     deps = deps || {};
@@ -733,41 +734,63 @@ const saveClientSettings = () => {
 const saveSemester = async () => {
   const form = semesterForm.value;
   if (!form.id.trim()) { showToast('請輸入學期代號（如 114-2）', 'info'); return; }
-  loading.value = true;
-  try {
-    const data = {
-      "學期代號": form.id.trim(),
-      "學期名稱": form.name || form.id.trim(),
-      "開始日期": form.startDate,
-      "結束日期": form.endDate,
-      "是否預設": semesterModalMode.value === 'add' ? "FALSE" : undefined
-    };
-    
-    if (semesterModalMode.value === 'add') {
-      const teachersToCopy = teachersList.value.map(t => ({
-        "學期代號": form.id.trim(),
-         "教師Email": t.loginEmail || t.email,
-         "教師姓名": t.name,
-         "授課科目": t.subject,
-         "系統角色": t.role,
-         "基本鐘點": t.baseHours,
-         "超鐘點節數": t.fixedOvertimeConfigured ? t.fixedOvertimeHours : '',
-         "超鐘點節次": t.fixedOvertimeConfigured ? (t.fixedOvertimeSlotsText || t.fixedOvertimeSlots || '') : ''
-       }));
-      data.teachersToCopy = teachersToCopy;
-    }
+  const data = {
+    "學期代號": form.id.trim(),
+    "學期名稱": form.name || form.id.trim(),
+    "開始日期": form.startDate,
+    "結束日期": form.endDate,
+    "是否預設": semesterModalMode.value === 'add' ? "FALSE" : undefined
+  };
 
-    await callGasApi('saveSemester', data);
-    showToast('✅ 學期已儲存！', 'success');
-    showSemesterModal.value = false;
-    await loadSemesters();
-    await loadWeeklyData();
-  } catch (e) {
-    console.error('儲存學期失敗', e);
-    showToast('❌ 儲存學期失敗：' + e.message, 'error');
-  } finally {
-    loading.value = false;
+  if (semesterModalMode.value === 'add') {
+    const teachersToCopy = teachersList.value.map(t => ({
+      "學期代號": form.id.trim(),
+       "教師Email": t.loginEmail || t.email,
+       "教師姓名": t.name,
+       "授課科目": t.subject,
+       "系統角色": t.role,
+       "基本鐘點": t.baseHours,
+       "超鐘點節數": t.fixedOvertimeConfigured ? t.fixedOvertimeHours : '',
+       "超鐘點節次": t.fixedOvertimeConfigured ? (t.fixedOvertimeSlotsText || t.fixedOvertimeSlots || '') : ''
+     }));
+    data.teachersToCopy = teachersToCopy;
   }
+
+  // 本地先寫入：學期先套進本機清單並關窗，GAS 在背景存，完成再跳泡泡
+  const isAdd = semesterModalMode.value === 'add';
+  showSemesterModal.value = false;
+  await runBackgroundSave({
+    key: 'semester:' + data["學期代號"],
+    label: isAdd ? '新增學期' : '編輯學期',
+    optimistic: () => {
+      const prevList = semestersList.value;
+      const list = semestersList.value.slice();
+      const idx = list.findIndex(s => s.id === data["學期代號"]);
+      const patched = {
+        id: data["學期代號"],
+        name: data["學期名稱"],
+        startDate: data["開始日期"],
+        endDate: data["結束日期"],
+        isDefault: idx >= 0 ? !!list[idx].isDefault : false
+      };
+      if (idx >= 0) list[idx] = Object.assign({}, list[idx], patched);
+      else list.push(patched);
+      list.sort((a, b) => a.id.localeCompare(b.id));
+      semestersList.value = list;
+      return { prevList };
+    },
+    rollback: (snapshot) => {
+      if (snapshot && snapshot.prevList) semestersList.value = snapshot.prevList;
+    },
+    apiCall: () => callGasApi('saveSemester', data),
+    successMessage: '學期已儲存',
+    errorMessage: '儲存學期失敗',
+    onSuccess: () => {
+      // 背景把伺服器狀態補回來（不鎖畫面）
+      loadSemesters().catch(() => {});
+      loadWeeklyData({ force: true, silent: true }).catch(() => {});
+    }
+  });
 };
 
 const deleteSemester = async (semId) => {
@@ -776,31 +799,46 @@ const deleteSemester = async (semId) => {
     return;
   }
   if (!await showConfirm(`確定要刪除學期「${semId}」及其所有資料嗎？此操作不可復原！`)) return;
-  loading.value = true;
-  try {
-    await callGasApi('deleteSemester', { semesterId: semId });
-    showToast('✅ 學期已刪除', 'success');
-    await loadSemesters();
-  } catch (e) {
-    console.error('刪除學期失敗', e);
-    showToast('❌ 刪除學期失敗：' + e.message, 'error');
-  } finally {
-    loading.value = false;
-  }
+  // 本地先寫入：先從學期清單移除，GAS 在背景刪，完成再跳泡泡
+  await runBackgroundSave({
+    key: 'semester-delete:' + semId,
+    label: '刪除學期',
+    optimistic: () => {
+      const prevList = semestersList.value;
+      semestersList.value = (semestersList.value || []).filter(s => s.id !== semId);
+      return { prevList };
+    },
+    rollback: (snapshot) => {
+      if (snapshot && snapshot.prevList) semestersList.value = snapshot.prevList;
+    },
+    apiCall: () => callGasApi('deleteSemester', { semesterId: semId }),
+    successMessage: '學期已刪除',
+    errorMessage: '刪除學期失敗',
+    onSuccess: () => { loadSemesters().catch(() => {}); }
+  });
 };
 
 const setDefaultSemester = async (semId) => {
-  loading.value = true;
-  try {
-    await callGasApi('setDefaultSemester', { semesterId: semId });
-    showToast('✅ 已將「' + (semestersList.value.find(s => s.id === semId)?.name || semId) + '」設為預設學期', 'success');
-    await loadSemesters();
-  } catch (e) {
-    console.error('設定預設學期失敗', e);
-    showToast('❌ 設定失敗：' + e.message, 'error');
-  } finally {
-    loading.value = false;
-  }
+  // 本地先寫入：先切換預設標記，GAS 在背景存，完成再跳泡泡
+  const targetName = semestersList.value.find(s => s.id === semId)?.name || semId;
+  await runBackgroundSave({
+    key: 'semester-default:' + semId,
+    label: '預設學期',
+    optimistic: () => {
+      const prevList = semestersList.value;
+      semestersList.value = (semestersList.value || []).map(s =>
+        Object.assign({}, s, { isDefault: s.id === semId })
+      );
+      return { prevList };
+    },
+    rollback: (snapshot) => {
+      if (snapshot && snapshot.prevList) semestersList.value = snapshot.prevList;
+    },
+    apiCall: () => callGasApi('setDefaultSemester', { semesterId: semId }),
+    successMessage: '已將「' + targetName + '」設為預設學期',
+    errorMessage: '設定預設學期失敗',
+    onSuccess: () => { loadSemesters().catch(() => {}); }
+  });
 };
 
 const manualRefreshData = async () => {

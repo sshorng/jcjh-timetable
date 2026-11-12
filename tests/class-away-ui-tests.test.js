@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import DomainClassAway from '../src/domain/domain-class-away.js';
 import { UiClassAwayAdmin, UiMutualBridge } from '../src/modules/ui-activity.js';
 
+import { getLastSaveBubble } from '../src/ui/save-bubble.js';
 test('class away ui tests（v1 移植）', () => {
   const savedRows = [];
   const toasts = [];
@@ -41,7 +42,9 @@ test('class away ui tests（v1 移植）', () => {
     assert.equal(eventRef.value[0].startPeriod, '0');
     assert.equal(eventRef.value[0].endPeriod, '4');
     assert.equal(admin.classAwayPeriodLabel(eventRef.value[0]), '連續：早自習～第4節');
-    assert.match(toasts[0].message, /早自習～第4節/);
+    // 存檔改成「本地先寫入 → 背景同步 → 泡泡回報」，不再跳 toast
+    assert.match(getLastSaveBubble().text, /早自習～第4節/);
+    assert.equal(toasts.length, 0, '儲存成功不應再彈 toast（改由背景泡泡回報）');
 
     const mutualState = {
       start: { value: '' }, end: { value: '' }, startPeriod: { value: '0' }, endPeriod: { value: '8' },
@@ -139,9 +142,7 @@ test('class away ui tests（v1 移植）', () => {
     console.log('class-away UI tests PASS');
   }
 
-  run().catch(error => {
-    console.error(error);
-    process.exitCode = 1;
-  });
+  // 回傳 Promise，讓 vitest 真的等這串斷言跑完（否則 await 之後的失敗會被吞掉）
+  return run();
 
 });
