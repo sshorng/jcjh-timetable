@@ -267,13 +267,14 @@ function slotView(email, dateStr, period) {
     if (typeof props.getScheduleForDate === 'function' && email && dateStr && period !== '') {
       eff = props.getScheduleForDate(email, dateStr, period, dayOfWeekOf(dateStr)) || null;
     }
-  } catch (eEff) { /* 以基礎課程為準 */ }
+  } catch (eEff) { /* 以基礎課表為備援 */ }
   var teacherName = '';
   try {
     teacherName = props.getTeacherNameByEmail(email) || (s && (s.teacherName || s.name)) || '';
   } catch (eName) { /* ignore */ }
-  var className = String(((eff && eff.className) || (s && s.className)) || '');
-  var subject = String(((eff && eff.subject) || (s && s.subject)) || '');
+  // 班級／科目逐一取有效值：當前課程缺哪一欄，才用基礎課表補哪一欄
+  var className = String(((eff && eff.className) || (s && s.className)) || '').trim();
+  var subject = String(((eff && eff.subject) || (s && s.subject)) || '').trim();
   return {
     teacherEmail: email,
     teacherName: teacherName,
@@ -288,6 +289,23 @@ function slotView(email, dateStr, period) {
     period: period === '' ? '' : parseInt(period, 10)
   };
 }
+// 有課＝當前課程有班級或科目（抽離／資優課可能只有科目），不以「有沒有基礎課程」判定
+function hasSlotCourse(slot) {
+  if (!slot) return false;
+  return !!(String(slot.className || '').trim() || String(slot.subject || '').trim());
+}
+function slotCourseText(slot) {
+  var cls = String((slot && slot.className) || '').trim();
+  var sub = String((slot && slot.subject) || '').trim();
+  if (cls && sub) return cls + ' ' + sub;
+  return cls || sub;
+}
+function periodLabel(period) {
+  var p = parseInt(period, 10);
+  if (p === 45) return '午休';
+  if (p === 0) return '早自習';
+  return '第' + p + '節';
+}
 function slotTextWithPending(slot) {
   var base = slotText(slot);
   if (slot.pendingText) return base + '（' + slot.pendingText + '）';
@@ -295,8 +313,9 @@ function slotTextWithPending(slot) {
 }
 function slotText(slot) {
   if (!slot.teacherEmail || !slot.dateStr || slot.period === '') return '—';
-  if (!slot.className) return '（該格無基礎課程）';
-  return slot.dateStr + ' 第' + slot.period + '節 ' + slot.className + (slot.subject ? ' ' + slot.subject : '');
+  var head = slot.dateStr + ' ' + periodLabel(slot.period) + ' ';
+  if (!hasSlotCourse(slot)) return head + '（此時段查無課程：可能為空堂，或該異動尚未核准生效）';
+  return head + slotCourseText(slot);
 }
 function legHasInput(i) {
   var leg = legs.value[i];
@@ -357,13 +376,13 @@ const canSubmit = computed(function () {
       if (!leg.bEmail || !leg.bDate || leg.bPeriod === '') return false;
       var a = slotView(leg.aEmail, leg.aDate, leg.aPeriod);
       var b = slotView(leg.bEmail, leg.bDate, leg.bPeriod);
-      if (!a.className || !b.className) return false;
+      if (!hasSlotCourse(a) || !hasSlotCourse(b)) return false;
       if (String(a.teacherEmail).trim().toLowerCase() === String(b.teacherEmail).trim().toLowerCase()) return false;
     } else {
       if (!leg.aEmail || !leg.aDate || leg.aPeriod === '') return false;
       if (!leg.bEmail || !leg.subFee) return false;
       var s = slotView(leg.aEmail, leg.aDate, leg.aPeriod);
-      if (!s.className) return false;
+      if (!hasSlotCourse(s)) return false;
       if (String(leg.aEmail).trim().toLowerCase() === String(leg.bEmail).trim().toLowerCase()) return false;
     }
   }

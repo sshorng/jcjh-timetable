@@ -3,7 +3,7 @@ import { test, expect } from 'vitest';
 import { nextTick, createApp, h } from 'vue';
 import ExceptionComposerModal from '../src/components/ExceptionComposerModal.vue';
 
-function mountComposer() {
+function mountComposer(overrides = {}) {
   const warnings = [];
   const sent = [];
   const props = {
@@ -26,6 +26,7 @@ function mountComposer() {
     getTeacherNameByEmail: (e) => ({ 'a@school.example': 'A師', 'b@school.example': 'B師' }[String(e || '').toLowerCase()] || e),
     submitAdminException: async (payload) => { sent.push(payload); return { ok: true, results: [] }; }
   };
+  Object.assign(props, overrides || {});
   const app = createApp({ render: () => h(ExceptionComposerModal, props) });
   app.config.warnHandler = (msg) => { warnings.push(String(msg)); };
   const el = document.createElement('div');
@@ -95,6 +96,80 @@ test('composer：打錯名字送不出', async () => {
     + ' btnN=' + el.querySelectorAll('button').length);
   const submitBtn = [...el.querySelectorAll('button')].find((b) => b.textContent.includes('直接核准建單'));
   expect(submitBtn.disabled, '教師解析失敗應鎖住送出').toBe(true);
+  app.unmount();
+  expect(warnings).toEqual([]);
+});
+
+// 共同操作：填好一組調課（A：09/01 第8節、B：11/02 第2節）
+async function fillExchange(el, reason = '測試事由') {
+  const texts = [...el.querySelectorAll('input[type="text"]')];
+  const dates = [...el.querySelectorAll('input[type="date"]')];
+  const selects = [...el.querySelectorAll('select.form-select')];
+  setText(texts[0], 'A師');
+  setText(texts[1], 'B師');
+  setDate(dates[0], '2026-09-01');
+  setDate(dates[1], '2026-11-02');
+  setSelect(selects[1], '8');
+  setSelect(selects[2], '2');
+  setText(texts[2], reason);
+  for (let i = 0; i < 5; i++) await nextTick();
+}
+
+test('composer：B 端當日無基礎課、但已有調入課程時讀當前課程（不判無課）', async () => {
+  const { app, el, warnings } = mountComposer({
+    // B 師 11/02 第2節：基礎課表沒有這一格，當前課程是調入的英資A英語
+    getScheduleForDate: (email, dateStr, period) => {
+      if (String(email).toLowerCase() === 'b@school.example'
+        && String(dateStr).slice(0, 10) === '2026-11-02' && Number(period) === 2) {
+        return { className: '英資A', subject: '英語', isSubstitutionDuty: true, subText: '👤 代課：C師' };
+      }
+      return null;
+    }
+  });
+  await nextTick();
+  await fillExchange(el);
+  const html = el.innerHTML;
+  expect(html).toContain('英資A');
+  expect(html).not.toContain('查無課程');
+  expect(html).not.toContain('基礎課程');
+  const submitBtn = [...el.querySelectorAll('button')].find((b) => b.textContent.includes('直接核准建單'));
+  expect(submitBtn.disabled, '當前課程存在即可送出').toBe(false);
+  app.unmount();
+  expect(warnings).toEqual([]);
+});
+
+test('composer：當前課程只有科目沒有班級（抽離／資優課）仍視為有課', async () => {
+  const { app, el, warnings } = mountComposer({
+    getScheduleForDate: (email, dateStr, period) => {
+      if (String(email).toLowerCase() === 'b@school.example'
+        && String(dateStr).slice(0, 10) === '2026-11-02' && Number(period) === 2) {
+        return { className: '', subject: '英語資優', attr: '抽離' };
+      }
+      return null;
+    }
+  });
+  await nextTick();
+  await fillExchange(el);
+  const html = el.innerHTML;
+  expect(html).toContain('英語資優');
+  expect(html).not.toContain('查無課程');
+  const submitBtn = [...el.querySelectorAll('button')].find((b) => b.textContent.includes('直接核准建單'));
+  expect(submitBtn.disabled, '有科目即視為有課').toBe(false);
+  app.unmount();
+  expect(warnings).toEqual([]);
+});
+
+test('composer：真的查無課程時明講查無課程，且不得送出', async () => {
+  const { app, el, warnings } = mountComposer({
+    getScheduleForDate: () => null
+  });
+  await nextTick();
+  await fillExchange(el);
+  const html = el.innerHTML;
+  expect(html).toContain('查無課程');
+  expect(html).not.toContain('基礎課程');
+  const submitBtn = [...el.querySelectorAll('button')].find((b) => b.textContent.includes('直接核准建單'));
+  expect(submitBtn.disabled, 'B 端無課應鎖住送出').toBe(true);
   app.unmount();
   expect(warnings).toEqual([]);
 });

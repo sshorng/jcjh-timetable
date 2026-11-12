@@ -2734,7 +2734,9 @@ const UiAdmin = (() => {
             if (String(a.teacherEmail).trim().toLowerCase() === String(b.teacherEmail).trim().toLowerCase()) {
               throw new Error('第' + (i + 1) + '組：雙方須為不同教師');
             }
-            if (!a.className || !b.className) throw new Error('第' + (i + 1) + '組：雙方課堂須有基礎課程');
+            if (!(a.className || a.subject) || !(b.className || b.subject)) {
+              throw new Error('第' + (i + 1) + '組：雙方課堂在該時段查無課程（以當前課表為準，含調代課）');
+            }
             built = buildExceptionLeg({
               mode: 'exchange',
               leaveTeacher: a.teacherEmail,
@@ -2759,7 +2761,7 @@ const UiAdmin = (() => {
             if (!leave.teacherEmail || !sub.teacherEmail) throw new Error('第' + (i + 1) + '組：請選定請假與代課教師');
             if (!sub.fee) throw new Error('第' + (i + 1) + '組：請選擇經費');
             // 被代課堂以元件解析的「當前該格課程」為準（含已生效／待生效疊加），此處只驗存在
-            if (!leave.className) throw new Error('第' + (i + 1) + '組：被代格無課程');
+            if (!(leave.className || leave.subject)) throw new Error('第' + (i + 1) + '組：被代教師該時段查無課程（以當前課表為準，含調代課）');
             built = buildExceptionLeg({
               mode: 'substitution',
               leaveTeacher: leave.teacherEmail,
