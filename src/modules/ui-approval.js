@@ -271,62 +271,21 @@ const UiApproval = (() => {
     }
 
     function isAdminPendingSelected(id) {
-      // DOM 優先（避免每列讀 ref 觸發依賴追蹤抖動）
-      try {
-        var el = document.querySelector('.admin-select-cb[data-req-id="' + String(id) + '"]');
-        if (el) return !!el.checked;
-      } catch (e) { /* ignore */ }
-      return selectedAdminPendingIds.value.some(function (selectedId) {
-        return String(selectedId) === String(id);
+      var key = String(id);
+      return (selectedAdminPendingIds.value || []).some(function (selectedId) {
+        return String(selectedId) === key;
       });
-    }
-
-    function readAdminCheckedIds() {
-      var ids = [];
-      try {
-      document.querySelectorAll('.admin-select-cb:checked').forEach(function (el) {
-        if (el.disabled) return;
-        var id = el.getAttribute('data-req-id') || el.value;
-          if (id) ids.push(id);
-        });
-      } catch (e) { /* ignore */ }
-      return ids;
     }
 
     function syncAdminSelectionFromDom() {
-      var checkedIds = readAdminCheckedIds();
-      var renderedIds = [];
-      try {
-        document.querySelectorAll('.admin-select-cb').forEach(function (el) {
-          var id = el.getAttribute('data-req-id') || el.value;
-          if (id) renderedIds.push(String(id));
-        });
-      } catch (e) { /* ignore */ }
-      var renderedSet = new Set(renderedIds);
-      var next = [];
-      // 收合批次的子列不在 DOM，保留它們原本的選取狀態。
-      (selectedAdminPendingIds.value || []).forEach(function (id) {
-        if (!renderedSet.has(String(id)) && next.indexOf(String(id)) < 0) next.push(String(id));
-      });
-      checkedIds.forEach(function (id) {
-        if (next.indexOf(String(id)) < 0) next.push(String(id));
-      });
-      selectedAdminPendingIds.value = next;
-      var selected = new Set(next);
-      var pageIds = getAdminPendingPageSelectableIds();
-      var pageSelected = pageIds.length > 0 && pageIds.every(function (id) { return selected.has(String(id)); });
-      try {
-        document.querySelectorAll('.admin-select-all').forEach(function (el) { el.checked = pageSelected; });
-      } catch (eHeader) { /* ignore */ }
+      return selectedAdminPendingIds.value;
     }
 
-    function toggleAdminPendingSelect(id) {
-      // 相容舊呼叫：改 DOM 再同步
-      try {
-        var el = document.querySelector('.admin-select-cb[data-req-id="' + String(id) + '"]');
-        if (el) el.checked = !el.checked;
-      } catch (e) { /* ignore */ }
-      syncAdminSelectionFromDom();
+    function toggleAdminPendingSelect(id, evt) {
+      var key = String(id);
+      var hasCheckboxState = !!(evt && evt.target && evt.target.type === 'checkbox');
+      var on = hasCheckboxState ? !!evt.target.checked : !isAdminPendingSelected(key);
+      setAdminPendingSelection([key], on);
     }
 
     function getAdminPendingPageSelectableIds() {
@@ -361,18 +320,6 @@ const UiApproval = (() => {
         else selected.delete(key);
       });
       selectedAdminPendingIds.value = Array.from(selected);
-      var idSet = new Set((ids || []).map(function (id) { return String(id); }));
-      try {
-        document.querySelectorAll('.admin-select-cb').forEach(function (el) {
-          var id = el.getAttribute('data-req-id') || el.value;
-          if (!el.disabled && idSet.has(String(id))) el.checked = on;
-        });
-        var pageIds = getAdminPendingPageSelectableIds();
-        var pageSelected = pageIds.length > 0 && pageIds.every(function (id) { return selected.has(String(id)); });
-        document.querySelectorAll('.admin-select-all').forEach(function (el) {
-          el.checked = pageSelected;
-        });
-      } catch (e) { /* ignore */ }
     }
 
     function toggleSelectAllAdminPending(evt) {
@@ -406,11 +353,6 @@ const UiApproval = (() => {
     }
 
     function clearAdminPendingSelection() {
-      try {
-        document.querySelectorAll('.admin-select-cb, .admin-select-all').forEach(function (el) {
-          el.checked = false;
-        });
-      } catch (e) { /* ignore */ }
       selectedAdminPendingIds.value = [];
     }
 
@@ -432,20 +374,7 @@ const UiApproval = (() => {
       return { regularIds: regularIds, triangleIds: triangleIds };
     }
 
-    // 單勾：原生已亮；延後同步 ref（按鈕 disabled 用）
-    if (typeof document !== 'undefined') {
-      document.addEventListener('change', function (evt) {
-        var t = evt && evt.target;
-        if (!t || !t.classList) return;
-        if (t.classList.contains('admin-select-cb')) {
-          if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(syncAdminSelectionFromDom);
-          } else {
-            syncAdminSelectionFromDom();
-          }
-        }
-      }, true);
-    }
+    // 選取狀態改由 Vue 響應式狀態驅動，不綁全域 DOM 監聽器。
 
     async function checkUrlCallback(currentUser) {
       var urlParams = new URLSearchParams(window.location.search);

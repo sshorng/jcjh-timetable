@@ -1,11 +1,12 @@
 /** v2 stores/backoffice.js — 由 v1 setup() §分節機械分解（gen-final.cjs）。 */
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
+import DomainClassAway from '../domain/domain-class-away.js';
 import FieldMap from '../domain/field-map.js';
-import { UiClassAwayAdmin } from '../modules/ui-activity.js';
+import { mutualDraftKey as mutualDraftKeyPure } from '../domain/slot-helpers.js';
+import { activityModulesReady, ensureUiActivityModule, getUiActivitySync } from '../modules/activity-gates.js';
 import { notifyChunkLoadFailed } from '../modules/vendor-libs.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
-import { UiMutualPanelState } from '../modules/ui-mutual.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useAdminStore } from './admin.js';
 import { useDataStore } from './data.js';
@@ -45,10 +46,7 @@ export const useBackofficeStore = defineStore('backoffice', () => {
       if (parseInt(period, 10) === 8) return useTourStore().PERIOD8_FEE;
       return isPublicFeeReason(reason) ? '公費代課' : '自費代課';
     };
-    const mutualDraftKey = (leaveEmail, dateStr, period) =>
-      (UiMutualPanelState && UiMutualPanelState.mutualDraftKey)
-        ? UiMutualPanelState.mutualDraftKey(leaveEmail, dateStr, period)
-        : (String(leaveEmail || '').toLowerCase() + '|' + dateStr + '|' + period);
+    const mutualDraftKey = (leaveEmail, dateStr, period) => mutualDraftKeyPure(leaveEmail, dateStr, period);
     const changePendingPage = (section, n) => {
       const maxPages = { pending: storeToRefs(useTimetableStore()).pendingMyPendingTotal, sent: storeToRefs(useTimetableStore()).pendingMySentTotal, admin: storeToRefs(useTimetableStore()).pendingAdminTotal };
       const refs = { pending: storeToRefs(useTimetableStore()).pendingMyPendingPage, sent: storeToRefs(useTimetableStore()).pendingMySentPage, admin: storeToRefs(useTimetableStore()).pendingAdminPage };
@@ -101,7 +99,7 @@ const ensureUiBackofficeApi = async () => {
         activityBalanceCtx: useMutualStore().activityBalanceCtx, ACTIVITY_PUBLIC_FEE: useTourStore().ACTIVITY_PUBLIC_FEE, successModalTitle: storeToRefs(useMutualStore()).successModalTitle, successModalMessage: storeToRefs(useMutualStore()).successModalMessage,
         hasLineTemplate: storeToRefs(useMutualStore()).hasLineTemplate, lineBatchParts: storeToRefs(useMutualStore()).lineBatchParts, lineCopyText: storeToRefs(useMutualStore()).lineCopyText, showSuccessModal: storeToRefs(useMutualStore()).showSuccessModal,
         buildLineBatchInviteText, DAC: useTourStore().DAC, successFlowMode: storeToRefs(useMutualStore()).successFlowMode, notificationsSuppressed: storeToRefs(useSubmitStore()).notificationsSuppressed,
-        openPaperPrintMutualDrafts: useOutputStore().openPaperPrintMutualDrafts, getMutualImportEventId: () => String(storeToRefs(useMutualStore()).mutualImportEventId.value || ''), mutualImportEventId: storeToRefs(useMutualStore()).mutualImportEventId, classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents, fetchQuotaSpendPreview: useGasStore().fetchQuotaSpendPreview, getMutualPanelApi: useMutualStore().getMutualPanelApi, userRole: storeToRefs(useSessionStore()).userRole, allSchedules: storeToRefs(useSessionStore()).allSchedules,
+        openPaperPrintMutualDrafts: useOutputStore().openPaperPrintMutualDrafts, getMutualImportEventId: () => String(storeToRefs(useMutualStore()).mutualImportEventId.value || ''), mutualImportEventId: storeToRefs(useMutualStore()).mutualImportEventId, classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents, fetchQuotaSpendPreview: useGasStore().fetchQuotaSpendPreview, getMutualPanelApi: useMutualStore().getMutualPanelApi, ensureMutualPanelModule: useMutualStore().ensureMutualPanelModule, userRole: storeToRefs(useSessionStore()).userRole, allSchedules: storeToRefs(useSessionStore()).allSchedules,
         schoolSwaps: storeToRefs(useSessionStore()).schoolSwaps, classDirectory: storeToRefs(useMutualStore()).classDirectory, classViewSchedules: storeToRefs(useMutualStore()).classViewSchedules, classViewSchoolSwaps: storeToRefs(useMutualStore()).classViewSchoolSwaps,
         classViewSubstitutionRecords: storeToRefs(useMutualStore()).classViewSubstitutionRecords, classViewClassAwayEvents: storeToRefs(useMutualStore()).classViewClassAwayEvents, classViewLoadedClass: storeToRefs(useMutualStore()).classViewLoadedClass,
         substitutionRecords: storeToRefs(useSessionStore()).substitutionRecords, homeroomRecords: storeToRefs(useSessionStore()).homeroomRecords, homeroomAssignSelections: storeToRefs(useSessionStore()).homeroomAssignSelections, mySentRequests: storeToRefs(useTourStore()).mySentRequests,
@@ -175,29 +173,151 @@ const ensureUiBackofficeApi = async () => {
     const restoreNavAfterLogin = (...a) => needUiBackoffice('restoreNavAfterLogin', ...a);
     const devSwitchUser = (...a) => needUiBackoffice('devSwitchUser', ...a);
     const restoreAdmin = (...a) => needUiBackoffice('restoreAdmin', ...a);
-const {
-      showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm,
-      openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass,
-      isClassAwayFormClassSelected, selectClassAwayGrade,
-      toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange,
-      setClassAwayPeriodBoundary, setClassAwayPeriodMode,
-      clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel,
-      classAwayDailyPeriodLabel, classAwayBoundaryPeriodLabel, isClassAwayRangeEvent,
-      classAwayRuleCount, classAwayEventRuleSummary,
-      saveClassAwayEvent, deleteClassAwayEvent
-    } = UiClassAwayAdmin.create({
-      ref,
-      callGasApi: useGasStore().callGasApi,
-      showToast,
-      showConfirm,
-      classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
-      classList: storeToRefs(useMutualStore()).classList,
-      currentSemester: storeToRefs(useSessionStore()).currentSemester,
-      loading: storeToRefs(useSessionStore()).loading,
-      clearScheduleCache: useTimetableStore().clearScheduleCache,
-      softRefreshInBackground: useDataStore().softRefreshInBackground
+    const showClassAwayModal = ref(false);
+    const classAwayModalMode = ref('add');
+    const classAwayPeriodOptions = [
+      { value: '0', label: '早自習' },
+      { value: '1', label: '第1節' }, { value: '2', label: '第2節' },
+      { value: '3', label: '第3節' }, { value: '4', label: '第4節' },
+      { value: '45', label: '午休' },
+      { value: '5', label: '第5節' }, { value: '6', label: '第6節' },
+      { value: '7', label: '第7節' }, { value: '8', label: '第8節' }
+    ];
+    const classAwayForm = ref({
+      id: '', name: '', startDate: '', endDate: '',
+      scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
+      billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '',
+      rules: [{
+        scope: 'classes', classes: [], subjectsText: '', periodMode: 'range',
+        periods: ['all'], startPeriod: '0', endPeriod: '8', billingRule: 'keep', expanded: true, pickerOpen: false
+      }]
     });
+    let _classAwayAdminApi = null;
+    const getClassAwayAdminApi = () => {
+      void activityModulesReady.value.activity;
+      if (_classAwayAdminApi) return _classAwayAdminApi;
+      const mod = getUiActivitySync();
+      if (!mod || !mod.UiClassAwayAdmin) return null;
+      _classAwayAdminApi = mod.UiClassAwayAdmin.create({
+        ref,
+        callGasApi: useGasStore().callGasApi,
+        showToast,
+        showConfirm,
+        classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
+        classList: storeToRefs(useMutualStore()).classList,
+        currentSemester: storeToRefs(useSessionStore()).currentSemester,
+        loading: storeToRefs(useSessionStore()).loading,
+        clearScheduleCache: useTimetableStore().clearScheduleCache,
+        softRefreshInBackground: useDataStore().softRefreshInBackground,
+        showClassAwayModal,
+        classAwayModalMode,
+        classAwayForm
+      });
+      return _classAwayAdminApi;
+    };
+    const ensureClassAwayAdminModule = async () => {
+      await ensureUiActivityModule();
+      return getClassAwayAdminApi();
+    };
+    const openAddClassAwayModal = async (...args) => {
+      const a = getClassAwayAdminApi() || await ensureClassAwayAdminModule();
+      return a ? a.openAddClassAwayModal(...args) : undefined;
+    };
+    const openEditClassAwayModal = async (...args) => {
+      const a = getClassAwayAdminApi() || await ensureClassAwayAdminModule();
+      return a ? a.openEditClassAwayModal(...args) : undefined;
+    };
+    const toggleClassAwayFormClass = (cls) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.toggleClassAwayFormClass(cls);
+      return undefined;
+    };
+    const isClassAwayFormClassSelected = (cls) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.isClassAwayFormClassSelected(cls);
+      return Array.isArray(classAwayForm.value.classes) && classAwayForm.value.classes.includes(String(cls || '').trim());
+    };
+    const selectClassAwayGrade = (grade) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.selectClassAwayGrade(grade);
+      return undefined;
+    };
+    const toggleClassAwayPeriod = (period) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.toggleClassAwayPeriod(period);
+      return undefined;
+    };
+    const isClassAwayPeriodSelected = (period) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.isClassAwayPeriodSelected(period);
+      const selected = DomainClassAway && DomainClassAway.normalizePeriods ? DomainClassAway.normalizePeriods(classAwayForm.value.periods || []) : ['all'];
+      return selected.includes('all') || selected.includes(String(period || ''));
+    };
+    const selectClassAwayPeriodRange = () => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.selectClassAwayPeriodRange();
+      return undefined;
+    };
+    const setClassAwayPeriodBoundary = (field, value) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.setClassAwayPeriodBoundary(field, value);
+      if (field === 'startPeriod' || field === 'endPeriod') {
+        classAwayForm.value = Object.assign({}, classAwayForm.value, { [field]: String(value || '') });
+      }
+    };
+    const setClassAwayPeriodMode = (mode) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.setClassAwayPeriodMode(mode);
+      classAwayForm.value = Object.assign({}, classAwayForm.value, { periodMode: mode === 'daily' ? 'daily' : 'range' });
+    };
+    const clearClassAwayPeriods = () => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.clearClassAwayPeriods();
+      return undefined;
+    };
+    const isClassAwayFullDaySelected = () => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.isClassAwayFullDaySelected();
+      return String(classAwayForm.value.startPeriod) === '0' && String(classAwayForm.value.endPeriod) === '8';
+    };
+    const isClassAwayRangeEvent = (ev) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.isClassAwayRangeEvent(ev);
+      return !!(DomainClassAway && DomainClassAway.eventPeriodRange ? DomainClassAway.eventPeriodRange(ev) : false);
+    };
+    const classAwayPeriodLabel = (ev) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.classAwayPeriodLabel(ev);
+      return (DomainClassAway && DomainClassAway.eventPeriod ? DomainClassAway.eventPeriod(ev) : '') || '—';
+    };
+    const classAwayDailyPeriodLabel = (ev) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.classAwayDailyPeriodLabel(ev);
+      return isClassAwayRangeEvent(ev) ? '—' : ((DomainClassAway && DomainClassAway.periodLabel) ? DomainClassAway.periodLabel(ev && (ev.periods !== undefined ? ev.periods : ev.period)) : '全部節次');
+    };
+    const classAwayBoundaryPeriodLabel = (ev, boundary) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.classAwayBoundaryPeriodLabel(ev, boundary);
+      return '—';
+    };
+    const classAwayRuleCount = (ev) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.classAwayRuleCount(ev);
+      return Array.isArray(ev && ev.rules) && ev.rules.length ? ev.rules.length : 1;
+    };
+    const classAwayEventRuleSummary = (ev) => {
+      const a = getClassAwayAdminApi();
+      if (a) return a.classAwayEventRuleSummary(ev);
+      return '';
+    };
+    const saveClassAwayEvent = async (...args) => {
+      const a = getClassAwayAdminApi() || await ensureClassAwayAdminModule();
+      return a ? a.saveClassAwayEvent(...args) : undefined;
+    };
+    const deleteClassAwayEvent = async (...args) => {
+      const a = getClassAwayAdminApi() || await ensureClassAwayAdminModule();
+      return a ? a.deleteClassAwayEvent(...args) : undefined;
+    };
 
-
-  return { isSimulating, closeEmptySlotModal, PUBLIC_FEE_REASONS, isPublicFeeReason, defaultSubFeeForReason, getHistoryEditDefaultSubFee, mutualDraftKey, changePendingPage, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, closeSuccessCopyLine, getBackofficeApi, showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm, openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass, isClassAwayFormClassSelected, selectClassAwayGrade, toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel, classAwayDailyPeriodLabel, classAwayBoundaryPeriodLabel, isClassAwayRangeEvent, classAwayRuleCount, classAwayEventRuleSummary, saveClassAwayEvent, deleteClassAwayEvent, logout, toggleSelectAllRecords, isHistoryRecordSelected, isHistoryBatchGroupSelected, toggleHistoryBatchGroupSelection, changeHistoryPage, openBatchPendingPrintPreview, isAdminPendingPageFullySelected, syncHistorySelectionFromDom, openManualQuotaAdjust, saveManualQuotaAdjust, openEmptySlotAssign, openEmptySlotFromDetail, onLeaveReasonChange, previewMutualDraft, submitAllMutualDrafts, toggleMutualCover, resetAppState, restoreNavAfterLogin, devSwitchUser, restoreAdmin };
+  return { isSimulating, closeEmptySlotModal, PUBLIC_FEE_REASONS, isPublicFeeReason, defaultSubFeeForReason, getHistoryEditDefaultSubFee, mutualDraftKey, changePendingPage, closeSuccessGoPending, closeSuccessGoRecords, closeSuccessStayTimetable, closeSuccessCopyLine, getBackofficeApi, getClassAwayAdminApi, ensureClassAwayAdminModule, showClassAwayModal, classAwayModalMode, classAwayPeriodOptions, classAwayForm, openAddClassAwayModal, openEditClassAwayModal, toggleClassAwayFormClass, isClassAwayFormClassSelected, selectClassAwayGrade, toggleClassAwayPeriod, isClassAwayPeriodSelected, selectClassAwayPeriodRange, setClassAwayPeriodBoundary, setClassAwayPeriodMode, clearClassAwayPeriods, isClassAwayFullDaySelected, classAwayPeriodLabel, classAwayDailyPeriodLabel, classAwayBoundaryPeriodLabel, isClassAwayRangeEvent, classAwayRuleCount, classAwayEventRuleSummary, saveClassAwayEvent, deleteClassAwayEvent, logout, toggleSelectAllRecords, isHistoryRecordSelected, isHistoryBatchGroupSelected, toggleHistoryBatchGroupSelection, changeHistoryPage, openBatchPendingPrintPreview, isAdminPendingPageFullySelected, syncHistorySelectionFromDom, openManualQuotaAdjust, saveManualQuotaAdjust, openEmptySlotAssign, openEmptySlotFromDetail, onLeaveReasonChange, previewMutualDraft, submitAllMutualDrafts, toggleMutualCover, resetAppState, restoreNavAfterLogin, devSwitchUser, restoreAdmin };
 });

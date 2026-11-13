@@ -9,7 +9,13 @@ import { UiTimetable } from '../src/modules/ui-timetable.js';
 
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const indexSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+// 簽核／歷史／後台分頁已抽為 components/*TabPanel.vue，維持與主殼層聚合檢查
+const indexSource = [
+  fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8'),
+  fs.readFileSync(path.join(here, '..', 'src', 'components', 'PendingTabPanel.vue'), 'utf8'),
+  fs.readFileSync(path.join(here, '..', 'src', 'components', 'RecordsTabPanel.vue'), 'utf8'),
+  fs.readFileSync(path.join(here, '..', 'src', 'components', 'AdminTabPanel.vue'), 'utf8')
+].join('\n');
 // 詳情 modal 已抽為 components/DetailModal.vue（模板聚合見 composition.test.js）
 const detailModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'DetailModal.vue'), 'utf8');
 const overtimePlanModalSource = fs.readFileSync(path.join(here, '..', 'src', 'components', 'OvertimePlanModal.vue'), 'utf8');

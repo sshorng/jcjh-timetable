@@ -5,7 +5,7 @@
 import DomainSchedule from './domain-schedule.js';
 import DomainClassAway from './domain-class-away.js';
 import DateUtils from './date-utils.js';
-import DomainActivityCover from './domain-activity-cover.js';
+import FeeUtils from './fee-utils.js';
 
 /**
  * 媒合領域邏輯（純函式）
@@ -282,13 +282,13 @@ const DomainMatch = (() => {
       var preferReleased = !!(opts.preferReleasedByAway || opts.activityMode);
       var score = (preferReleased && isReleasedByAway ? 100 : 0)
         + (isSameCourse ? 4 : 0) + (isSameSubject ? 2 : 0) + (isSameClass ? 1 : 0);
-      // 活動模式經費建議委派 DomainActivityCover（若尚未載入則內建後備）
+      // 活動模式經費建議（支援可選覆寫函式，避免主包強制靜態載入 DomainActivityCover）
       var suggestedFee = '';
       if (opts.activityMode) {
-        if (DomainActivityCover && DomainActivityCover.suggestedFee) {
-          suggestedFee = DomainActivityCover.suggestedFee(isReleasedByAway, true);
+        if (typeof opts.suggestedFeeFn === 'function') {
+          suggestedFee = opts.suggestedFeeFn(isReleasedByAway, true);
         } else {
-          suggestedFee = isReleasedByAway ? '扣額度' : '活動公費';
+          suggestedFee = isReleasedByAway ? FeeUtils.QUOTA : FeeUtils.ACTIVITY_PUBLIC;
         }
       }
       return Object.assign({}, t, {

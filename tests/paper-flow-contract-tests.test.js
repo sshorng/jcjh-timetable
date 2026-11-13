@@ -949,7 +949,11 @@ function runCalendarFallbackContractTest() {
   }
 }
 function runApplicationFormContractTest() {
-  const html = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
+  const appHtml = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
+  const pendingTabHtml = fs.readFileSync(path.join(here, '../src/components', 'PendingTabPanel.vue'), 'utf8');
+  const recordsTabHtml = fs.readFileSync(path.join(here, '../src/components', 'RecordsTabPanel.vue'), 'utf8');
+  const adminTabHtml = fs.readFileSync(path.join(here, '../src/components', 'AdminTabPanel.vue'), 'utf8');
+  const html = appHtml + pendingTabHtml + recordsTabHtml + adminTabHtml;
   const printPreviewHtml = fs.readFileSync(path.join(here, '../src/components', 'PrintPreviewModal.vue'), 'utf8');
   // 申請表單已抽為 components/CompareModal.vue；成功後續抽為 SuccessModal.vue
   const compareHtml = fs.readFileSync(path.join(here, '../src/components', 'CompareModal.vue'), 'utf8');
@@ -1526,7 +1530,8 @@ async function runApprovalLedgerCacheBustTest() {
 }
 
 async function runTriangleAdminBatchSelectionTest() {
-  const source = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8');
+  const source = fs.readFileSync(path.join(here, '../src/App.vue'), 'utf8')
+    + fs.readFileSync(path.join(here, '../src/components', 'PendingTabPanel.vue'), 'utf8');
   assert.doesNotMatch(
     source,
     /class="admin-select-cb[^"]*"[^>]*:disabled="row\.type === 'triangle'/,

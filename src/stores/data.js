@@ -5,7 +5,7 @@ import DateUtils from '../domain/date-utils.js';
 import FieldMap from '../domain/field-map.js';
 import { UiData } from '../modules/ui-data.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
-import { UiSubmitHelpers } from '../modules/ui-request.js';
+import { getBatchCompareWeeks } from '../domain/slot-helpers.js';
 import { UiStyle } from '../modules/ui-style.js';
 import { ensureUiSyncModule } from '../modules/tab-gates.js';
 import { ensureAccounting } from '../modules/export-gates.js';
@@ -206,10 +206,7 @@ export const useDataStore = defineStore('data', () => {
     };
     const batchCompareWeeks = computed(() => {
       if (!(storeToRefs(useMutualStore()).pendingRequestData.value || {}).isBatch) return [];
-      if (UiSubmitHelpers && typeof UiSubmitHelpers.getBatchCompareWeeks === 'function') {
-        return UiSubmitHelpers.getBatchCompareWeeks(getBatchCompareSlots());
-      }
-      return [];
+      return getBatchCompareWeeks(getBatchCompareSlots());
     });
     const batchCompareWeekIndex = ref(0);
     const batchExchangePreviewBatchId = ref('');

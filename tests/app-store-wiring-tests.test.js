@@ -49,3 +49,51 @@ test('App.vue 從 interactionStore 取用的名稱，store 必須真的回傳', 
   const missing = [...wanted].filter((name) => !provided.has(name));
   assert.deepEqual(missing, [], '以下名稱 store 沒回傳，模板一呼叫就會 TypeError');
 });
+
+test('分頁 SFC 從各 store 取用的名稱，對應 store 必須真的回傳', () => {
+  const panelFiles = [
+    'src/components/PendingTabPanel.vue',
+    'src/components/RecordsTabPanel.vue',
+    'src/components/AdminTabPanel.vue'
+  ];
+  const storeFiles = [
+    ['sessionStore', 'src/stores/session.js'],
+    ['dataStore', 'src/stores/data.js'],
+    ['timetableStore', 'src/stores/timetable.js'],
+    ['requestsStore', 'src/stores/requests.js'],
+    ['historyStore', 'src/stores/history.js'],
+    ['backofficeStore', 'src/stores/backoffice.js'],
+    ['adminStore', 'src/stores/admin.js'],
+    ['outputStore', 'src/stores/output.js'],
+    ['interactionStore', 'src/stores/interaction.js'],
+    ['homeroomStore', 'src/stores/homeroom.js'],
+    ['mutualStore', 'src/stores/mutual.js'],
+    ['submitStore', 'src/stores/submit.js'],
+    ['tourStore', 'src/stores/tour.js']
+  ];
+  const providedByStore = Object.fromEntries(
+    storeFiles.map(([varName, file]) => [varName, returnedNames(read(file))])
+  );
+  const missing = [];
+  for (const panelFile of panelFiles) {
+    const src = read(panelFile);
+    for (const [varName] of storeFiles) {
+      const refPattern = new RegExp(`const \\{([^}]*)\\}\\s*=\\s*storeToRefs\\(${varName}\\)`, 'g');
+      let m;
+      while ((m = refPattern.exec(src))) {
+        m[1].split(',').forEach((raw) => {
+          const name = raw.split(':')[0].trim();
+          if (name && !providedByStore[varName].has(name)) {
+            missing.push(`${panelFile}:${varName}.${name}`);
+          }
+        });
+      }
+      for (const name of destructuredNames(src, varName)) {
+        if (!providedByStore[varName].has(name)) {
+          missing.push(`${panelFile}:${varName}.${name}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(missing, [], '以下分頁 SFC 取用名稱未在對應 store 回傳');
+});

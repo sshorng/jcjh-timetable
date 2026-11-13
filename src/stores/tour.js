@@ -2,7 +2,11 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
-import DomainActivityCover from '../domain/domain-activity-cover.js';
+import {
+  activityModulesReady,
+  ensureDomainActivityCoverModule,
+  getDomainActivityCoverSync
+} from '../modules/activity-gates.js';
 import DomainClassAway from '../domain/domain-class-away.js';
 import FeeUtils from '../domain/fee-utils.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
@@ -51,16 +55,14 @@ export const useTourStore = defineStore('tour', () => {
     const batchAssignMode = ref('same'); // 'same' | 'perSlot'
     const batchActiveSlotKey = ref(''); // 每節不同人：目前正在媒合的節次 key
     const isMutualCover = ref(false);
-    const QUOTA_DEDUCT_FEE = (FeeUtils && FeeUtils.QUOTA)
-      || (DomainActivityCover && DomainActivityCover.QUOTA_DEDUCT_FEE) || '扣額度';
-    const MUTUAL_COVER_FEE = (FeeUtils && FeeUtils.QUOTA)
-      || (DomainActivityCover && DomainActivityCover.MUTUAL_COVER_FEE) || QUOTA_DEDUCT_FEE;
-    const ACTIVITY_PUBLIC_FEE = (DomainActivityCover && DomainActivityCover.ACTIVITY_PUBLIC_FEE) || '活動公費';
+    const QUOTA_DEDUCT_FEE = (FeeUtils && FeeUtils.QUOTA) || '扣額度';
+    const MUTUAL_COVER_FEE = QUOTA_DEDUCT_FEE;
+    const ACTIVITY_PUBLIC_FEE = (FeeUtils && FeeUtils.ACTIVITY_PUBLIC) || '活動公費';
     const isQuotaDeductFee = (fee) => {
       if (DAC() && DAC().isQuotaDeductFee) return DAC().isQuotaDeductFee(fee);
       return String(fee || '') === QUOTA_DEDUCT_FEE || String(fee || '') === '互代不結';
     };
-    const PERIOD8_FEE = (DomainActivityCover && DomainActivityCover.PERIOD8_FEE) || '第8節代課';
+    const PERIOD8_FEE = (FeeUtils && FeeUtils.PERIOD8) || '第8節代課';
     const TIMETABLE_ONLY_FEE = (FeeUtils && FeeUtils.TIMETABLE_ONLY) || '僅課表呈現（不結算）';
     const isTimetableOnlyFee = (fee) => {
       if (FeeUtils && FeeUtils.isTimetableOnlyFee) {
@@ -82,7 +84,10 @@ export const useTourStore = defineStore('tour', () => {
     const mutualActivityEndPeriod = ref('8');
     const mutualActivityPeriodMode = ref('range');
     const mutualActivityPeriods = ref(['all']);
-    const DAC = () => DomainActivityCover;
+    const DAC = () => {
+      void activityModulesReady.value.dac;
+      return getDomainActivityCoverSync();
+    };
     const isMutualActivitySlotInRange = (dateStr, period) => {
       const date = String(dateStr || '').slice(0, 10);
       const startDate = String(mutualActivityStart.value || '').slice(0, 10);
@@ -102,11 +107,7 @@ export const useTourStore = defineStore('tour', () => {
       }, period, date, endDate || startDate);
     };
     const ensureDAC = async () => {
-      if (DomainActivityCover) return DomainActivityCover;
-      if (typeof window.ensureDomainActivityCover === 'function') {
-        await window.ensureDomainActivityCover();
-      }
-      return DomainActivityCover || null;
+      return await ensureDomainActivityCoverModule();
     };
 // 2.1e：UiTour 改閘門按需載入（導覽／示範動作才抓）；未載入前回 null（既有守衛語義）。
 let UiTour = null;

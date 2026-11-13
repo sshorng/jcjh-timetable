@@ -332,6 +332,63 @@ const DomainSchedule = (() => {
     return Object.keys(slots).length;
   }
 
+  /**
+   * 單趟 O(T + S) 計算全校所有教師之正式排課節數，與逐一呼叫 countTeacherFormalScheduleHours 完全等價。
+   * 回傳鍵為 teacherIndex（0..teachers.length-1）及正規化身分辨識鍵之陣列／查表。
+   */
+  function countAllTeachersFormalScheduleHours(teachers, schedules, dates) {
+    var teacherList = Array.isArray(teachers) ? teachers : [];
+    var weekDates = Array.isArray(dates) ? dates : [];
+    var keyToTeacherIdxs = Object.create(null);
+    var teacherSlots = new Array(teacherList.length);
+    for (var ti = 0; ti < teacherList.length; ti++) {
+      teacherSlots[ti] = Object.create(null);
+      var keys = identityKeys(teacherList[ti]);
+      for (var ki = 0; ki < keys.length; ki++) {
+        var k = keys[ki];
+        if (!keyToTeacherIdxs[k]) keyToTeacherIdxs[k] = [];
+        keyToTeacherIdxs[k].push(ti);
+      }
+    }
+
+    (schedules || []).forEach(function (row) {
+      if (!row) return;
+      if (isPatrolCell(row) || row.isPreplanned || String(row.attr || '').trim() === '預排'
+          || hasScheduleTag(row, '預排')) return;
+      var period = parseInt(row.period != null ? row.period : row['節次'], 10);
+      var day = parseInt(row.dayOfWeek != null ? row.dayOfWeek : row['星期'], 10);
+      if (!Number.isFinite(period) || !Number.isFinite(day) || day < 1 || day > 5) return;
+      if (period === 8 || !(period === 0 || period === 45 || (period >= 1 && period <= 7))) return;
+
+      if (weekDates.length) {
+        var rowDate = weekDates[day - 1];
+        if (!rowDate || !isActiveOnDate(row, rowDate)) return;
+      }
+
+      var rowKeys = identityKeys(row);
+      if (!rowKeys.length) return;
+      var slotKey = day + '|' + period;
+      var visitedTeachers = null;
+      for (var rk = 0; rk < rowKeys.length; rk++) {
+        var idxs = keyToTeacherIdxs[rowKeys[rk]];
+        if (!idxs) continue;
+        for (var j = 0; j < idxs.length; j++) {
+          var tIdx = idxs[j];
+          if (visitedTeachers && visitedTeachers[tIdx]) continue;
+          if (!visitedTeachers) visitedTeachers = Object.create(null);
+          visitedTeachers[tIdx] = true;
+          teacherSlots[tIdx][slotKey] = true;
+        }
+      }
+    });
+
+    var counts = new Array(teacherList.length);
+    for (var outIdx = 0; outIdx < teacherList.length; outIdx++) {
+      counts[outIdx] = Object.keys(teacherSlots[outIdx]).length;
+    }
+    return counts;
+  }
+
   function scheduleRangesOverlap(a, b) {
     var aFrom = scheduleActiveFrom(a) || '0000-01-01';
     var aTo = scheduleActiveTo(a) || '9999-12-31';
@@ -347,6 +404,7 @@ const DomainSchedule = (() => {
   function buildScheduleIndex(allSchedules) {
     const byTeacherSlot = {};
     const bySlotOwners = {};
+    const bySlotRows = {};
     (allSchedules || []).forEach(function (s) {
       if (!s || !s.teacherEmail) return;
       const email = String(s.teacherEmail).toLowerCase();
@@ -358,8 +416,10 @@ const DomainSchedule = (() => {
       const oKey = dow + '|' + period;
       if (!bySlotOwners[oKey]) bySlotOwners[oKey] = [];
       if (bySlotOwners[oKey].indexOf(email) === -1) bySlotOwners[oKey].push(email);
+      if (!bySlotRows[oKey]) bySlotRows[oKey] = [];
+      bySlotRows[oKey].push(s);
     });
-    return { byTeacherSlot: byTeacherSlot, bySlotOwners: bySlotOwners };
+    return { byTeacherSlot: byTeacherSlot, bySlotOwners: bySlotOwners, bySlotRows: bySlotRows };
   }
 
   function getCandidates(index, teacherEmail, dayOfWeek, period, allSchedules, dateStr) {
@@ -380,16 +440,25 @@ const DomainSchedule = (() => {
 
   function getSlotOwnerEmails(index, dayOfWeek, period, allSchedules, dateStr) {
     var rows;
+    var oKey = parseInt(dayOfWeek, 10) + '|' + parseInt(period, 10);
     if (index && index.bySlotOwners) {
-      var emails = index.bySlotOwners[parseInt(dayOfWeek, 10) + '|' + parseInt(period, 10)] || [];
+      var emails = index.bySlotOwners[oKey] || [];
       if (!dateStr) return emails;
-      rows = filterActiveRows((allSchedules || []).filter(function (s) {
-        return emails.indexOf(String(s.teacherEmail || '').toLowerCase()) >= 0
-          && parseInt(s.dayOfWeek, 10) === parseInt(dayOfWeek, 10)
-          && parseInt(s.period, 10) === parseInt(period, 10);
-      }), dateStr);
-      return rows.map(function (s) { return String(s.teacherEmail || '').toLowerCase(); })
-        .filter(function (email, i, list) { return list.indexOf(email) === i; });
+      var slotRows = index.bySlotRows
+        ? (index.bySlotRows[oKey] || [])
+        : (allSchedules || []).filter(function (s) {
+          return emails.indexOf(String(s.teacherEmail || '').toLowerCase()) >= 0
+            && parseInt(s.dayOfWeek, 10) === parseInt(dayOfWeek, 10)
+            && parseInt(s.period, 10) === parseInt(period, 10);
+        });
+      rows = filterActiveRows(slotRows, dateStr);
+      var seen = Object.create(null);
+      var activeEmails = [];
+      for (var ri = 0; ri < rows.length; ri++) {
+        var em = String(rows[ri].teacherEmail || '').toLowerCase();
+        if (em && !seen[em]) { seen[em] = true; activeEmails.push(em); }
+      }
+      return activeEmails;
     }
     rows = (allSchedules || []).filter(function (s) {
       return parseInt(s.dayOfWeek) === parseInt(dayOfWeek) &&
@@ -518,9 +587,15 @@ const DomainSchedule = (() => {
         var pairedIn = null;
         var attributeBase = baseIn;
         if (isExIn) {
+          var reqPeers = ctx.subsByRequestId && incomingEdge.requestId != null
+            ? (typeof ctx.subsByRequestId.get === 'function'
+              ? ctx.subsByRequestId.get(incomingEdge.requestId)
+              : ctx.subsByRequestId[incomingEdge.requestId])
+            : null;
+          var peerPool = reqPeers || allSubs;
           pairedIn = incomingEdge.type === 'triangle'
             ? null
-            : allSubs.find(function (x) {
+            : peerPool.find(function (x) {
               return x.requestId === incomingEdge.requestId
                 && (x.date !== incomingEdge.date || String(x.period) !== String(incomingEdge.period) || x.id !== incomingEdge.id);
             });
@@ -1334,6 +1409,7 @@ const DomainSchedule = (() => {
     isActiveOnDate: isActiveOnDate,
     filterActiveRows: filterActiveRows,
     countTeacherFormalScheduleHours: countTeacherFormalScheduleHours,
+    countAllTeachersFormalScheduleHours: countAllTeachersFormalScheduleHours,
     scheduleRangesOverlap: scheduleRangesOverlap,
     isCombinedReturnRequest: isCombinedReturnRequest,
     PATROL_INCOMING_TIP: PATROL_INCOMING_TIP,

@@ -7,7 +7,6 @@ import DomainMatch from '../domain/domain-match.js';
 import DomainSchoolSwap from '../domain/domain-school-swap.js';
 import FieldMap from '../domain/field-map.js';
 import { UiAuth } from '../modules/ui-auth.js';
-import { UiMutualPanelState } from '../modules/ui-mutual.js';
 import { UiProxy } from '../modules/ui-proxy.js';
 import { fallbackAvatarDataUri, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
@@ -375,6 +374,8 @@ const getAuthApi = () => {
     watch([activeTab, adminSubTab], ([tab, subTab]) => {
       if (tab === 'admin' && subTab === 'period8') {
         useOutputStore().ensurePeriod8Ready().catch((error) => console.error('第八節模組載入失敗：', error));
+      } else if (tab === 'admin' && subTab === 'classAway') {
+        useBackofficeStore().ensureClassAwayAdminModule().catch((error) => console.error('空堂事件模組載入失敗：', error));
       }
     }, { immediate: true });
     }
@@ -405,13 +406,16 @@ const getAuthApi = () => {
       // 連線設定固定內建（setup 開頭已清除舊 localStorage 鍵，不在此覆寫）
 
       // 還原活動互代面板暫存（期間／外出班／帶隊／暫定）
-      // 2B 懶載：先等互代模組就緒，否則還原會被靜默跳過
+      // 只有實際存在暫存草稿時才按需載入互代模組，避免乾淨首屏預載
       try {
-        if (!UiMutualPanelState && typeof window.ensureUiMutual === 'function') {
-          await window.ensureUiMutual();
+        const rawMutualDraft = typeof localStorage !== 'undefined'
+          ? localStorage.getItem('jcjh_mutual_panel_draft_v1')
+          : null;
+        if (rawMutualDraft) {
+          await useMutualStore().ensureMutualPanelModule();
+          const saved = useMutualStore().restoreMutualPanelDraft();
+          if (saved) useMutualStore().applyMutualPanelDraft(saved);
         }
-        const saved = useMutualStore().restoreMutualPanelDraft();
-        if (saved) useMutualStore().applyMutualPanelDraft(saved);
       } catch (e) { /* ignore */ }
 
       // 先解析班級唯讀深連結
@@ -551,9 +555,7 @@ const getAuthApi = () => {
               const now = Date.now();
               if (user.value && now - lastVisibleRefreshAt > 30000) {
                 lastVisibleRefreshAt = now;
-                import('./data.js')
-                  .then((m) => m.useDataStore().softRefreshInBackground({ delay: 300, requestsOnly: true }))
-                  .catch(() => {});
+                useDataStore().softRefreshInBackground({ delay: 300, requestsOnly: true }).catch(() => {});
               }
             } catch (eVisibleRefresh) { /* ignore */ }
             // 回到登入頁且按鈕不見時補渲染

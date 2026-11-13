@@ -264,6 +264,8 @@ test('畫面接線：預覽可勾選聯別、歷史可選日期區間', () => {
   const previewModal = fs.readFileSync(
     path.join(here, '..', 'src', 'components', 'PrintPreviewModal.vue'), 'utf8');
   const app = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+  const recordsTab = fs.readFileSync(
+    path.join(here, '..', 'src', 'components', 'RecordsTabPanel.vue'), 'utf8');
   const store = fs.readFileSync(path.join(here, '..', 'src', 'stores', 'mutual.js'), 'utf8');
 
   // 列印預覽：四種聯的勾選框＋全選，點擊走 setPrintPreviewCopyKinds 重算。
@@ -273,11 +275,11 @@ test('畫面接線：預覽可勾選聯別、歷史可選日期區間', () => {
   assert.match(app, /:set-print-preview-copy-kinds="setPrintPreviewCopyKinds"/);
   assert.match(app, /:is-print-preview-copy-kind-selected="isPrintPreviewCopyKindSelected"/);
 
-  // 歷史紀錄：區間模式有起訖日期輸入與套用按鈕。
-  assert.match(app, /setHistoryFilterMode\('range'\)/);
-  assert.match(app, /v-model="historyRangeStart"/);
-  assert.match(app, /v-model="historyRangeEnd"/);
-  assert.match(app, /@click="applyHistoryRangeFilter"/);
+  // 歷史紀錄：區間模式有起訖日期輸入與套用按鈕（已抽至 RecordsTabPanel.vue）。
+  assert.match(recordsTab, /setHistoryFilterMode\('range'\)/);
+  assert.match(recordsTab, /v-model="historyRangeStart"/);
+  assert.match(recordsTab, /v-model="historyRangeEnd"/);
+  assert.match(recordsTab, /@click="applyHistoryRangeFilter"/);
   assert.match(store, /const historyRangeStart = ref\(''\)/);
   assert.match(store, /const historyRangeEnd = ref\(''\)/);
 });

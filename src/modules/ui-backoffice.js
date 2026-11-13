@@ -89,6 +89,7 @@ const UiBackoffice = (() => {
     var classAwayEventsRef = deps.classAwayEvents;
     var fetchQuotaSpendPreviewFn = deps.fetchQuotaSpendPreview;
     var getMutualPanelApi = deps.getMutualPanelApi;
+    var ensureMutualPanelModule = deps.ensureMutualPanelModule;
     var userRole = deps.userRole;
     var allSchedules = deps.allSchedules;
     var schoolSwaps = deps.schoolSwaps;
@@ -446,7 +447,9 @@ const submitAllMutualDrafts = async () => {
     return;
   }
   // 2B 懶載：送出前確保互代模組已載入
-  if (!UiMutualSubmit && typeof window.ensureUiMutual === 'function') {
+  if (typeof ensureMutualPanelModule === 'function') {
+    try { await ensureMutualPanelModule(); } catch (e) { /* ignore，沿用下方提示 */ }
+  } else if (!UiMutualSubmit && typeof window.ensureUiMutual === 'function') {
     try { await window.ensureUiMutual(); } catch (e) { /* ignore，沿用下方提示 */ }
   }
   if (!UiMutualSubmit) {
@@ -476,6 +479,7 @@ const submitAllMutualDrafts = async () => {
 
 const toggleMutualCover = async () => {
   if (!isMutualCover.value) await ensureDAC();
+  if (typeof ensureMutualPanelModule === 'function') await ensureMutualPanelModule();
   const a = getMutualPanelApi();
   if (a) a.toggleMutualCover();
 };

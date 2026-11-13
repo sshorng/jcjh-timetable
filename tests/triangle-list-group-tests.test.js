@@ -6,7 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { UiListHelpers } from '../src/modules/ui-list-helpers.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const appSource = fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8');
+// 簽核與歷史分頁已抽為 PendingTabPanel／RecordsTabPanel，聚合主殼層與分頁範本進行合約檢查
+const appSource = [
+  fs.readFileSync(path.join(here, '..', 'src', 'App.vue'), 'utf8'),
+  fs.readFileSync(path.join(here, '..', 'src', 'components', 'PendingTabPanel.vue'), 'utf8'),
+  fs.readFileSync(path.join(here, '..', 'src', 'components', 'RecordsTabPanel.vue'), 'utf8')
+].join('\n');
 const dataSource = fs.readFileSync(path.join(here, '..', 'src', 'modules', 'ui-data.js'), 'utf8');
 
 function triangleLegs(id) {

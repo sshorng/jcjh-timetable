@@ -12,7 +12,7 @@ import FeeUtils from '../domain/fee-utils.js';
 import FieldMap from '../domain/field-map.js';
 import { UiLineTemplate } from '../modules/ui-line-template.js';
 import { UiListHelpers } from '../modules/ui-list-helpers.js';
-import { UiMutualPanelState } from '../modules/ui-mutual.js';
+import { mutualDraftKey } from '../domain/slot-helpers.js';
 
 /**
  * ui-timetable.js — 課表存取層（方案甲第三大塊）
@@ -74,6 +74,57 @@ const UiTimetable = (() => {
         : { dayOfWeek: dayOfWeek, period: period, row: null, endpoint: '' };
     }
 
+    const normalizeRechangeRequestId = (value) => String(value || '').trim().replace(/_(?:class_)?[12]$/, '');
+
+    var subsByRequestId = computed(function () {
+      const map = new Map();
+      const all = (substitutionRecords && substitutionRecords.value) || [];
+      for (let i = 0; i < all.length; i++) {
+        const s = all[i];
+        if (!s || s.requestId == null) continue;
+        let bucket = map.get(s.requestId);
+        if (!bucket) { bucket = []; map.set(s.requestId, bucket); }
+        bucket.push(s);
+      }
+      return map;
+    });
+
+    var priorDutyBySlot = computed(function () {
+      const map = new Map();
+      const all = (substitutionRecords && substitutionRecords.value) || [];
+      for (let i = all.length - 1; i >= 0; i--) {
+        const s = all[i];
+        if (!s || !s.actualTeacherEmail || !(s.className || s.subject)) continue;
+        const em = String(s.actualTeacherEmail).toLowerCase();
+        const dk = String(s.date || '');
+        const p = parseInt(s.period, 10);
+        if (!em || !dk || Number.isNaN(p)) continue;
+        const key = em + '|' + dk + '|' + p;
+        let bucket = map.get(key);
+        if (!bucket) { bucket = []; map.set(key, bucket); }
+        bucket.push(s);
+      }
+      return map;
+    });
+
+    var requestStatusByNormId = computed(function () {
+      const map = new Map();
+      const list = typeof requestsList !== 'undefined' && requestsList && Array.isArray(requestsList.value)
+        ? requestsList.value
+        : [];
+      for (let i = 0; i < list.length; i++) {
+        const row = list[i];
+        if (!row) continue;
+        const k = normalizeRechangeRequestId(row.id || row.requestId);
+        if (!k || map.has(k)) continue;
+        const statusVal = row.status || row['狀態'];
+        if (statusVal != null && String(statusVal).trim() !== '') {
+          map.set(k, statusVal);
+        }
+      }
+      return map;
+    });
+
     var pendingIndex = computed(function () {
       if (DomainSchedule && DomainSchedule.buildPendingIndex) {
         return DomainSchedule.buildPendingIndex(allPendingRequests.value);
@@ -88,10 +139,10 @@ const UiTimetable = (() => {
       fetchRecommendations._cache = {};
     }
 
-    function getApprovedScheduleForDate(teacherEmail, dateStr, period, dayOfWeek) {
+    function getApprovedScheduleForDate(teacherEmail, dateStr, period, dayOfWeek, preResolvedBaseSlot) {
       var key = dateStr + '_' + period;
       var lookup = substitutionsLookup.value || {};
-      var baseSlot = resolveBaseSlot(dateStr, dayOfWeek, period, teacherEmail);
+      var baseSlot = preResolvedBaseSlot || resolveBaseSlot(dateStr, dayOfWeek, period, teacherEmail);
       var cell = DomainSchedule.resolveApprovedSchedule({
         teacherEmail: teacherEmail,
         dateStr: dateStr,
@@ -103,6 +154,7 @@ const UiTimetable = (() => {
         scheduleIndex: scheduleIndex.value,
         periodSubs: lookup[key] || [],
         allSubs: substitutionRecords.value,
+        subsByRequestId: subsByRequestId.value,
         helpers: {
           getTeacherNameByEmail: getTeacherNameByEmail,
           getTeacherSubjectByEmail: getTeacherSubjectByEmail,
@@ -128,7 +180,7 @@ const UiTimetable = (() => {
       var memoKey = teacherEmail + '|' + dateStr + '|' + period;
       if (_scheduleCache.has(memoKey)) return _scheduleCache.get(memoKey);
       var baseSlot = resolveBaseSlot(dateStr, dayOfWeek, period, teacherEmail);
-      var cell = getApprovedScheduleForDate(teacherEmail, dateStr, period, dayOfWeek);
+      var cell = getApprovedScheduleForDate(teacherEmail, dateStr, period, dayOfWeek, baseSlot);
       var merged = DomainSchedule.applyPendingOverlay({
         cell: cell,
         teacherEmail: teacherEmail,
@@ -571,17 +623,23 @@ const UiTimetable = (() => {
       if (dates.indexOf(sourceDate) < 0) dates.push(sourceDate);
       const periods = Array.isArray(timetablePeriods) && timetablePeriods.length
         ? timetablePeriods : [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
+      const candidateTeacherKeys = new Set();
+      const schedulesSnapshot = allSchedules.value || [];
+      for (let si = 0; si < schedulesSnapshot.length; si++) {
+        const schedule = schedulesSnapshot[si];
+        if (!schedule || !sameClass(schedule.className, sourceClass)) continue;
+        const tk = triangleTeacherKey(schedule.teacherEmail || schedule.teacherName);
+        if (tk && tk !== sourceTeacher) candidateTeacherKeys.add(tk);
+      }
+      if (!candidateTeacherKeys.size) return [];
       const seen = Object.create(null);
       const result = [];
       (teachersList.value || []).forEach((teacher) => {
         if (!teacher) return;
         const email = teacher.email || teacher.teacherName || teacher.name || '';
         const teacherName = teacher.teacherName || teacher.name || email;
-        if (!email || triangleTeacherKey(email) === sourceTeacher) return;
-        if (!(allSchedules.value || []).some(schedule =>
-          triangleTeacherKey(schedule.teacherEmail || schedule.teacherName) === triangleTeacherKey(email)
-          && sameClass(schedule.className, sourceClass)
-        )) return;
+        const tk = triangleTeacherKey(email);
+        if (!email || tk === sourceTeacher || !candidateTeacherKeys.has(tk)) return;
         dates.forEach((date, dateIndex) => {
           const day = dateIndex < 5 ? dateIndex + 1 : (() => {
             const parsed = new Date(String(date).replace(/-/g, '/'));
@@ -1511,16 +1569,14 @@ const UiTimetable = (() => {
       const p = parseInt(period, 10);
       const dk = String(dateStr || '');
       if (!em || !dk || Number.isNaN(p)) return null;
-      const all = substitutionRecords.value || [];
-      for (let i = all.length - 1; i >= 0; i--) {
-        const s = all[i];
-        if (!s || (excludeId && s.id === excludeId)) continue;
-        if (excludeRequestId && String(s.requestId || '') === String(excludeRequestId)) continue;
-        if (String(s.date) !== dk || parseInt(s.period, 10) !== p) continue;
-        if (s.actualTeacherEmail && String(s.actualTeacherEmail).toLowerCase() === em
-            && (s.className || s.subject)) {
-          return s;
-        }
+      const bucket = priorDutyBySlot.value.get(em + '|' + dk + '|' + p);
+      if (!bucket) return null;
+      const exReq = excludeRequestId ? String(excludeRequestId) : '';
+      for (let i = 0; i < bucket.length; i++) {
+        const s = bucket[i];
+        if (excludeId && s.id === excludeId) continue;
+        if (exReq && String(s.requestId || '') === exReq) continue;
+        return s;
       }
       return null;
     };
@@ -1687,23 +1743,18 @@ const UiTimetable = (() => {
       return resolveRestrictionForHistoryRec(rec, 'exchange');
     };
 
-    // 2A：再異動判定簇自 app.js 搬移（substitutionRecords／requestsList 本作用域既有）
-    /** 再異動判斷用：同一申請的 _1／_2 邊不可算成自己的前一筆。 */
-    const normalizeRechangeRequestId = (value) => String(value || '').trim().replace(/_(?:class_)?[12]$/, '');
+    // 2A：再異動判定簇（O(1) 索引：requestsList 與 substitutionRecords 預建 Map）
     /** 只有已核准生效的異動才會成為下一筆的前次異動。 */
-    const isEffectiveChangedDuty = (record) => {
+    const isEffectiveChangedDuty = (record, statusMapOpt) => {
       if (!record || record.enabled === false || record.isPaperDraft) return false;
       const recordRequestId = normalizeRechangeRequestId(record.requestId || record.id);
       let rawStatus = record.status;
       if (rawStatus == null || String(rawStatus).trim() === '') rawStatus = record['狀態'];
 
       // 以申請單最新狀態為準，避免已核准後撤回／駁回的舊紀錄仍被算入。
-      if (recordRequestId && typeof requestsList !== 'undefined'
-          && requestsList && Array.isArray(requestsList.value)) {
-        const request = requestsList.value.find(row =>
-          row && normalizeRechangeRequestId(row.id || row.requestId) === recordRequestId
-        );
-        const requestStatus = request && (request.status || request['狀態']);
+      if (recordRequestId) {
+        const statusMap = statusMapOpt || requestStatusByNormId.value;
+        const requestStatus = statusMap.get(recordRequestId);
         if (requestStatus != null && String(requestStatus).trim() !== '') rawStatus = requestStatus;
       }
 
@@ -1714,23 +1765,46 @@ const UiTimetable = (() => {
         '核准生效', '已核准', '核准', '已生效', '生效', '有效', '啟用'
       ].includes(status);
     };
+    const effectiveChangedDutiesBySlot = computed(() => {
+      const map = new Map();
+      const statusMap = requestStatusByNormId.value;
+      const all = substitutionRecords.value || [];
+      for (let i = 0; i < all.length; i++) {
+        const s = all[i];
+        if (!isEffectiveChangedDuty(s, statusMap)) continue;
+        const dk = String(s.date || s.requestDate || '').trim();
+        const p = parseInt(s.period != null ? s.period : s.requestPeriod, 10);
+        if (!dk || Number.isNaN(p) || !(s.className || s.subject)) continue;
+        const rowRequestId = normalizeRechangeRequestId(s.requestId || s.id);
+        const orig = String(s.originalTeacherEmail || '').trim().toLowerCase();
+        const act = String(s.actualTeacherEmail || '').trim().toLowerCase();
+        if (orig) {
+          const ok = orig + '|' + dk + '|' + p;
+          let ob = map.get(ok);
+          if (!ob) { ob = []; map.set(ok, ob); }
+          ob.push(rowRequestId);
+        }
+        if (act && act !== orig) {
+          const ak = act + '|' + dk + '|' + p;
+          let ab = map.get(ak);
+          if (!ab) { ab = []; map.set(ak, ab); }
+          ab.push(rowRequestId);
+        }
+      }
+      return map;
+    });
     const hasOtherChangedDutyAtSlot = (email, dateStr, period, excludeRequestId) => {
       const em = String(email || '').trim().toLowerCase();
       const dk = String(dateStr || '').trim();
       const p = parseInt(period, 10);
       const excluded = normalizeRechangeRequestId(excludeRequestId);
       if (!em || !dk || Number.isNaN(p)) return false;
-      return (substitutionRecords.value || []).some(s => {
-        if (!isEffectiveChangedDuty(s)) return false;
-        const rowRequestId = normalizeRechangeRequestId(s.requestId || s.id);
-        if (excluded && rowRequestId === excluded) return false;
-        if (String(s.date || s.requestDate || '').trim() !== dk) return false;
-        if (parseInt(s.period != null ? s.period : s.requestPeriod, 10) !== p) return false;
-        if (!(s.className || s.subject)) return false;
-        const original = String(s.originalTeacherEmail || '').trim().toLowerCase();
-        const actual = String(s.actualTeacherEmail || '').trim().toLowerCase();
-        return original === em || actual === em;
-      });
+      const bucket = effectiveChangedDutiesBySlot.value.get(em + '|' + dk + '|' + p);
+      if (!bucket) return false;
+      for (let i = 0; i < bucket.length; i++) {
+        if (!excluded || bucket[i] !== excluded) return true;
+      }
+      return false;
     };
 
     /** 原始位置是否為「再異動」；請假與調課都套用同一規則。 */
@@ -1746,10 +1820,11 @@ const UiTimetable = (() => {
     const isHistoryExchangeRechanged = (rec) => {
       if (!rec || !isExchangeLikeRequest(rec)) return false;
       const requestId = rec.requestId || rec.id;
-      const all = substitutionRecords.value || [];
-      const targetEdge = requestId
-        ? all.find(x => x && x.requestId === requestId && String(x.id || '').endsWith('_1'))
-          || all.find(x => x && x.requestId === requestId && x.id !== rec.id)
+      const peers = requestId ? (subsByRequestId.value.get(requestId) || []) : [];
+      const targetEdge = peers.length
+        ? (peers.find(x => String(x.id || '').endsWith('_1'))
+          || peers.find(x => x.id !== rec.id)
+          || null)
         : null;
       const targetDate = (targetEdge && targetEdge.date) || rec.targetDate;
       const targetPeriod = targetEdge && targetEdge.period != null ? targetEdge.period : rec.targetPeriod;
@@ -1823,9 +1898,7 @@ const UiTimetable = (() => {
       // 備援：目標日 edge _1 的班科就是目標位置原本的課堂。
       let peerTargetEdge = null;
       if (rec.requestId) {
-        const peers = (substitutionRecords.value || []).filter(x =>
-          x && x.requestId === rec.requestId
-        );
+        const peers = subsByRequestId.value.get(rec.requestId) || [];
         peerTargetEdge = peers.find(x => String(x.id || '').endsWith('_1'))
           || peers.find(x => x.id !== rec.id)
           || null;
@@ -1873,9 +1946,7 @@ const UiTimetable = (() => {
 
     function draftAt(leaveEmail, dateStr, period) {
       if (!isMutualCover.value) return null;
-      var key = (UiMutualPanelState && UiMutualPanelState.mutualDraftKey)
-        ? UiMutualPanelState.mutualDraftKey(leaveEmail, dateStr, period)
-        : (String(leaveEmail || '').toLowerCase() + '|' + dateStr + '|' + period);
+      var key = mutualDraftKey(leaveEmail, dateStr, period);
       return mutualDraftIndex.value[key] || null;
     }
 
@@ -1918,15 +1989,15 @@ const UiTimetable = (() => {
       var teachers = displayTimetableTeachers.value || [];
       var dates = currentWeekDates.value || [];
       var mutualOn = !!isMutualCover.value;
+      var periodList = (DateUtils && DateUtils.getTimetablePeriods)
+        ? DateUtils.getTimetablePeriods()
+        : [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
       teachers.forEach(function (t) {
         if (!t || !t.email) return;
         var row = {};
         for (var day = 1; day <= 5; day++) {
           var dateStr = dates[day - 1];
           if (!dateStr) continue;
-          var periodList = (DateUtils && DateUtils.getTimetablePeriods)
-            ? DateUtils.getTimetablePeriods()
-             : [0, 1, 2, 3, 4, 45, 5, 6, 7, 8];
           for (var pi = 0; pi < periodList.length; pi++) {
             var period = periodList[pi];
             var cell = getScheduleForDate(t.email, dateStr, period, day);

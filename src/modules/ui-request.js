@@ -7,6 +7,7 @@ import DomainActivityCover from '../domain/domain-activity-cover.js';
 import DomainMatch from '../domain/domain-match.js';
 import DomainSchedule from '../domain/domain-schedule.js';
 import FieldMap from '../domain/field-map.js';
+import { getBatchCompareWeeks as getBatchCompareWeeksShared } from '../domain/slot-helpers.js';
 
 /**
  * ui-request.js — 一般調代課申請（方案甲）
@@ -765,19 +766,7 @@ const UiSubmitHelpers = (() => {
 
   /** 批次模擬可瀏覽的週次：依選定節次日期去重並按時間排序。 */
   function getBatchCompareWeeks(slots) {
-    var dateUtils = DateUtils;
-    if (!dateUtils || typeof dateUtils.getWeekDatesFrom !== 'function') return [];
-    var weekMap = Object.create(null);
-    (slots || []).forEach(function (slot) {
-      var dateStr = String(slot && (slot.dateStr || slot.date) || '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
-      var dates = dateUtils.getWeekDatesFrom(dateStr);
-      if (!Array.isArray(dates) || dates.length !== 5 || !dates[0]) return;
-      weekMap[dates[0]] = dates;
-    });
-    return Object.keys(weekMap).sort().map(function (startDate) {
-      return weekMap[startDate];
-    });
+    return getBatchCompareWeeksShared(slots);
   }
 
   function getCompareWeekDates(deps, who, view) {

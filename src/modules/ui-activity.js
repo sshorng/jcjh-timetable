@@ -32,8 +32,8 @@ const UiClassAwayAdmin = (() => {
     var clearScheduleCache = deps.clearScheduleCache || function () {};
     var softRefreshInBackground = deps.softRefreshInBackground || function () {};
 
-    var showClassAwayModal = ref(false);
-    var classAwayModalMode = ref('add');
+    var showClassAwayModal = deps.showClassAwayModal || ref(false);
+    var classAwayModalMode = deps.classAwayModalMode || ref('add');
     var classAwayPeriodOptions = [
       { value: '0', label: '早自習' },
       { value: '1', label: '第1節' }, { value: '2', label: '第2節' },
@@ -76,7 +76,7 @@ const UiClassAwayAdmin = (() => {
       }, patch || {});
     }
 
-    var classAwayForm = ref({
+    var classAwayForm = deps.classAwayForm || ref({
       id: '', name: '', startDate: '', endDate: '',
       scope: 'classes', classes: [], periodMode: 'range', periods: ['all'], startPeriod: '0', endPeriod: '8',
       billingRule: 'keep', forMutual: true, enabled: true, note: '', subject: '',
@@ -535,7 +535,7 @@ const UiMutualBridge = (() => {
         return e.enabled !== false && e.forMutual;
       });
     });
-    var mutualImportEventId = ref('');
+    var mutualImportEventId = deps.mutualImportEventId || ref('');
 
     function applyClassAwayEventById(eventId) {
       var id = String(eventId || '').trim();

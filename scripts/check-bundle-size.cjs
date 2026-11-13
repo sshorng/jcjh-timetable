@@ -31,8 +31,12 @@ const zlib = require('zlib');
 // 新增 ui/save-bubble.js 並接入六個模組）與 68b2912～5d768a9「代課費專案款項分表」
 // （+2.83 KiB，申請單欄位、專案分表、專案清單設定）。屬功能成長而非閘門退化，
 // 故上調 5 KiB 並在此明文記錄；餘裕僅 0.7 KiB，後續若再成長應優先真的瘦身。
-const RAW_LIMIT_KIB = 730;
-const GZIP_LIMIT_KIB = 220;
+// 2026-11-13 Phase 2 瘦身收斂為 610 KiB／gzip 180 KiB：
+// 透過 activity-gates.js 與 slot-helpers.js 拆出 domain-activity-cover / ui-activity /
+// ui-mutual / ui-submit / ui-request 等延遲模組（實測 729.30 → 592.19 KiB，
+// gzip 215.94 → 171.72 KiB），並消除 Rollup 靜態+動態混用重複引用警告。
+const RAW_LIMIT_KIB = 540;
+const GZIP_LIMIT_KIB = 165;
 const DIST = path.resolve(__dirname, '..', 'dist', 'assets');
 
 function fail(msg) {

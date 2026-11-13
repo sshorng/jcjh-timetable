@@ -159,13 +159,19 @@ const changeMatchMode = async (mode) => {
 
 const teacherTimetableHours = computed(() => {
   const map = Object.create(null);
-  (teachersList.value || []).forEach(teacher => {
+  const teachers = teachersList.value || [];
+  const batchCounts = DomainSchedule && typeof DomainSchedule.countAllTeachersFormalScheduleHours === 'function'
+    ? DomainSchedule.countAllTeachersFormalScheduleHours(teachers, allSchedules.value, currentWeekDates.value)
+    : null;
+  teachers.forEach((teacher, index) => {
     const basicHours = teacher.baseHours === 0 || teacher.baseHours === '0'
       ? 0
       : (parseInt(teacher.baseHours, 10) || 16);
-    const scheduledHours = DomainSchedule && typeof DomainSchedule.countTeacherFormalScheduleHours === 'function'
-       ? DomainSchedule.countTeacherFormalScheduleHours(teacher, allSchedules.value, currentWeekDates.value)
-       : 0;
+    const scheduledHours = batchCounts
+      ? (batchCounts[index] || 0)
+      : (DomainSchedule && typeof DomainSchedule.countTeacherFormalScheduleHours === 'function'
+        ? DomainSchedule.countTeacherFormalScheduleHours(teacher, allSchedules.value, currentWeekDates.value)
+        : 0);
     const fixedSetting = FieldMap && typeof FieldMap.fixedOvertimeSetting === 'function'
       ? FieldMap.fixedOvertimeSetting(teacher)
       : { configured: false, valid: false, hours: 0, slotsText: '' };

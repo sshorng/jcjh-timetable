@@ -63,9 +63,12 @@ test('classmode：?class=701 免登入渲染唯讀課表', async () => {
     expect(seen).toContain('getPublicClassData');
     // 只打公開 API，不碰需登入 API
     expect(seen.filter((a) => a !== 'getPublicClassData')).toEqual([]);
-    // 最終 flush：讓佇列中的重渲染落地再讀 DOM
-    await nextTick();
-    await new Promise((r) => setTimeout(r, 300));
+    // 最終 flush：等 defineAsyncComponent(ClassPanel) 落地再讀 DOM
+    for (let i = 0; i < 60; i++) {
+      await nextTick();
+      if (el.innerHTML.includes('701') && el.innerHTML.includes('國文')) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
     await nextTick();
     const diag = 'tab=' + session.activeTab + ' loaded=' + mutual.classViewLoadedClass +
       ' readonly=' + mutual.classReadonlyMode + ' loading=' + session.loading;

@@ -11,9 +11,13 @@ import { useMutualStore } from '../src/stores/mutual.js';
 import { useMatchStore } from '../src/stores/match.js';
 import { storeToRefs } from 'pinia';
 
-async function flush() {
-  for (let i = 0; i < 5; i++) await nextTick();
-  await new Promise((r) => setTimeout(r, 300));
+async function flush(predicate, maxMs = 4000) {
+  const deadline = Date.now() + maxMs;
+  do {
+    for (let i = 0; i < 5; i++) await nextTick();
+    if (!predicate || predicate()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  } while (Date.now() < deadline);
 }
 
 test('drawer 載入更多：代課點擊 10/54→20/54', async () => {
@@ -46,14 +50,14 @@ test('drawer 載入更多：代課點擊 10/54→20/54', async () => {
     const match = useMatchStore();
     await match.ensureMatchModule();
     useSessionStore().showMatchModal = true;
-    await flush();
-
     const loadMoreBtn = () => el.querySelector('.match-drawer .center-pad-10 button');
+    await flush(() => Boolean(loadMoreBtn()));
+
     const btn = loadMoreBtn();
     expect(btn, '代課模式應有載入更多按鈕').toBeTruthy();
     expect(btn.textContent).toContain('10 / 54');
     btn.click();
-    await flush();
+    await flush(() => storeToRefs(useMutualStore()).matchDisplayCount.value === 20);
     expect(storeToRefs(useMutualStore()).matchDisplayCount.value).toBe(20);
     expect(loadMoreBtn().textContent).toContain('20 / 54');
     expect(errors, 'vue errors:\n' + errors.join('\n')).toEqual([]);

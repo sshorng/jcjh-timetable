@@ -3,8 +3,13 @@ import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
 import DateUtils from '../domain/date-utils.js';
 import FeeUtils from '../domain/fee-utils.js';
-import { UiMutualBridge } from '../modules/ui-activity.js';
-import { UiMutualPanelState } from '../modules/ui-mutual.js';
+import {
+  activityModulesReady,
+  ensureUiActivityModule,
+  ensureUiMutualModule,
+  getUiActivitySync,
+  getUiMutualSync
+} from '../modules/activity-gates.js';
 import { showConfirm, showToast } from '../ui/toast.js';
 import { useBackofficeStore } from './backoffice.js';
 import { useDataStore } from './data.js';
@@ -213,9 +218,11 @@ export const useMutualStore = defineStore('mutual', () => {
       return a ? a.classList.value : [];
     });
 const getMutualPanelApi = () => {
+      void activityModulesReady.value.mutual;
       if (_mutualPanelApi) return _mutualPanelApi;
-      // 同步路徑：若尚未載入 DAC，先觸發背景載入（常數有 fallback）
-      _mutualPanelApi = UiMutualPanelState.create({
+      const mod = getUiMutualSync();
+      if (!mod || !mod.UiMutualPanelState) return null;
+      _mutualPanelApi = mod.UiMutualPanelState.create({
         showToast, showConfirm, callGasApi: useGasStore().callGasApi, isAdmin: storeToRefs(useSessionStore()).isAdmin, loading: storeToRefs(useSessionStore()).loading, loadingMessage: storeToRefs(useSessionStore()).loadingMessage,
         isMutualCover: storeToRefs(useTourStore()).isMutualCover, mutualAwayClasses: storeToRefs(useTourStore()).mutualAwayClasses, mutualLeadEmails: storeToRefs(useTourStore()).mutualLeadEmails, mutualSkipNotify: storeToRefs(useTourStore()).mutualSkipNotify, mutualNote: storeToRefs(useTourStore()).mutualNote, mutualDrafts: storeToRefs(useTourStore()).mutualDrafts,
         mutualActivityStart: storeToRefs(useTourStore()).mutualActivityStart, mutualActivityEnd: storeToRefs(useTourStore()).mutualActivityEnd, mutualActivityStartPeriod: storeToRefs(useTourStore()).mutualActivityStartPeriod, mutualActivityEndPeriod: storeToRefs(useTourStore()).mutualActivityEndPeriod,
@@ -231,40 +238,57 @@ const getMutualPanelApi = () => {
       });
       return _mutualPanelApi;
     };
+    const ensureMutualPanelModule = async () => {
+      await Promise.all([
+        useTourStore().ensureDAC(),
+        ensureUiMutualModule(),
+        ensureUiActivityModule()
+      ]);
+      return getMutualPanelApi();
+    };
+    const withMutualPanel = (fnName, ...args) => {
+      const a = getMutualPanelApi();
+      if (a) return a[fnName](...args);
+      return ensureMutualPanelModule().then((loaded) => (loaded ? loaded[fnName](...args) : undefined));
+    };
 
-    const setMutualActivityPeriodBoundary = (field, value) => { const a = getMutualPanelApi(); if (a) a.setMutualActivityPeriodBoundary(field, value); };
+    const setMutualActivityPeriodBoundary = (field, value) => withMutualPanel('setMutualActivityPeriodBoundary', field, value);
     const persistMutualPanelDraft = () => { const a = getMutualPanelApi(); if (a) a.persistMutualPanelDraft(); };
     const restoreMutualPanelDraft = () => { const a = getMutualPanelApi(); return a ? a.restoreMutualPanelDraft() : null; };
     const applyMutualPanelDraft = (saved) => { const a = getMutualPanelApi(); if (a) a.applyMutualPanelDraft(saved); };
-    const clearMutualPanel = async () => { const a = getMutualPanelApi(); if (a) await a.clearMutualPanel(); };
+    const clearMutualPanel = async () => {
+      await ensureMutualPanelModule();
+      const a = getMutualPanelApi();
+      if (a) await a.clearMutualPanel();
+    };
     const ensureMutualActivityRange = () => { const a = getMutualPanelApi(); if (a) a.ensureMutualActivityRange(); };
-    const setMutualActivityThisWeek = () => { const a = getMutualPanelApi(); if (a) a.setMutualActivityThisWeek(); };
-    const setMutualActivityPeriodMode = (mode) => { const a = getMutualPanelApi(); if (a) a.setMutualActivityPeriodMode(mode); };
-    const toggleMutualActivityPeriod = (period) => { const a = getMutualPanelApi(); if (a) a.toggleMutualActivityPeriod(period); };
+    const setMutualActivityThisWeek = () => withMutualPanel('setMutualActivityThisWeek');
+    const setMutualActivityPeriodMode = (mode) => withMutualPanel('setMutualActivityPeriodMode', mode);
+    const toggleMutualActivityPeriod = (period) => withMutualPanel('toggleMutualActivityPeriod', period);
     const isMutualActivityPeriodSelected = (period) => { const a = getMutualPanelApi(); return a ? a.isMutualActivityPeriodSelected(period) : false; };
     const activityBalanceCtx = (extra) => { const a = getMutualPanelApi(); return a ? a.activityBalanceCtx(extra) : {}; };
     const patchLocalMutualQuota = (email, nextQuota) => { const a = getMutualPanelApi(); if (a) a.patchLocalMutualQuota(email, nextQuota); };
     const recalculateMutualQuotasFromActivity = async () => {
-      await useTourStore().ensureDAC();
+      await ensureMutualPanelModule();
       const a = getMutualPanelApi();
       if (a) await a.recalculateMutualQuotasFromActivity();
     };
-    const toggleMutualLead = (email) => { const a = getMutualPanelApi(); if (a) a.toggleMutualLead(email); };
+    const toggleMutualLead = (email) => withMutualPanel('toggleMutualLead', email);
     const isMutualLead = (email) => { const a = getMutualPanelApi(); return a ? a.isMutualLead(email) : false; };
     const setMutualCover = async (on) => {
-      if (on) await useTourStore().ensureDAC();
-      const a = getMutualPanelApi();
+      if (on) await ensureMutualPanelModule();
+      const a = getMutualPanelApi() || (await ensureMutualPanelModule());
       if (a) a.setMutualCover(on);
     };
     const getMutualDraftAt = (leaveEmail, dateStr, period) => {
       const a = getMutualPanelApi();
       return a ? a.getMutualDraftAt(leaveEmail, dateStr, period) : null;
     };
-    const removeMutualDraft = (key) => { const a = getMutualPanelApi(); if (a) a.removeMutualDraft(key); };
-    const clearMutualDrafts = () => { const a = getMutualPanelApi(); if (a) a.clearMutualDrafts(); };
-    const assignMutualDraftFromMatch = (subEmail) => { const a = getMutualPanelApi(); if (a) a.assignMutualDraftFromMatch(subEmail); };
-    const toggleMutualAwayClass = (cls) => { const a = getMutualPanelApi(); if (a) a.toggleMutualAwayClass(cls); };
-    const selectAwayGrade = (grade) => { const a = getMutualPanelApi(); if (a) a.selectAwayGrade(grade); };
+    const removeMutualDraft = (key) => withMutualPanel('removeMutualDraft', key);
+    const clearMutualDrafts = () => withMutualPanel('clearMutualDrafts');
+    const assignMutualDraftFromMatch = (subEmail) => withMutualPanel('assignMutualDraftFromMatch', subEmail);
+    const toggleMutualAwayClass = (cls) => withMutualPanel('toggleMutualAwayClass', cls);
+    const selectAwayGrade = (grade) => withMutualPanel('selectAwayGrade', grade);
     function initImmediateMutual1() {
     watch(askFirstLineText, (text) => {
       if (!showLineMessageModal.value) askFirstLineDraft.value = text || '';
@@ -404,41 +428,71 @@ const getMutualPanelApi = () => {
       }
     );
     }
-const {
-      mutualImportableEvents, mutualImportEventId,
-      applyClassAwayEventById, applyClassAwayToMutualPanel, mutualCoverStats
-    } = UiMutualBridge.create({
-      ref,
-      computed,
-      showToast,
-      classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
-      classList,
-      semesterEndDate: storeToRefs(useSessionStore()).semesterEndDate,
-       mutualActivityStart: storeToRefs(useTourStore()).mutualActivityStart,
-       mutualActivityEnd: storeToRefs(useTourStore()).mutualActivityEnd,
-       mutualActivityStartPeriod: storeToRefs(useTourStore()).mutualActivityStartPeriod,
-       mutualActivityEndPeriod: storeToRefs(useTourStore()).mutualActivityEndPeriod,
-       mutualActivityPeriodMode: storeToRefs(useTourStore()).mutualActivityPeriodMode,
-       mutualActivityPeriods: storeToRefs(useTourStore()).mutualActivityPeriods,
-      mutualAwayClasses: storeToRefs(useTourStore()).mutualAwayClasses,
-      mutualNote: storeToRefs(useTourStore()).mutualNote,
-      mutualLeadEmails: storeToRefs(useTourStore()).mutualLeadEmails,
-      mutualDrafts: storeToRefs(useTourStore()).mutualDrafts,
-      isMutualCover: storeToRefs(useTourStore()).isMutualCover,
-      batchSlots: storeToRefs(useTourStore()).batchSlots,
-      allSchedules: storeToRefs(useSessionStore()).allSchedules,
-      requestsList: storeToRefs(useSessionStore()).requestsList,
-      teachersList: storeToRefs(useSessionStore()).teachersList,
-      currentWeekDates: storeToRefs(useTimetableStore()).currentWeekDates,
-      getScheduleForDate: useTimetableStore().getScheduleForDate,
-      isSingleWeek: useSessionStore().isSingleWeek,
-      persistMutualPanelDraft,
-      clearScheduleCache: useTimetableStore().clearScheduleCache,
-      ensureMutualActivityRange,
-      DAC: useTourStore().DAC
+    const EMPTY_MUTUAL_STATS = {
+      awayClasses: 0, releasedSlots: 0, mutualDone: 0, publicDone: 0,
+      arranged: 0, drafted: 0, demand: 0, remaining: 0, leaveTeachers: 0,
+      pendingSelected: 0, byLeaders: [], rangeDays: 0, rangeLabel: ''
+    };
+    const mutualImportableEvents = computed(() =>
+      (storeToRefs(useSessionStore()).classAwayEvents.value || []).filter((e) => e.enabled !== false && e.forMutual)
+    );
+    const mutualImportEventId = ref('');
+    let _mutualBridgeApi = null;
+    const getMutualBridgeApi = () => {
+      void activityModulesReady.value.activity;
+      if (_mutualBridgeApi) return _mutualBridgeApi;
+      const mod = getUiActivitySync();
+      if (!mod || !mod.UiMutualBridge) return null;
+      _mutualBridgeApi = mod.UiMutualBridge.create({
+        ref,
+        computed,
+        showToast,
+        classAwayEvents: storeToRefs(useSessionStore()).classAwayEvents,
+        classList,
+        semesterEndDate: storeToRefs(useSessionStore()).semesterEndDate,
+        mutualActivityStart: storeToRefs(useTourStore()).mutualActivityStart,
+        mutualActivityEnd: storeToRefs(useTourStore()).mutualActivityEnd,
+        mutualActivityStartPeriod: storeToRefs(useTourStore()).mutualActivityStartPeriod,
+        mutualActivityEndPeriod: storeToRefs(useTourStore()).mutualActivityEndPeriod,
+        mutualActivityPeriodMode: storeToRefs(useTourStore()).mutualActivityPeriodMode,
+        mutualActivityPeriods: storeToRefs(useTourStore()).mutualActivityPeriods,
+        mutualAwayClasses: storeToRefs(useTourStore()).mutualAwayClasses,
+        mutualNote: storeToRefs(useTourStore()).mutualNote,
+        mutualLeadEmails: storeToRefs(useTourStore()).mutualLeadEmails,
+        mutualDrafts: storeToRefs(useTourStore()).mutualDrafts,
+        isMutualCover: storeToRefs(useTourStore()).isMutualCover,
+        batchSlots: storeToRefs(useTourStore()).batchSlots,
+        allSchedules: storeToRefs(useSessionStore()).allSchedules,
+        requestsList: storeToRefs(useSessionStore()).requestsList,
+        teachersList: storeToRefs(useSessionStore()).teachersList,
+        currentWeekDates: storeToRefs(useTimetableStore()).currentWeekDates,
+        getScheduleForDate: useTimetableStore().getScheduleForDate,
+        isSingleWeek: useSessionStore().isSingleWeek,
+        persistMutualPanelDraft,
+        clearScheduleCache: useTimetableStore().clearScheduleCache,
+        ensureMutualActivityRange,
+        DAC: useTourStore().DAC,
+        mutualImportEventId
+      });
+      return _mutualBridgeApi;
+    };
+    const applyClassAwayEventById = async (...args) => {
+      await ensureMutualPanelModule();
+      const b = getMutualBridgeApi();
+      return b ? b.applyClassAwayEventById(...args) : undefined;
+    };
+    const applyClassAwayToMutualPanel = async (...args) => {
+      await ensureMutualPanelModule();
+      const b = getMutualBridgeApi();
+      return b ? b.applyClassAwayToMutualPanel(...args) : undefined;
+    };
+    const mutualCoverStats = computed(() => {
+      if (!storeToRefs(useTourStore()).isMutualCover.value) return EMPTY_MUTUAL_STATS;
+      const b = getMutualBridgeApi();
+      return b ? b.mutualCoverStats.value : EMPTY_MUTUAL_STATS;
     });
 
     _getMutualImportEventId = () => (mutualImportEventId && mutualImportEventId.value) || '';
-  return { onMutualLeadChipClick, bustQuotaLedgerViewCache, selectedClass, classReadonlyMode, pendingClassView, classDirectory, classViewSchedules, classViewSchoolSwaps, classViewSubstitutionRecords, classViewClassAwayEvents, classViewLoadedClass, selectedClassDate, period8WeekDate, selectedClassWeekDates, period8WeekDates, classWeekNumber, period8WeekNumber, classSubstitutionMap, classChangeSummary, classChangeTypeLabels, getClassChangeTypeLabel, matchSearchQuery, matchDisplayCount, matchShowNoTeacherWarning, matchEmptyReasons, exchangeTeacherEmail, exchangeTeacherClasses, exchangePeriodId, exchangeTargetDate, exchangeWeekOffset, exchangeWeekdayFilter, exchangeWeekdayOptions, setExchangeWeekdayFilter, showCompareModal, showTriangleTimetablePreview, showSuccessModal, showLineMessageModal, lineMessageTitle, lineMessageText, successModalTitle, successModalMessage, successFlowMode, successActionRequests, lineCopyText, hasLineTemplate, lineBatchParts, copyLineMessage, sendLineMessage, openLineMessageEditor, copyEditedLineMessage, sendEditedLineMessage, copyLineBatchPart, isExchangeLikeRequest, getTargetSubject, getTargetClassAndSubject, getOriginalRequestSubject, getOriginalRequestClass, getOriginalTargetSubject, getOriginalTargetClass, pendingRequestData, combinedReturnCandidates, askFirstLineText, askFirstLineDraft, selectedRecordIds, showDevDropdown, paperPrintDraft, paperSignatureByTeacher, showPrintPreviewModal, printPreview, printPreviewImageBusy, isSubmitting, showDetailModal, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, historyFilterMode, historyTypeFilter, historyFilterDate, historyRangeStart, historyRangeEnd, historySearchQuery, historyPage, isHistoryExchangeType, historyPageSize, classList, getMutualPanelApi, mutualImportableEvents, mutualImportEventId, applyClassAwayEventById, applyClassAwayToMutualPanel, mutualCoverStats, setMutualActivityPeriodBoundary, persistMutualPanelDraft, restoreMutualPanelDraft, applyMutualPanelDraft, clearMutualPanel, ensureMutualActivityRange, setMutualActivityThisWeek, setMutualActivityPeriodMode, toggleMutualActivityPeriod, isMutualActivityPeriodSelected, activityBalanceCtx, patchLocalMutualQuota, recalculateMutualQuotasFromActivity, toggleMutualLead, isMutualLead, setMutualCover, getMutualDraftAt, removeMutualDraft, clearMutualDrafts, assignMutualDraftFromMatch, toggleMutualAwayClass, selectAwayGrade, initImmediateMutual1, initImmediateMutual2, initImmediateMutual3, initImmediateMutual4, initImmediateMutual5, initImmediateMutual6, initImmediateMutual7, initImmediateMutual8, initImmediateMutual9, initImmediateMutual10, initMutual1, initMutual2, initImmediateMutual11 };
+  return { onMutualLeadChipClick, bustQuotaLedgerViewCache, selectedClass, classReadonlyMode, pendingClassView, classDirectory, classViewSchedules, classViewSchoolSwaps, classViewSubstitutionRecords, classViewClassAwayEvents, classViewLoadedClass, selectedClassDate, period8WeekDate, selectedClassWeekDates, period8WeekDates, classWeekNumber, period8WeekNumber, classSubstitutionMap, classChangeSummary, classChangeTypeLabels, getClassChangeTypeLabel, matchSearchQuery, matchDisplayCount, matchShowNoTeacherWarning, matchEmptyReasons, exchangeTeacherEmail, exchangeTeacherClasses, exchangePeriodId, exchangeTargetDate, exchangeWeekOffset, exchangeWeekdayFilter, exchangeWeekdayOptions, setExchangeWeekdayFilter, showCompareModal, showTriangleTimetablePreview, showSuccessModal, showLineMessageModal, lineMessageTitle, lineMessageText, successModalTitle, successModalMessage, successFlowMode, successActionRequests, lineCopyText, hasLineTemplate, lineBatchParts, copyLineMessage, sendLineMessage, openLineMessageEditor, copyEditedLineMessage, sendEditedLineMessage, copyLineBatchPart, isExchangeLikeRequest, getTargetSubject, getTargetClassAndSubject, getOriginalRequestSubject, getOriginalRequestClass, getOriginalTargetSubject, getOriginalTargetClass, pendingRequestData, combinedReturnCandidates, askFirstLineText, askFirstLineDraft, selectedRecordIds, showDevDropdown, paperPrintDraft, paperSignatureByTeacher, showPrintPreviewModal, printPreview, printPreviewImageBusy, isSubmitting, showDetailModal, consecAlertsA, consecAlertsB, detailRequest, detailSubRecord, historyFilterMode, historyTypeFilter, historyFilterDate, historyRangeStart, historyRangeEnd, historySearchQuery, historyPage, isHistoryExchangeType, historyPageSize, classList, getMutualPanelApi, ensureMutualPanelModule, mutualImportableEvents, mutualImportEventId, applyClassAwayEventById, applyClassAwayToMutualPanel, mutualCoverStats, setMutualActivityPeriodBoundary, persistMutualPanelDraft, restoreMutualPanelDraft, applyMutualPanelDraft, clearMutualPanel, ensureMutualActivityRange, setMutualActivityThisWeek, setMutualActivityPeriodMode, toggleMutualActivityPeriod, isMutualActivityPeriodSelected, activityBalanceCtx, patchLocalMutualQuota, recalculateMutualQuotasFromActivity, toggleMutualLead, isMutualLead, setMutualCover, getMutualDraftAt, removeMutualDraft, clearMutualDrafts, assignMutualDraftFromMatch, toggleMutualAwayClass, selectAwayGrade, initImmediateMutual1, initImmediateMutual2, initImmediateMutual3, initImmediateMutual4, initImmediateMutual5, initImmediateMutual6, initImmediateMutual7, initImmediateMutual8, initImmediateMutual9, initImmediateMutual10, initMutual1, initMutual2, initImmediateMutual11 };
 });
 

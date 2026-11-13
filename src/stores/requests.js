@@ -67,19 +67,12 @@ const isPaperFlowValue = (value) => {
       }
       return !!(suppressed && pendingPaperStatus && !isProxySubmitRequest(request));
     };
-    const isAdminPendingSelected = (id) => {
-      try {
-        if (typeof document !== 'undefined') {
-          const el = document.querySelector('.admin-select-cb[data-req-id="' + String(id) + '"]');
-          if (el) return !!el.checked;
-        }
-      } catch (e) { /* ignore */ }
-      return selectedAdminPendingIds.value.some((selectedId) => String(selectedId) === String(id));
-    };
+    const selectedAdminPendingSet = computed(() => new Set((selectedAdminPendingIds.value || []).map((sid) => String(sid))));
+    const isAdminPendingSelected = (id) => selectedAdminPendingSet.value.has(String(id));
     const isAdminBatchGroupSelected = (group) => {
       const ids = (group && group.items || []).filter((row) => row && row.id != null).map((row) => String(row.id));
       if (!ids.length) return false;
-      const selected = new Set((selectedAdminPendingIds.value || []).map((sid) => String(sid)));
+      const selected = selectedAdminPendingSet.value;
       return ids.every((sid) => selected.has(sid));
     };
 const getApprovalApi = () => {
